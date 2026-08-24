@@ -115,32 +115,6 @@ class LeadChannelAccount(LeadAIBase):
     LastError = Column(String(500), nullable=True)
     MetaJson = Column(JSON, nullable=True)
 
-    # ---- which Meta integration this account was connected through --------- #
-    # "facebook"  : Instagram API with Facebook Login. The IG account is linked
-    #               to a Page, the token is a PAGE token, and calls go to
-    #               graph.facebook.com. Also the value for whatsapp/messenger.
-    # "instagram" : Instagram API with Instagram Login. Standalone professional
-    #               account, no Page anywhere, the token is an INSTAGRAM USER
-    #               token, and calls go to graph.instagram.com.
-    #
-    # This is not cosmetic. An Instagram User token sent to graph.facebook.com
-    # fails with "Cannot parse access token", which reads like a bad credential
-    # rather than a wrong host. Routing is driven off this column.
-    LoginType = Column(String(20), nullable=False, default="facebook")
-
-    # The app this account was connected through. A standalone Instagram
-    # connection uses a DIFFERENT Meta app from the Facebook one - Meta allows
-    # only one API setup per app - so the id is stored per account rather than
-    # read from a single global setting.
-    AppId = Column(String(120), nullable=True)
-
-    # Instagram User tokens expire after 60 days and must be refreshed while
-    # still valid and at least 24h old. Miss that window and the company has to
-    # re-authorise from scratch, so the expiry is tracked explicitly rather than
-    # inferred. Null for Page tokens, which do not expire this way.
-    TokenExpiresAt = Column(DateTime, nullable=True)
-    TokenRefreshedAt = Column(DateTime, nullable=True)
-
 
 class LeadChannelIdentity(LeadAIBase):
     """Maps an external social id to a LeadCustomer inside one company.
@@ -509,6 +483,28 @@ class LeadJob(LeadAIBase):
     Error = Column(String(1000), nullable=True)
 
 
+class LeadCompanyService(LeadAIBase):
+    """Tracks which services/features are enabled for a company.
+
+    Extensible by design: Any new feature key (e.g. 'instagram', 'facebook',
+    'linkedin', 'voice_agent', 'whatsapp') can be granted/revoked per company
+    without schema changes or migrations.
+    """
+
+    __tablename__ = "leadai_company_services"
+    __table_args__ = (
+        UniqueConstraint("ClientId", "ServiceKey", name="uq_leadai_comp_service"),
+        Index("ix_leadai_comp_service_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    ServiceKey = Column(String(60), nullable=False)
+    IsEnabled = Column(Boolean, nullable=False, default=False)
+    ConfigJson = Column(JSON, nullable=True)
+    GrantedBy = Column(String(100), nullable=True)
+
+
+
 ALL_LEADAI_EXT_TABLES = (
     LeadChannelAccount,
     LeadChannelIdentity,
@@ -521,4 +517,6 @@ ALL_LEADAI_EXT_TABLES = (
     LeadAccountNote,
     LeadFile,
     LeadJob,
+    LeadCompanyService,
 )
+

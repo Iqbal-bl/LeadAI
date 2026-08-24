@@ -38,6 +38,7 @@ integration can be repointed by changing the base URL and the auth header.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
@@ -49,12 +50,15 @@ from ..models import utcnow
 from ..models_social import (
     POST_STATUS_PENDING,
     POST_STATUS_PUBLISHED,
+    POST_STATUS_SCHEDULED,
     LeadSocialPost,
     LeadSocialTopic,
 )
 from ..rbac import Principal, assert_owns, scoped
 from ..schemas import Ok
+from ..services import jobs
 from ..social import agent_bridge, service
+
 from ..social.credentials import ChannelNotConnected, connected_platforms, resolve
 from ..social.schemas import (
     AiPostRequest,
@@ -169,12 +173,32 @@ def platform_status(
     return PlatformStatusOut(platforms=connected_platforms(db, client_id))
 
 
+def _validate_schedule_time(schedule_time: datetime | None) -> datetime | None:
+    if schedule_time is None:
+        return None
+    if schedule_time.tzinfo is None:
+        st = schedule_time.replace(tzinfo=timezone.utc)
+    else:
+        st = schedule_time.astimezone(timezone.utc)
+
+    now = utcnow()
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+
+    if st <= now:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"schedule_time must be in the future (UTC). Received {st.isoformat()}, current UTC time is {now.isoformat()}",
+        )
+    return st
+
+
 # ===========================================================================
 # Multi-platform publishing — the primary endpoint
 # ===========================================================================
 @router.post(
     "/posts",
-    summary="Publish an exact caption + media to every connected platform",
+    summary="Publish or schedule an exact caption + media to every connected platform",
     status_code=status.HTTP_201_CREATED,
 )
 async def create_direct_post(
@@ -191,8 +215,12 @@ async def create_direct_post(
     while Instagram's carousel still publishes; the response body carries a
     per-platform result either way, and the HTTP status is 201 as long as the
     request itself was well-formed.
+
+    If `schedule_time` is provided (in UTC), the post is queued to publish automatically
+    at that future time. If `schedule_time` is null, the post publishes immediately.
     """
     principal, client_id = scope
+    st = _validate_schedule_time(body.schedule_time)
 
     try:
         uploaded = await service.upload_media_items(body.media)
@@ -200,6 +228,47 @@ async def create_direct_post(
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, f"Media upload failed: {exc}"
         ) from exc
+
+    if st is not None:
+        media_shape = service.classify_media(uploaded)
+        row = LeadSocialPost(
+            ClientId=client_id,
+            ChannelAccountId=body.account_id,
+            Platforms=",".join(body.platforms),
+            Mode="direct",
+            Caption=body.caption,
+            MediaUrls=[m["url"] for m in uploaded],
+            MediaShape=media_shape,
+            Status=POST_STATUS_SCHEDULED,
+            ScheduledFor=st,
+            CreatedBy=principal.email,
+        )
+        db.add(row)
+        db.flush()
+
+        jobs.enqueue(
+            db,
+            kind="social.publish",
+            payload={"post_id": row.Id},
+            client_id=client_id,
+            run_at=st,
+            commit=True,
+        )
+
+        activity.log_principal(
+            db, principal, action=A.CHANNEL_UPDATED, client_id=client_id,
+            entity_type="social_post", entity_id=row.Id,
+            message=f"Scheduled post for {st.isoformat()} on {', '.join(body.platforms)}",
+            meta={"status": row.Status, "scheduled_for": st.isoformat(), "media_count": len(body.media)},
+            request=request,
+        )
+        db.commit()
+        return {
+            "post_id": row.Id,
+            "status": row.Status,
+            "scheduled_for": st.isoformat(),
+            "results": {p: {"scheduled": True, "scheduled_for": st.isoformat()} for p in body.platforms},
+        }
 
     results, row = await service.publish(
         db,
@@ -225,7 +294,7 @@ async def create_direct_post(
 
 @router.post(
     "/posts/from-urls",
-    summary="Publish using media that is already hosted",
+    summary="Publish or schedule using media that is already hosted",
     status_code=status.HTTP_201_CREATED,
 )
 async def create_direct_post_from_urls(
@@ -243,7 +312,41 @@ async def create_direct_post_from_urls(
     fail on Meta's side rather than here.
     """
     principal, client_id = scope
+    st = _validate_schedule_time(body.schedule_time)
     uploaded = [{"url": m.url, "is_video": m.is_video} for m in body.media]
+
+    if st is not None:
+        media_shape = service.classify_media(uploaded)
+        row = LeadSocialPost(
+            ClientId=client_id,
+            ChannelAccountId=body.account_id,
+            Platforms=",".join(body.platforms),
+            Mode="direct",
+            Caption=body.caption,
+            MediaUrls=[m["url"] for m in uploaded],
+            MediaShape=media_shape,
+            Status=POST_STATUS_SCHEDULED,
+            ScheduledFor=st,
+            CreatedBy=principal.email,
+        )
+        db.add(row)
+        db.flush()
+
+        jobs.enqueue(
+            db,
+            kind="social.publish",
+            payload={"post_id": row.Id},
+            client_id=client_id,
+            run_at=st,
+            commit=True,
+        )
+        db.commit()
+        return {
+            "post_id": row.Id,
+            "status": row.Status,
+            "scheduled_for": st.isoformat(),
+            "results": {p: {"scheduled": True, "scheduled_for": st.isoformat()} for p in body.platforms},
+        }
 
     results, row = await service.publish(
         db, client_id,
@@ -256,6 +359,7 @@ async def create_direct_post_from_urls(
     )
     db.commit()
     return {"post_id": row.Id if row else None, "status": row.Status if row else None, "results": results}
+
 
 
 @router.post(

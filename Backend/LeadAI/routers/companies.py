@@ -39,11 +39,14 @@ from ..schemas import (
     CompanyUserOut,
     CompanyUsersOut,
     Ok,
+    ServiceItemOut,
 )
 from ..serializers import company_out
 from ..services import ai_engine, script_engine
 
+
 logger = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/companies", tags=["LeadAI • Companies"])
 
@@ -105,6 +108,21 @@ def create_company(
     # assistant is usable the moment a document is uploaded.
     script_engine.seed_prompts(db, client.Id, created_by=principal.email)
     db.add(LeadCompanySettings(ClientId=client.Id, CreatedBy=principal.email))
+
+    # Seed services/features for the company (only explicitly listed services are enabled)
+    if payload.services:
+        for s_key in payload.services:
+            s_key = s_key.strip().lower()
+            db.add(
+                LeadCompanyService(
+                    ClientId=client.Id,
+                    ServiceKey=s_key,
+                    IsEnabled=True,
+                    CreatedBy=principal.email,
+                )
+            )
+
+
 
     if payload.admin_email:
         # Create user in identity server directly
@@ -430,3 +448,107 @@ def update_settings(
     )
     db.commit()
     return _settings_out(db, row)
+
+
+# ===========================================================================
+# Company Services / Features Management
+# ===========================================================================
+@router.get(
+    "/{company_id}/services",
+    response_model=CompanyServicesOut,
+    summary="Get services/features enabled for a company",
+)
+def get_company_services(
+    company_id: str,
+    principal: Principal = Depends(require("company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    if not principal.is_platform_admin:
+        allowed = set(principal.accessible_client_ids) | (
+            {principal.client_id} if principal.client_id else set()
+        )
+        if company_id not in allowed:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
+
+    client = db.get(Client, company_id)
+    if not client or client.IsDeleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
+
+    existing_rows = (
+        db.query(LeadCompanyService)
+        .filter(
+            LeadCompanyService.ClientId == company_id,
+            LeadCompanyService.IsDeleted == False,  # noqa: E712
+        )
+        .order_by(LeadCompanyService.ServiceKey.asc())
+        .all()
+    )
+
+    items = [
+        ServiceItemOut(key=r.ServiceKey, is_enabled=r.IsEnabled)
+        for r in existing_rows
+    ]
+
+    return CompanyServicesOut(
+        company_id=client.Id,
+        company_name=client.Name,
+        services=items,
+    )
+
+
+@router.patch(
+    "/{company_id}/services",
+    response_model=CompanyServicesOut,
+    summary="Patch/update services/features enabled status for a company (super admin)",
+)
+def patch_company_services(
+    company_id: str,
+    payload: CompanyServicesPatchIn,
+    request: Request,
+    principal: Principal = Depends(require("company.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    client = db.get(Client, company_id)
+    if not client or client.IsDeleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
+
+    for item in payload.services:
+        s_key = item.key.strip().lower()
+        row = (
+            db.query(LeadCompanyService)
+            .filter(
+                LeadCompanyService.ClientId == company_id,
+                LeadCompanyService.ServiceKey == s_key,
+                LeadCompanyService.IsDeleted == False,  # noqa: E712
+            )
+            .first()
+        )
+        if row:
+            row.IsEnabled = item.is_enabled
+            row.UpdatedBy = principal.email
+            row.UpdatedAt = utcnow()
+        else:
+            db.add(
+                LeadCompanyService(
+                    ClientId=company_id,
+                    ServiceKey=s_key,
+                    IsEnabled=item.is_enabled,
+                    CreatedBy=principal.email,
+                )
+            )
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.COMPANY_UPDATED,
+        client_id=company_id,
+        entity_type="company_services",
+        entity_id=company_id,
+        message=f"Patched company services for '{client.Name}'",
+        meta={"services_patched": len(payload.services)},
+        request=request,
+    )
+    db.commit()
+    return get_company_services(company_id=company_id, principal=principal, db=db)
+
+
