@@ -1,0 +1,143 @@
+name: Build on cloud, deploy to home server via SSH-tunneled registry
+
+on:
+  push:
+    branches: [with-outbound]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: my-python-app
+  CONTAINER_NAME: my-python-app
+  HOST_PORT: 6789
+  CONTAINER_PORT: 6789
+  # Path on the SERVER (Windows). Secrets file is owned by the server
+  # admin; it's never in this repo and never in GitHub Secrets.
+  ENV_FILE: 'C:\ProgramData\my-python-app\.env'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # Tell the runner's Docker to allow plain-HTTP push to
+      # localhost:5000. localhost:5000 is the runner-side mouth of the
+      # SSH tunnel; nothing else on the runner can reach it. Restart
+      # is per-job, dies with the runner.
+      - name: Allow plain-HTTP push to localhost:5000
+        run: |
+          echo '{"insecure-registries":["localhost:5000"]}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Install SSH key and trust server host key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Quick reachability check so we get a clear error instead of
+          # a 5-second silent timeout from ssh-keyscan.
+          echo "Probing server reachability..."
+          if ! nc -z -w 5 "${{ secrets.SERVER_HOST }}" "${{ secrets.SSH_PORT }}"; then
+            echo "::error::Cannot reach ${{ secrets.SERVER_HOST }}:${{ secrets.SSH_PORT }} from GitHub. Check router port-forward and the SERVER_HOST / SSH_PORT secrets."
+            exit 1
+          fi
+          # No 2>/dev/null this time - we want to see the real error.
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      # -L 5000:127.0.0.1:5000  = runner's localhost:5000 forwards to
+      #                            server's localhost:5000 (its own registry)
+      # -N                       = no remote command, just the tunnel
+      # -f                       = background after authentication
+      # ServerAliveInterval/-Max = keep the tunnel alive during slow pushes
+      - name: Open SSH tunnel to server-side registry
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} \
+              -i ~/.ssh/id_ed25519 \
+              -L 5000:127.0.0.1:5000 \
+              -N -f \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=120 \
+              ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}
+
+      # Query the registry (through the open tunnel) for existing "vN" tags,
+      # find the highest N, and increment by 1. First deploy gets tag "v1".
+      # Using a "v" prefix avoids collision with old SHA-based tags (which can
+      # be all-digit hex strings like "9908993" and would inflate the counter).
+      - name: Compute next version tag
+        id: vars
+        run: |
+          curl -sf http://localhost:5000/v2/$IMAGE_NAME/tags/list \
+            > /tmp/registry_tags.json 2>/dev/null \
+            || echo '{"tags":[]}' > /tmp/registry_tags.json
+
+          CURRENT_VERSION=$(python3 -c "import json; d=json.load(open('/tmp/registry_tags.json')); t=d.get('tags') or []; nums=[int(x[1:]) for x in t if x.startswith('v') and x[1:].isdigit()]; print(max(nums, default=0))")
+          NEXT_VERSION=$((CURRENT_VERSION + 1))
+          echo "VERSION_TAG=v$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Next version: v$NEXT_VERSION"
+
+      - name: Build image
+        run: |
+          docker build \
+            -t localhost:5000/$IMAGE_NAME:latest \
+            -t localhost:5000/$IMAGE_NAME:${{ steps.vars.outputs.VERSION_TAG }} \
+            .
+
+      # The push goes through the tunnel to the registry running on
+      # the server. The server never exposes :5000 to the internet.
+      - name: Push image through tunnel
+        run: |
+          docker push localhost:5000/$IMAGE_NAME:latest
+          docker push localhost:5000/$IMAGE_NAME:${{ steps.vars.outputs.VERSION_TAG }}
+
+      # Now tell the server to pull from its own loopback registry and
+      # restart the container. "localhost:5000" from the SERVER's
+      # perspective is the same registry we just pushed into.
+      # Previous versioned images are kept in the registry.
+      - name: Pull and restart container on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Docker Desktop overwrites credential helpers on update; re-apply
+            # the no-op helper so Session-0 SSH pulls keep working.
+            $dockerBin = "C:\Program Files\Docker\Docker\resources\bin"
+            $empty = "$dockerBin\docker-credential-empty.exe"
+            if (Test-Path $empty) {
+              Copy-Item $empty "$dockerBin\docker-credential-wincred.exe" -Force
+              Copy-Item $empty "$dockerBin\docker-credential-desktop.exe" -Force
+            }
+
+            Write-Host "Deploying version: ${{ steps.vars.outputs.VERSION_TAG }}"
+
+            docker pull localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+            if ($LASTEXITCODE -ne 0) { throw "docker pull failed" }
+
+            docker rm -f ${{ env.CONTAINER_NAME }} 2>$null
+            $global:LASTEXITCODE = 0
+
+            if (-not (Test-Path '${{ env.ENV_FILE }}')) {
+              Write-Error "Env file not found at ${{ env.ENV_FILE }} - create it on the server first."
+              exit 1
+            }
+
+            docker run -d `
+              --name ${{ env.CONTAINER_NAME }} `
+              --restart unless-stopped `
+              --network outbound-net `
+              --env-file '${{ env.ENV_FILE }}' `
+              -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} `
+              localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+            if ($LASTEXITCODE -ne 0) { throw "docker run failed" }
+
+      - name: Close SSH tunnel
+        if: always()
+        run: pkill -f 'ssh.*-L 5000:127.0.0.1:5000' || true

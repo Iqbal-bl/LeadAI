@@ -1,0 +1,259 @@
+<?xml version='1.0' encoding='utf-8'?>
+<fsm>
+  <state id="greeting">
+    <prompt> I’m actually calling to follow up on a claim. Would you be able to assist me with that?</prompt>
+    <retryPrompts>
+      <prompt>Oh, sorry about that. I was just wondering if you could help with a claim today?</prompt>
+      <prompt>I’m trying to follow up on a claim. Could you let me know if you can help with that?</prompt>
+    </retryPrompts>
+    <expectedInputs>
+      <input>yes</input>
+      <input>no</input>
+      <input>ivr</input>
+      <input>human</input>
+    </expectedInputs>
+    <nextState>
+      <input value="yes">identify</input>
+      <input value="human">identify</input>
+      <input value="ivr">handle_ivr</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="identify">
+    <prompt>Oh, great! Thanks for your help.</prompt>
+    <retryPrompts>
+      <prompt>Let me just repeat that: I'm calling to discuss a claim.</prompt>
+      <prompt>Just confirming — this is a claim inquiry </prompt>
+    </retryPrompts>
+    <expectedInputs>
+      <input>acknowledged</input>
+    </expectedInputs>
+    <nextState>
+      <input value="acknowledged">claim_received_check</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="claim_received_check">
+    <prompt>First off, could you confirm if the claim or appeal for this patient was received?</prompt>
+    <retryPrompts>
+      <prompt>Could you please confirm whether you received the claim or appeal?</prompt>
+      <prompt>Was the claim submitted acknowledged in your system?</prompt>
+    </retryPrompts>
+    <expectedInputs>
+      <input>yes</input>
+      <input>no</input>
+    </expectedInputs>
+    <nextState>
+      <input value="yes">claim_status</input>
+      <input value="no">missing_claim_info</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="missing_claim_info">
+    <prompt>Could you provide the correct payer ID for electronic claims?</prompt>
+    <retryPrompts>
+      <prompt>I'm looking for the payer ID to resubmit the claim electronically. Can you provide it?</prompt>
+      <prompt>We need the payer ID for proper routing. Could you check and share it?</prompt>
+    </retryPrompts>
+    <expectedInputs>
+      <input>provided</input>
+    </expectedInputs>
+    <nextState>
+      <input value="provided">mailing_address</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="mailing_address">
+    <prompt>Could you provide the correct mailing address for paper claims?</prompt>
+    <expectedInputs>
+      <input>provided</input>
+    </expectedInputs>
+    <nextState>
+      <input value="provided">system_issue_check</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="system_issue_check">
+    <prompt>Was there any system issue that may have delayed processing?</prompt>
+    <expectedInputs>
+      <input>answered</input>
+    </expectedInputs>
+    <nextState>
+      <input value="answered">filing_limit</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="filing_limit">
+    <prompt>What is the timely filing limit for claims and appeals?</prompt>
+    <expectedInputs>
+      <input>answered</input>
+    </expectedInputs>
+    <nextState>
+      <input value="answered">eligibility_check</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="eligibility_check">
+    <prompt>Can you confirm the patient’s eligibility on the date of service?</prompt>
+    <expectedInputs>
+      <input>confirmed</input>
+    </expectedInputs>
+    <nextState>
+      <input value="confirmed">conclusion</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="claim_status">
+    <prompt>Perfect, thanks. Do you happen to know the current status of the claim or appeal?</prompt>
+    <expectedInputs>
+      <input>in_process</input>
+      <input>paid</input>
+      <input>denied</input>
+    </expectedInputs>
+    <nextState>
+      <input value="in_process">process_details</input>
+      <input value="paid">paid_step1</input>
+      <input value="denied">denied_step1</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="process_details">
+    <prompt>Okay, thanks. When was the claim received, and how long do you think it will take to process?</prompt>
+    <expectedInputs>
+      <input>answered</input>
+    </expectedInputs>
+    <nextState>
+      <input value="answered">expedite_check</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="expedite_check">
+    <prompt>Hmm, it’s been over 45 days. Do you think you could expedite the processing?</prompt>
+    <expectedInputs>
+      <input>noted</input>
+    </expectedInputs>
+    <nextState>
+      <input value="noted">conclusion</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="paid_step1">
+    <prompt>When was the claim received and when was it processed?</prompt>
+    <expectedInputs>
+      <input>answered</input>
+    </expectedInputs>
+    <nextState>
+      <input value="answered">paid_step2</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="paid_step2">
+    <prompt>What is the paid amount and claim number?</prompt>
+    <expectedInputs>
+      <input>answered</input>
+    </expectedInputs>
+    <nextState>
+      <input value="answered">paid_step3</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="paid_step3">
+    <prompt>Was the payment issued as a check or EFT?</prompt>
+    <expectedInputs>
+      <input>check</input>
+      <input>eft</input>
+    </expectedInputs>
+    <nextState>
+      <input value="check">check_details</input>
+      <input value="eft">eft_details</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="check_details">
+    <prompt>What was the check number and cashing date?</prompt>
+    <expectedInputs>
+      <input>provided</input>
+    </expectedInputs>
+    <nextState>
+      <input value="provided">conclusion</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="eft_details">
+    <prompt>What was the EFT number and deposit date?</prompt>
+    <expectedInputs>
+      <input>provided</input>
+    </expectedInputs>
+    <nextState>
+      <input value="provided">conclusion</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="denied_step1">
+    <prompt>What is the denial reason, denied date, and claim number?</prompt>
+    <expectedInputs>
+      <input>answered</input>
+    </expectedInputs>
+    <nextState>
+      <input value="answered">denial_appeal_method</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="denial_appeal_method">
+    <prompt>What is the preferred method to submit an appeal — mail, fax, or online portal?</prompt>
+    <expectedInputs>
+      <input>mail</input>
+      <input>fax</input>
+      <input>online</input>
+    </expectedInputs>
+    <nextState>
+      <input value="mail">mail_appeal</input>
+      <input value="fax">fax_appeal</input>
+      <input value="online">online_appeal</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="mail_appeal">
+    <prompt>Please provide the mailing address for appeal submission.</prompt>
+    <expectedInputs>
+      <input>provided</input>
+    </expectedInputs>
+    <nextState>
+      <input value="provided">conclusion</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="fax_appeal">
+    <prompt>Please provide the fax number for appeal submission.</prompt>
+    <expectedInputs>
+      <input>provided</input>
+    </expectedInputs>
+    <nextState>
+      <input value="provided">conclusion</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="online_appeal">
+    <prompt>Please provide the portal URL and registration steps.</prompt>
+    <expectedInputs>
+      <input>provided</input>
+    </expectedInputs>
+    <nextState>
+      <input value="provided">conclusion</input>
+    </nextState>
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="conclusion">
+    <prompt>Thank you so much for your help! Could I have your name and the call reference number? Also, would it be possible to check more than one claim during this call?</prompt>
+    <expectedInputs>
+      <input>done</input>
+    </expectedInputs>
+    <nextState />
+    <fallbackState>manual_escalation</fallbackState>
+  </state>
+  <state id="manual_escalation">
+    <prompt>It looks like I’m having trouble confirming the information. Could you please transfer me to a representative or provide an alternate contact method?</prompt>
+    <expectedInputs />
+    <nextState />
+  </state>
+</fsm>

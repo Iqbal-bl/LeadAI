@@ -1,0 +1,39 @@
+<?xml version="1.0" ?>
+<agent-template version="2.0">
+    <section title="Identity" type="identity">
+        <field name="name">Name</field>
+        <field name="role">Agent Role</field>
+        <field name="company">Company Name</field>
+    </section>
+    <section title="Mission" type="text">Describe what your agent does and its main purpose here.
+        This helps the AI understand its core function.</section>
+    <section title="Goals" type="list">
+        <item>Goal 1: What should agent accomplish?</item>
+        <item>Goal 2: Another objective</item>
+        <item>Goal 3: Add more as needed</item>
+    </section>
+    <section title="Available Data" type="data">
+        <field name="" label="Data Point 1">Value or description</field>
+        <field name="" label="Data Point 2">Value or description</field>
+    </section>
+    <section title="Data Not Available" type="data-unavailable">
+        <item>Sensitive information agent should not disclose</item>
+        <item>Add more restricted items here</item>
+    </section>
+    <section title="Rules" type="rules">
+        <must-do/>
+        <must-not/>
+    </section>
+    <section title="Scenarios" type="scenarios">
+        <scenario if="">
+            </scenario>
+        <scenario if="">
+            </scenario>
+    </section>
+    <section title="Call Flow" type="script">
+        <step order="1">First thing to do</step>
+        <step order="2">Second step</step>
+        <step order="3">Third step</step>
+        <step order="4">Continue as needed</step>
+    </section>
+</agent-template>

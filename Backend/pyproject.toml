@@ -1,0 +1,81 @@
+# =============================================================================
+# Tooling configuration.
+#
+# Ruff replaces black + isort + flake8 in one binary, which matters here because
+# the tree is 44k lines and a multi-tool pre-commit pass over it is slow enough
+# that people skip it.
+#
+# The line length is 100, not black's 88. This codebase is already written at
+# roughly that width, and reflowing every file to 88 would produce a diff so
+# large that the genuinely interesting changes become invisible in review.
+# =============================================================================
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+exclude = [
+    ".git",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "dll_file",
+    "data_files",
+    # Vendored third-party agents. Formatting them creates merge conflicts
+    # against upstream for no benefit — de-duplicate them first (see
+    # scripts/cleanup_repo.sh step 3), then remove this exclusion.
+    "browser_agent_v2-main",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes — unused imports/names, the highest-value checks here
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "T20",  # flake8-print — catches the 59 print() calls in batching.py
+]
+
+ignore = [
+    "E501",   # line length — the formatter owns this
+    "B008",   # function call in default arg: this is how FastAPI's Depends() works
+    "SIM108", # ternary-instead-of-if: often less readable in this codebase
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The legacy files. These are NOT exempt forever — the intent is to work through
+# them module by module and delete entries from this list. Suppressing them now
+# keeps `ruff check` green on new code, so the signal is usable today rather
+# than drowning in 400 pre-existing findings.
+"multiligual_call.py" = ["T20", "B904", "E722", "F841"]
+"batching.py"         = ["T20", "B904", "E722", "F841"]
+"bot/*.py"            = ["T20", "B904", "E722", "F841"]
+"social_agent/**"     = ["T20", "B904", "E722"]
+
+# Scripts and tests legitimately print.
+"demo/*.py"           = ["T20"]
+"config_guard.py"     = ["T20"]
+"test_*.py"           = ["T20"]
+"**/functional_test.py" = ["T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["LeadAI", "Domain", "Repositories", "Websockets", "bot"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+
+# =============================================================================
+[tool.pytest.ini_options]
+testpaths = ["tests", "."]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: needs a live database and network",
+    "slow: takes more than a second",
+]

@@ -1,0 +1,46 @@
+# ===========================================================================
+# LeadAI additional requirements
+# ===========================================================================
+# Install ON TOP of the existing requirements.txt:
+#     pip install -r requirements.txt
+#     pip install -r LeadAI/requirements-leadai.txt
+#
+# Most of what LeadAI needs is ALREADY in the outbound requirements.txt and is
+# listed here only as a comment so you can see the full dependency picture:
+#
+#   fastapi, uvicorn, SQLAlchemy, pydantic  -> web + ORM
+#   mysqlclient                             -> the shared MySQL engine
+#   numpy                                   -> vector scoring
+#   httpx                                   -> OpenAI / Exotel HTTP calls
+#   PyJWT                                   -> chat widget session tokens
+#   python-dotenv                           -> .env loading
+#   email-validator                         -> EmailStr validation
+#   python-multipart                        -> document upload
+#   openai                                  -> (present, though we call the REST
+#                                              API through httpx directly)
+#
+# ---------------------------------------------------------------------------
+# REQUIRED additions
+# ---------------------------------------------------------------------------
+
+# Fernet encryption of customer PII at rest (phone/email/social handles).
+cryptography>=42.0.0
+
+# Text extraction from uploaded knowledge-base documents.
+pypdf==5.1.0
+python-docx==1.1.2
+
+
+# ---------------------------------------------------------------------------
+# OPTIONAL — the platform detects these and falls back cleanly when absent
+# ---------------------------------------------------------------------------
+
+# Shared cache + rate limiting across uvicorn workers. Without it, rate limits
+# are per-process (fine for one worker, not for a scaled deployment).
+# Enable with REDIS_URL=redis://host:6379/0
+redis==5.2.1
+
+# Production vector store. Without it, embeddings live in leadai_kb_chunks and
+# are scored in-process with numpy — fine to ~tens of thousands of chunks per
+# company. Enable with QDRANT_URL=http://host:6333
+# qdrant-client==1.12.1

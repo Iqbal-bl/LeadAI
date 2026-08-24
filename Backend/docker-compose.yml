@@ -1,0 +1,120 @@
+services:
+  voice-agent:
+    build: .
+    # Port resolution. main.py reads PORT (default 5050); the CI workflow and the
+    # published compose file used a hard-coded 6789, and the README's ngrok
+    # script tunnelled 5050 — three different answers for one service. PORT is
+    # now the single source of truth: set it once in .env and every layer follows.
+    # Default 6789 preserves the behaviour of the existing deployment.
+    ports:
+      - "${PORT:-6789}:${PORT:-6789}"
+    env_file:
+      - .env
+    volumes:
+      # Persist uploaded / edited XML agent scripts so they survive restarts.
+      - ./scripts:/app/scripts
+    environment:
+      - PORT=${PORT:-6789}
+      - PYTHONPATH=/app
+      # Force Python to use UTF-8 for file paths with Indic characters.
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+      # MinIO recording archive. The app uploads each Twilio recording here and
+      # then deletes it from Twilio. Override these in .env for production.
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-call-recordings}
+      - MINIO_REGION=${MINIO_REGION:-us-east-1}
+      # LeadAI document store. Separate buckets per purpose so a retention rule
+      # or a lifecycle policy can be applied to campaign uploads without
+      # touching call recordings.
+      - MINIO_BUCKET_DOCUMENTS=${MINIO_BUCKET_DOCUMENTS:-leadai-documents}
+      - MINIO_BUCKET_CAMPAIGNS=${MINIO_BUCKET_CAMPAIGNS:-leadai-campaigns}
+      - MINIO_BUCKET_EXPORTS=${MINIO_BUCKET_EXPORTS:-leadai-exports}
+      # The API replicas serve requests only. Background campaign work belongs
+      # to the dedicated worker below, otherwise every replica would race for
+      # the same jobs and the voice pipeline's thread pool would be starved.
+      - LEADAI_WORKER_ENABLED=false
+    depends_on:
+      - minio
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------- #
+  # Campaign / background worker
+  # ---------------------------------------------------------------------- #
+  # Same image, same code, one environment variable apart. It runs the durable
+  # job queue: building campaign audiences, sending batches, placing calls,
+  # retrying failures. Keep this at ONE replica unless you have verified the
+  # claim query behaves under contention — jobs are claimed with an atomic
+  # conditional UPDATE, so extra replicas are safe but rarely necessary.
+  leadai-worker:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./scripts:/app/scripts
+    environment:
+      - PORT=${PORT:-6789}
+      - PYTHONPATH=/app
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-http://minio:9000}
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-call-recordings}
+      - MINIO_BUCKET_DOCUMENTS=${MINIO_BUCKET_DOCUMENTS:-leadai-documents}
+      - MINIO_BUCKET_CAMPAIGNS=${MINIO_BUCKET_CAMPAIGNS:-leadai-campaigns}
+      - MINIO_BUCKET_EXPORTS=${MINIO_BUCKET_EXPORTS:-leadai-exports}
+      - MINIO_REGION=${MINIO_REGION:-us-east-1}
+      # This is the one process that drains the queue.
+      - LEADAI_WORKER_ENABLED=true
+      - LEADAI_WORKER_CONCURRENCY=${LEADAI_WORKER_CONCURRENCY:-4}
+      - LEADAI_WORKER_POLL_SECONDS=${LEADAI_WORKER_POLL_SECONDS:-5}
+      # Only the API replicas should run schema migrations, to avoid two
+      # processes issuing ALTER TABLE against the same table on boot.
+      - LEADAI_AUTO_MIGRATE=false
+    depends_on:
+      - minio
+      - voice-agent
+    restart: unless-stopped
+
+  # One-shot bucket bootstrap. MinIO does not create buckets on demand, and the
+  # app deliberately does not run CreateBucket at request time (that would need
+  # admin credentials in the API process). This container makes them once and
+  # exits.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minioadmin}; do
+        echo 'waiting for minio...'; sleep 2;
+      done;
+      mc mb --ignore-existing local/${MINIO_BUCKET:-call-recordings};
+      mc mb --ignore-existing local/${MINIO_BUCKET_DOCUMENTS:-leadai-documents};
+      mc mb --ignore-existing local/${MINIO_BUCKET_CAMPAIGNS:-leadai-campaigns};
+      mc mb --ignore-existing local/${MINIO_BUCKET_EXPORTS:-leadai-exports};
+      echo 'buckets ready';
+      "
+    restart: on-failure
+
+  # S3-compatible object store for archived call recordings.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API (used by the app via MINIO_ENDPOINT)
+      - "9001:9001"   # web console
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+volumes:
+  minio-data:

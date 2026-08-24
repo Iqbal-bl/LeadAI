@@ -1,0 +1,171 @@
+# =============================================================================
+# Unified requirements.txt — AIOutbound + LeadAI + Social Agent + Browser Agent
+# =============================================================================
+# Install: pip install -r requirements.txt
+# =============================================================================
+
+# --- Web Framework ---
+fastapi==0.116.2
+uvicorn==0.35.0
+starlette==0.48.0
+python-multipart==0.0.20
+Jinja2==3.1.6
+websockets==15.0.1
+
+# --- Database ---
+SQLAlchemy==2.0.43
+mysqlclient==2.2.7
+greenlet==3.2.4
+
+# --- Authentication & Security ---
+PyJWT==2.10.1
+bcrypt==4.3.0
+passlib==1.7.4
+cryptography>=42.0.0
+itsdangerous==2.2.0
+
+# --- AWS / MinIO Storage ---
+aioboto3==15.1.0
+aiobotocore==2.24.0
+boto3==1.39.11
+botocore==1.39.11
+s3transfer==0.13.1
+
+# --- HTTP Clients ---
+httpx==0.28.1
+httpcore==1.0.9
+requests==2.32.5
+urllib3==2.5.0
+
+# --- AI / LLM ---
+openai>=1.40.0
+deepgram-sdk==4.8.1
+elevenlabs==1.56.0
+sarvamai
+
+# --- Voice / Audio ---
+pysilero_vad==2.1.1
+webrtcvad-wheels==2.0.14
+SpeechRecognition==3.14.3
+pydub==0.25.1
+librosa==0.11.0
+soundfile==0.13.1
+soxr==1.0.0
+onnxruntime==1.22.1
+audioread==3.0.1
+
+# --- Twilio (SMS / Voice) ---
+twilio==9.5.1
+
+# --- Data / ML ---
+numpy==2.2.6
+pandas==2.3.2
+scikit-learn==1.7.2
+scipy==1.15.3
+openpyxl==3.1.5
+xlrd==2.0.2
+
+# --- Data Validation / Serialization ---
+pydantic==2.11.9
+pydantic_core==2.33.2
+email-validator==2.3.0
+dataclasses-json==0.6.7
+marshmallow==3.26.1
+
+# --- Phone Number Validation ---
+phonenumbers==9.0.14
+
+# --- Document Processing ---
+python-docx==1.1.2
+pypdf==5.1.0
+pillow==11.3.0
+
+# --- Environment / Config ---
+python-dotenv==1.1.1
+PyYAML==6.0.2
+pytz==2025.2
+tzdata==2025.2
+
+# --- Cloudinary (Social Media Image Hosting) ---
+cloudinary>=1.40.0
+
+# --- LangChain / LangGraph (Social Agent AI) ---
+langchain>=0.3
+langchain-openai>=0.2
+langchain-text-splitters>=0.3
+langchain-chroma>=0.1
+langgraph>=0.2
+chromadb>=0.5
+tavily-python>=0.5
+
+# --- Browser Agent ---
+playwright>=1.45
+apscheduler>=3.10
+langchain-groq>=0.2
+langchain-google-genai>=2.0
+replicate>=1.0
+
+# --- Redis (Optional: shared cache across workers) ---
+redis==5.2.1
+
+# --- Misc Utilities ---
+aiohttp==3.12.15
+aiohttp-retry==2.9.1
+aiofiles==24.1.0
+aiohappyeyeballs==2.6.1
+aioitertools==0.12.0
+aiosignal==1.4.0
+annotated-types==0.7.0
+anyio==4.10.0
+async-timeout==5.0.1
+attrs==25.3.0
+certifi==2025.8.3
+cffi==2.0.0
+charset-normalizer==3.4.3
+click==8.3.0
+colorama==0.4.6
+coloredlogs==15.0.1
+decorator==5.2.1
+deprecation==2.1.0
+dnspython==2.8.0
+et_xmlfile==2.0.0
+exceptiongroup==1.3.0
+filelock==3.19.1
+flatbuffers==25.2.10
+frozenlist==1.7.0
+fsspec==2025.9.0
+h11==0.16.0
+humanfriendly==10.0
+idna==3.10
+jwcrypto==1.5.6
+jmespath==1.0.1
+joblib==1.5.2
+lazy_loader==0.4
+llvmlite==0.45.0
+MarkupSafe==3.0.2
+mpmath==1.3.0
+msgpack==1.1.1
+multidict==6.6.4
+mypy_extensions==1.1.0
+networkx==3.4.2
+numba==0.62.0
+packaging==25.0
+platformdirs==4.4.0
+pooch==1.8.2
+propcache==0.3.2
+protobuf==6.32.1
+pycparser==2.23
+pyreadline3==3.5.4
+python-dateutil==2.9.0.post0
+regex==2025.9.18
+safetensors==0.6.2
+six==1.17.0
+sniffio==1.3.1
+sympy==1.14.0
+threadpoolctl==3.6.0
+tqdm==4.67.1
+typing-inspect==0.9.0
+typing-inspection==0.4.1
+typing_extensions==4.15.0
+wrapt==1.17.3
+yarl==1.20.1

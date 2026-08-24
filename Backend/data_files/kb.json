@@ -1,0 +1,127 @@
+{
+  "steps": [
+    {
+      "id": "greeting",
+      "intent": "Introduce yourself and state the purpose of the call.",
+      "action": "Politely state your name and role as the claimant or their representative. Mention you are following up on an insurance claim and ask if the person can assist.",
+      "next": "confirm_help"
+    },
+    {
+      "id": "confirm_help",
+      "intent": "Confirm the other party is able to help.",
+      "action": "If the other party confirms, continue. If not, ask to be transferred to someone who can assist.",
+      "next": "confirm_claim"
+    },
+    {
+      "id": "confirm_claim",
+      "intent": "Clarify claim details.",
+      "action": "Restate you are calling about a specific claim. Provide claim number and other patient identifiers directly from data. Ask if they can locate the claim.",
+      "next": {
+        "found": "claim_status",
+        "not_found": "missing_claim_info"
+      }
+    },
+    {
+      "id": "missing_claim_info",
+      "intent": "Gather information needed to locate the claim.",
+      "action": "If electronic: Request payer ID. If paper: Ask for correct mailing address. After each, confirm and proceed.",
+      "next": "system_issue_check"
+    },
+    {
+      "id": "system_issue_check",
+      "intent": "Identify if system issues are causing delays.",
+      "action": "Ask if any technical/system issues occurred that might delay claim receipt or processing.",
+      "next": "filing_limit"
+    },
+    {
+      "id": "filing_limit",
+      "intent": "Get the timely filing limit.",
+      "action": "Ask what the cutoff date is for timely claim submissions.",
+      "next": "eligibility_check"
+    },
+    {
+      "id": "eligibility_check",
+      "intent": "Confirm patient eligibility.",
+      "action": "Ask if the patient was eligible on the date of service according to their records.",
+      "next": "conclusion"
+    },
+    {
+      "id": "claim_status",
+      "intent": "Determine the status of the claim.",
+      "action": "Ask if the claim is in process, paid, denied, or another status.",
+      "next": {
+        "in_process": "process_details",
+        "paid": "paid_details",
+        "denied": "denied_details",
+        "other": "manual_escalation"
+      }
+    },
+    {
+      "id": "process_details",
+      "intent": "Collect processing details for in-process claims.",
+      "action": "Ask when the claim was received and the expected completion date. If delayed over 45 days, ask if it can be expedited.",
+      "next": "conclusion"
+    },
+    {
+      "id": "paid_details",
+      "intent": "Collect payment details.",
+      "action": "Ask for dates of receipt and payment, amount paid, and claim number. Then determine if payment was via check or EFT and gather details accordingly.",
+      "next": {
+        "check": "check_details",
+        "eft": "eft_details"
+      }
+    },
+    {
+      "id": "check_details",
+      "intent": "Get check-specific information.",
+      "action": "Ask for check number and cashing date.",
+      "next": "conclusion"
+    },
+    {
+      "id": "eft_details",
+      "intent": "Get EFT-specific information.",
+      "action": "Ask for EFT number and deposit date.",
+      "next": "conclusion"
+    },
+    {
+      "id": "denied_details",
+      "intent": "Capture denial information.",
+      "action": "Ask for denial reason/code, date, and claim number. Then ask about appeal method (mail, fax, online) and gather the relevant details.",
+      "next": {
+        "mail": "mail_appeal",
+        "fax": "fax_appeal",
+        "online": "online_appeal"
+      }
+    },
+    {
+      "id": "mail_appeal",
+      "intent": "Mail appeal information.",
+      "action": "Ask for the mailing address for appeals.",
+      "next": "conclusion"
+    },
+    {
+      "id": "fax_appeal",
+      "intent": "Fax appeal information.",
+      "action": "Ask for the fax number for appeals.",
+      "next": "conclusion"
+    },
+    {
+      "id": "online_appeal",
+      "intent": "Online appeal information.",
+      "action": "Ask for portal URL and instructions for submitting online appeals.",
+      "next": "conclusion"
+    },
+    {
+      "id": "conclusion",
+      "intent": "Wrap up the call and verify next steps.",
+      "action": "Thank the other party, get their name and reference number, and ask if they can help with additional claims if any.",
+      "next": null
+    },
+    {
+      "id": "manual_escalation",
+      "intent": "Handle unresolvable cases.",
+      "action": "If the conversation flow fails or information is unavailable, request escalation or ask for an alternate contact.",
+      "next": null
+    }
+  ]
+}

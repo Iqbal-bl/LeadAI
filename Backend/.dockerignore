@@ -1,0 +1,59 @@
+# Build hygiene — keeps the image small and safe.
+# Anything that's secret, machine-specific, or regenerable goes here.
+
+# Secrets / local config — never copy into the image
+.env
+.env.*
+*.env
+
+# Python caches
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv
+venv
+env
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Editor / IDE
+.vscode
+.idea
+.cursor
+.claude
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Build / packaging artifacts
+*.egg-info
+build
+dist
+.eggs
+
+# Test caches
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Logs / runtime debris
+*.log
+nohup.out
+
+# Local Docker artifacts
+docker-compose.override.yml
+
+# Local plans / scratch
+plans

@@ -1,0 +1,31 @@
+# Optional extras for social publishing.
+#
+# The DIRECT publishing endpoints (/social/posts, /social/posts/from-urls, and
+# every */posts/direct route) need NOTHING from this file — they use httpx and
+# boto3, both already in requirements.txt. Install these only if you also want
+# the AI endpoints (/social/posts/ai, the topic-based routes, and the
+# reply-all routes), which run the LangGraph content agent.
+#
+#     pip install -r requirements-social.txt
+#
+# Until then those endpoints return a 503 explaining exactly this, rather than
+# breaking the rest of the API at import time — see LeadAI/social/agent_bridge.py.
+
+langchain>=0.3
+langchain-openai>=0.2
+langgraph>=0.2
+langchain-text-splitters>=0.3
+
+# CRAG grounding — replies and captions are drawn from the company's own
+# knowledge base rather than the model's general knowledge.
+langchain-chroma>=0.1
+chromadb>=0.5
+tavily-python>=0.5
+
+# Image generation for posts submitted without an image_url.
+pillow>=10.0
+
+# Browser-driven tasks (the legacy Playwright flows). NOT needed for anything
+# exposed over the API — every endpoint runs with use_browser=False — so leave
+# this commented unless you also run the standalone scheduler.
+# playwright>=1.45

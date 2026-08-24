@@ -1,0 +1,10 @@
+env
+venv
+vscode/
+temp_scipts/
+temp/
+dockerfile
+__pycache__/
+.venv
+.vnev
+.env

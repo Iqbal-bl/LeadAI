@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css?v=1.6">
+
+</head>
+
+<body>
+    <!-- Custom Modal -->
+    <div id="modal-container" class="modal-overlay hidden">
+        <div class="modal-box">
+            <button id="modal-close" class="modal-close" title="Close">&times;</button>
+            <h3 id="modal-title" class="modal-title">Prompt</h3>
+            <p id="modal-message" class="modal-message"></p>
+            <div id="modal-input-container">
+                <input type="text" id="modal-input" class="input-field" placeholder="">
+            </div>
+            <div class="modal-actions">
+                <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="modal-confirm" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login View -->
+    <div class="login-view" id="login-view">
+        <div class="login-box">
+            <div class="login-logo">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 2L2 7l10 5-10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+            </div>
+            <h2 class="login-title">Welcome back</h2>
+            <p class="login-subtitle">Sign in to access Voice Agent</p>
+            <div class="login-form">
+                <div class="input-group">
+                    <label class="input-label">Email</label>
+                    <input type="email" id="login-email" class="input-field" placeholder="Enter email">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Password</label>
+                    <input type="password" id="login-password" class="input-field" placeholder="Enter password">
+                </div>
+                <button id="btn-login" class="btn btn-primary" style="width: 100%;">
+                    Sign In
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App (hidden until logged in) -->
+    <div class="app-container hidden" id="app-container">
+        <!-- Left Panel: Call Controls & Transcript -->
+        <div class="left-panel">
+            <div class="header">
+                <div class="brand">
+                    <div class="brand-icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                        </svg>
+                    </div>
+                    <span class="brand-text">Voice Agent</span>
+                </div>
+                <button id="btn-logout" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;">
+                    Logout
+                </button>
+            </div>
+
+            <div class="status-bar">
+                <div class="status">
+                    <div class="status-dot" id="status-dot"></div>
+                    <span class="status-text" id="status-text">Ready</span>
+                </div>
+                <span class="duration" id="duration"></span>
+            </div>
+
+            <!-- Call Form -->
+            <div class="form-section" id="call-form" style="padding: 16px;">
+                <div class="input-group">
+                    <label class="input-label">Phone Number</label>
+                    <input type="tel" id="phone-number" class="input-field" placeholder="+1 234 567 8900">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Language</label>
+                    <select id="language-select" class="select-field">
+                        <option value="multi">Auto-detect (Multi)</option>
+                        <option value="hi">Hindi (हिंदी)</option>
+                        <option value="en">English (Indian)</option>
+                        <option value="ta">Tamil (தமிழ்)</option>
+                        <option value="te">Telugu (తెలుగు)</option>
+                        <option value="kn">Kannada (ಕನ್ನಡ)</option>
+                        <option value="ml">Malayalam (മലയാളം)</option>
+                        <option value="bn">Bengali (বাংলা)</option>
+                        <option value="gu">Gujarati (ગુજરાતી)</option>
+                        <option value="mr">Marathi (मराठी)</option>
+                        <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                        <option value="od">Odia (ଓଡ଼ିଆ)</option>
+                        <option value="raj">Rajasthani (राजस्थानी)</option>
+                    </select>
+                </div>
+                <!-- Smart Multi-lingual Toggle -->
+                <div class="input-group">
+                    <div class="toggle-container">
+                        <label class="input-label" style="margin-bottom: 0;">Smart Multi-lingual Input</label>
+                        <label class="switch">
+                            <input type="checkbox" id="multi-stt-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                    <div class="gender-speaker-info" style="margin-top: 5px; text-align: left;">
+                        Enable to understand <strong>any</strong> language.
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Agent Voice</label>
+                    <div class="gender-toggle" id="gender-toggle" style="margin-bottom: 8px;">
+                        <button class="gender-btn active" id="gender-female" data-gender="female">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/></svg>
+                            Female
+                        </button>
+                        <button class="gender-btn" id="gender-male" data-gender="male">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2a5 5 0 1 0 0 10A5 5 0 0 0 12 2zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/></svg>
+                            Male
+                        </button>
+                    </div>
+                    <select id="speaker-select" class="select-field">
+                        <!-- Options populated by JS -->
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Saved Scripts</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="script-select" class="select-field">
+                            <option value="">Select a script...</option>
+                        </select>
+                        <button id="btn-add-script" class="btn btn-secondary" title="Create new script from scratch"
+                            style="padding: 0 12px; color: var(--success);">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4v16m8-8H4" />
+                            </svg>
+                        </button>
+                        <button id="btn-delete-script" class="btn btn-secondary" title="Delete selected script"
+                            style="padding: 0 12px; color: var(--danger);">
+                            <svg fill="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                                <path
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Upload New Template (XML)</label>
+                    <div class="upload-area" id="upload-area">
+                        <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <div class="upload-text">Click or drag XML file here</div>
+                        <div class="upload-filename hidden" id="upload-filename"></div>
+                    </div>
+                    <input type="file" id="xml-file-input" accept=".xml" style="display: none;">
+                    <div style="margin-top: 10px;">
+                        <a href="/api/download-template" class="btn btn-secondary"
+                            style="width: 100%; text-align: center; text-decoration: none; display: block; font-size: 0.8rem;">
+                            Download Template
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transcript -->
+            <div class="transcript-container">
+                <div class="transcript-header">
+                    <div class="live-dot" id="live-dot"></div>
+                    <span>Transcript</span>
+                </div>
+                <div class="transcript-list" id="transcript-list">
+                    <div class="empty-state" id="empty-state">
+                        <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        <span class="empty-text">Upload XML to enable calling</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div class="footer">
+                <button id="btn-call" class="btn btn-primary" disabled title="Upload an XML template first">
+                    <svg fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+                    </svg>
+                    Call
+                </button>
+                <button id="btn-hangup" class="btn btn-danger hidden" disabled>
+                    <svg fill="currentColor" viewBox="0 0 24 24">
+                        <path
+                            d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
+                    </svg>
+                    End
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Panel: XML Editor -->
+        <div class="right-panel">
+            <div class="editor-header">
+                <span class="editor-title">Agent Configuration <span class="live-status-badge" id="live-badge"
+                        title="Your edits are saved to memory and applied to the next call automatically. No need to click Save unless you want to store them permanently.">Auto-Sync:
+                        Live</span></span>
+                <div class="editor-actions">
+                    <button id="btn-save" class="btn btn-secondary"
+                        title="Save changes permanently to your server library (Session-only edits work automatically for calls without saving)">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save
+                    </button>
+                    <button id="btn-save-as" class="btn btn-secondary" title="Save as a new script">
+                        Save As...
+                    </button>
+                    <button id="btn-export" class="btn btn-secondary" title="Download current configuration as XML">
+                        Export XML
+                    </button>
+                    <button id="btn-clear" class="btn btn-secondary" title="Clear configuration from view">
+                        Clear View
+                    </button>
+                </div>
+            </div>
+
+            <div class="sections-container" id="sections-container">
+                <!-- Sections will be rendered here by JavaScript -->
+            </div>
+
+            <div class="no-xml-state" id="no-xml-state">
+                <svg class="no-xml-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div class="no-xml-title">No Template Loaded</div>
+                <div class="no-xml-text">Upload an XML agent template to configure your voice agent's behavior and start
+                    making calls.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js?v=1.6"></script>
+    <script>
+        // Login/Logout functionality
+        const loginView = document.getElementById('login-view');
+        const appContainer = document.getElementById('app-container');
+        const btnLogin = document.getElementById('btn-login');
+        const btnLogout = document.getElementById('btn-logout');
+        const loginEmail = document.getElementById('login-email');
+        const loginPassword = document.getElementById('login-password');
+
+        // Check if already logged in (via session or localStorage)
+        async function checkSession() {
+            try {
+                const token = localStorage.getItem('access_token');
+                const headers = {};
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+
+                const response = await fetch('/api/check-session', { headers });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.logged_in) {
+                        if (data.access_token) {
+                            localStorage.setItem('access_token', data.access_token);
+                        }
+                        showApp();
+                    } else {
+                        // If we had a token but backend says not logged in, clear it
+                        localStorage.removeItem('access_token');
+                        showLogin();
+                    }
+                }
+            } catch (e) {
+                console.error('Session check failed:', e);
+            }
+        }
+
+        // Make these globally accessible for app.js to call them
+        window.showApp = function() {
+            loginView.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            // Trigger data loading now that we have auth
+            if (window.initApp) window.initApp();
+        };
+
+        window.showLogin = function() {
+            loginView.classList.remove('hidden');
+            appContainer.classList.add('hidden');
+        };
+
+        btnLogin.onclick = async () => {
+            const email = loginEmail.value.trim();
+            const password = loginPassword.value.trim();
+
+            if (!email || !password) {
+                alert('Please enter both email and password');
+                return;
+            }
+
+            btnLogin.disabled = true;
+            btnLogin.textContent = 'Signing in...';
+
+            try {
+                const formData = new FormData();
+                formData.append('email', email);
+                formData.append('password', password);
+
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.access_token) {
+                        localStorage.setItem('access_token', data.access_token);
+                    }
+                    showApp();
+                } else {
+                    const data = await response.json();
+                    alert(data.detail || 'Login failed');
+                }
+            } catch (e) {
+                alert('Login failed: ' + e.message);
+            }
+
+            btnLogin.disabled = false;
+            btnLogin.textContent = 'Sign In';
+        };
+
+        btnLogout.onclick = async () => {
+            try {
+                await fetch('/api/logout', { method: 'POST' });
+            } catch (e) { }
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('currentScriptName');
+            showLogin();
+        };
+
+        // Enter key on login fields
+        loginEmail.onkeypress = loginPassword.onkeypress = (e) => {
+            if (e.key === 'Enter') btnLogin.click();
+        };
+
+        // Check session on load
+        checkSession();
+    </script>
+</body>
+
+</html>
