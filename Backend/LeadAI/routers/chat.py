@@ -306,10 +306,6 @@ def history(
         dto.sources = None
         dto.model_used = None
         dto.sender_email = None
-        # Internal operational state — a customer must not see our provider
-        # errors or the fact that a message failed to send.
-        dto.delivery_status = None
-        dto.delivery_error = None
         out.append(dto)
     return out
 

@@ -34,7 +34,6 @@ from ..db import get_leadai_db
 from ..models import (
     Lead,
     LeadCall,
-    LeadChannelIdentity,
     LeadConversation,
     LeadCustomer,
     LeadMessage,
@@ -51,9 +50,7 @@ from ..schemas import (
     ConversationDetail,
     ConversationListOut,
     ConversationOut,
-    DeliveryOut,
     Ok,
-    SocialIdentityOut,
     StatusRequest,
 )
 from ..security import decrypt_pii
@@ -63,7 +60,7 @@ from ..serializers import (
     conversation_detail,
     conversation_out,
 )
-from ..services import ai_engine, conversation_flow
+from ..services import ai_engine
 
 try:
     from Websockets.connection import manager as ws_manager, _fire_and_forget
@@ -440,16 +437,16 @@ def reply(
     client = _company(db, client_id)
     conversation = _load(db, conversation_id, principal, client_id)
 
-    agent_message = LeadMessage(
-        ClientId=client_id,
-        ConversationId=conversation.Id,
-        Sender="agent",
-        SenderEmail=principal.email,
-        Content=payload.message.strip(),
-        CreatedBy=principal.email,
+    db.add(
+        LeadMessage(
+            ClientId=client_id,
+            ConversationId=conversation.Id,
+            Sender="agent",
+            SenderEmail=principal.email,
+            Content=payload.message.strip(),
+            CreatedBy=principal.email,
+        )
     )
-    db.add(agent_message)
-    db.flush()
     conversation.LastMessageAt = utcnow()
     if conversation.Status in ("open", "needs_human"):
         conversation.Status = "assigned"
@@ -487,50 +484,6 @@ def reply(
     db.commit()
     db.refresh(conversation)
 
-    # ---- deliver to the customer's actual channel -------------------------
-    #
-    # THE BUG THIS FIXES
-    # Everything above persists the reply and shows it in the dashboard. Nothing
-    # above SENT it. For the web widget that was fine — the widget polls
-    # /public/chat/messages, so a persisted row reaches the customer on its own.
-    # For WhatsApp, Messenger and Instagram it was not: those are push channels,
-    # and the message has to be handed to the Graph API explicitly.
-    #
-    # So inbound worked (webhook -> handle_customer_turn -> deliver), AI replies
-    # worked (same path), and human replies from the inbox went nowhere. The
-    # agent saw their message in the thread and reasonably assumed the customer
-    # had it too.
-    #
-    # Delivery happens AFTER the commit, deliberately. Sending first and then
-    # failing to commit would put a message on the customer's phone that does not
-    # exist in our database — unrecoverable. This ordering can at worst leave a
-    # persisted message undelivered, which is visible, retryable, and now
-    # explicitly recorded on the row.
-    delivery = conversation_flow.deliver(
-        db, conversation, payload.message.strip(), message=agent_message
-    )
-    if delivery.status != "not_applicable":
-        db.commit()
-
-    if delivery.needs_attention:
-        activity.log_principal(
-            db,
-            principal,
-            action=A.AGENT_REPLIED,
-            client_id=client_id,
-            entity_type="conversation",
-            entity_id=conversation.Id,
-            message=f"Reply NOT delivered on {conversation.Channel}: {delivery.error}",
-            meta={"delivery_status": delivery.status, "channel": conversation.Channel},
-            log_type="Warning",
-            request=request,
-        )
-        db.commit()
-        logger.warning(
-            "[LeadAI inbox] agent reply undelivered conv=%s channel=%s status=%s: %s",
-            conversation.Id, conversation.Channel, delivery.status, delivery.error,
-        )
-
     # Broadcast agent reply to the conversation WebSocket channel
     logger.info("[LeadAI] inbox broadcast: conv=%s ws_manager=%s", conversation.Id, ws_manager is not None)
     if ws_manager is not None:
@@ -543,23 +496,11 @@ def reply(
                     "sender_email": principal.email,
                     "content": payload.message.strip(),
                     "conversation_id": conversation.Id,
-                    "delivery_status": delivery.status,
                 },
             )
         )
 
-    detail = conversation_detail(db, conversation, principal)
-    # Surfaced so the dashboard can show an undelivered reply as undelivered.
-    # Optional field, so an existing client that ignores it is unaffected.
-    detail.delivery = DeliveryOut(
-        status=delivery.status,
-        delivered=delivery.delivered,
-        channel=conversation.Channel,
-        message_id=delivery.message_id,
-        error=delivery.error,
-        detail=delivery.detail,
-    )
-    return detail
+    return conversation_detail(db, conversation, principal)
 
 
 @router.post(
@@ -640,44 +581,11 @@ def reveal_contact(
     )
     db.commit()
 
-    identities = (
-        db.query(LeadChannelIdentity)
-        .filter(
-            LeadChannelIdentity.CustomerId == customer.Id,
-            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
-        )
-        .order_by(LeadChannelIdentity.CreatedAt.asc())
-        .all()
-    )
-
-    social = []
-    for ident in identities:
-        handle = ident.ProfileName
-        profile_url = None
-        if ident.Channel == "instagram" and handle:
-            # Only a resolved username makes a working link; a raw IGSID does not.
-            profile_url = f"https://instagram.com/{handle.lstrip('@')}"
-        elif ident.Channel == "messenger" and ident.ExternalUserId:
-            profile_url = f"https://m.me/{ident.ExternalUserId}"
-        social.append(
-            SocialIdentityOut(
-                channel=ident.Channel,
-                handle=handle or ident.ExternalUserId,
-                profile_name=ident.ProfileName,
-                external_user_id=ident.ExternalUserId,
-                profile_url=profile_url,
-                opted_out=bool(ident.OptedOut),
-                last_message_at=ident.LastUserMessageAt,
-            )
-        )
-
     return ContactReveal(
         phone=decrypt_pii(customer.PhoneEnc),
         email=decrypt_pii(customer.EmailEnc),
         whatsapp=decrypt_pii(customer.WhatsAppEnc),
         instagram=decrypt_pii(customer.InstagramEnc),
-        display_name=customer.DisplayName,
-        social_identities=social,
         revealed_at=datetime.now(timezone.utc),
     )
 

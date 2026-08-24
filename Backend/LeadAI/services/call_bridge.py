@@ -46,7 +46,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import Lead, LeadCall, LeadConversation, LeadCustomer, LeadMessage, utcnow
 from ..security import decrypt_pii, mask_phone
-from . import ai_engine, memory, script_engine, telephony
+from . import ai_engine, script_engine, telephony
 
 logger = logging.getLogger(__name__)
 
@@ -61,26 +61,10 @@ def prepare_agent_context(
     company_name: str,
     channel: str = "voice",
     script_id: str | None = None,
-    conversation: LeadConversation | None = None,
 ) -> tuple[list[dict], object, dict]:
     """Build the `xml_sections` + voice settings for one company's agent.
 
     Returns (sections, script_row, voice_settings).
-
-    MEMORY (added): when `conversation` is supplied, the customer's prior history
-    — chat turns, earlier calls, extracted qualification facts, and summaries
-    from other channels — is rendered into two extra sections and PREPENDED to
-    the company script.
-
-    Prepended rather than appended on purpose. `xml_parser.sections_to_prompt`
-    concatenates in order, and LLM instruction-following degrades toward the
-    middle of a long prompt; the "you have spoken to this person before" framing
-    has to land before the agent reads its opening line, or it will introduce
-    itself from scratch anyway. The company's own Identity section still follows
-    immediately after, so persona is unaffected.
-
-    When there is no history (a genuinely cold outbound lead) this adds nothing
-    and the prompt is byte-identical to the pre-memory behaviour.
     """
     script = script_engine.resolve_script(db, client_id, channel=channel, script_id=script_id)
     sections = script_engine.sections_of(script)
@@ -114,17 +98,6 @@ def prepare_agent_context(
                 ),
             },
         ]
-
-    # ---- cross-channel memory ------------------------------------------- #
-    if conversation is not None:
-        briefing = memory.voice_briefing(db, conversation)
-        if briefing:
-            sections = briefing + sections
-            logger.info(
-                "[LeadAI call] agent context includes %d memory section(s) for conv %s",
-                len(briefing),
-                conversation.Id,
-            )
 
     voice = {
         "language": (getattr(script, "Language", None) or settings.default_language),
@@ -212,15 +185,8 @@ def start_call_for_conversation(
         db.flush()
         return call
 
-    # `conversation` is passed so the agent boots with the customer's chat and
-    # earlier-call history in its system prompt instead of a blank slate.
     sections, script, voice = prepare_agent_context(
-        db,
-        client_id,
-        company_name,
-        channel="voice",
-        script_id=script_id,
-        conversation=conversation,
+        db, client_id, company_name, channel="voice", script_id=script_id
     )
     call.ScriptId = getattr(script, "Id", None)
     call.Language = voice.get("language")

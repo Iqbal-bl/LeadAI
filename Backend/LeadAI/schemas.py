@@ -41,6 +41,8 @@ class CompanyCreate(BaseModel):
     # Optionally grant the first company admin in the same call.
     admin_email: EmailStr | None = None
     admin_name: str | None = None
+    # Services/features to enable for the company (e.g. ["instagram", "facebook", "linkedin", "voice_agent"])
+    services: list[str] | None = Field(default=None, description="Features/services to enable. If omitted, all features default to enabled.")
 
 
 class CompanyUpdate(BaseModel):
@@ -49,42 +51,6 @@ class CompanyUpdate(BaseModel):
     phone_number: str | None = None
     description: str | None = None
     is_active: bool | None = None
-
-
-class CompanyUserOut(BaseModel):
-    """One person with access to a company."""
-
-    id: str
-    user_id: str | None = None      # identity-server id, when we captured it
-    email: str
-    name: str | None = None
-    role: str
-    is_active: bool = True
-    # True when the grant is global (ClientId NULL): a platform admin who can act
-    # on this company without being a member of it. Worth showing distinctly, so
-    # a company admin is not surprised by who appears in their list.
-    is_global: bool = False
-    created_at: datetime | None = None
-
-    @field_serializer("created_at")
-    def serialize_created_at(self, dt: datetime | None, _info):
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.isoformat()
-
-
-class CompanyUsersOut(BaseModel):
-    """The company's people, grouped for a details screen and also flat."""
-
-    company_id: str
-    company_name: str
-    total: int
-    admins: list[CompanyUserOut] = []
-    managers: list[CompanyUserOut] = []
-    employees: list[CompanyUserOut] = []
-    users: list[CompanyUserOut] = []
 
 
 class CompanyOut(BaseModel):
@@ -125,6 +91,28 @@ class CompanySettingsOut(CompanySettingsIn):
     client_id: str
     effective_handoff_threshold: float
     effective_retrieval_top_k: int
+
+
+class ServiceItemOut(BaseModel):
+    key: str
+    is_enabled: bool
+
+
+class CompanyServicesOut(BaseModel):
+    company_id: str
+    company_name: str
+    services: list[ServiceItemOut]
+
+
+class ServiceStatusPatch(BaseModel):
+    key: str
+    is_enabled: bool
+
+
+class CompanyServicesPatchIn(BaseModel):
+    services: list[ServiceStatusPatch]
+
+
 
 
 # ===========================================================================
@@ -428,10 +416,6 @@ class MessageOut(BaseModel):
     sources: list | None = None
     model_used: str | None = None
     call_sid: str | None = None
-    # Null for inbound messages and for web/voice channels, where there is
-    # nothing to push. Non-null on social outbound: sent | failed | skipped.
-    delivery_status: str | None = None
-    delivery_error: str | None = None
     created_at: datetime | None = None
 
     @field_serializer('created_at')
@@ -492,28 +476,10 @@ class ConversationOut(BaseModel):
         return dt.isoformat()
 
 
-class DeliveryOut(BaseModel):
-    """Outcome of pushing a message to a social channel.
-
-    Returned by the inbox reply endpoint so the dashboard can distinguish
-    "saved and sent" from "saved but the customer never got it". Optional on
-    ConversationDetail, so a client that ignores it is unaffected.
-    """
-
-    status: str                       # sent | failed | skipped | not_applicable
-    delivered: bool = False
-    channel: str | None = None
-    message_id: str | None = None
-    error: str | None = None
-    detail: str | None = None         # operator-facing explanation
-
-
 class ConversationDetail(ConversationOut):
     messages: list[MessageOut] = []
     suggestions: list[str] = []
     calls: list["CallOut"] = []
-    # Populated only by POST /{id}/reply. Null elsewhere.
-    delivery: DeliveryOut | None = None
 
 
 class ChatConversationDetail(ConversationOut):
@@ -603,41 +569,11 @@ class AgentReply(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
 
 
-class SocialIdentityOut(BaseModel):
-    """One social identity behind a customer.
-
-    `handle` is what an agent should actually read: '@nikhil.arora' on
-    Instagram, or the person's name on Messenger. `external_user_id` is the raw
-    PSID / IGSID — kept because it is what you quote to Meta support, but it is
-    never the primary display value.
-    """
-
-    channel: str
-    handle: str | None = None          # '@username' or the display name
-    profile_name: str | None = None    # real name, when the platform gives one
-    external_user_id: str | None = None
-    profile_url: str | None = None
-    opted_out: bool = False
-    last_message_at: datetime | None = None
-
-    @field_serializer("last_message_at")
-    def serialize_last_message_at(self, dt: datetime | None, _info):
-        if dt is None:
-            return None
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.isoformat()
-
-
 class ContactReveal(BaseModel):
     phone: str | None = None
     email: str | None = None
     whatsapp: str | None = None
     instagram: str | None = None
-    # Added so a reveal on a Messenger or Instagram lead shows a person rather
-    # than a 16-digit id. Populated from leadai_channel_identities.
-    display_name: str | None = None
-    social_identities: list[SocialIdentityOut] = []
     revealed_at: datetime
     warning: str = "This reveal has been recorded in the activity log."
 

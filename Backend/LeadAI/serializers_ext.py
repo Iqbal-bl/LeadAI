@@ -47,10 +47,6 @@ def channel_account_out(row: LeadChannelAccount, public_base: str | None = None)
         auto_reply=bool(row.AutoReply),
         script_id=row.ScriptId,
         default_language=row.DefaultLanguage,
-        login_type=getattr(row, "LoginType", None) or "facebook",
-        app_id=getattr(row, "AppId", None),
-        token_expires_at=getattr(row, "TokenExpiresAt", None),
-        token_refreshed_at=getattr(row, "TokenRefreshedAt", None),
         # Presence, never the value.
         has_access_token=bool(row.AccessTokenEnc),
         has_app_secret=bool(row.AppSecretEnc),

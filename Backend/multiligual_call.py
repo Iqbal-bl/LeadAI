@@ -48,14 +48,15 @@ from swagger_schema import configure_swagger
 configure_swagger(app, title="Voice Agent API", version="1.0.0", description="Voice Agent APIs with Bearer Token Authentication")
 
 # CORS origins (shared by CORS middleware and the token middleware's
-# preflight/echo handling). Read from env — comma-separated.
+# preflight/echo handling).
 _CORS_ORIGINS = [
-    o.strip()
-    for o in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:4300,http://localhost:4200,http://127.0.0.1:8125",
-    ).split(",")
-    if o.strip()
+    "https://223.178.214.156:4300",
+    "https://223.178.214.156:4301",
+    "http://18.213.55.46:8125",
+    "http://223.178.214.156:6789",
+    "http://127.0.0.1:8125",
+    "http://localhost:4300",
+    "http://localhost:4200"
 ]
 
 

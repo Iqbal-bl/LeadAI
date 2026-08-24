@@ -183,8 +183,6 @@ def message_out(row: LeadMessage) -> MessageOut:
         sources=row.SourcesJson,
         model_used=row.ModelUsed,
         call_sid=row.CallSid,
-        delivery_status=getattr(row, "DeliveryStatus", None),
-        delivery_error=getattr(row, "DeliveryError", None),
         created_at=row.CreatedAt,
     )
 

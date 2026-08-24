@@ -399,25 +399,6 @@ class LeadMessage(LeadAIBase):
     # For voice turns: which CallSid this line came from.
     CallSid = Column(String(100), nullable=True, index=True)
 
-    # ---- outbound delivery tracking ------------------------------------- #
-    # Populated for messages we PUSH to a social channel (WhatsApp, Messenger,
-    # Instagram). The web widget is pull-based, so widget messages leave these
-    # null and that is correct, not a failure.
-    #
-    # Before these existed, a staff reply that Meta rejected was indistinguishable
-    # from one that was delivered: both were a row in this table. The agent saw
-    # their message in the thread and assumed the customer had it. They had not.
-    #
-    # DeliveryStatus is one of:
-    #   None       - nothing to deliver (web widget, voice, or inbound message)
-    #   "pending"  - queued, not yet attempted
-    #   "sent"     - the provider accepted it and returned a message id
-    #   "failed"   - the provider rejected it; DeliveryError says why
-    #   "skipped"  - deliberately not sent (e.g. outside Meta's 24h window)
-    ExternalMessageId = Column(String(200), nullable=True, index=True)
-    DeliveryStatus = Column(String(16), nullable=True)
-    DeliveryError = Column(String(500), nullable=True)
-
 
 class Lead(LeadAIBase):
     """Qualification state, recomputed after every inbound customer turn."""
