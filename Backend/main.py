@@ -17,7 +17,16 @@ import asyncio
 import os
 import logging
 
-from fastapi import WebSocket, WebSocketDisconnect
+# Validate the environment BEFORE importing anything that reads it. multiligual_
+# call.py builds its SessionMiddleware with `os.getenv("SESSION_SECRET",
+# "demo-secret-key")` at import time, so a check placed after that import would
+# be reporting on a secret that has already been baked into the middleware.
+# In production a critical issue exits 78 here; in development it warns.
+from config_guard import validate as _validate_config
+
+_validate_config()
+
+from fastapi import WebSocket, WebSocketDisconnect  # noqa: E402
 
 # Import the complete, already-built Sarvam app. This pulls in db.py (users +
 # transcripts) and, transitively via batching below, the Domain/ ORM used for

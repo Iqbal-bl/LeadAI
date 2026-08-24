@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from Domain.models import Client
@@ -20,7 +21,7 @@ from ..activity import A
 from ..config import settings
 from ..db import get_leadai_db
 from ..models import LeadCompanySettings, LeadUserRole, utcnow
-from ..models_ext import LeadCompanyService
+from ..models import ROLE_ADMIN, ROLE_EMPLOYEE, ROLE_MANAGER
 from ..rbac import (
     ROLE_COMPANY_ADMIN,
     Principal,
@@ -32,20 +33,17 @@ from ..rbac import (
 from ..schemas import (
     CompanyCreate,
     CompanyOut,
-    CompanyServicesOut,
-    CompanyServicesPatchIn,
     CompanySettingsIn,
     CompanySettingsOut,
     CompanyUpdate,
+    CompanyUserOut,
+    CompanyUsersOut,
     Ok,
-    ServiceItemOut,
 )
 from ..serializers import company_out
 from ..services import ai_engine, script_engine
 
-
 logger = logging.getLogger(__name__)
-
 
 router = APIRouter(prefix="/companies", tags=["LeadAI • Companies"])
 
@@ -107,21 +105,6 @@ def create_company(
     # assistant is usable the moment a document is uploaded.
     script_engine.seed_prompts(db, client.Id, created_by=principal.email)
     db.add(LeadCompanySettings(ClientId=client.Id, CreatedBy=principal.email))
-
-    # Seed services/features for the company (only explicitly listed services are enabled)
-    if payload.services:
-        for s_key in payload.services:
-            s_key = s_key.strip().lower()
-            db.add(
-                LeadCompanyService(
-                    ClientId=client.Id,
-                    ServiceKey=s_key,
-                    IsEnabled=True,
-                    CreatedBy=principal.email,
-                )
-            )
-
-
 
     if payload.admin_email:
         # Create user in identity server directly
@@ -190,6 +173,85 @@ def get_company(
     if not client or client.IsDeleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
     return company_out(db, client)
+
+
+@router.get(
+    "/{company_id}/users",
+    response_model=CompanyUsersOut,
+    summary="Who belongs to this company",
+)
+def list_company_users(
+    company_id: str,
+    include_inactive: bool = Query(default=False),
+    principal: Principal = Depends(require("role.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    """The company's people, grouped so a details screen can render them directly.
+
+    WHY THIS EXISTS
+    `/user-management/employees` returns members of the CALLER's own company,
+    resolved through `resolve_scope`. That is the right shape for a company admin
+    managing their own team, but it cannot answer "show me who is in company X"
+    on a platform-admin company-details screen — there was no endpoint for that.
+
+    Roles are returned grouped as well as flat, because the question a details
+    screen asks is "who is the admin here, and who else is there", not "give me
+    an unordered list I have to bucket myself".
+
+    Users granted a GLOBAL role (ClientId NULL) are included and flagged: a
+    platform admin can act on this company without being a member of it, and
+    hiding that from the screen would misrepresent who has access.
+    """
+    if not principal.is_platform_admin:
+        allowed = set(principal.accessible_client_ids) | (
+            {principal.client_id} if principal.client_id else set()
+        )
+        if company_id not in allowed:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+
+    client = db.get(Client, company_id)
+    if not client or client.IsDeleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
+
+    query = db.query(LeadUserRole).filter(
+        LeadUserRole.IsDeleted == False,  # noqa: E712
+        or_(
+            LeadUserRole.ClientId == company_id,
+            LeadUserRole.ClientId.is_(None),   # global admins
+        ),
+    )
+    if not include_inactive:
+        query = query.filter(LeadUserRole.IsActive == True)  # noqa: E712
+
+    rows = query.order_by(LeadUserRole.CreatedAt.asc()).all()
+
+    users = [
+        CompanyUserOut(
+            id=str(row.Id),
+            user_id=str(row.UserId) if row.UserId else None,
+            email=row.UserEmail,
+            name=row.FullName,
+            role=row.Role,
+            is_active=bool(row.IsActive),
+            is_global=row.ClientId is None,
+            created_at=row.CreatedAt,
+        )
+        for row in rows
+    ]
+
+    by_role: dict[str, list[CompanyUserOut]] = {}
+    for user in users:
+        by_role.setdefault(user.role, []).append(user)
+
+    return CompanyUsersOut(
+        company_id=company_id,
+        company_name=client.Name,
+        total=len(users),
+        admins=by_role.get(ROLE_COMPANY_ADMIN, []) + by_role.get(ROLE_ADMIN, []),
+        managers=by_role.get(ROLE_MANAGER, []),
+        employees=by_role.get(ROLE_EMPLOYEE, []),
+        users=users,
+    )
 
 
 @router.patch("/{company_id}", response_model=CompanyOut, summary="Update a company")
@@ -368,107 +430,3 @@ def update_settings(
     )
     db.commit()
     return _settings_out(db, row)
-
-
-# ===========================================================================
-# Company Services / Features Management
-# ===========================================================================
-@router.get(
-    "/{company_id}/services",
-    response_model=CompanyServicesOut,
-    summary="Get services/features enabled for a company",
-)
-def get_company_services(
-    company_id: str,
-    principal: Principal = Depends(require("company.read")),
-    db: Session = Depends(get_leadai_db),
-):
-    if not principal.is_platform_admin:
-        allowed = set(principal.accessible_client_ids) | (
-            {principal.client_id} if principal.client_id else set()
-        )
-        if company_id not in allowed:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
-
-    client = db.get(Client, company_id)
-    if not client or client.IsDeleted:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
-
-    existing_rows = (
-        db.query(LeadCompanyService)
-        .filter(
-            LeadCompanyService.ClientId == company_id,
-            LeadCompanyService.IsDeleted == False,  # noqa: E712
-        )
-        .order_by(LeadCompanyService.ServiceKey.asc())
-        .all()
-    )
-
-    items = [
-        ServiceItemOut(key=r.ServiceKey, is_enabled=r.IsEnabled)
-        for r in existing_rows
-    ]
-
-    return CompanyServicesOut(
-        company_id=client.Id,
-        company_name=client.Name,
-        services=items,
-    )
-
-
-@router.patch(
-    "/{company_id}/services",
-    response_model=CompanyServicesOut,
-    summary="Patch/update services/features enabled status for a company (super admin)",
-)
-def patch_company_services(
-    company_id: str,
-    payload: CompanyServicesPatchIn,
-    request: Request,
-    principal: Principal = Depends(require("company.manage")),
-    db: Session = Depends(get_leadai_db),
-):
-    client = db.get(Client, company_id)
-    if not client or client.IsDeleted:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Company not found")
-
-    for item in payload.services:
-        s_key = item.key.strip().lower()
-        row = (
-            db.query(LeadCompanyService)
-            .filter(
-                LeadCompanyService.ClientId == company_id,
-                LeadCompanyService.ServiceKey == s_key,
-                LeadCompanyService.IsDeleted == False,  # noqa: E712
-            )
-            .first()
-        )
-        if row:
-            row.IsEnabled = item.is_enabled
-            row.UpdatedBy = principal.email
-            row.UpdatedAt = utcnow()
-        else:
-            db.add(
-                LeadCompanyService(
-                    ClientId=company_id,
-                    ServiceKey=s_key,
-                    IsEnabled=item.is_enabled,
-                    CreatedBy=principal.email,
-                )
-            )
-
-    activity.log_principal(
-        db,
-        principal,
-        action=A.COMPANY_UPDATED,
-        client_id=company_id,
-        entity_type="company_services",
-        entity_id=company_id,
-        message=f"Patched company services for '{client.Name}'",
-        meta={"services_patched": len(payload.services)},
-        request=request,
-    )
-    db.commit()
-    return get_company_services(company_id=company_id, principal=principal, db=db)
-
-

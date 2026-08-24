@@ -166,18 +166,56 @@ def app_secret_for(account: LeadChannelAccount | None) -> str | None:
     if account is not None:
         secret = decrypt_pii(account.AppSecretEnc)
         if secret:
-            logger.warning("[LeadAI channels] secret from account %s (len=%d, tail=%s)",
-                           account.Id, len(secret), secret[-4:])
             return secret
-        logger.error("[LeadAI channels] account %s AppSecretEnc set=%s but decrypt failed",
-                     account.Id, bool(account.AppSecretEnc))
+        logger.error(
+            "[LeadAI channels] account %s AppSecretEnc set=%s but decrypt failed",
+            account.Id, bool(account.AppSecretEnc),
+        )
+    # A standalone Instagram account's webhooks are signed with the INSTAGRAM
+    # app secret. Falling back to META_APP_SECRET for one of those would fail
+    # every signature check with a message that says nothing about the cause.
+    if is_instagram_login(account):
+        logger.warning("[LeadAI channels] falling back to env INSTAGRAM_APP_SECRET")
+        return settings.instagram_app_secret or settings.meta_app_secret
     logger.warning("[LeadAI channels] falling back to env META_APP_SECRET")
     return settings.meta_app_secret
 
 
+def is_instagram_login(account: LeadChannelAccount | None) -> bool:
+    """True when this account was connected via standalone Instagram Login.
+
+    Such an account has no Facebook Page, holds an Instagram User access token
+    rather than a Page token, and must be addressed at graph.instagram.com.
+    """
+    return bool(account is not None and (account.LoginType or "facebook") == "instagram")
+
+
+def _graph_base(account: LeadChannelAccount | None) -> tuple[str, str]:
+    """(host, api_version) for this account.
+
+    THE FAILURE THIS PREVENTS
+    An Instagram User access token is not valid at graph.facebook.com. Sent
+    there it returns "Invalid OAuth access token - Cannot parse access token",
+    which reads like a bad credential and sends people off rotating tokens that
+    were fine. Conversely a Page token is not valid at graph.instagram.com.
+
+    The host is therefore a property of how the account was connected, never a
+    global setting, and every caller goes through here.
+    """
+    if is_instagram_login(account):
+        return (
+            settings.instagram_graph_base.rstrip("/"),
+            (account.ApiVersion if account else None) or settings.instagram_graph_version,
+        )
+    return (
+        settings.meta_graph_base.rstrip("/"),
+        (account.ApiVersion if account else None) or settings.meta_graph_version,
+    )
+
+
 def _graph_url(account: LeadChannelAccount | None, path: str) -> str:
-    version = (account.ApiVersion if account else None) or settings.meta_graph_version
-    return f"{settings.meta_graph_base.rstrip('/')}/{version}/{path.lstrip('/')}"
+    base, version = _graph_base(account)
+    return f"{base}/{version}/{path.lstrip('/')}"
 
 
 # =========================================================================== #
@@ -457,6 +495,109 @@ def within_session_window(last_user_message_at: datetime | None) -> bool:
     return datetime.now(timezone.utc) - reference < timedelta(
         hours=settings.meta_session_window_hours
     )
+
+
+def fetch_profile(
+    account: LeadChannelAccount | None,
+    channel: str,
+    external_user_id: str,
+    *,
+    timeout: float = 10.0,
+) -> dict:
+    """Look up a social sender's real name and handle from the Graph API.
+
+    WHY THIS IS NEEDED
+    ------------------
+    WhatsApp webhooks carry the sender's name: it arrives in the `contacts`
+    array and `normalise()` already reads it. Messenger and Instagram webhooks
+    do NOT. Meta sends only an opaque PSID / IGSID — a long numeric string —
+    and nothing else about the person.
+
+    So an agent revealing a Messenger lead's contact details saw
+    `7891234567890123` and nothing more. That is not a bug in the reveal
+    endpoint; the name was never fetched in the first place, because it only
+    exists behind a separate Graph call.
+
+    Returns a dict with whichever of `name`, `username`, `profile_pic` the
+    platform gave us, plus `handle` (a display-ready `@username` for Instagram,
+    else the name). Returns {} on any failure — a missing name must never break
+    message handling, which is the actual job.
+
+    PERMISSIONS
+    Messenger needs `pages_messaging`; the page token used for sending already
+    has it. Instagram needs `instagram_manage_messages` and the account must be
+    a Professional account linked to the Page. If the lookup 400s with a
+    permissions error, reconnecting the account to mint a fresh token with the
+    right scopes is the fix.
+
+    PRIVACY
+    Meta only returns a profile for a user who has messaged the Page — the same
+    condition under which we hold a conversation with them at all. There is no
+    way to enumerate strangers with this.
+    """
+    if not external_user_id:
+        return {}
+
+    token = _token_for(account)
+    if not token:
+        logger.debug("[LeadAI channels] no token to fetch profile for %s", channel)
+        return {}
+
+    if channel == CHANNEL_INSTAGRAM:
+        # IG exposes `username`, which is what a human recognises; `name` is the
+        # optional display name and is frequently blank.
+        fields = "name,username,profile_pic"
+    elif channel == CHANNEL_MESSENGER:
+        # Messenger splits the name and does not expose a handle at all.
+        fields = "name,first_name,last_name,profile_pic"
+    else:
+        # WhatsApp has no profile lookup endpoint — the name arrives in the
+        # webhook or not at all.
+        return {}
+
+    url = _graph_url(account, external_user_id)
+    try:
+        import httpx
+
+        response = httpx.get(
+            url,
+            params={"fields": fields, "access_token": token},
+            timeout=timeout,
+        )
+        if response.status_code >= 400:
+            logger.info(
+                "[LeadAI channels] profile lookup %s/%s -> %s: %s",
+                channel, external_user_id, response.status_code, response.text[:200],
+            )
+            return {}
+        data = response.json() or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.info(
+            "[LeadAI channels] profile lookup failed %s/%s: %s", channel, external_user_id, exc
+        )
+        return {}
+
+    name = data.get("name") or " ".join(
+        p for p in (data.get("first_name"), data.get("last_name")) if p
+    ).strip()
+    username = data.get("username")
+
+    result = {}
+    if name:
+        result["name"] = name
+    if username:
+        result["username"] = username
+        result["handle"] = f"@{username}"
+    elif name:
+        result["handle"] = name
+    if data.get("profile_pic"):
+        result["profile_pic"] = data["profile_pic"]
+
+    logger.info(
+        "[LeadAI channels] profile resolved %s/%s -> %s",
+        channel, external_user_id, result.get("handle") or "(none)",
+    )
+    return result
 
 
 def send_text(

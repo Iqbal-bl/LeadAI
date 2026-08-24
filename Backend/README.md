@@ -18,7 +18,7 @@ cd app/backend
 
 ### Clone the project from your Git repository
 ```bash
-git clone https://github.com/BharatLogic-com/AI-outbound-Agent-Backend.git
+git clone https://<YOUR_GITHUB_TOKEN>@github.com/BharatLogic-com/AI-outbound-Agent-Backend.git
 cd AI-outbound-Agent-Backend
 ```
 

@@ -195,63 +195,76 @@ async def create_user(
 
     user_id = idp_result.get("id") or idp_result.get("userId") or payload.email
 
-    # 2. Grant role if provided
-    role_granted = None
-    client_id = None
-    if payload.role:
-        existing = (
-            db.query(LeadUserRole)
-            .filter(
-                LeadUserRole.UserEmail == payload.email.lower(),
-                LeadUserRole.ClientId == payload.client_id,
-                LeadUserRole.IsDeleted == False,  # noqa: E712
-            )
-            .first()
+    # 2. Record the user locally.
+    #
+    # THE BUG THIS FIXES
+    # This whole block used to be wrapped in `if payload.role:`. Create a user
+    # without an explicit role — which the schema permits, since `role` is
+    # optional — and NOTHING was written here: no leadai_user_roles row, no
+    # activity log, no commit. The user existed in the identity server and was
+    # invisible to this application, so the company details screen had no way to
+    # list who belonged to a company.
+    #
+    # Every user created through this endpoint now gets a directory row. A user
+    # with no role specified is recorded as an employee, which is the least
+    # privilege any member can hold — recording them is a directory concern, and
+    # granting them capability is a separate decision made by ROLE_PERMISSIONS.
+    granted_role = payload.role or ROLE_EMPLOYEE
+
+    existing = (
+        db.query(LeadUserRole)
+        .filter(
+            LeadUserRole.UserEmail == payload.email.lower(),
+            LeadUserRole.ClientId == payload.client_id,
+            LeadUserRole.IsDeleted == False,  # noqa: E712
         )
-        if existing:
-            existing.Role = payload.role
-            existing.FullName = payload.name
-            existing.IsActive = True
-            existing.UpdatedBy = "system"
-            existing.UpdatedAt = utcnow()
-            role_granted = payload.role
-            client_id = existing.ClientId
-        else:
-            grant = LeadUserRole(
+        .first()
+    )
+    if existing:
+        existing.Role = granted_role
+        existing.UserId = existing.UserId or str(user_id)
+        existing.FullName = payload.name or existing.FullName
+        existing.IsActive = True
+        existing.UpdatedBy = "system"
+        existing.UpdatedAt = utcnow()
+        client_id = existing.ClientId
+    else:
+        db.add(
+            LeadUserRole(
                 UserEmail=payload.email.lower(),
-                UserId=user_id,
+                UserId=str(user_id),
                 FullName=payload.name,
-                Role=payload.role,
+                Role=granted_role,
                 ClientId=payload.client_id,
                 IsActive=True,
                 CreatedBy="system",
             )
-            db.add(grant)
-            role_granted = payload.role
-            client_id = payload.client_id
-
-        activity.log(
-            db,
-            action=A.USER_CREATED,
-            client_id=payload.client_id,
-            actor_email=payload.email,
-            entity_type="user",
-            entity_id=str(user_id),
-            message=f"Created user '{payload.email}'",
-            meta={
-                "role": payload.role,
-                "client_id": payload.client_id,
-            },
-            request=request,
         )
-        db.commit()
+        client_id = payload.client_id
+
+    activity.log(
+        db,
+        action=A.USER_CREATED,
+        client_id=payload.client_id,
+        actor_email=payload.email,
+        entity_type="user",
+        entity_id=str(user_id),
+        message=f"Created user '{payload.email}' as {granted_role}",
+        meta={
+            "role": granted_role,
+            "role_explicit": bool(payload.role),
+            "client_id": payload.client_id,
+        },
+        request=request,
+    )
+    db.commit()
 
     return UserManagementOut(
         id=str(user_id),
         email=payload.email,
         name=payload.name,
         email_confirmed=not payload.send_email_confirmation,
-        role_granted=role_granted,
+        role_granted=granted_role,
         client_id=client_id,
     )
 

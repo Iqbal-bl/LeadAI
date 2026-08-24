@@ -80,6 +80,13 @@ class ChannelAccountOut(BaseModel):
     auto_reply: bool
     script_id: str | None = None
     default_language: str | None = None
+    # "facebook" (Page-linked, graph.facebook.com) or "instagram" (standalone
+    # professional account, graph.instagram.com). The dashboard needs this to
+    # know whether to offer a token refresh or a reconnect.
+    login_type: str = "facebook"
+    app_id: str | None = None
+    token_expires_at: datetime | None = None
+    token_refreshed_at: datetime | None = None
     # Secrets are NEVER returned; only whether they are set.
     has_access_token: bool = False
     has_app_secret: bool = False
@@ -91,7 +98,8 @@ class ChannelAccountOut(BaseModel):
     last_error_at: datetime | None = None
     created_at: datetime | None = None
 
-    @field_serializer('last_inbound_at', 'last_outbound_at', 'last_error_at', 'created_at')
+    @field_serializer('last_inbound_at', 'last_outbound_at', 'last_error_at', 'created_at',
+                      'token_expires_at', 'token_refreshed_at')
     def serialize_dates(self, dt: datetime | None, _info):
         if dt is None:
             return None
@@ -565,3 +573,14 @@ class JobStatsOut(BaseModel):
     worker: str
     enabled: bool
     queue: dict[str, int] = {}
+
+
+class InstagramCallbackIn(BaseModel):
+    """The OAuth callback from a standalone Instagram connection.
+
+    `state` is the value returned by GET /channels/instagram/connect. It is what
+    binds the callback to a company, so it is required and single-use.
+    """
+
+    code: str = Field(min_length=10, description="Authorization code from Instagram")
+    state: str = Field(min_length=8, description="State issued by /channels/instagram/connect")

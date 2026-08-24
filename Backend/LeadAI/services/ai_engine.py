@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..models import Lead, LeadCompanySettings, LeadConversation, LeadMessage
-from . import llm, script_engine, vectorstore
+from . import llm, memory, script_engine, vectorstore
 
 logger = logging.getLogger(__name__)
 
@@ -186,8 +186,15 @@ def answer(
     history: list[LeadMessage] | None = None,
     channel: str = "chat",
     script=None,
+    carryover: str = "",
 ) -> dict:
     """Answer strictly from this company's knowledge base.
+
+    `carryover` is an optional cross-channel memory digest (see services/memory.
+    py). It describes the customer, never the company, and is injected as its own
+    system turn — deliberately NOT merged into the knowledge context, because the
+    "answer only from company knowledge" rule must keep applying to product facts
+    while still letting the agent use what it knows about the person.
 
     Returns: reply, confidence, needs_human, handoff_reason, sources,
              model, latency_ms, script_id.
@@ -220,7 +227,20 @@ def answer(
 
     wants_human = bool(HUMAN_REQUEST.search(question or ""))
 
-    hits = vectorstore.search(db, client_id, question, top_k=top_k)
+    # Retrieval runs on a HISTORY-AWARE query, not the raw utterance.
+    #
+    # "and what about the processing fee?" contains no product noun, so embedding
+    # it alone retrieves nothing, confidence collapses, and the handoff rule
+    # escalates a question that is squarely inside the knowledge base. memory.
+    # retrieval_query() prepends the salient nouns from the last couple of
+    # customer turns when — and only when — the utterance looks like a follow-up.
+    #
+    # Scoring below still uses the ORIGINAL `question`: lexical coverage measures
+    # how well a retrieved sentence answers what the customer actually asked, and
+    # padding that side with carried-over words would inflate confidence.
+    search_query = memory.retrieval_query(question, history)
+
+    hits = vectorstore.search(db, client_id, search_query, top_k=top_k)
     idf, unseen = vectorstore.idf_map(db, client_id)
     top_score = hits[0]["score"] if hits else 0.0
 
@@ -260,10 +280,33 @@ def answer(
 
     reply, meta = None, {"model": "builtin-extractive", "latency_ms": 0}
     if settings.llm_enabled and not wants_human:
-        chat: list[dict] = [
-            {"role": "user" if m.Sender == "customer" else "assistant", "content": m.Content}
-            for m in history[-8:]
-        ]
+        # Was `history[-8:]` with an inline mapping. Routed through memory.
+        # llm_window() so the chat path and any future channel window history
+        # identically, and so `system` rows (audit lines like "Outbound call
+        # placed…") are excluded rather than being fed back as assistant turns
+        # for the model to imitate.
+        chat: list[dict] = memory.llm_window(history)
+
+        if carryover:
+            # Ahead of the thread, not merged into it: the model should treat this
+            # as background it already possesses, not as something the customer
+            # just said. Framed with an explicit "do not ask again" instruction
+            # because the most common failure of a returning-customer flow is the
+            # bot re-asking for a budget the customer gave it last week.
+            chat.insert(
+                0,
+                {
+                    "role": "system",
+                    "content": (
+                        "Background on this returning customer, from earlier "
+                        "conversations across other channels. Use it naturally; do "
+                        "NOT ask again for anything already stated here, and do NOT "
+                        "read this list back to them.\n"
+                        f"{carryover}"
+                    ),
+                },
+            )
+
         chat.append(
             {
                 "role": "user",

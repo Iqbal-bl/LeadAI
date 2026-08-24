@@ -118,6 +118,26 @@ class LeadAISettings:
     meta_verify_token: str = os.getenv("META_VERIFY_TOKEN", "leadai-verify")
     meta_graph_version: str = os.getenv("META_GRAPH_VERSION", "v21.0")
     meta_graph_base: str = os.getenv("META_GRAPH_BASE", "https://graph.facebook.com")
+
+    # ---- standalone Instagram (Instagram API with Instagram Login) --------- #
+    # These come from a SECOND Meta app configured with "API setup with
+    # Instagram Login". Meta permits only one API setup per app, so these are
+    # necessarily different values from META_APP_ID / META_APP_SECRET above —
+    # reusing the Facebook ones is the most common reason the flow fails with an
+    # opaque OAuth error.
+    instagram_app_id: str | None = os.getenv("INSTAGRAM_APP_ID") or None
+    instagram_app_secret: str | None = os.getenv("INSTAGRAM_APP_SECRET") or None
+    instagram_redirect_uri: str | None = os.getenv("INSTAGRAM_REDIRECT_URI") or None
+    # Instagram webhooks are verified with the Instagram app secret, not the
+    # Facebook one. Falls back to META_APP_SECRET only so an existing
+    # Page-linked setup keeps working unchanged.
+    instagram_verify_token: str = os.getenv(
+        "INSTAGRAM_VERIFY_TOKEN", os.getenv("META_VERIFY_TOKEN", "leadai-verify")
+    )
+    instagram_graph_base: str = os.getenv(
+        "INSTAGRAM_GRAPH_BASE", "https://graph.instagram.com"
+    )
+    instagram_graph_version: str = os.getenv("INSTAGRAM_GRAPH_VERSION", "v23.0")
     meta_access_token: str | None = os.getenv("META_ACCESS_TOKEN") or None
     whatsapp_phone_number_id: str | None = os.getenv("WHATSAPP_PHONE_NUMBER_ID") or None
     # Reject webhook payloads whose X-Hub-Signature-256 does not verify. Leave

@@ -19,6 +19,7 @@ or "Add token", which is all it needs.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -35,11 +36,13 @@ from ..schemas_ext import (
     ChannelAccountUpdate,
     ChannelStatusOut,
     ChannelTestSend,
+    InstagramCallbackIn,
 )
 from ..schemas import Ok
 from ..security import encrypt_pii
 from ..serializers_ext import channel_account_out
-from ..services import channels as ch
+from ..services import cache, channels as ch
+from ..services import instagram_login as ig_login
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +282,242 @@ def test_send(
         )
         db.commit()
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+# =========================================================================== #
+# Standalone Instagram (Instagram API with Instagram Login)
+# =========================================================================== #
+# Connects an Instagram professional account that has NO linked Facebook Page.
+# See LeadAI/services/instagram_login.py for why this is a separate flow rather
+# than an option on the existing one.
+
+@router.get(
+    "/instagram/connect",
+    summary="Start connecting a standalone Instagram account (no Facebook Page)",
+)
+def instagram_connect(
+    request: Request,
+    publishing: bool = False,
+    scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Returns the URL to send the company to.
+
+    The caller redirects the browser there; Instagram sends the person back to
+    INSTAGRAM_REDIRECT_URI with `code` and `state`.
+
+    `state` binds the callback to this company. It is returned here and stored
+    server-side; the callback rejects any state it did not issue. Without that
+    check, anyone who can reach the callback URL could attach an Instagram
+    account of their choosing to a tenant.
+    """
+    principal, client_id = scope
+    try:
+        url, state = ig_login.authorize_url(publishing=publishing)
+    except ig_login.InstagramLoginError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    # Short TTL: this is a browser round-trip, not a session. Ten minutes is
+    # generous for a consent screen and short enough that a leaked state is
+    # useless by the time anyone finds it.
+    cache.set_value(f"leadai:iglogin:{state}", client_id, ttl=600)
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.CHANNEL_CONNECTED,
+        client_id=client_id,
+        entity_type="channel",
+        message="Started standalone Instagram connection",
+        request=request,
+    )
+    db.commit()
+
+    return {
+        "authorize_url": url,
+        "state": state,
+        "expires_in": 600,
+        "note": (
+            "Open this URL in a browser. The Instagram account must be a "
+            "professional (Business or Creator) account."
+        ),
+    }
+
+
+@router.post(
+    "/instagram/callback",
+    response_model=ChannelAccountOut,
+    summary="Finish connecting a standalone Instagram account",
+)
+def instagram_callback(
+    payload: InstagramCallbackIn,
+    request: Request,
+    db: Session = Depends(get_leadai_db),
+):
+    """Exchange the authorization code and store the connected account.
+
+    Deliberately NOT scoped through `scoped(...)`: the company is recovered from
+    the `state` issued by /instagram/connect, because the browser returning from
+    Instagram may not be carrying a staff token. The state IS the authorisation,
+    which is why it is single-use and deleted the moment it is consumed.
+    """
+    client_id = cache.get_value(f"leadai:iglogin:{payload.state}")
+    if not client_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "That connection link has expired or was already used. Start again from "
+            "Channels > Connect Instagram.",
+        )
+    # Single-use: a replayed callback must not be able to rebind an account.
+    # The cache exposes no delete, so the key is overwritten with a 1-second TTL
+    # — the same effect, and it works identically on the Redis and in-process
+    # backends rather than depending on which one is configured.
+    cache.set_value(f"leadai:iglogin:{payload.state}", "", ttl=1)
+
+    try:
+        result = ig_login.complete_connection(payload.code)
+    except ig_login.InstagramLoginError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    external_id = result["external_id"]
+    username = result.get("username") or external_id
+
+    existing = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.Channel == "instagram",
+            LeadChannelAccount.ExternalId == external_id,
+            LeadChannelAccount.IsDeleted == False,  # noqa: E712
+        )
+        .one_or_none()
+    )
+
+    if existing is not None and existing.ClientId != client_id:
+        # One Instagram account cannot serve two tenants: inbound webhooks are
+        # routed by ExternalId, so allowing this would send one company's DMs to
+        # another company's inbox.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"@{username} is already connected to a different company.",
+        )
+
+    account = existing or LeadChannelAccount(
+        ClientId=client_id,
+        Channel="instagram",
+        Provider="meta",
+        ExternalId=external_id,
+        CreatedBy="instagram-login",
+    )
+
+    account.LoginType = ig_login.LOGIN_TYPE_INSTAGRAM
+    account.AppId = settings.instagram_app_id
+    account.Name = f"@{username}"
+    account.AccessTokenEnc = encrypt_pii(result["access_token"])
+    account.AppSecretEnc = encrypt_pii(settings.instagram_app_secret)
+    account.VerifyToken = settings.instagram_verify_token
+    account.ApiVersion = settings.instagram_graph_version
+    account.TokenExpiresAt = result.get("expires_at")
+    account.TokenRefreshedAt = utcnow()
+    account.IsActive = True
+    account.LastError = None
+    account.LastErrorAt = None
+    account.MetaJson = {
+        "username": username,
+        "account_type": result.get("account_type"),
+        "profile_picture_url": result.get("profile_picture_url"),
+        "permissions": result.get("permissions"),
+        "login": "instagram",
+    }
+    if existing is None:
+        db.add(account)
+    db.flush()
+
+    activity.log(
+        db,
+        action=A.CHANNEL_CONNECTED,
+        client_id=client_id,
+        actor_email="instagram-login",
+        entity_type="channel",
+        entity_id=account.Id,
+        message=f"Connected standalone Instagram @{username}",
+        meta={"external_id": external_id, "login_type": "instagram"},
+        request=request,
+    )
+    db.commit()
+    db.refresh(account)
+
+    logger.info(
+        "[LeadAI ig-login] connected @%s (%s) to company %s", username, external_id, client_id
+    )
+    return channel_account_out(account, _public_base(request))
+
+
+@router.post(
+    "/{account_id}/refresh-token",
+    response_model=ChannelAccountOut,
+    summary="Refresh a standalone Instagram token",
+)
+def instagram_refresh_token(
+    account_id: str,
+    request: Request,
+    scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Extend the 60-day token by another 60 days.
+
+    Normally the background job handles this. Exposed manually because the one
+    failure mode that cannot be automated away is a token that already expired,
+    and an operator needs to be able to try before concluding they must
+    re-authorise.
+    """
+    principal, client_id = scope
+    account = _get(db, account_id, client_id)
+
+    if not ch.is_instagram_login(account):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This account uses Facebook Login. Page tokens do not refresh this way — "
+            "reconnect it instead.",
+        )
+
+    token = ch._token_for(account)
+    if not token:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No token stored for this account")
+
+    try:
+        refreshed = ig_login.refresh_long_lived(token)
+    except ig_login.InstagramLoginError as exc:
+        account.LastError = str(exc)[:500]
+        account.LastErrorAt = utcnow()
+        db.commit()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"{exc} If the token has already expired there is no way to refresh it — "
+            "reconnect the account from Channels.",
+        ) from exc
+
+    expires_in = int(refreshed.get("expires_in") or 0)
+    account.AccessTokenEnc = encrypt_pii(refreshed["access_token"])
+    account.TokenExpiresAt = (
+        utcnow() + timedelta(seconds=expires_in) if expires_in else None
+    )
+    account.TokenRefreshedAt = utcnow()
+    account.LastError = None
+    account.LastErrorAt = None
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.CHANNEL_CONNECTED,
+        client_id=client_id,
+        entity_type="channel",
+        entity_id=account.Id,
+        message=f"Refreshed Instagram token for {account.Name}",
+        request=request,
+    )
+    db.commit()
+    db.refresh(account)
+    return channel_account_out(account, _public_base(request))
 
 
 @router.get("/{account_id}/contacts", summary="Known contacts on this channel")
