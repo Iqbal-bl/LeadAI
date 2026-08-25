@@ -41,9 +41,8 @@ class CompanyCreate(BaseModel):
     # Optionally grant the first company admin in the same call.
     admin_email: EmailStr | None = None
     admin_name: str | None = None
-    # Services/features to enable for the company (e.g. ["instagram", "facebook", "linkedin", "voice_agent"])
-    services: list[str] | None = Field(default=None, description="Features/services to enable. If omitted or null, features default to unenabled/disabled.")
-
+    # Permissions/features to enable for the company (e.g. ["social.instagram", "social.facebook", "social.linkedin", "social.whatsapp"])
+    permissions: list[str] | None = Field(default=None, description="Permissions/features to enable. If omitted or null, permissions default to unenabled/disabled.")
 
 
 class CompanyUpdate(BaseModel):
@@ -130,26 +129,24 @@ class CompanySettingsOut(CompanySettingsIn):
     effective_retrieval_top_k: int
 
 
-class ServiceItemOut(BaseModel):
+class PermissionItemOut(BaseModel):
     key: str
     is_enabled: bool
 
 
-class CompanyServicesOut(BaseModel):
+class CompanyPermissionsOut(BaseModel):
     company_id: str
     company_name: str
-    services: list[ServiceItemOut]
+    permissions: list[PermissionItemOut]
 
 
-class ServiceStatusPatch(BaseModel):
+class PermissionStatusPatch(BaseModel):
     key: str
     is_enabled: bool
 
 
-class CompanyServicesPatchIn(BaseModel):
-    services: list[ServiceStatusPatch]
-
-
+class CompanyPermissionsPatchIn(BaseModel):
+    permissions: list[PermissionStatusPatch]
 
 
 # ===========================================================================
