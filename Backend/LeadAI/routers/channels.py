@@ -411,6 +411,13 @@ def instagram_callback(
 
     account.LoginType = ig_login.LOGIN_TYPE_INSTAGRAM
     account.AppId = settings.instagram_app_id
+    # Instagram webhooks may carry the IGID (stored as ExternalId above) OR the
+    # app-scoped user id from the OAuth step. Recording the second one here is
+    # what lets channels.find_account match exactly rather than guess — and a
+    # guess is unusable once more than one company has connected Instagram.
+    scoped_user_id = result.get("scoped_user_id")
+    if scoped_user_id and scoped_user_id != external_id:
+        account.BusinessAccountId = scoped_user_id
     account.Name = f"@{username}"
     account.AccessTokenEnc = encrypt_pii(result["access_token"])
     account.AppSecretEnc = encrypt_pii(settings.instagram_app_secret)

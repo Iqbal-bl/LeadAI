@@ -126,9 +126,25 @@ async def receive_webhook(
     for message in messages:
         account = channels.find_account(db, message.channel, message.account_external_id)
         if account is None:
+            # Log the ids we DO hold for this channel. Without them the next
+            # id mismatch is another hour of guessing; with them it names
+            # itself. Note that Meta's "Send to server" test button always
+            # sends recipient.id=23245, which matches nothing by design — a
+            # drop of that id is expected and proves only that the URL is
+            # reachable.
+            known = [
+                (a.ExternalId, a.BusinessAccountId)
+                for a in db.query(LeadChannelAccount)
+                .filter(
+                    LeadChannelAccount.Channel == message.channel,
+                    LeadChannelAccount.IsDeleted == False,  # noqa: E712
+                )
+                .limit(20)
+                .all()
+            ]
             logger.warning(
-                "[LeadAI webhook] no account for %s/%s — event dropped",
-                message.channel, message.account_external_id,
+                "[LeadAI webhook] no account for %s/%s — event dropped; known ids=%s",
+                message.channel, message.account_external_id, known,
             )
             continue
 
@@ -324,7 +340,11 @@ def _process_one(db: Session, item: dict) -> None:
         )
         return
 
-    channels.mark_read(account, item.get("external_message_id") or "")
+    channels.mark_read(
+        account,
+        item.get("external_message_id") or "",
+        external_user_id=item.get("external_user_id"),
+    )
 
     conversation_flow.handle_customer_turn(
         db,

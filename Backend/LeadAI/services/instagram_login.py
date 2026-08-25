@@ -342,7 +342,23 @@ def complete_connection(code: str) -> dict:
 
     Returns everything `channels`/the router needs to create or update a
     LeadChannelAccount:
-        access_token, expires_at, user_id, username, name, account_type
+        access_token, expires_at, external_id, scoped_user_id, username,
+        name, account_type
+
+    TWO IDS, BOTH KEPT
+    ------------------
+    Instagram hands back two different identifiers in this flow and they are
+    not interchangeable:
+
+        /oauth/access_token -> user_id  : the APP-SCOPED id   (e.g. 2746…)
+        /me?fields=user_id  -> user_id  : the IGID            (e.g. 17841…)
+
+    Which of them appears in a webhook depends on the payload shape Meta
+    chooses, and there is no way to know in advance. This function used to
+    return only the IGID, which left webhook routing guessing whenever the
+    other one arrived. Both are returned now and both are stored, so
+    `channels.find_account` can match exactly instead of falling back to a
+    heuristic that breaks as soon as a second company connects Instagram.
     """
     short = exchange_code(code)
     long_lived = exchange_long_lived(short["access_token"])
@@ -364,6 +380,9 @@ def complete_connection(code: str) -> dict:
         "expires_at": expires_at,
         "expires_in": expires_in,
         "external_id": external_id,
+        # App-scoped id from the OAuth step. May legitimately be absent or
+        # identical to external_id; the caller stores it only when it differs.
+        "scoped_user_id": str(short.get("user_id") or ""),
         "username": profile.get("username"),
         "name": profile.get("name") or profile.get("username"),
         "account_type": profile.get("account_type"),

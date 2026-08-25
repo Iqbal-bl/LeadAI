@@ -125,34 +125,53 @@ def verify_challenge(mode: str | None, token: str | None, expected_token: str | 
 # account lookup
 # =========================================================================== #
 def find_account(db: Session, channel: str, external_id: str) -> LeadChannelAccount | None:
-    """Route an inbound event to the tenant that owns the receiving account."""
+    """Route an inbound event to the tenant that owns the receiving account.
+
+    EXACT MATCH ONLY — NO HEURISTICS
+    --------------------------------
+    An earlier version fell back to "if there is exactly one Instagram account
+    in the whole database, it must be that one". That is wrong in two ways on a
+    multi-tenant platform:
+
+      * It has no ClientId filter, so the count spans EVERY company. It works
+        for your first customer and silently stops working the moment a second
+        one connects Instagram — presenting as "it worked in beta, production
+        drops everything".
+
+      * While only one account exists it is a tenant-assignment hole: any POST
+        with an arbitrary recipient.id selects that company. Signature checking
+        happens AFTER this lookup, so the body picks the tenant first. That is
+        precisely what rule 2 in routers/webhooks.py forbids.
+
+    So: match the ids we recorded at connect time, or return None. Instagram
+    hands us two of them (see instagram_login.complete_connection) and both are
+    stored, so an exact match is always available for a correctly connected
+    account. A None here means a genuine configuration problem worth seeing in
+    the logs, not something to paper over with a guess.
+    """
     ext = str(external_id)
     base = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.IsActive == True,    # noqa: E712
         LeadChannelAccount.IsDeleted == False,  # noqa: E712
     )
+    # .first(), not .one_or_none(): duplicate rows are a data problem, and
+    # MultipleResultsFound here would escape the router as a 500 — which Meta
+    # answers by retrying the same delivery, with backoff, for days.
     row = base.filter(
         LeadChannelAccount.Channel == channel,
         LeadChannelAccount.ExternalId == ext,
-    ).one_or_none()
+    ).first()
     if row is not None or channel != CHANNEL_INSTAGRAM:
         return row
 
-    # Instagram sends an IG-scoped id that may differ from the business account
-    # id stored at connect time. Try the alternates, then remember what Meta
-    # actually sends so the next event hits the fast path.
-    row = base.filter(
+    # Instagram Login issues an IGID (17841…) and an app-scoped user id
+    # (2746…). Which one lands in the webhook depends on the payload shape, so
+    # both are recorded at connect time: IGID in ExternalId, app-scoped id in
+    # BusinessAccountId.
+    return base.filter(
         LeadChannelAccount.Channel == CHANNEL_INSTAGRAM,
         LeadChannelAccount.BusinessAccountId == ext,
     ).first()
-    if row is None:
-        candidates = base.filter(LeadChannelAccount.Channel == CHANNEL_INSTAGRAM).all()
-        row = candidates[0] if len(candidates) == 1 else None
-    if row is not None:
-        logger.warning("[LeadAI channels] IG id %s matched account %s — recording alias", ext, row.Id)
-        row.MetaJson = {**(row.MetaJson or {}), "webhook_entry_id": ext}
-        db.commit()
-    return row
 
 def _token_for(account: LeadChannelAccount | None) -> str | None:
     if account is not None:
@@ -706,22 +725,46 @@ def send_template(
     return _post(url, body, token, timeout)
 
 
-def mark_read(account: LeadChannelAccount | None, message_id: str) -> None:
-    """Blue ticks. Best-effort — never let this fail a turn."""
+def mark_read(
+    account: LeadChannelAccount | None,
+    message_id: str,
+    *,
+    external_user_id: str | None = None,
+) -> None:
+    """Blue ticks. Best-effort — never let this fail a turn.
+
+    The three channels do not share a shape here. WhatsApp marks a specific
+    MESSAGE read; Instagram and Messenger mark the CONVERSATION seen and need
+    the sender's id, not the message id. Sending WhatsApp's body to Instagram
+    (as this once did) 400s on every inbound message — invisibly, because the
+    failure is swallowed below.
+    """
     if settings.campaign_dry_run or account is None:
         return
     token = _token_for(account)
     if not token:
         return
+
+    channel = account.Channel
+    if channel == CHANNEL_WHATSAPP:
+        if not message_id:
+            return
+        url = _graph_url(account, f"{account.ExternalId}/messages")
+        body = {"messaging_product": "whatsapp", "status": "read", "message_id": message_id}
+    elif channel in (CHANNEL_INSTAGRAM, CHANNEL_MESSENGER):
+        if not external_user_id:
+            return  # no conversation to mark without the sender
+        url = _graph_url(account, f"{account.ExternalId or 'me'}/messages")
+        body = {"recipient": {"id": external_user_id}, "sender_action": "mark_seen"}
+    else:
+        return
+
     try:
-        _post(
-            _graph_url(account, f"{account.ExternalId}/messages"),
-            {"messaging_product": "whatsapp", "status": "read", "message_id": message_id},
-            token,
-            10.0,
-        )
-    except Exception:  # noqa: BLE001
-        pass
+        _post(url, body, token, 10.0)
+    except Exception as exc:  # noqa: BLE001
+        # Debug, not warning: read receipts are cosmetic and a noisy failure
+        # here would bury the errors that actually matter.
+        logger.debug("[LeadAI channels] mark_read failed on %s: %s", channel, exc)
 
 
 def _post(url: str, body: dict, token: str, timeout: float) -> str:
