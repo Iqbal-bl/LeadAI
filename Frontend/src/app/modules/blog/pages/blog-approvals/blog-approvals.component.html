@@ -1,0 +1,1185 @@
+<div class="py-2 pb-8">
+  <p-toast></p-toast>
+  <p-confirmDialog [style]="{ width: '450px' }"></p-confirmDialog>
+
+  <!-- ==========================================================
+       Page Header Card & KPI Metrics
+  ========================================================== -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm mb-6">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400">
+            <i class="pi pi-check-square text-[11px]"></i> Editorial Workflow
+          </span>
+          <span class="text-xs px-2.5 py-0.5 rounded-full font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+            Multi-Platform Pipeline
+          </span>
+        </div>
+        <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+          Blog Approvals & Content Pipeline
+        </h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Review, approve, schedule, and broadcast employee-submitted blog articles across connected CMS channels.
+        </p>
+      </div>
+
+      <div class="flex items-center flex-wrap gap-3">
+        <button
+          type="button"
+          (click)="createBlogPost()"
+          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-600 hover:from-brand-600 hover:to-indigo-700 text-white text-sm font-semibold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
+        >
+          <i class="pi pi-plus text-xs"></i>
+          Create Blog Post
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Metric Cards Grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
+      <!-- All -->
+      <div
+        (click)="setStatusFilter('all')"
+        class="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+        [ngClass]="selectedStatusFilter === 'all' ? 'ring-2 ring-brand-500/50 bg-brand-50/50 dark:bg-brand-950/20 border-brand-300 dark:border-brand-700' : ''"
+      >
+        <div class="w-9 h-9 rounded-lg bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center text-sm flex-shrink-0">
+          <i class="pi pi-file"></i>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-lg font-extrabold text-slate-900 dark:text-slate-100 leading-none">{{ metrics.total }}</span>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">All Submissions</span>
+        </div>
+      </div>
+
+      <!-- Pending -->
+      <div
+        (click)="setStatusFilter('pending_approval')"
+        class="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+        [ngClass]="selectedStatusFilter === 'pending_approval' ? 'ring-2 ring-amber-500/50 bg-amber-50/60 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700' : ''"
+      >
+        <div class="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm flex-shrink-0">
+          <i class="pi pi-clock"></i>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="text-lg font-extrabold text-amber-600 dark:text-amber-400 leading-none">{{ metrics.pending }}</span>
+            <span *ngIf="metrics.pending > 0" class="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+          </div>
+          <span class="text-[11px] font-semibold text-amber-700 dark:text-amber-300 mt-1 truncate">Pending Review</span>
+        </div>
+      </div>
+
+      <!-- Approved -->
+      <div
+        (click)="setStatusFilter('approved')"
+        class="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+        [ngClass]="selectedStatusFilter === 'approved' ? 'ring-2 ring-emerald-500/50 bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-700' : ''"
+      >
+        <div class="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm flex-shrink-0">
+          <i class="pi pi-check-circle"></i>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 leading-none">{{ metrics.approved }}</span>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">Approved</span>
+        </div>
+      </div>
+
+      <!-- Changes Requested -->
+      <div
+        (click)="setStatusFilter('rejected')"
+        class="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+        [ngClass]="selectedStatusFilter === 'rejected' ? 'ring-2 ring-rose-500/50 bg-rose-50/50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-700' : ''"
+      >
+        <div class="w-9 h-9 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center text-sm flex-shrink-0">
+          <i class="pi pi-exclamation-circle"></i>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-lg font-extrabold text-rose-600 dark:text-rose-400 leading-none">{{ metrics.changesRequested }}</span>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">Changes Req.</span>
+        </div>
+      </div>
+
+      <!-- Published -->
+      <div
+        (click)="setStatusFilter('published')"
+        class="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+        [ngClass]="selectedStatusFilter === 'published' ? 'ring-2 ring-indigo-500/50 bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-300 dark:border-indigo-700' : ''"
+      >
+        <div class="w-9 h-9 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-sm flex-shrink-0">
+          <i class="pi pi-send"></i>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-lg font-extrabold text-indigo-600 dark:text-indigo-400 leading-none">{{ metrics.published }}</span>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">Published Live</span>
+        </div>
+      </div>
+
+      <!-- Scheduled -->
+      <div
+        (click)="setStatusFilter('scheduled')"
+        class="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+        [ngClass]="selectedStatusFilter === 'scheduled' ? 'ring-2 ring-purple-500/50 bg-purple-50/50 dark:bg-purple-950/20 border-purple-300 dark:border-purple-700' : ''"
+      >
+        <div class="w-9 h-9 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center text-sm flex-shrink-0">
+          <i class="pi pi-calendar"></i>
+        </div>
+        <div class="flex flex-col min-w-0">
+          <span class="text-lg font-extrabold text-purple-600 dark:text-purple-400 leading-none">{{ metrics.scheduled }}</span>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">Scheduled</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       Filter & Search Toolbar
+  ========================================================== -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm mb-6">
+    <!-- Status Filter Pills Row -->
+    <div class="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap"
+        [ngClass]="selectedStatusFilter === 'all' ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'"
+        (click)="setStatusFilter('all')"
+      >
+        All Articles
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold" [ngClass]="selectedStatusFilter === 'all' ? 'bg-white/25 text-white dark:text-slate-900' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'">{{ metrics.total }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap"
+        [ngClass]="selectedStatusFilter === 'pending_approval' ? 'bg-amber-600 text-white font-semibold shadow-sm' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/60'"
+        (click)="setStatusFilter('pending_approval')"
+      >
+        <i class="pi pi-clock text-[10px]"></i>
+        Pending Approval
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold" [ngClass]="selectedStatusFilter === 'pending_approval' ? 'bg-white/30 text-white' : 'bg-amber-200/80 dark:bg-amber-900 text-amber-800 dark:text-amber-200'">{{ metrics.pending }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap"
+        [ngClass]="selectedStatusFilter === 'approved' ? 'bg-emerald-600 text-white font-semibold shadow-sm' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800/60'"
+        (click)="setStatusFilter('approved')"
+      >
+        <i class="pi pi-check text-[10px]"></i>
+        Approved
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold" [ngClass]="selectedStatusFilter === 'approved' ? 'bg-white/30 text-white' : 'bg-emerald-200/80 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'">{{ metrics.approved }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap"
+        [ngClass]="selectedStatusFilter === 'rejected' ? 'bg-rose-600 text-white font-semibold shadow-sm' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/60'"
+        (click)="setStatusFilter('rejected')"
+      >
+        <i class="pi pi-exclamation-triangle text-[10px]"></i>
+        Changes Requested
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold" [ngClass]="selectedStatusFilter === 'rejected' ? 'bg-white/30 text-white' : 'bg-rose-200/80 dark:bg-rose-900 text-rose-800 dark:text-rose-200'">{{ metrics.changesRequested }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap"
+        [ngClass]="selectedStatusFilter === 'published' ? 'bg-indigo-600 text-white font-semibold shadow-sm' : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800/60'"
+        (click)="setStatusFilter('published')"
+      >
+        <i class="pi pi-send text-[10px]"></i>
+        Published
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold" [ngClass]="selectedStatusFilter === 'published' ? 'bg-white/30 text-white' : 'bg-indigo-200/80 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200'">{{ metrics.published }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap"
+        [ngClass]="selectedStatusFilter === 'scheduled' ? 'bg-purple-600 text-white font-semibold shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'"
+        (click)="setStatusFilter('scheduled')"
+      >
+        <i class="pi pi-calendar text-[10px]"></i>
+        Scheduled
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold" [ngClass]="selectedStatusFilter === 'scheduled' ? 'bg-white/30 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'">{{ metrics.scheduled }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition cursor-pointer whitespace-nowrap"
+        [ngClass]="selectedStatusFilter === 'draft' ? 'bg-slate-800 text-white font-semibold shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'"
+        (click)="setStatusFilter('draft')"
+      >
+        <i class="pi pi-pencil text-[10px]"></i>
+        Drafts
+        <span class="px-1.5 py-0.2 rounded-full text-[10px] font-bold" [ngClass]="selectedStatusFilter === 'draft' ? 'bg-white/30 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'">{{ metrics.drafts }}</span>
+      </button>
+    </div>
+
+    <!-- Search and Controls Row -->
+    <div class="flex flex-col md:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+      <div class="w-full md:w-80">
+        <p-iconfield styleClass="w-full">
+          <p-inputicon styleClass="pi pi-search"></p-inputicon>
+          <input
+            pInputText
+            type="text"
+            [(ngModel)]="searchQuery"
+            (ngModelChange)="applyFilters()"
+            placeholder="Search by title, author, keyword, or tag..."
+            class="w-full text-sm rounded-xl"
+          />
+        </p-iconfield>
+      </div>
+
+      <div class="flex items-center flex-wrap gap-3 w-full md:w-auto justify-end">
+        <!-- Category Filter -->
+        <p-dropdown
+          [options]="categoryOptions"
+          [(ngModel)]="selectedCategory"
+          (ngModelChange)="applyFilters()"
+          optionLabel="label"
+          optionValue="value"
+          styleClass="min-w-[160px]"
+          placeholder="Filter Category"
+        ></p-dropdown>
+
+        <!-- Sort Filter -->
+        <p-dropdown
+          [options]="sortOptions"
+          [(ngModel)]="selectedSort"
+          (ngModelChange)="applyFilters()"
+          optionLabel="label"
+          optionValue="value"
+          styleClass="min-w-[160px]"
+        ></p-dropdown>
+
+        <!-- View Mode Switch -->
+        <div class="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+          <button
+            type="button"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-xs transition cursor-pointer"
+            [ngClass]="viewMode === 'table' ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 font-bold shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'"
+            (click)="viewMode = 'table'"
+            pTooltip="Table View"
+            tooltipPosition="top"
+          >
+            <i class="pi pi-list"></i>
+          </button>
+          <button
+            type="button"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-xs transition cursor-pointer"
+            [ngClass]="viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 font-bold shadow-xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'"
+            (click)="viewMode = 'grid'"
+            pTooltip="Cards Grid View"
+            tooltipPosition="top"
+          >
+            <i class="pi pi-th-large"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       Main Content: Table View
+  ========================================================== -->
+  <div *ngIf="viewMode === 'table'" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+    <p-table
+      [value]="filteredPosts"
+      [paginator]="true"
+      [rows]="8"
+      [rowsPerPageOptions]="[8, 15, 25]"
+      [rowHover]="true"
+      dataKey="id"
+      styleClass="p-datatable-sm"
+    >
+      <ng-template pTemplate="header">
+        <tr class="bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700">
+          <th style="min-width: 22rem" class="py-3 px-4">Blog Article</th>
+          <th style="min-width: 13rem" class="py-3 px-4">Author / Employee</th>
+          <th style="min-width: 10rem" class="py-3 px-4">Platforms</th>
+          <th style="min-width: 8rem" class="py-3 px-4">Word Count</th>
+          <th style="min-width: 9rem" class="py-3 px-4">Status</th>
+          <th style="min-width: 8rem" class="py-3 px-4">Submitted</th>
+          <th style="width: 12rem; text-align: right" class="py-3 px-4">Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-post>
+        <tr class="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+          <!-- Article Title & Thumbnail -->
+          <td class="py-3.5 px-4">
+            <div class="flex items-start gap-3">
+              <div class="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+                <img
+                  *ngIf="post.coverImage; else noCover"
+                  [src]="post.coverImage"
+                  [alt]="post.title"
+                  class="w-full h-full object-cover"
+                />
+                <ng-template #noCover>
+                  <div class="w-full h-full flex items-center justify-center text-brand-500 bg-brand-50 dark:bg-brand-950/40 text-lg">
+                    <i class="pi pi-file-edit"></i>
+                  </div>
+                </ng-template>
+              </div>
+
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-0.5">
+                  <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                    {{ post.category || 'General' }}
+                  </span>
+                  <span *ngIf="post.reviewNotes?.length" class="text-xs text-slate-400 flex items-center gap-1" pTooltip="Review Notes Logged">
+                    <i class="pi pi-comment text-[10px]"></i> {{ post.reviewNotes.length }}
+                  </span>
+                </div>
+                <h4
+                  class="text-sm font-semibold text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer line-clamp-1 transition-colors"
+                  (click)="openPreviewModal(post)"
+                  [pTooltip]="post.title"
+                  tooltipPosition="top"
+                >
+                  {{ post.title }}
+                </h4>
+                <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
+                  {{ post.excerpt }}
+                </p>
+                <div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span *ngFor="let tag of (post.tags || []).slice(0, 3)" class="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
+                    #{{ tag }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Author -->
+          <td class="py-3.5 px-4">
+            <div class="flex items-center gap-2.5">
+              <p-avatar
+                *ngIf="post.author.avatar"
+                [image]="post.author.avatar"
+                shape="circle"
+                size="normal"
+              ></p-avatar>
+              <p-avatar
+                *ngIf="!post.author.avatar"
+                [label]="getAuthorInitials(post.author.name)"
+                shape="circle"
+                size="normal"
+                [style]="{ background: '#6366f1', color: '#fff', 'font-size': '11px', 'font-weight': '600' }"
+              ></p-avatar>
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                  {{ post.author.name || 'LeadAI Team' }}
+                </div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  {{ post.author.department || post.author.title || 'Employee' }}
+                </div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Target Platforms -->
+          <td class="py-3.5 px-4">
+            <div class="flex items-center gap-1 flex-wrap">
+              <span
+                *ngFor="let pKey of post.selectedPlatforms || []"
+                class="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-xs text-slate-600 dark:text-slate-300 hover:text-brand-500 hover:border-brand-300 transition"
+                [pTooltip]="getPlatformLabel(pKey)"
+                tooltipPosition="top"
+              >
+                <i [class]="getPlatformIcon(pKey)"></i>
+              </span>
+              <span *ngIf="!post.selectedPlatforms?.length" class="text-xs text-slate-400">
+                Default
+              </span>
+            </div>
+          </td>
+
+          <!-- Stats (Words & Reading Time) -->
+          <td class="py-3.5 px-4">
+            <div class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+              {{ post.wordCount || 0 }} words
+            </div>
+            <div class="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+              <i class="pi pi-clock text-[10px]"></i>
+              {{ post.readingTimeMinutes || 1 }} min read
+            </div>
+          </td>
+
+          <!-- Status Badge -->
+          <td class="py-3.5 px-4">
+            <p-tag
+              [value]="getStatusLabel(post.status)"
+              [severity]="getStatusBadgeSeverity(post.status)"
+              [rounded]="true"
+            ></p-tag>
+            <div *ngIf="post.status === 'scheduled' && post.scheduledDate" class="text-[10px] text-purple-600 dark:text-purple-400 mt-1">
+              📅 {{ post.scheduledDate }}
+            </div>
+          </td>
+
+          <!-- Submitted Date -->
+          <td class="py-3.5 px-4">
+            <div class="text-xs text-slate-600 dark:text-slate-400">
+              {{ formatDate(post.createdAt) }}
+            </div>
+          </td>
+
+          <!-- Actions -->
+          <td class="py-3.5 px-4 text-right">
+            <div class="flex items-center justify-end gap-1.5">
+              <!-- Quick Preview -->
+              <button
+                type="button"
+                class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/40 hover:border-brand-300 transition cursor-pointer"
+                (click)="openPreviewModal(post)"
+                pTooltip="Preview Article"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-eye text-xs"></i>
+              </button>
+
+              <!-- If Draft: Send for Approval button -->
+              <button
+                *ngIf="post.status === 'draft'"
+                type="button"
+                class="w-8 h-8 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 transition cursor-pointer"
+                (click)="submitDraftForApproval(post)"
+                pTooltip="Send for Approval"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-send text-xs"></i>
+              </button>
+
+              <!-- If Pending: Approve button -->
+              <button
+                *ngIf="post.status === 'pending_approval'"
+                type="button"
+                class="w-8 h-8 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 transition cursor-pointer"
+                (click)="openApproveModal(post)"
+                pTooltip="Approve Post"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-check text-xs"></i>
+              </button>
+
+              <!-- If Pending: Request Changes button -->
+              <button
+                *ngIf="post.status === 'pending_approval'"
+                type="button"
+                class="w-8 h-8 rounded-lg border border-rose-200 dark:border-rose-800 flex items-center justify-center text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 transition cursor-pointer"
+                (click)="openRejectModal(post)"
+                pTooltip="Request Changes"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-times text-xs"></i>
+              </button>
+
+              <!-- If Approved: Publish Now -->
+              <button
+                *ngIf="post.status === 'approved'"
+                type="button"
+                class="w-8 h-8 rounded-lg border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 transition cursor-pointer"
+                (click)="publishPostNow(post)"
+                pTooltip="Publish Now"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-send text-xs"></i>
+              </button>
+
+              <!-- If Approved: Schedule -->
+              <button
+                *ngIf="post.status === 'approved'"
+                type="button"
+                class="w-8 h-8 rounded-lg border border-purple-200 dark:border-purple-800 flex items-center justify-center text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition cursor-pointer"
+                (click)="openScheduleModal(post)"
+                pTooltip="Schedule Release"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-calendar text-xs"></i>
+              </button>
+
+              <!-- Edit in Composer / Open in Editor -->
+              <button
+                type="button"
+                class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                (click)="editPostInComposer(post)"
+                [pTooltip]="post.status === 'draft' ? 'Open in Editor' : 'Edit in Composer'"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-pencil text-xs"></i>
+              </button>
+
+              <!-- Delete Post -->
+              <button
+                type="button"
+                class="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-300 transition cursor-pointer"
+                (click)="deletePost(post)"
+                pTooltip="Delete"
+                tooltipPosition="top"
+              >
+                <i class="pi pi-trash text-xs"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+
+      <!-- Empty state inside table -->
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7" class="text-center py-16">
+            <div class="flex flex-col items-center justify-center">
+              <div class="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-3">
+                <i class="pi pi-file-edit text-3xl"></i>
+              </div>
+              <h3 class="text-base font-bold text-slate-800 dark:text-slate-200">No blog submissions found</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mt-1">
+                No blog posts match your current filter criteria. Create a new blog post to get started.
+              </p>
+              <button
+                type="button"
+                (click)="createBlogPost()"
+                class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold shadow transition cursor-pointer"
+              >
+                <i class="pi pi-plus text-xs"></i>
+                Create New Blog Post
+              </button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- ==========================================================
+       Main Content: Grid / Cards View
+  ========================================================== -->
+  <div *ngIf="viewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div *ngFor="let post of filteredPosts" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all flex flex-col">
+      <!-- Card Image Header -->
+      <div class="h-44 relative overflow-hidden bg-slate-100 dark:bg-slate-800">
+        <img
+          *ngIf="post.coverImage; else gridPlaceholder"
+          [src]="post.coverImage"
+          [alt]="post.title"
+          class="w-full h-full object-cover"
+        />
+        <ng-template #gridPlaceholder>
+          <div class="w-full h-full flex items-center justify-center text-brand-300 bg-gradient-to-br from-brand-50 to-indigo-50 dark:from-slate-800 dark:to-slate-900">
+            <i class="pi pi-image text-4xl opacity-50"></i>
+          </div>
+        </ng-template>
+
+        <div class="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+          <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-sm text-white">
+            {{ post.category || 'AI Blog' }}
+          </span>
+          <p-tag
+            [value]="getStatusLabel(post.status)"
+            [severity]="getStatusBadgeSeverity(post.status)"
+            [rounded]="true"
+          ></p-tag>
+        </div>
+      </div>
+
+      <!-- Card Body -->
+      <div class="p-5 flex-1 flex flex-col">
+        <!-- Author info -->
+        <div class="flex items-center gap-2 mb-3">
+          <p-avatar
+            *ngIf="post.author.avatar"
+            [image]="post.author.avatar"
+            shape="circle"
+            size="normal"
+          ></p-avatar>
+          <p-avatar
+            *ngIf="!post.author.avatar"
+            [label]="getAuthorInitials(post.author.name)"
+            shape="circle"
+            size="normal"
+            [style]="{ background: '#6366f1', color: '#fff', 'font-size': '10px' }"
+          ></p-avatar>
+          <div class="flex-1 min-w-0">
+            <span class="text-xs font-semibold text-slate-800 dark:text-slate-200 block truncate">
+              {{ post.author.name }}
+            </span>
+            <span class="text-[10px] text-slate-400 block">
+              {{ formatDate(post.createdAt) }}
+            </span>
+          </div>
+          <span class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+            {{ post.wordCount || 0 }}w
+          </span>
+        </div>
+
+        <h3
+          class="text-sm font-bold text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer line-clamp-2 transition mb-1.5"
+          (click)="openPreviewModal(post)"
+        >
+          {{ post.title }}
+        </h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+          {{ post.excerpt }}
+        </p>
+
+        <!-- Tags -->
+        <div class="flex items-center gap-1.5 flex-wrap my-3">
+          <span *ngFor="let tag of (post.tags || []).slice(0, 3)" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
+            #{{ tag }}
+          </span>
+        </div>
+
+        <!-- Target platforms & Quick Actions -->
+        <div class="flex items-center justify-between pt-3 mt-auto border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-1">
+            <span *ngFor="let pKey of post.selectedPlatforms || []" class="w-6 h-6 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center text-[10px]" [pTooltip]="getPlatformLabel(pKey)">
+              <i [class]="getPlatformIcon(pKey)"></i>
+            </span>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="w-7 h-7 rounded-md border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 transition cursor-pointer"
+              (click)="openPreviewModal(post)"
+              pTooltip="Preview"
+            >
+              <i class="pi pi-eye text-[11px]"></i>
+            </button>
+
+            <!-- If Draft: Send for Approval -->
+            <button
+              *ngIf="post.status === 'draft'"
+              type="button"
+              class="w-7 h-7 rounded-md border border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100 flex items-center justify-center transition cursor-pointer"
+              (click)="submitDraftForApproval(post)"
+              pTooltip="Send for Approval"
+            >
+              <i class="pi pi-send text-[11px]"></i>
+            </button>
+
+            <!-- If Pending: Approve button -->
+            <button
+              *ngIf="post.status === 'pending_approval'"
+              type="button"
+              class="w-7 h-7 rounded-md border border-emerald-200 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center transition cursor-pointer"
+              (click)="openApproveModal(post)"
+              pTooltip="Approve"
+            >
+              <i class="pi pi-check text-[11px]"></i>
+            </button>
+
+            <!-- If Pending: Request Changes button -->
+            <button
+              *ngIf="post.status === 'pending_approval'"
+              type="button"
+              class="w-7 h-7 rounded-md border border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-100 flex items-center justify-center transition cursor-pointer"
+              (click)="openRejectModal(post)"
+              pTooltip="Request Changes"
+            >
+              <i class="pi pi-times text-[11px]"></i>
+            </button>
+
+            <!-- If Approved: Publish -->
+            <button
+              *ngIf="post.status === 'approved'"
+              type="button"
+              class="w-7 h-7 rounded-md border border-indigo-200 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 flex items-center justify-center transition cursor-pointer"
+              (click)="publishPostNow(post)"
+              pTooltip="Publish"
+            >
+              <i class="pi pi-send text-[11px]"></i>
+            </button>
+
+            <!-- Open in Editor / Edit -->
+            <button
+              type="button"
+              class="w-7 h-7 rounded-md border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center justify-center transition cursor-pointer"
+              (click)="editPostInComposer(post)"
+              [pTooltip]="post.status === 'draft' ? 'Open in Editor' : 'Edit in Composer'"
+            >
+              <i class="pi pi-pencil text-[11px]"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================
+       Article Preview & Editorial Review Modal
+  ========================================================== -->
+  <p-dialog
+    [(visible)]="showPreviewDialog"
+    [modal]="true"
+    [style]="{ width: '90vw', maxWidth: '1050px' }"
+    [maximizable]="true"
+    [draggable]="false"
+    [resizable]="false"
+    (onHide)="closePreviewModal()"
+  >
+    <ng-template pTemplate="header">
+      <div class="flex items-center justify-between w-full pr-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold">
+            <i class="pi pi-book"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-slate-100">
+              Editorial Article Review
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              Review full manuscript, SEO metadata, and audit timeline notes.
+            </p>
+          </div>
+        </div>
+
+        <div *ngIf="selectedPostForPreview" class="flex items-center gap-2">
+          <p-tag
+            [value]="getStatusLabel(selectedPostForPreview.status)"
+            [severity]="getStatusBadgeSeverity(selectedPostForPreview.status)"
+            [rounded]="true"
+          ></p-tag>
+        </div>
+      </div>
+    </ng-template>
+
+    <div *ngIf="selectedPostForPreview" class="max-h-[72vh] overflow-y-auto pr-2">
+      <!-- Modal Navigation Tabs -->
+      <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 mb-4">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer"
+          [ngClass]="activePreviewTab === 'article' ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100'"
+          (click)="activePreviewTab = 'article'"
+        >
+          <i class="pi pi-file-edit"></i> Manuscript & Content
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer"
+          [ngClass]="activePreviewTab === 'seo' ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100'"
+          (click)="activePreviewTab = 'seo'"
+        >
+          <i class="pi pi-search"></i> SEO & Platforms
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer"
+          [ngClass]="activePreviewTab === 'history' ? 'bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100'"
+          (click)="activePreviewTab = 'history'"
+        >
+          <i class="pi pi-history"></i> Review Notes ({{ selectedPostForPreview.reviewNotes.length }})
+        </button>
+      </div>
+
+      <!-- TAB 1: Article Content -->
+      <div *ngIf="activePreviewTab === 'article'" class="py-2">
+        <!-- Article Header Card -->
+        <div class="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-6 mb-6">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-400">
+              {{ selectedPostForPreview.category || 'General' }}
+            </span>
+            <span class="text-xs text-slate-400">•</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400">{{ selectedPostForPreview.readingTimeMinutes || 2 }} min read</span>
+            <span class="text-xs text-slate-400">•</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400">{{ selectedPostForPreview.wordCount || 0 }} words</span>
+          </div>
+
+          <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 leading-tight">
+            {{ selectedPostForPreview.title }}
+          </h1>
+          <p *ngIf="selectedPostForPreview.subtitle" class="text-sm text-slate-600 dark:text-slate-300 mt-2">
+            {{ selectedPostForPreview.subtitle }}
+          </p>
+
+          <!-- Author Info Row -->
+          <div class="flex items-center justify-between pt-4 mt-4 border-t border-slate-200/60 dark:border-slate-700/60">
+            <div class="flex items-center gap-3">
+              <p-avatar
+                *ngIf="selectedPostForPreview.author.avatar"
+                [image]="selectedPostForPreview.author.avatar"
+                shape="circle"
+                size="large"
+              ></p-avatar>
+              <p-avatar
+                *ngIf="!selectedPostForPreview.author.avatar"
+                [label]="getAuthorInitials(selectedPostForPreview.author.name)"
+                shape="circle"
+                size="large"
+                [style]="{ background: '#6366f1', color: '#fff' }"
+              ></p-avatar>
+              <div>
+                <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {{ selectedPostForPreview.author.name || 'Author' }}
+                </div>
+                <div class="text-xs text-slate-500 dark:text-slate-400">
+                  {{ selectedPostForPreview.author.title || selectedPostForPreview.author.department || 'Content Contributor' }}
+                  <span *ngIf="selectedPostForPreview.author.email">({{ selectedPostForPreview.author.email }})</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <div class="text-[11px] text-slate-400">Created on</div>
+              <div class="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                {{ formatDate(selectedPostForPreview.createdAt) }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cover Image Banner -->
+        <div *ngIf="selectedPostForPreview.coverImage" class="mb-6">
+          <img
+            [src]="selectedPostForPreview.coverImage"
+            [alt]="selectedPostForPreview.title"
+            class="w-full h-80 object-cover rounded-2xl shadow-md border border-slate-200 dark:border-slate-800"
+          />
+          <p *ngIf="selectedPostForPreview.coverImageCaption" class="text-xs text-center text-slate-400 mt-2 italic">
+            {{ selectedPostForPreview.coverImageCaption }}
+          </p>
+        </div>
+
+        <!-- Rendered HTML Content -->
+        <div class="text-slate-800 dark:text-slate-200 text-sm leading-relaxed [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h1]:dark:text-slate-100 [&_h1]:mt-6 [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-slate-900 [&_h2]:dark:text-slate-100 [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:text-slate-900 [&_h3]:dark:text-slate-100 [&_h3]:mt-4 [&_h3]:mb-1.5 [&_p]:mb-3 [&_blockquote]:border-l-4 [&_blockquote]:border-brand-500 [&_blockquote]:bg-brand-50/50 [&_blockquote]:dark:bg-brand-950/20 [&_blockquote]:p-3.5 [&_blockquote]:rounded-r-xl [&_blockquote]:my-4 [&_blockquote]:italic [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_li]:mb-1 [&_img]:rounded-xl [&_img]:max-w-full [&_img]:my-4" [innerHTML]="selectedPostForPreview.content"></div>
+
+        <!-- Tags Footer -->
+        <div *ngIf="selectedPostForPreview.tags?.length" class="mt-8 pt-4 border-t border-slate-200 dark:border-slate-800">
+          <div class="text-xs font-semibold text-slate-400 mb-2">TOPICS & TAGS</div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span *ngFor="let t of selectedPostForPreview.tags" class="text-xs px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              #{{ t }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: SEO & Publishing Metadata -->
+      <div *ngIf="activePreviewTab === 'seo'" class="py-4 space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Google SERP Snippet Preview -->
+          <div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              <i class="pi pi-google mr-1"></i> Search Engine Listing Preview
+            </h4>
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+              <div class="text-xs text-emerald-600 dark:text-emerald-400 mb-1">https://leadai.io/blog/{{ selectedPostForPreview.seo.slug || selectedPostForPreview.slug }}</div>
+              <div class="text-base font-semibold text-blue-600 dark:text-blue-400 hover:underline leading-snug mb-1">{{ selectedPostForPreview.seo.metaTitle || selectedPostForPreview.title }}</div>
+              <div class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{{ selectedPostForPreview.seo.metaDescription || selectedPostForPreview.excerpt }}</div>
+            </div>
+          </div>
+
+          <!-- Target Platforms -->
+          <div class="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              <i class="pi pi-share-alt mr-1"></i> Configured Publishing Destinations
+            </h4>
+            <div class="space-y-2">
+              <div *ngFor="let p of platforms" class="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
+                <div class="flex items-center gap-2.5">
+                  <i [class]="p.icon + ' text-brand-500 text-sm'"></i>
+                  <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">{{ p.name }}</span>
+                </div>
+                <span
+                  class="text-[11px] px-2.5 py-0.5 rounded-full font-medium"
+                  [ngClass]="selectedPostForPreview.selectedPlatforms.includes(p.key) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+                >
+                  {{ selectedPostForPreview.selectedPlatforms.includes(p.key) ? 'Enabled' : 'Disabled' }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Keyword & Slug Details -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
+            <span class="text-xs text-slate-400 block mb-1">Permanent URL Slug</span>
+            <span class="text-sm font-mono font-semibold text-slate-800 dark:text-slate-200">
+              /blog/{{ selectedPostForPreview.slug }}
+            </span>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60">
+            <span class="text-xs text-slate-400 block mb-1">Focus Keywords</span>
+            <div class="flex items-center gap-1.5 flex-wrap mt-1">
+              <span *ngFor="let kw of selectedPostForPreview.seo.focusKeywords || []" class="text-xs px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
+                {{ kw }}
+              </span>
+              <span *ngIf="!selectedPostForPreview.seo.focusKeywords?.length" class="text-xs text-slate-400">
+                None specified
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: Review Notes & Audit History -->
+      <div *ngIf="activePreviewTab === 'history'" class="py-4 space-y-3">
+        <div *ngIf="!selectedPostForPreview.reviewNotes.length" class="text-center py-8 text-slate-400">
+          <i class="pi pi-comments text-3xl mb-2"></i>
+          <p class="text-sm">No review feedback has been logged yet for this article.</p>
+        </div>
+
+        <div *ngFor="let note of selectedPostForPreview.reviewNotes" class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span
+                class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md"
+                [ngClass]="note.authorRole === 'admin' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300'"
+              >
+                {{ note.authorRole === 'admin' ? 'Editorial Reviewer' : 'Employee Author' }}
+              </span>
+              <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                {{ note.authorName }}
+              </span>
+            </div>
+            <span class="text-[11px] text-slate-400">
+              {{ formatDate(note.timestamp) }}
+            </span>
+          </div>
+          <p class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+            {{ note.content }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer Actions -->
+    <ng-template pTemplate="footer">
+      <div *ngIf="selectedPostForPreview" class="flex flex-col sm:flex-row items-center justify-between w-full gap-3 pt-3">
+        <div class="flex items-center gap-2">
+          <p-button
+            label="Edit in Composer"
+            icon="pi pi-pencil"
+            [text]="true"
+            size="small"
+            (click)="editPostInComposer(selectedPostForPreview)"
+          ></p-button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <p-button
+            label="Close"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            (click)="closePreviewModal()"
+          ></p-button>
+
+          <!-- Action: Send for Approval (Drafts) -->
+          <p-button
+            *ngIf="selectedPostForPreview.status === 'draft'"
+            label="Send for Approval"
+            icon="pi pi-send"
+            severity="warn"
+            size="small"
+            (click)="submitDraftForApproval(selectedPostForPreview); closePreviewModal()"
+          ></p-button>
+
+          <!-- Action: Request Changes -->
+          <p-button
+            *ngIf="selectedPostForPreview.status === 'pending_approval'"
+            label="Request Changes"
+            icon="pi pi-times"
+            severity="danger"
+            [outlined]="true"
+            size="small"
+            (click)="openRejectModal(selectedPostForPreview)"
+          ></p-button>
+
+          <!-- Action: Approve -->
+          <p-button
+            *ngIf="selectedPostForPreview.status === 'pending_approval'"
+            label="Approve Post"
+            icon="pi pi-check"
+            severity="success"
+            size="small"
+            (click)="openApproveModal(selectedPostForPreview)"
+          ></p-button>
+
+          <!-- Action: Schedule -->
+          <p-button
+            *ngIf="selectedPostForPreview.status === 'approved'"
+            label="Schedule Release"
+            icon="pi pi-calendar"
+            severity="contrast"
+            size="small"
+            (click)="openScheduleModal(selectedPostForPreview)"
+          ></p-button>
+
+          <!-- Action: Publish -->
+          <p-button
+            *ngIf="selectedPostForPreview.status === 'approved'"
+            label="Publish Now"
+            icon="pi pi-send"
+            severity="primary"
+            size="small"
+            (click)="publishPostNow(selectedPostForPreview)"
+          ></p-button>
+        </div>
+      </div>
+    </ng-template>
+  </p-dialog>
+
+  <!-- ==========================================================
+       Approve Modal
+  ========================================================== -->
+  <p-dialog
+    header="Approve Blog Post"
+    [(visible)]="showApproveDialog"
+    [modal]="true"
+    [style]="{ width: '480px' }"
+  >
+    <div *ngIf="selectedPostForApprove" class="py-2 space-y-4">
+      <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-start gap-3">
+        <i class="pi pi-check-circle text-emerald-600 text-lg mt-0.5"></i>
+        <div>
+          <h4 class="text-xs font-bold text-emerald-900 dark:text-emerald-300">Ready to Approve</h4>
+          <p class="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+            Approving this article marks it as ready for immediate publication or scheduling.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+          Article Title
+        </label>
+        <div class="text-sm font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+          {{ selectedPostForApprove.title }}
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+          Editorial Approval Notes (Optional)
+        </label>
+        <textarea
+          pInputText
+          rows="3"
+          [(ngModel)]="approvalNote"
+          class="w-full text-sm p-3 rounded-xl border border-slate-300 dark:border-slate-700"
+          placeholder="Add commendation or publishing guidelines..."
+        ></textarea>
+      </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p-button label="Cancel" [text]="true" (click)="showApproveDialog = false"></p-button>
+      <p-button
+        label="Confirm Approval"
+        icon="pi pi-check"
+        severity="success"
+        (click)="confirmApproval()"
+      ></p-button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- ==========================================================
+       Request Changes / Rejection Modal
+  ========================================================== -->
+  <p-dialog
+    header="Request Editorial Revisions"
+    [(visible)]="showRejectDialog"
+    [modal]="true"
+    [style]="{ width: '480px' }"
+  >
+    <div *ngIf="selectedPostForReject" class="py-2 space-y-4">
+      <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
+        <i class="pi pi-exclamation-triangle text-amber-600 text-lg mt-0.5"></i>
+        <div>
+          <h4 class="text-xs font-bold text-amber-900 dark:text-amber-300">Action Required by Author</h4>
+          <p class="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+            The article will be returned to the employee with your revision feedback.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+          Article Title
+        </label>
+        <div class="text-sm font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+          {{ selectedPostForReject.title }}
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+          Revision Feedback & Required Changes *
+        </label>
+        <textarea
+          pInputText
+          rows="4"
+          [(ngModel)]="rejectionReason"
+          class="w-full text-sm p-3 rounded-xl border border-slate-300 dark:border-slate-700"
+          placeholder="Specify what sections need improvement, missing citations, or tone adjustments..."
+        ></textarea>
+      </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p-button label="Cancel" [text]="true" (click)="showRejectDialog = false"></p-button>
+      <p-button
+        label="Send Revisions Back"
+        icon="pi pi-send"
+        severity="danger"
+        (click)="confirmReject()"
+      ></p-button>
+    </ng-template>
+  </p-dialog>
+
+  <!-- ==========================================================
+       Schedule Modal
+  ========================================================== -->
+  <p-dialog
+    header="Schedule Blog Publication"
+    [(visible)]="showScheduleDialog"
+    [modal]="true"
+    [style]="{ width: '420px' }"
+  >
+    <div *ngIf="selectedPostForSchedule" class="py-2 space-y-4">
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+          Article
+        </label>
+        <div class="text-sm font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+          {{ selectedPostForSchedule.title }}
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">
+          Select Release Date & Time *
+        </label>
+        <p-calendar
+          [(ngModel)]="scheduledDateTime"
+          [showTime]="true"
+          [showIcon]="true"
+          dateFormat="M dd, yy"
+          hourFormat="12"
+          [minDate]="scheduledDateTime"
+          styleClass="w-full"
+          appendTo="body"
+        ></p-calendar>
+      </div>
+    </div>
+
+    <ng-template pTemplate="footer">
+      <p-button label="Cancel" [text]="true" (click)="showScheduleDialog = false"></p-button>
+      <p-button
+        label="Confirm Schedule"
+        icon="pi pi-calendar-plus"
+        severity="contrast"
+        (click)="confirmSchedule()"
+      ></p-button>
+    </ng-template>
+  </p-dialog>
+</div>

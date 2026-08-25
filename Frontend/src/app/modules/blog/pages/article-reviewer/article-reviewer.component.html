@@ -1,0 +1,253 @@
+<p-toast></p-toast>
+
+<div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
+  <!-- Top Navigation & Action Header -->
+  <header class="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-6 py-3.5 flex items-center justify-between shadow-2xs">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white font-bold shadow-md shadow-brand-500/20">
+        <i class="pi pi-verified text-lg"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-bold text-slate-900 dark:text-slate-100">Editorial Review Portal</h1>
+          <span
+            *ngIf="article"
+            class="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full border"
+            [ngClass]="getStatusBadgeClass(article.status)"
+          >
+            {{ getStatusLabel(article.status) }}
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+          LeadAI Content Publishing & Review Pipeline
+        </p>
+      </div>
+    </div>
+
+    <!-- Review Action Area -->
+    <div *ngIf="article" class="flex items-center gap-2">
+      <!-- When in pending review: show action buttons -->
+      <ng-container *ngIf="article.status === 'pending_approval'; else reviewCompleted">
+        <!-- Approve Button -->
+        <button
+          type="button"
+          (click)="openReviewModal('approved')"
+          [disabled]="submitting"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer shadow-xs"
+        >
+          <i class="pi pi-check text-xs"></i>
+          <span>Approve Article</span>
+        </button>
+
+        <!-- Request Changes Button -->
+        <button
+          type="button"
+          (click)="openReviewModal('changes_requested')"
+          [disabled]="submitting"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-amber-900 dark:text-amber-100 bg-amber-100 dark:bg-amber-950/70 hover:bg-amber-200 dark:hover:bg-amber-900/80 border border-amber-300 dark:border-amber-700 transition cursor-pointer"
+        >
+          <i class="pi pi-pencil text-xs text-amber-600"></i>
+          <span>Request Changes</span>
+        </button>
+
+        <!-- Reject Button -->
+        <button
+          type="button"
+          (click)="openReviewModal('rejected')"
+          [disabled]="submitting"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 transition cursor-pointer"
+        >
+          <i class="pi pi-times text-xs"></i>
+          <span>Reject</span>
+        </button>
+      </ng-container>
+
+      <!-- When review has already been performed: show locked status badge -->
+      <ng-template #reviewCompleted>
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700">
+          <i class="pi pi-lock text-[11px] text-slate-500"></i>
+          <span>Review Completed:</span>
+          <span
+            class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider"
+            [ngClass]="getStatusBadgeClass(article.status)"
+          >
+            {{ getStatusLabel(article.status) }}
+          </span>
+        </div>
+      </ng-template>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-4xl w-full mx-auto p-6 md:p-10 space-y-6">
+    
+    <!-- Loading State -->
+    <div *ngIf="loading" class="flex flex-col items-center justify-center py-20 space-y-3">
+      <i class="pi pi-spin pi-spinner text-3xl text-brand-600"></i>
+      <p class="text-xs text-slate-500 font-medium">Loading article manuscript for review...</p>
+    </div>
+
+    <!-- Error / Not Found State -->
+    <div *ngIf="!loading && !article" class="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 space-y-3 shadow-2xs">
+      <i class="pi pi-exclamation-triangle text-3xl text-amber-500"></i>
+      <h2 class="text-base font-bold">Article Manuscript Not Found</h2>
+      <p class="text-xs text-slate-500 max-w-md mx-auto">
+        We could not locate the requested article or your review token might be invalid or expired.
+      </p>
+    </div>
+
+    <!-- Article Manuscript Content -->
+    <article *ngIf="!loading && article" class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 md:p-10 shadow-xs space-y-8">
+      
+      <!-- Submission / Status Banner -->
+      <div class="p-4 rounded-xl border flex items-start justify-between gap-3 text-xs" [ngClass]="getStatusBadgeClass(article.status)">
+        <div class="flex items-start gap-2.5">
+          <i
+            class="pi text-base mt-0.5"
+            [ngClass]="article.status === 'pending_approval' ? 'pi-info-circle' : (article.status === 'approved' ? 'pi-check-circle' : 'pi-lock')"
+          ></i>
+          <div>
+            <div class="font-bold">Article Status: {{ getStatusLabel(article.status) }}</div>
+            <p *ngIf="article.status === 'pending_approval'" class="mt-0.5 opacity-90">
+              Submitted for review by <strong>{{ article.author_name || article.author?.name || 'Author' }}</strong>. Please review content and provide editorial decision.
+            </p>
+            <p *ngIf="article.status !== 'pending_approval'" class="mt-0.5 opacity-90">
+              This article has already been reviewed with decision: <strong>{{ getStatusLabel(article.status) }}</strong>. No further review actions can be performed.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Header & Metadata -->
+      <header class="space-y-4 border-b border-slate-100 dark:border-slate-800 pb-6">
+        <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <span class="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 font-medium text-slate-700 dark:text-slate-300">
+            {{ article.category || 'Editorial Post' }}
+          </span>
+          <span>•</span>
+          <span>{{ getWordCount(article.content) }} words</span>
+          <span *ngIf="article.submitted_at || article.createdAt">•</span>
+          <span *ngIf="article.submitted_at || article.createdAt">Submitted: {{ (article.submitted_at || article.createdAt) | date:'medium' }}</span>
+        </div>
+
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+          {{ article.title }}
+        </h1>
+
+        <p *ngIf="article.summary || article.subtitle" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
+          {{ article.summary || article.subtitle }}
+        </p>
+
+        <!-- Tags -->
+        <div *ngIf="article.tags && article.tags.length > 0" class="flex flex-wrap gap-1.5 pt-1">
+          <span
+            *ngFor="let tag of article.tags"
+            class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+          >
+            #{{ tag }}
+          </span>
+        </div>
+      </header>
+
+      <!-- Cover Image -->
+      <div *ngIf="article.cover_image || article.coverImage" class="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+        <img
+          [src]="article.cover_image || article.coverImage"
+          alt="Article Cover"
+          class="w-full max-h-[380px] object-cover"
+        />
+      </div>
+
+      <!-- Formatted HTML Manuscript Body -->
+      <div
+        class="prose dark:prose-invert max-w-none text-sm md:text-base leading-relaxed text-slate-800 dark:text-slate-200 [&_h1]:text-2xl [&_h1]:font-extrabold [&_h1]:my-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:my-3 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:my-2 [&_p]:my-3 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:ml-6 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:ml-6 [&_ol]:my-2 [&_li]:my-1 [&_blockquote]:border-l-4 [&_blockquote]:border-brand-500 [&_blockquote]:bg-brand-50/50 dark:[&_blockquote]:bg-brand-950/30 [&_blockquote]:p-3 [&_blockquote]:rounded-r-lg [&_blockquote]:my-3 [&_blockquote]:italic [&_strong]:font-bold [&_a]:text-brand-600 [&_a]:underline"
+        [innerHTML]="article.content"
+      ></div>
+
+      <!-- Revision Notes / Audit Trail History -->
+      <div *ngIf="article.review_notes || article.reviewNotes" class="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-3">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+          Editorial History & Notes
+        </h3>
+        <div class="space-y-2">
+          <div
+            *ngFor="let note of (article.review_notes || article.reviewNotes)"
+            class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1"
+          >
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-800 dark:text-slate-200">{{ note.author_name || note.authorName }}</span>
+              <span class="text-[10px] text-slate-400">{{ (note.created_at || note.timestamp) | date:'medium' }}</span>
+            </div>
+            <p class="text-slate-600 dark:text-slate-300">{{ note.content }}</p>
+          </div>
+        </div>
+      </div>
+
+    </article>
+  </main>
+</div>
+
+<!-- Review Decision Dialog Modal -->
+<p-dialog
+  [(visible)]="showReviewDialog"
+  [modal]="true"
+  [style]="{ width: '480px' }"
+  [draggable]="false"
+  [resizable]="false"
+  header="Submit Editorial Decision"
+>
+  <div class="space-y-4 py-2 text-xs">
+    <div class="space-y-1.5">
+      <label class="block font-bold text-slate-700 dark:text-slate-300">Decision Action</label>
+      <div class="p-2.5 rounded-xl border font-bold capitalize flex items-center gap-2" [ngClass]="getStatusBadgeClass(selectedAction)">
+        <i
+          class="pi"
+          [ngClass]="selectedAction === 'approved' ? 'pi-check-circle text-emerald-600' : (selectedAction === 'changes_requested' ? 'pi-exclamation-triangle text-amber-600' : 'pi-times-circle text-rose-600')"
+        ></i>
+        <span>{{ getStatusLabel(selectedAction) }}</span>
+      </div>
+    </div>
+
+    <div class="space-y-1">
+      <label class="block font-bold text-slate-700 dark:text-slate-300">Reviewer Name</label>
+      <input
+        type="text"
+        [(ngModel)]="reviewerName"
+        class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none"
+      />
+    </div>
+
+    <div class="space-y-1">
+      <label class="block font-bold text-slate-700 dark:text-slate-300">
+        Reviewer Feedback & Instructions
+        <span *ngIf="selectedAction === 'changes_requested'" class="text-rose-500">*</span>
+      </label>
+      <textarea
+        [(ngModel)]="feedbackNote"
+        rows="4"
+        placeholder="Add constructive notes or reason for this decision..."
+        class="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none leading-relaxed"
+      ></textarea>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-end gap-2 pt-2">
+      <p-button
+        label="Cancel"
+        [text]="true"
+        severity="secondary"
+        size="small"
+        (click)="showReviewDialog = false"
+      ></p-button>
+      <p-button
+        [label]="submitting ? 'Submitting...' : 'Confirm Decision'"
+        [icon]="submitting ? 'pi pi-spin pi-spinner' : 'pi pi-send'"
+        [severity]="selectedAction === 'approved' ? 'success' : (selectedAction === 'changes_requested' ? 'warn' : 'danger')"
+        size="small"
+        [disabled]="submitting"
+        (click)="submitDecision()"
+      ></p-button>
+    </div>
+  </ng-template>
+</p-dialog>

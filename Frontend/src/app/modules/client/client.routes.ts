@@ -180,6 +180,35 @@ export const CLIENT_ROUTES: Routes = [
         pathMatch: 'full',
       },
       {
+        path: 'create-blog',
+        loadComponent: () =>
+          import('../blog/pages/blog-composer/blog-composer.component').then(
+            (m) => m.BlogComposerComponent,
+          ),
+      },
+      {
+        path: 'blog-post',
+        redirectTo: 'create-blog',
+        pathMatch: 'full',
+      },
+      {
+        path: 'blog-approvals',
+        loadComponent: () =>
+          import('../blog/pages/blog-approvals/blog-approvals.component').then(
+            (m) => m.BlogApprovalsComponent,
+          ),
+      },
+      {
+        path: 'blogs',
+        redirectTo: 'blog-approvals',
+        pathMatch: 'full',
+      },
+      {
+        path: 'blog',
+        loadChildren: () =>
+          import('../blog/blog.module').then((m) => m.BlogModule),
+      },
+      {
         path: 'social-analytics',
         loadComponent: () =>
           import('../../features/campaigns/pages/analytics-layout/analytics-layout').then(

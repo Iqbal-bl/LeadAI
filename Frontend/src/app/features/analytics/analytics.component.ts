@@ -27,6 +27,8 @@ export class AnalyticsComponent implements OnInit {
   isLoading = true;
   selectedDays = 7;
   selectedDateRange: Date[] | null = null;
+  isTrendLoading = false;
+  private funnelLoaded = false;
 
   // Header Greetings & User
   greeting = '';
@@ -61,6 +63,7 @@ export class AnalyticsComponent implements OnInit {
     this.loadUser();
     this.setupChartOptions();
     this.loadAnalytics(this.selectedDays);
+    this.loadFunnel();
   }
 
   private setGreeting(): void {
@@ -196,9 +199,30 @@ export class AnalyticsComponent implements OnInit {
     };
   }
 
-  setPeriod(days: number): void {
+  setTrendPeriod(days: number): void {
+    if (this.selectedDays === days && this.dailyTrendChartData) return;
     this.selectedDays = days;
-    this.loadAnalytics(days);
+    this.isTrendLoading = true;
+    this.analyticsService.getAnalytics(days).subscribe({
+      next: (data: AnalyticsData) => {
+        if (data && data.daily) {
+          this.dailyTrendChartData = this.buildTrendChartData(data.daily);
+        }
+        this.isTrendLoading = false;
+      },
+      error: () => {
+        this.isTrendLoading = false;
+      }
+    });
+  }
+
+  setPeriod(days: number): void {
+    this.setTrendPeriod(days);
+  }
+
+  refreshAll(): void {
+    this.loadAnalytics(this.selectedDays);
+    this.loadFunnel();
   }
 
   loadAnalytics(days: number = 7): void {
@@ -207,13 +231,18 @@ export class AnalyticsComponent implements OnInit {
       next: (data: AnalyticsData) => {
         this.analyticsData = data;
         this.processAnalyticsData(data);
+        if (!this.funnelLoaded || this.funnelSteps.length === 0) {
+          this.computeFallbackFunnel();
+        }
         this.isLoading = false;
       },
       error: () => {
         this.isLoading = false;
       }
     });
+  }
 
+  loadFunnel(): void {
     this.analyticsService.getFunnel().subscribe({
       next: (funnel: AnalyticsFunnelStage[]) => {
         const colors = ['#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#10b981'];
@@ -224,6 +253,7 @@ export class AnalyticsComponent implements OnInit {
             percentage: step.percentage,
             color: colors[idx % colors.length]
           }));
+          this.funnelLoaded = true;
         } else {
           this.computeFallbackFunnel();
         }
@@ -236,7 +266,8 @@ export class AnalyticsComponent implements OnInit {
 
   private computeFallbackFunnel(): void {
     if (!this.analyticsData) return;
-    const total = this.analyticsData.total_leads || 1;
+    const total = this.analyticsData.total_leads || 0;
+    const denominator = total || 1;
     const warmOrHot = (this.analyticsData.warm || 0) + (this.analyticsData.hot || 0);
     const qualified = this.analyticsData.qualified || 0;
     const assigned = this.analyticsData.assigned || 0;
@@ -244,11 +275,12 @@ export class AnalyticsComponent implements OnInit {
 
     this.funnelSteps = [
       { label: 'Total Leads', count: total, percentage: 100, color: '#6366f1' },
-      { label: 'Warm / Hot Interest', count: warmOrHot, percentage: Math.round((warmOrHot / total) * 100), color: '#8b5cf6' },
-      { label: 'Assigned to Agent', count: assigned, percentage: Math.round((assigned / total) * 100), color: '#a855f7' },
-      { label: 'Qualified Opportunities', count: qualified, percentage: Math.round((qualified / total) * 100), color: '#ec4899' },
-      { label: 'Closed Deals', count: closed, percentage: Math.round((closed / total) * 100), color: '#10b981' }
+      { label: 'Warm / Hot Interest', count: warmOrHot, percentage: Math.min(100, Math.round((warmOrHot / denominator) * 100)), color: '#8b5cf6' },
+      { label: 'Assigned to Agent', count: assigned, percentage: Math.min(100, Math.round((assigned / denominator) * 100)), color: '#a855f7' },
+      { label: 'Qualified Opportunities', count: qualified, percentage: Math.min(100, Math.round((qualified / denominator) * 100)), color: '#ec4899' },
+      { label: 'Closed Deals', count: closed, percentage: Math.min(100, Math.round((closed / denominator) * 100)), color: '#10b981' }
     ];
+    this.funnelLoaded = true;
   }
 
   private processAnalyticsData(data: AnalyticsData): void {

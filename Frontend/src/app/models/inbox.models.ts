@@ -15,14 +15,7 @@ export interface LeadInfo {
 export interface LeadInboxItem {
   id: string;
   client_id: string;
-  channel:
-    | 'web'
-    | 'voice'
-    | 'whatsapp'
-    | 'messenger'
-    | 'sms'
-    | 'email'
-    | string;
+  channel: 'web' | 'voice' | 'whatsapp' | 'messenger' | 'sms' | 'email' | string;
   status: 'open' | 'needs_human' | 'closed' | string;
   customer_ref: string;
   customer_name: string | null;
@@ -53,7 +46,6 @@ export interface ContactInfo {
   instagram: string | null;
   revealed_at: string;
   warning: string;
-  display_name: string;
 }
 
 export interface InboxResponse {

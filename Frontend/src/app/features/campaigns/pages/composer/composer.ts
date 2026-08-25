@@ -1,7 +1,6 @@
 import {
   Component,
-  ChangeDetectorRef,
-  ViewChild
+  ChangeDetectorRef
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
@@ -50,9 +49,6 @@ import { MessageService } from 'primeng/api';
 })
 export class ComposerComponent {
 
-  @ViewChild(ScheduleBar)
-  scheduleBar?: ScheduleBar;
-
   /* ==========================================================
      Publishing State
   ========================================================== */
@@ -68,16 +64,10 @@ export class ComposerComponent {
 
 
   /* ==========================================================
-     Publish Mode & Schedule Time
+     Publish Mode
   ========================================================== */
 
   publishMode: 'now' | 'schedule' = 'now';
-
-  scheduledUtc: string | null = null;
-
-  onScheduledUtcChange(utc: string | null): void {
-    this.scheduledUtc = utc;
-  }
 
 
   /* ==========================================================
@@ -294,11 +284,6 @@ export class ComposerComponent {
       mediaToPublish
     );
 
-    const scheduleTime =
-      this.publishMode === 'schedule'
-        ? (this.scheduledUtc || (this.scheduleBar ? this.scheduleBar.getScheduledUtc() : null))
-        : null;
-
 
     /* ----------------------------------------------------------
        Publish Through Unified Backend
@@ -308,8 +293,7 @@ export class ComposerComponent {
       .publish(
         this.selectedAccounts,
         this.postContent,
-        mediaToPublish,
-        scheduleTime
+        mediaToPublish
       )
       .subscribe({
         next: (response) => {

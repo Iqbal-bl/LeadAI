@@ -5,13 +5,14 @@ import { FormsModule } from '@angular/forms';
 
 import { CardModule } from 'primeng/card';
 import { DatePickerModule } from 'primeng/datepicker';
+import { SelectModule } from 'primeng/select';
 import { PopoverModule, Popover } from 'primeng/popover';
 
 @Component({
   selector: 'app-schedule-bar',
   standalone: true,
 
-  imports: [CommonModule, FormsModule, CardModule, DatePickerModule, PopoverModule],
+  imports: [CommonModule, FormsModule, CardModule, DatePickerModule, SelectModule, PopoverModule],
 
   templateUrl: './schedule-bar.html',
   styleUrl: './schedule-bar.scss',
@@ -28,22 +29,40 @@ export class ScheduleBar {
   publishModeChange = new EventEmitter<'now' | 'schedule'>();
 
   /* ==========================================================
-     Schedule Outputs
-  ========================================================== */
-
-  @Output()
-  scheduledUtcChange = new EventEmitter<string | null>();
-
-  @Output()
-  scheduledDateChange = new EventEmitter<string | null>();
-
-  /* ==========================================================
      Schedule Data
   ========================================================== */
 
   selectedDate: Date | null = null;
 
   selectedTime: Date | null = null;
+
+  selectedTimezone = 'Asia/Kolkata';
+
+  /* ==========================================================
+     Timezones
+  ========================================================== */
+
+  timezones = [
+    {
+      label: 'Asia/Kolkata (GMT +05:30)',
+      value: 'Asia/Kolkata',
+    },
+
+    {
+      label: 'UTC',
+      value: 'UTC',
+    },
+
+    {
+      label: 'America/New_York',
+      value: 'America/New_York',
+    },
+
+    {
+      label: 'Europe/London',
+      value: 'Europe/London',
+    },
+  ];
 
   /* ==========================================================
      Change Publish Mode
@@ -56,56 +75,18 @@ export class ScheduleBar {
   }
 
   /* ==========================================================
-     Scheduled UTC Conversion
-  ========================================================== */
-
-  getScheduledUtc(): string | null {
-    if (!this.selectedDate) {
-      return null;
-    }
-
-    const scheduledDate = new Date(this.selectedDate);
-
-    if (this.selectedTime) {
-      scheduledDate.setHours(
-        this.selectedTime.getHours(),
-        this.selectedTime.getMinutes(),
-        this.selectedTime.getSeconds(),
-        0
-      );
-    } else {
-      scheduledDate.setHours(0, 0, 0, 0);
-    }
-
-    return scheduledDate.toISOString();
-  }
-
-  emitScheduledUtc(): void {
-    const utcString = this.getScheduledUtc();
-    this.scheduledUtcChange.emit(utcString);
-    this.scheduledDateChange.emit(utcString);
-  }
-
-  /* ==========================================================
      Date Picker
   ========================================================== */
 
-  onDateSelect(popover?: Popover): void {
-    if (popover) {
-      popover.hide();
-    }
-    this.emitScheduledUtc();
+  onDateSelect(popover: Popover): void {
+    popover.hide();
   }
 
   /* ==========================================================
      Time Picker
   ========================================================== */
 
-  onTimeSelect(popover?: Popover): void {
-    if (popover) {
-      popover.hide();
-    }
-    this.emitScheduledUtc();
+  onTimeSelect(popover: Popover): void {
+    popover.hide();
   }
 }
-

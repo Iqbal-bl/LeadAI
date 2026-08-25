@@ -10,31 +10,10 @@
       </p>
     </div>
 
-    <!-- Date Filters & Actions -->
-    <div class="flex flex-wrap items-center gap-2.5">
-      <!-- Quick Range Buttons -->
-      <div class="flex items-center p-1 rounded-lg border"
-        style="background: var(--card-bg); border-color: var(--app-border);">
-        <button type="button" (click)="setPeriod(7)" class="px-3 py-1 text-xs font-semibold rounded-md transition-all"
-          [ngClass]="selectedDays === 7 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
-          7D
-        </button>
-        <button type="button" (click)="setPeriod(14)" class="px-3 py-1 text-xs font-semibold rounded-md transition-all"
-          [ngClass]="selectedDays === 14 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
-          14D
-        </button>
-        <button type="button" (click)="setPeriod(30)" class="px-3 py-1 text-xs font-semibold rounded-md transition-all"
-          [ngClass]="selectedDays === 30 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
-          30D
-        </button>
-        <button type="button" (click)="setPeriod(90)" class="px-3 py-1 text-xs font-semibold rounded-md transition-all"
-          [ngClass]="selectedDays === 90 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
-          90D
-        </button>
-      </div>
-
-      <p-button icon="pi pi-refresh" [loading]="isLoading" (onClick)="loadAnalytics(selectedDays)"
-        styleClass="p-button-outlined p-button-secondary !py-2 !px-3" pTooltip="Refresh Data" tooltipPosition="bottom">
+    <!-- Header Actions -->
+    <div class="flex items-center gap-2.5">
+      <p-button icon="pi pi-refresh" [loading]="isLoading" (onClick)="refreshAll()"
+        styleClass="p-button-outlined p-button-secondary !py-2 !px-3" pTooltip="Refresh Analytics" tooltipPosition="bottom">
       </p-button>
 
       <p-button label="Export Report" icon="pi pi-download" size="small"
@@ -276,14 +255,36 @@
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <!-- Daily Calls & Leads Activity Line Chart (2 Cols) -->
     <div class="lg:col-span-2 card-base p-5 flex flex-col justify-between">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
         <div>
-          <h3 class="text-base font-bold tracking-tight" style="color: var(--app-text);">Daily Activity & Interaction
-            Trends</h3>
-          <p class="text-xs" style="color: var(--app-text-muted);">Daily comparison of call volume, newly captured
-            leads, and hot prospects</p>
+          <h3 class="text-base font-bold tracking-tight" style="color: var(--app-text);">Daily Activity & Interaction Trends</h3>
+          <p class="text-xs" style="color: var(--app-text-muted);">Daily comparison of call volume, newly captured leads, and hot prospects</p>
         </div>
-        <div class="flex items-center gap-3 text-xs font-medium">
+
+        <!-- Day Range Buttons attached specifically to Daily Activity Chart -->
+        <div class="flex items-center p-1 rounded-lg border self-start sm:self-auto"
+          style="background: var(--card-bg); border-color: var(--app-border);">
+          <button type="button" (click)="setTrendPeriod(7)" class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer"
+            [ngClass]="selectedDays === 7 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
+            7D
+          </button>
+          <button type="button" (click)="setTrendPeriod(14)" class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer"
+            [ngClass]="selectedDays === 14 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
+            14D
+          </button>
+          <button type="button" (click)="setTrendPeriod(30)" class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer"
+            [ngClass]="selectedDays === 30 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
+            30D
+          </button>
+          <button type="button" (click)="setTrendPeriod(90)" class="px-2.5 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer"
+            [ngClass]="selectedDays === 90 ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'">
+            90D
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between text-xs font-medium mb-3">
+        <div class="flex items-center gap-3">
           <span class="flex items-center gap-1.5 text-indigo-500">
             <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span> Calls
           </span>
@@ -294,6 +295,9 @@
             <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Hot
           </span>
         </div>
+        <span *ngIf="isTrendLoading" class="flex items-center gap-1.5 text-xs text-indigo-500 animate-pulse font-semibold">
+          <i class="pi pi-spin pi-spinner text-xs"></i> Updating {{ selectedDays }}D trend...
+        </span>
       </div>
 
       <div class="h-72 w-full">
@@ -309,7 +313,7 @@
         <p class="text-xs" style="color: var(--app-text-muted);">Lead lifecycle qualification progression</p>
       </div>
 
-      <div class="space-y-4 my-auto">
+      <div class="space-y-4 my-auto" *ngIf="funnelSteps.length > 0; else funnelLoadingState">
         <div *ngFor="let step of funnelSteps" class="space-y-1.5">
           <div class="flex justify-between text-xs font-semibold" style="color: var(--app-text);">
             <span class="flex items-center gap-1.5">
@@ -326,6 +330,18 @@
           </div>
         </div>
       </div>
+
+      <ng-template #funnelLoadingState>
+        <div class="space-y-4 my-auto py-2">
+          <div *ngFor="let i of [1,2,3,4,5]" class="space-y-1.5">
+            <div class="flex justify-between">
+              <p-skeleton width="90px" height="14px" styleClass="rounded"></p-skeleton>
+              <p-skeleton width="45px" height="14px" styleClass="rounded"></p-skeleton>
+            </div>
+            <p-skeleton height="12px" styleClass="rounded-full"></p-skeleton>
+          </div>
+        </div>
+      </ng-template>
 
       <div class="pt-3 border-t mt-4 flex items-center justify-between text-xs font-medium"
         style="border-color: var(--app-border); color: var(--app-text-secondary);">

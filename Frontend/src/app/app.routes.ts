@@ -12,20 +12,6 @@ export const routes: Routes = [
             (m) => m.CallbackComponent,
           ),
       },
-      {
-        path: 'instagram/callback',
-        loadComponent: () =>
-          import('./features/auth/instagram/instagram-callback.component').then(
-            (m) => m.InstagramCallbackComponent,
-          ),
-      },
-      // {
-      //   path: 'instagram',
-      //   loadComponent: () =>
-      //     import(
-      //       './features/auth/instagram/instagram-callback.component'
-      //     ).then((m) => m.InstagramCallbackComponent),
-      // },
     ],
   },
   {
@@ -50,6 +36,19 @@ export const routes: Routes = [
       import('./modules/lead-generation/lead-generation.component').then(
         (m) => m.LeadGenerationComponent,
       ),
+  },
+  {
+    path: 'review/:id',
+    loadComponent: () =>
+      import(
+        './modules/blog/pages/article-reviewer/article-reviewer.component'
+      ).then((m) => m.ArticleReviewerComponent),
+  },
+  {
+    path: 'blog',
+    canActivate: [AuthGuard],
+    loadChildren: () =>
+      import('./modules/blog/blog.module').then((m) => m.BlogModule),
   },
   {
     path: '**',

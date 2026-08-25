@@ -12,3 +12,4 @@ docker-compose.yml
 .vscode/
 frontend/
 backend/
+BLOG_INTEGRATION_FLOW.md

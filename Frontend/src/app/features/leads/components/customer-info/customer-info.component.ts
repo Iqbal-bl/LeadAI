@@ -79,12 +79,9 @@ export class CustomerInfoComponent {
         if (contact.instagram) {
           this.lead.instagram = contact.instagram;
         }
-        if (contact.display_name) {
-          this.lead.display_name = contact.display_name;
-        }
+
         this.toastService.success(
-          contact.warning ||
-            'Customer contact details revealed. This action has been logged.',
+          contact.warning || 'Customer contact details revealed. This action has been logged.',
           'Contact Details Revealed',
         );
       },
@@ -106,6 +103,7 @@ export class CustomerInfoComponent {
       this.toastService.success(`${label} copied to clipboard`, 'Copied');
     });
   }
+
 
   convertToCustomer(): void {
     if (!this.lead?.id) return;
@@ -129,3 +127,4 @@ export class CustomerInfoComponent {
     });
   }
 }
+

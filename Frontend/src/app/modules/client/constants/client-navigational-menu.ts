@@ -16,12 +16,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         routerLink: '/client/leads',
         permission: 'lead.read.all',
       },
-      // {
-      //   label: 'Conversations',
-      //   icon: 'pi pi-comments',
-      //   routerLink: '/client/conversations',
-      //   permission: 'lead.read.all',
-      // },
+      {
+        label: 'Conversations',
+        icon: 'pi pi-comments',
+        routerLink: '/client/conversations',
+        permission: 'lead.read.all',
+      },
       {
         label: 'Customers',
         icon: 'pi pi-id-card',
@@ -49,6 +49,18 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         label: 'Create a Post',
         icon: 'pi pi-send',
         routerLink: '/client/create-post',
+        permission: 'campaign.manage',
+      },
+      {
+        label: 'Create Blog Post',
+        icon: 'pi pi-file-edit',
+        routerLink: '/client/create-blog',
+        permission: 'campaign.manage',
+      },
+      {
+        label: 'Blog Approvals',
+        icon: 'pi pi-check-square',
+        routerLink: '/client/blog-approvals',
         permission: 'campaign.manage',
       },
     ],

@@ -103,8 +103,6 @@
         <p-popover #timePopover showTransitionOptions="0ms" hideTransitionOptions="0ms">
           <p-datepicker
             [(ngModel)]="selectedTime"
-            (onSelect)="onTimeSelect(timePopover)"
-            (ngModelChange)="onTimeSelect()"
             [inline]="true"
             [timeOnly]="true"
             hourFormat="12"

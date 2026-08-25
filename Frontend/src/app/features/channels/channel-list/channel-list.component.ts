@@ -5,7 +5,6 @@ import {
   Channel,
   ChannelStatus,
   ChannelUpdateRequest,
-  LinkedInStatus,
 } from '../../../models/channel.models';
 import { MessageService, ConfirmationService, MenuItem } from 'primeng/api';
 import { ChannelWizardComponent } from '../channel-wizard/channel-wizard.component';
@@ -23,9 +22,6 @@ import { Script } from '../../../models/script.models';
 export class ChannelListComponent implements OnInit {
   channels: Channel[] = [];
   channelStatus: ChannelStatus | null = null;
-  linkedinStatus: LinkedInStatus | null = null;
-  linkedinLoading = false;
-  private linkedinPollingInterval: any;
   loading = true;
 
   // Scripts for dropdown selection
@@ -81,14 +77,7 @@ export class ChannelListComponent implements OnInit {
   ngOnInit(): void {
     this.loadChannels();
     this.loadStatus();
-    this.loadLinkedInStatus();
     this.loadScripts();
-  }
-
-  ngOnDestroy(): void {
-    if (this.linkedinPollingInterval) {
-      clearInterval(this.linkedinPollingInterval);
-    }
   }
 
   loadScripts(): void {
@@ -98,102 +87,6 @@ export class ChannelListComponent implements OnInit {
       },
       error: () => {
         this.scripts = [];
-      },
-    });
-  }
-
-  loadLinkedInStatus(): void {
-    this.channelService.getLinkedInStatus().subscribe({
-      next: (status) => {
-        this.linkedinStatus = status;
-      },
-      error: () => {
-        this.linkedinStatus = null;
-      },
-    });
-  }
-
-  connectLinkedIn(): void {
-    this.linkedinLoading = true;
-    this.channelService.getLinkedInConnectUrl().subscribe({
-      next: (res) => {
-        if (res && res.authorize_url) {
-          const width = 600;
-          const height = 650;
-          const left = window.screen.width / 2 - width / 2;
-          const top = window.screen.height / 2 - height / 2;
-          const popup = window.open(
-            res.authorize_url,
-            'LinkedIn Connect',
-            `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`,
-          );
-
-          if (this.linkedinPollingInterval) {
-            clearInterval(this.linkedinPollingInterval);
-          }
-
-          this.linkedinPollingInterval = setInterval(() => {
-            this.channelService.getLinkedInStatus().subscribe({
-              next: (status) => {
-                if (status && status.connected) {
-                  clearInterval(this.linkedinPollingInterval);
-                  this.linkedinLoading = false;
-                  this.linkedinStatus = status;
-                  if (popup && !popup.closed) {
-                    popup.close();
-                  }
-                  this.messageService.add({
-                    severity: 'success',
-                    summary: 'LinkedIn Connected',
-                    detail: `LinkedIn profile connected successfully${status.person_urn ? ' (' + status.person_urn + ')' : ''}.`,
-                  });
-                  this.loadChannels();
-                  this.loadStatus();
-                }
-              },
-            });
-          }, 3000);
-        } else {
-          this.linkedinLoading = false;
-        }
-      },
-      error: (err) => {
-        this.linkedinLoading = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'OAuth Error',
-          detail: err?.error?.detail || err?.message || 'Failed to initiate LinkedIn OAuth authorization.',
-        });
-      },
-    });
-  }
-
-  disconnectLinkedIn(): void {
-    this.confirmationService.confirm({
-      message: 'Are you sure you want to disconnect this company\'s LinkedIn profile?',
-      header: 'Disconnect LinkedIn Profile',
-      icon: 'pi pi-exclamation-triangle',
-      acceptButtonStyleClass: 'p-button-danger',
-      accept: () => {
-        this.channelService.disconnectLinkedIn().subscribe({
-          next: () => {
-            this.messageService.add({
-              severity: 'success',
-              summary: 'Disconnected',
-              detail: 'LinkedIn profile disconnected successfully.',
-            });
-            this.loadLinkedInStatus();
-            this.loadChannels();
-            this.loadStatus();
-          },
-          error: (err) => {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Error',
-              detail: err?.error?.detail || 'Failed to disconnect LinkedIn profile.',
-            });
-          },
-        });
       },
     });
   }
@@ -229,7 +122,6 @@ export class ChannelListComponent implements OnInit {
     this.showWizard = false;
     this.loadChannels();
     this.loadStatus();
-    this.loadLinkedInStatus();
     this.messageService.add({
       severity: 'success',
       summary: 'Channel Connected',
@@ -473,7 +365,6 @@ export class ChannelListComponent implements OnInit {
       whatsapp: 'pi pi-whatsapp',
       messenger: 'pi pi-facebook',
       instagram: 'pi pi-instagram',
-      linkedin: 'pi pi-linkedin',
     };
     return (type && icons[type.toLowerCase()]) || 'pi pi-comment';
   }
@@ -483,7 +374,6 @@ export class ChannelListComponent implements OnInit {
       whatsapp: '#25D366',
       messenger: '#0084FF',
       instagram: '#E4405F',
-      linkedin: '#0A66C2',
     };
     return (type && colors[type.toLowerCase()]) || '#6366f1';
   }

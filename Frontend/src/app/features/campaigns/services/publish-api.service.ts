@@ -5,13 +5,12 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 import { UnifiedPublishRequest } from './publish.services';
-import { environment } from '../../../../environments/environment';
 
 @Injectable({
   providedIn: 'root',
 })
 export class PublishApiService {
-  private readonly apiUrl = environment.apiPrefix;
+  private readonly apiUrl = 'https://sporting-zombie-kennel.ngrok-free.dev';
 
   private readonly apiKey = 'changeme123';
 
@@ -23,7 +22,7 @@ export class PublishApiService {
       'Content-Type': 'application/json',
     });
 
-    return this.http.post(`${this.apiUrl}/social/posts`, data, {
+    return this.http.post(`${this.apiUrl}/direct/posts`, data, {
       headers,
     });
   }

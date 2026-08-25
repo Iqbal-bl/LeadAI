@@ -1,20 +1,13 @@
 <!-- Back Button + Header -->
 <div class="flex items-center gap-3 mb-6">
-  <button
-    (click)="goBack()"
-    class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
-    style="color: var(--app-text-secondary)"
-  >
+  <button (click)="goBack()"
+          class="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          style="color: var(--app-text-secondary);">
     <i class="pi pi-arrow-left"></i>
   </button>
   <div class="flex-1">
-    <h1
-      class="text-xl lg:text-2xl font-bold tracking-tight"
-      style="color: var(--app-text)"
-    >
-      {{ lead.name }}
-    </h1>
-    <!-- <p class="text-sm" style="color: var(--app-text-muted);">{{ lead.company }} · {{ lead.industry }}</p> -->
+    <h1 class="text-xl lg:text-2xl font-bold tracking-tight" style="color: var(--app-text);">{{ lead.name }}</h1>
+    <p class="text-sm" style="color: var(--app-text-muted);">{{ lead.company }} · {{ lead.industry }}</p>
   </div>
   <app-lead-status-badge [status]="lead.status"></app-lead-status-badge>
 </div>
@@ -44,160 +37,78 @@
     <app-customer-info [lead]="lead"></app-customer-info>
 
     <!-- Worker Assignment -->
-    <app-worker-assignment
-      [lead]="lead"
-      [teamMembers]="assignableUsers"
-      (assign)="assignAgent($event)"
-    ></app-worker-assignment>
+    <app-worker-assignment [lead]="lead" [teamMembers]="assignableUsers" (assign)="assignAgent($event)"></app-worker-assignment>
 
     <!-- Calling Panel -->
-    <app-calling-panel
-      *ngIf="lead?.channel !== 'instagram' && lead?.channel !== 'messenger'"
-      [lead]="lead"
-    ></app-calling-panel>
+    <app-calling-panel [lead]="lead"></app-calling-panel>
   </div>
 </div>
 
 <!-- Transcript Preview Dialog -->
-<p-dialog
-  [(visible)]="transcriptVisible"
-  [modal]="true"
-  [header]="
-    'Call Transcript (' +
-    (activeTranscript?.mode === 'ai_voice'
-      ? 'AI Voice Agent'
-      : 'Human Specialist') +
-    ')'
-  "
-  [style]="{ width: '90vw', 'max-width': '650px' }"
-  [draggable]="false"
-  [resizable]="false"
-  (onHide)="closeTranscript()"
->
-  <div
-    *ngIf="transcriptLoading"
-    class="flex flex-col items-center justify-center py-8 space-y-3"
-  >
+<p-dialog [(visible)]="transcriptVisible" 
+          [modal]="true" 
+          [header]="'Call Transcript (' + (activeTranscript?.mode === 'ai_voice' ? 'AI Voice Agent' : 'Human Specialist') + ')'" 
+          [style]="{ width: '90vw', 'max-width': '650px' }" 
+          [draggable]="false" 
+          [resizable]="false" 
+          (onHide)="closeTranscript()">
+  
+  <div *ngIf="transcriptLoading" class="flex flex-col items-center justify-center py-8 space-y-3">
     <i class="pi pi-spin pi-spinner text-3xl text-brand-500"></i>
     <span class="text-sm text-slate-500">Loading call transcript...</span>
   </div>
 
   <div *ngIf="!transcriptLoading && activeTranscript" class="space-y-4">
     <!-- Call metadata -->
-    <div
-      class="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 rounded-xl border text-xs"
-      style="
-        background-color: var(--app-bg-secondary);
-        border-color: var(--app-border);
-        color: var(--app-text-secondary);
-      "
-    >
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 rounded-xl border text-xs"
+         style="background-color: var(--app-bg-secondary); border-color: var(--app-border); color: var(--app-text-secondary);">
       <div>
-        <span class="font-semibold block text-[10px] uppercase text-slate-400"
-          >Status</span
-        >
+        <span class="font-semibold block text-[10px] uppercase text-slate-400">Status</span>
         <span class="font-medium uppercase">{{ activeTranscript.status }}</span>
       </div>
       <div>
-        <span class="font-semibold block text-[10px] uppercase text-slate-400"
-          >Duration</span
-        >
-        <span class="font-medium">{{
-          formatDuration(activeTranscript.duration_sec)
-        }}</span>
+        <span class="font-semibold block text-[10px] uppercase text-slate-400">Duration</span>
+        <span class="font-medium">{{ formatDuration(activeTranscript.duration_sec) }}</span>
       </div>
       <div>
-        <span class="font-semibold block text-[10px] uppercase text-slate-400"
-          >Language</span
-        >
-        <span class="font-medium uppercase">{{
-          activeTranscript.language
-        }}</span>
+        <span class="font-semibold block text-[10px] uppercase text-slate-400">Language</span>
+        <span class="font-medium uppercase">{{ activeTranscript.language }}</span>
       </div>
       <div class="col-span-2">
-        <span class="font-semibold block text-[10px] uppercase text-slate-400"
-          >Initiated By</span
-        >
-        <span class="font-medium">{{
-          activeTranscript.initiated_by_email || "System"
-        }}</span>
+        <span class="font-semibold block text-[10px] uppercase text-slate-400">Initiated By</span>
+        <span class="font-medium">{{ activeTranscript.initiated_by_email || 'System' }}</span>
       </div>
       <div class="col-span-3 mt-1" *ngIf="activeTranscript.recording_url">
-        <span
-          class="font-semibold block text-[10px] uppercase text-slate-400 mb-1"
-          >Recording</span
-        >
-        <audio
-          [src]="activeTranscript.recording_url"
-          controls
-          class="w-full h-8 rounded-lg"
-          style="outline: none"
-        ></audio>
+        <span class="font-semibold block text-[10px] uppercase text-slate-400 mb-1">Recording</span>
+        <audio [src]="activeTranscript.recording_url" controls class="w-full h-8 rounded-lg" style="outline: none;"></audio>
       </div>
     </div>
 
     <!-- Transcript Messages -->
-    <div
-      class="max-h-[300px] overflow-y-auto space-y-3 p-2 border rounded-xl"
-      style="border-color: var(--app-border)"
-    >
-      <div
-        *ngFor="let msg of activeTranscript.messages"
-        class="flex flex-col"
-        [class.items-end]="msg.sender === 'customer'"
-        [class.items-start]="msg.sender !== 'customer'"
-      >
-        <div
-          class="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs shadow-sm"
-          [style.background-color]="
-            msg.sender === 'customer' ? '#6366f1' : 'var(--card-bg)'
-          "
-          [style.color]="
-            msg.sender === 'customer' ? '#ffffff' : 'var(--app-text)'
-          "
-          [style.border]="
-            msg.sender === 'customer' ? 'none' : '1px solid var(--app-border)'
-          "
-          [ngClass]="
-            msg.sender === 'customer' ? 'rounded-tr-none' : 'rounded-tl-none'
-          "
-        >
-          <div
-            class="font-semibold text-[9px] mb-1 opacity-75"
-            [style.color]="
-              msg.sender === 'customer' ? '#e0e7ff' : 'var(--app-text-muted)'
-            "
-          >
-            {{
-              msg.sender === "customer"
-                ? "Customer"
-                : msg.sender === "ai"
-                  ? "AI Agent (" + msg.model_used + ")"
-                  : "Agent"
-            }}
-            · {{ msg.created_at | date: "mediumTime" }}
+    <div class="max-h-[300px] overflow-y-auto space-y-3 p-2 border rounded-xl"
+         style="border-color: var(--app-border);">
+      <div *ngFor="let msg of activeTranscript.messages" class="flex flex-col"
+           [class.items-end]="msg.sender === 'customer'"
+           [class.items-start]="msg.sender !== 'customer'">
+        <div class="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs shadow-sm"
+             [style.background-color]="msg.sender === 'customer' ? '#6366f1' : 'var(--card-bg)'"
+             [style.color]="msg.sender === 'customer' ? '#ffffff' : 'var(--app-text)'"
+             [style.border]="msg.sender === 'customer' ? 'none' : '1px solid var(--app-border)'"
+             [ngClass]="msg.sender === 'customer' ? 'rounded-tr-none' : 'rounded-tl-none'">
+          <div class="font-semibold text-[9px] mb-1 opacity-75"
+               [style.color]="msg.sender === 'customer' ? '#e0e7ff' : 'var(--app-text-muted)'">
+            {{ msg.sender === 'customer' ? 'Customer' : (msg.sender === 'ai' ? 'AI Agent (' + msg.model_used + ')' : 'Agent') }} · {{ msg.created_at | date:'mediumTime' }}
           </div>
-          <div class="leading-relaxed whitespace-pre-wrap">
-            {{ msg.content }}
-          </div>
+          <div class="leading-relaxed whitespace-pre-wrap">{{ msg.content }}</div>
         </div>
       </div>
-      <div
-        *ngIf="activeTranscript.messages.length === 0"
-        class="text-center py-6 text-xs text-slate-400"
-      >
+      <div *ngIf="activeTranscript.messages.length === 0" class="text-center py-6 text-xs text-slate-400">
         No conversation messages found for this call.
       </div>
     </div>
   </div>
-
+  
   <ng-template pTemplate="footer">
-    <button
-      pButton
-      label="Close"
-      icon="pi pi-times"
-      class="p-button-text"
-      (click)="closeTranscript()"
-    ></button>
+    <button pButton label="Close" icon="pi pi-times" class="p-button-text" (click)="closeTranscript()"></button>
   </ng-template>
 </p-dialog>

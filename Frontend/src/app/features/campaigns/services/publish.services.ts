@@ -42,8 +42,6 @@ export interface UnifiedPublishRequest {
   platforms: string[];
 
   media: PublishMedia[];
-
-  schedule_time?: string | null;
 }
 
 /* ==========================================================
@@ -60,12 +58,7 @@ export class PublishService {
      Publish To Selected Platforms
   ========================================================== */
 
-  publish(
-    accounts: PublishAccount[],
-    caption: string,
-    mediaItems: MediaItem[],
-    scheduleTime?: string | null
-  ): Observable<any> {
+  publish(accounts: PublishAccount[], caption: string, mediaItems: MediaItem[]): Observable<any> {
     /* ========================================================
        Validate Platforms
     ======================================================== */
@@ -112,8 +105,6 @@ export class PublishService {
           platforms,
 
           media,
-
-          schedule_time: scheduleTime || null,
         };
 
         console.log('======================================');
@@ -121,8 +112,6 @@ export class PublishService {
         console.log('Unified Publish Request');
 
         console.log('Platforms:', platforms);
-
-        console.log('Schedule Time:', request.schedule_time);
 
         console.log('Media count:', media.length);
 

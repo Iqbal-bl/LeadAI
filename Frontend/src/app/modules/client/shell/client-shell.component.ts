@@ -34,7 +34,7 @@ export class ClientShellComponent implements OnInit, OnDestroy {
   private toastService = inject(ToastService);
   private sub = new Subscription();
 
-  navigationalMenu: SidebarSection[] = [];
+  navigationalMenu: SidebarSection[] = ClientNavigationalMenu;
 
   sidebarCollapsed = false;
 
@@ -47,11 +47,19 @@ export class ClientShellComponent implements OnInit, OnDestroy {
 
     this.sub.add(
       this.authService.currentUser$.subscribe((user) => {
-        const permissions = user?.permissions || [];
-        this.navigationalMenu = this.permissionService.filterMenuByPermissions(
-          ClientNavigationalMenu,
-          permissions,
-        );
+        if (!user) {
+          this.navigationalMenu = ClientNavigationalMenu;
+          return;
+        }
+        const permissions = user.permissions || [];
+        if (permissions.length > 0) {
+          this.navigationalMenu = this.permissionService.filterMenuByPermissions(
+            ClientNavigationalMenu,
+            permissions,
+          );
+        } else {
+          this.navigationalMenu = ClientNavigationalMenu;
+        }
       }),
     );
 

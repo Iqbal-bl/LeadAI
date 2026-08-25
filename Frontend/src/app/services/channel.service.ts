@@ -11,7 +11,6 @@ import {
   ChannelTestRequest,
   ChannelTestResponse,
   ChannelDeleteResponse,
-  LinkedInStatus,
 } from '../models/channel.models';
 
 @Injectable({
@@ -98,31 +97,6 @@ export class ChannelService {
   /** Helper to toggle is_active */
   public toggleActiveStatus(accountId: string, isActive: boolean): Observable<Channel> {
     return this.updateChannel(accountId, { is_active: isActive });
-  }
-
-  /** GET /channels/linkedin/status — check company LinkedIn profile connection status */
-  public getLinkedInStatus(): Observable<LinkedInStatus> {
-    return this.apiService.get<LinkedInStatus>('channels/linkedin/status', {
-      companyScoped: true,
-    });
-  }
-
-  /** GET /channels/linkedin/connect — get LinkedIn OAuth authorization URL */
-  public getLinkedInConnectUrl(): Observable<{ authorize_url: string }> {
-    return this.apiService.get<{ authorize_url: string }>('channels/linkedin/connect', {
-      companyScoped: true,
-    });
-  }
-
-  /** POST /channels/linkedin/disconnect — remove/disconnect LinkedIn account */
-  public disconnectLinkedIn(): Observable<{ ok: boolean }> {
-    return this.apiService.post<{ ok: boolean }>(
-      'channels/linkedin/disconnect',
-      {},
-      {
-        companyScoped: true,
-      },
-    );
   }
 }
 

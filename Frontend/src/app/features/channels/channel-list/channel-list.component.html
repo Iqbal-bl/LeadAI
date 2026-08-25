@@ -2,60 +2,7 @@
 
 <div class="mb-6">
   <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">Channel Connections</h1>
-  <p class="text-sm mt-0.5" style="color: var(--app-text-muted);">Connect, configure, and manage WhatsApp, Messenger, Instagram & LinkedIn channels</p>
-</div>
-
-<!-- LinkedIn Company Connection Card -->
-<div class="card-base p-5 mb-6 border transition-all duration-200"
-     [style.border-color]="linkedinStatus?.connected ? 'rgba(10, 102, 194, 0.4)' : 'var(--app-border)'"
-     [style.background]="linkedinStatus?.connected ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.08), rgba(0, 65, 130, 0.04))' : 'var(--app-surface)'">
-  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-    <div class="flex items-center gap-3.5">
-      <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-           style="background: linear-gradient(135deg, #0A66C2, #004182);">
-        <i class="pi pi-linkedin text-2xl"></i>
-      </div>
-      <div>
-        <div class="flex items-center gap-2 flex-wrap">
-          <h3 class="text-base font-semibold" style="color: var(--app-text);">Company LinkedIn Profile</h3>
-          <p-tag *ngIf="linkedinStatus?.connected" value="Connected" severity="success" [rounded]="true"></p-tag>
-          <p-tag *ngIf="linkedinStatus && !linkedinStatus.connected" value="Not Connected" severity="secondary" [rounded]="true"></p-tag>
-        </div>
-        <p *ngIf="linkedinStatus?.connected" class="text-xs font-mono mt-1" style="color: var(--app-text-secondary);">
-          Member: <span class="font-bold" style="color: var(--app-text);">{{ linkedinStatus?.person_urn }}</span>
-          <span *ngIf="linkedinStatus?.access_token_valid" class="ml-2 text-emerald-400">● Token Valid</span>
-          <span *ngIf="linkedinStatus?.has_refresh_token" class="ml-2 text-blue-400">● Auto-Refresh Enabled</span>
-        </p>
-        <p *ngIf="!linkedinStatus?.connected" class="text-xs mt-1" style="color: var(--app-text-muted);">
-          Link your company's LinkedIn Profile to schedule, manage, and publish company updates.
-        </p>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-2 shrink-0">
-      <p-button
-        *ngIf="!linkedinStatus?.connected"
-        label="{{ linkedinLoading ? 'Waiting for Consent...' : 'Connect LinkedIn' }}"
-        icon="{{ linkedinLoading ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
-        iconPos="right"
-        [loading]="linkedinLoading"
-        (onClick)="connectLinkedIn()"
-        [rounded]="true"
-        [style]="{ 'background': '#0A66C2', 'border': 'none' }"
-      ></p-button>
-
-      <p-button
-        *ngIf="linkedinStatus?.connected"
-        label="Disconnect"
-        icon="pi pi-power-off"
-        severity="danger"
-        [outlined]="true"
-        [rounded]="true"
-        size="small"
-        (onClick)="disconnectLinkedIn()"
-      ></p-button>
-    </div>
-  </div>
+  <p class="text-sm mt-0.5" style="color: var(--app-text-muted);">Connect, configure, and manage WhatsApp, Messenger & Instagram channels</p>
 </div>
 
 <!-- Status Tiles -->
@@ -198,7 +145,7 @@
           <div class="flex flex-col items-center justify-center py-12 gap-3">
             <i class="pi pi-link text-4xl" style="color: var(--app-text-muted);"></i>
             <p class="text-lg font-medium" style="color: var(--app-text-muted);">No channels connected yet</p>
-            <p class="text-sm" style="color: var(--app-text-muted);">Click "Connect Channel" to set up WhatsApp, Messenger, Instagram, or LinkedIn</p>
+            <p class="text-sm" style="color: var(--app-text-muted);">Click "Connect Channel" to set up WhatsApp, Messenger, or Instagram</p>
           </div>
         </td>
       </tr>

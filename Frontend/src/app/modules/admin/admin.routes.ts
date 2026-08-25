@@ -91,13 +91,6 @@ export const ADMIN_ROUTES: Routes = [
           ),
       },
       {
-        path: 'detail/:id',
-        loadComponent: () =>
-          import('./pages/client-management/client-detail/client-detail.component').then(
-            (m) => m.ClientDetailComponent,
-          ),
-      },
-      {
         path: 'create',
         loadComponent: () =>
           import('./pages/client-management/create-update-client/create-update-client.component').then(
@@ -116,13 +109,6 @@ export const ADMIN_ROUTES: Routes = [
         loadComponent: () =>
           import('./pages/client-management/create-update-client/create-update-client.component').then(
             (m) => m.CreateUpdateClientComponent,
-          ),
-      },
-      {
-        path: ':id',
-        loadComponent: () =>
-          import('./pages/client-management/client-detail/client-detail.component').then(
-            (m) => m.ClientDetailComponent,
           ),
       },
       {

@@ -47,20 +47,8 @@ export class CompanyService {
   }
 
   // DELETE /companies/{id}
-  public deleteCompany(
-    id: string,
-    clientId?: string,
-  ): Observable<{ success: boolean; message: string }> {
-    const options: any = {};
-    if (clientId) {
-      options.params = { client_id: clientId };
-    } else {
-      options.companyScoped = true;
-    }
-    return this.apiService.delete<{ success: boolean; message: string }>(
-      `companies/${id}`,
-      options,
-    );
+  public deleteCompany(id: string): Observable<void> {
+    return this.apiService.delete<void>(`companies/${id}`);
   }
 
   // GET /companies/{id}/settings

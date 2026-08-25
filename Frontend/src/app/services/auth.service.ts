@@ -2,11 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap, throwError } from 'rxjs';
 import { UserMe } from '../models/auth.models';
-import {
-  ROLE_COMPANY_ADMIN,
-  ROLE_EMPLOYEE,
-  ROLE_MANAGER,
-} from '../shared/constants/role.constants';
+import { ROLE_COMPANY_ADMIN, ROLE_EMPLOYEE, ROLE_MANAGER } from '../shared/constants/role.constants';
 
 import { environment } from '../../environments/environment';
 import { CommonLibService } from './common-lib.service';
@@ -303,38 +299,30 @@ export class AuthService {
 
   // mock login fallback
   public login(email: string, password?: string): Observable<any> {
-    const role = email.includes('admin')
-      ? ROLE_COMPANY_ADMIN
-      : email.includes('manager')
-        ? ROLE_MANAGER
-        : email.includes('operator')
-          ? 'ai_operator'
-          : ROLE_EMPLOYEE;
+    const role = email.includes('admin') ? ROLE_COMPANY_ADMIN : (email.includes('manager') ? ROLE_MANAGER : (email.includes('operator') ? 'ai_operator' : ROLE_EMPLOYEE));
     return this.loginWithRole(role);
   }
 
   public loginWithRole(role: string): Observable<any> {
     const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-    const payload = btoa(
-      JSON.stringify({
-        user_name: `${role}_demo`,
-        email: `${role}@leadai.com`,
-        role: role,
-        client_id: 'company-1',
-        client_name: 'LeadAI Demo Tenant',
-        permissions: ['read', 'write'],
-        accessible_companies: [
-          { id: 'company-1', name: 'TechCorp Solutions', is_active: true },
-          { id: 'company-2', name: 'GlobalFin Partners', is_active: true },
-        ],
-      }),
-    );
+    const payload = btoa(JSON.stringify({
+      user_name: `${role}_demo`,
+      email: `${role}@leadai.com`,
+      role: role,
+      client_id: 'company-1',
+      client_name: 'LeadAI Demo Tenant',
+      permissions: ['read', 'write'],
+      accessible_companies: [
+        { id: 'company-1', name: 'TechCorp Solutions', is_active: true },
+        { id: 'company-2', name: 'GlobalFin Partners', is_active: true }
+      ]
+    }));
     const mockToken = `${header}.${payload}.signature`;
-
+    
     this.setValue('accessToken', mockToken);
     this.setStaffToken(mockToken);
     this.setAuthLibAttributes();
-
+    
     return this.currentUser$;
   }
 
@@ -445,83 +433,5 @@ export class AuthService {
       }),
     );
   }
-
-  // Instagram OAuth: Get authorization URL & state
-  public getInstagramAuthorizeUrl(): Observable<{
-    authorize_url: string;
-    state: string;
-  }> {
-    return this.http.get<{ authorize_url: string; state: string }>(
-      `${environment.apiPrefix}/channels/instagram/connect`,
-      {
-        headers: {
-          'ngrok-skip-browser-warning': 'sdf',
-        },
-      },
-    );
-  }
-
-  // Instagram OAuth: Initiate login redirect
-  public initiateInstagramAuth(): void {
-    this.getInstagramAuthorizeUrl().subscribe({
-      next: (res) => {
-        if (res && res.authorize_url) {
-          window.location.assign(res.authorize_url);
-        }
-      },
-      error: (err) => {
-        console.error('Failed to get Instagram authorize URL', err);
-      },
-    });
-  }
-
-  // Instagram OAuth: Handle callback with code & state
-  public handleInstagramCallback(payload: {
-    code: string;
-    state: string;
-  }): Observable<any> {
-    return this.http.post<any>(
-      `${environment.apiPrefix}/channels/instagram/callback`,
-      payload,
-    );
-  }
-
-  // LinkedIn OAuth: Get authorization URL
-  public getLinkedInConnectUrl(): Observable<{ authorize_url: string }> {
-    return this.http.get<{ authorize_url: string }>(
-      `${environment.apiPrefix}/channels/linkedin/connect`,
-      {
-        headers: {
-          'ngrok-skip-browser-warning': 'sdf',
-        },
-      },
-    );
-  }
-
-  // LinkedIn OAuth: Get connection status
-  public getLinkedInStatus(): Observable<{
-    connected: boolean;
-    person_urn?: string;
-    access_token_valid?: boolean;
-    has_refresh_token?: boolean;
-  }> {
-    return this.http.get<{
-      connected: boolean;
-      person_urn?: string;
-      access_token_valid?: boolean;
-      has_refresh_token?: boolean;
-    }>(`${environment.apiPrefix}/channels/linkedin/status`, {
-      headers: {
-        'ngrok-skip-browser-warning': 'sdf',
-      },
-    });
-  }
-
-  // LinkedIn OAuth: Disconnect
-  public disconnectLinkedIn(): Observable<{ ok: boolean }> {
-    return this.http.post<{ ok: boolean }>(
-      `${environment.apiPrefix}/channels/linkedin/disconnect`,
-      {},
-    );
-  }
 }
+

@@ -5,6 +5,8 @@ import {
   Output,
   OnInit,
   OnDestroy,
+  OnChanges,
+  SimpleChanges,
   inject,
 } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
@@ -21,7 +23,7 @@ import { SharedModule } from '../../shared/shared.module';
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.scss',
 })
-export class SidebarComponent implements OnInit, OnDestroy {
+export class SidebarComponent implements OnInit, OnChanges, OnDestroy {
   @Input() collapsed = false;
   @Output() toggle = new EventEmitter<boolean>();
   @Input() navigationalMenu!: SidebarSection[];
@@ -42,14 +44,24 @@ export class SidebarComponent implements OnInit, OnDestroy {
       });
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['navigationalMenu']) {
+      if (this.navigationalMenu && this.navigationalMenu.length > 0) {
+        this.menuSections = this.navigationalMenu;
+      } else if (!this.navigationalMenu && this.currentRole) {
+        this.menuSections = this.layoutService.getSidebarMenu(this.currentRole);
+      }
+    }
+  }
+
   ngOnInit(): void {
-    if (this.navigationalMenu) {
+    if (this.navigationalMenu && this.navigationalMenu.length > 0) {
       this.menuSections = this.navigationalMenu;
     }
     this.sub.add(
       this.layoutService.currentRole$.subscribe((role) => {
         this.currentRole = role;
-        if (!this.navigationalMenu) {
+        if (!this.navigationalMenu || this.navigationalMenu.length === 0) {
           this.menuSections = this.layoutService.getSidebarMenu(role);
         }
       }),

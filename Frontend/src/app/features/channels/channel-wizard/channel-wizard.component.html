@@ -33,60 +33,6 @@
       </div>
     </div>
 
-    <!-- Instagram OAuth Quick Connect -->
-    <div *ngIf="channelType === 'instagram'" class="p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 border text-left"
-         style="border-color: rgba(228, 64, 95, 0.3); background: linear-gradient(135deg, rgba(228, 64, 95, 0.08), rgba(240, 148, 51, 0.08));">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-             style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);">
-          <i class="pi pi-instagram text-lg"></i>
-        </div>
-        <div>
-          <h4 class="text-sm font-semibold" style="color: var(--app-text);">Connect with Instagram (OAuth)</h4>
-          <p class="text-xs" style="color: var(--app-text-muted);">Authorize via Meta login without manually copying API tokens</p>
-        </div>
-      </div>
-      <p-button
-        label="Connect with Instagram"
-        icon="pi pi-external-link"
-        iconPos="right"
-        [loading]="oauthLoading"
-        (onClick)="connectWithInstagram()"
-        [style]="{ 'background': 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)', 'border': 'none' }"
-      ></p-button>
-    </div>
-
-    <!-- LinkedIn OAuth Quick Connect -->
-    <div *ngIf="channelType === 'linkedin'" class="p-4 rounded-xl flex flex-col gap-3 border text-left"
-         style="border-color: rgba(10, 102, 194, 0.3); background: linear-gradient(135deg, rgba(10, 102, 194, 0.08), rgba(0, 119, 181, 0.04));">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-               style="background: linear-gradient(135deg, #0A66C2, #004182);">
-            <i class="pi pi-linkedin text-lg"></i>
-          </div>
-          <div>
-            <h4 class="text-sm font-semibold" style="color: var(--app-text);">Connect LinkedIn Profile (OAuth)</h4>
-            <p class="text-xs" style="color: var(--app-text-muted);">Link your company's LinkedIn Profile to schedule and publish updates.</p>
-          </div>
-        </div>
-        <p-button
-          label="{{ linkedinConnecting ? 'Waiting for LinkedIn Consent...' : 'Connect LinkedIn Profile' }}"
-          icon="{{ linkedinConnecting ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
-          iconPos="right"
-          [loading]="linkedinConnecting"
-          (onClick)="connectWithLinkedIn()"
-          [style]="{ 'background': '#0A66C2', 'border': 'none' }"
-        ></p-button>
-      </div>
-
-      <div class="p-2.5 rounded-lg text-xs flex items-center gap-2"
-           style="background: rgba(10, 102, 194, 0.08); color: var(--app-text-secondary); border: 1px solid rgba(10, 102, 194, 0.15);">
-        <i class="pi pi-info-circle text-sm shrink-0" style="color: #0A66C2;"></i>
-        <span>Opens a secure LinkedIn popup. Once you sign in and authorize, LeadAI will automatically link your account and close the window.</span>
-      </div>
-    </div>
-
     <div>
       <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Display Name</label>
       <input pInputText type="text" [(ngModel)]="displayName" placeholder="e.g. Main Business Line"

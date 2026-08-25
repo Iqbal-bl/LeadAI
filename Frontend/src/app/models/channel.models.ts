@@ -1,12 +1,4 @@
-export type ChannelType = 'whatsapp' | 'messenger' | 'instagram' | 'linkedin';
-
-export interface LinkedInStatus {
-  connected: boolean;
-  person_urn?: string;
-  access_token_valid?: boolean;
-  has_refresh_token?: boolean;
-  [key: string]: any;
-}
+export type ChannelType = 'whatsapp' | 'messenger' | 'instagram';
 
 export interface Channel {
   id: string;

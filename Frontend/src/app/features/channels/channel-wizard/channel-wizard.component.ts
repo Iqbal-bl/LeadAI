@@ -1,7 +1,6 @@
 import { Component, EventEmitter, Input, Output, OnInit } from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { ChannelService } from '../../../services/channel.service';
-import { AuthService } from '../../../services/auth.service';
 import { ChannelType, ChannelCreateResponse } from '../../../models/channel.models';
 import { MessageService } from 'primeng/api';
 import { StepperModule } from 'primeng/stepper';
@@ -35,7 +34,6 @@ export class ChannelWizardComponent implements OnInit {
   scriptId = '';
   verifyTokenInput = '';
   autoReply = true;
-  oauthLoading = false;
 
   // Scripts library for dropdown
   scripts: Script[] = [];
@@ -60,12 +58,10 @@ export class ChannelWizardComponent implements OnInit {
     { label: 'WhatsApp', value: 'whatsapp', icon: 'pi pi-whatsapp', color: '#25D366' },
     { label: 'Messenger', value: 'messenger', icon: 'pi pi-facebook', color: '#0084FF' },
     { label: 'Instagram', value: 'instagram', icon: 'pi pi-instagram', color: '#E4405F' },
-    { label: 'LinkedIn', value: 'linkedin', icon: 'pi pi-linkedin', color: '#0A66C2' },
   ];
 
   constructor(
     private channelService: ChannelService,
-    private authService: AuthService,
     private messageService: MessageService,
     private scriptService: ScriptService,
   ) {}
@@ -90,7 +86,6 @@ export class ChannelWizardComponent implements OnInit {
       case 'whatsapp': return 'WhatsApp Phone Number ID';
       case 'messenger': return 'Facebook Page ID';
       case 'instagram': return 'Instagram Account ID';
-      case 'linkedin': return 'LinkedIn Person URN';
       default: return 'External ID';
     }
   }
@@ -100,7 +95,6 @@ export class ChannelWizardComponent implements OnInit {
       case 'whatsapp': return 'e.g. 109876543210';
       case 'messenger': return 'e.g. 123456789012345';
       case 'instagram': return 'e.g. 17841401234567';
-      case 'linkedin': return 'e.g. urn:li:person:CsjnS7Uz7f';
       default: return 'Enter ID';
     }
   }
@@ -190,105 +184,11 @@ export class ChannelWizardComponent implements OnInit {
     });
   }
 
-  private linkedinPollingInterval: any;
-  linkedinConnecting = false;
-
-  ngOnDestroy(): void {
-    if (this.linkedinPollingInterval) {
-      clearInterval(this.linkedinPollingInterval);
-    }
-  }
-
   finishWizard(): void {
-    if (this.linkedinPollingInterval) {
-      clearInterval(this.linkedinPollingInterval);
-    }
     this.complete.emit();
   }
 
-  connectWithInstagram(): void {
-    this.oauthLoading = true;
-    this.authService.getInstagramAuthorizeUrl().subscribe({
-      next: (res) => {
-        this.oauthLoading = false;
-        if (res && res.authorize_url) {
-          window.location.assign(res.authorize_url);
-        }
-      },
-      error: (err) => {
-        this.oauthLoading = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'OAuth Error',
-          detail:
-            err?.error?.detail ||
-            err?.message ||
-            'Failed to initiate Instagram OAuth authorization.',
-        });
-      },
-    });
-  }
-
-  connectWithLinkedIn(): void {
-    this.linkedinConnecting = true;
-    this.channelService.getLinkedInConnectUrl().subscribe({
-      next: (res) => {
-        if (res && res.authorize_url) {
-          const width = 600;
-          const height = 650;
-          const left = window.screen.width / 2 - width / 2;
-          const top = window.screen.height / 2 - height / 2;
-          const popup = window.open(
-            res.authorize_url,
-            'LinkedIn Connect',
-            `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`,
-          );
-
-          if (this.linkedinPollingInterval) {
-            clearInterval(this.linkedinPollingInterval);
-          }
-
-          this.linkedinPollingInterval = setInterval(() => {
-            this.channelService.getLinkedInStatus().subscribe({
-              next: (status) => {
-                if (status && status.connected) {
-                  clearInterval(this.linkedinPollingInterval);
-                  this.linkedinConnecting = false;
-                  if (popup && !popup.closed) {
-                    popup.close();
-                  }
-                  this.messageService.add({
-                    severity: 'success',
-                    summary: 'LinkedIn Connected',
-                    detail: `LinkedIn profile connected successfully${status.person_urn ? ' (' + status.person_urn + ')' : ''}.`,
-                  });
-                  this.finishWizard();
-                }
-              },
-            });
-          }, 3000);
-        } else {
-          this.linkedinConnecting = false;
-        }
-      },
-      error: (err) => {
-        this.linkedinConnecting = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'OAuth Error',
-          detail:
-            err?.error?.detail ||
-            err?.message ||
-            'Failed to initiate LinkedIn OAuth authorization.',
-        });
-      },
-    });
-  }
-
   onClose(): void {
-    if (this.linkedinPollingInterval) {
-      clearInterval(this.linkedinPollingInterval);
-    }
     this.close.emit();
   }
 }
