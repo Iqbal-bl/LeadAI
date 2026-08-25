@@ -1,0 +1,150 @@
+<div class="bg-white rounded-3xl border border-gray-200 shadow-sm flex flex-col h-full">
+  <!-- ========================================================
+       Header
+  ========================================================= -->
+
+  <div class="flex items-center justify-between px-6 py-5 border-b border-gray-200">
+    <div class="min-w-0">
+      <h2 class="text-xl font-semibold text-[#0a3d2e]">Create new post</h2>
+
+      <p class="text-sm text-gray-500 mt-1">Share your content across multiple platforms</p>
+    </div>
+
+    <!-- ======================================================
+         Create Menu
+    ======================================================= -->
+
+    <div class="relative flex-shrink-0" (click)="$event.stopPropagation()">
+      <!-- Create Button -->
+
+      <p-button icon="pi pi-plus" [rounded]="true" type="button"
+        styleClass="!bg-[#0a3d2e] !border-[#0a3d2e] hover:!bg-[#086048] !w-11 !h-11 !text-white"
+        (click)="toggleCreateMenu($event)">
+      </p-button>
+
+      <!-- ====================================================
+           Dropdown
+      ===================================================== -->
+
+      @if (showCreateMenu) {
+      <div class="create-menu">
+        <!-- Add Location -->
+
+        <button type="button" class="create-menu__item" (click)="onAddLocation()">
+          <span class="create-menu__icon create-menu__icon--red">
+            <i class="pi pi-map-marker"></i>
+          </span>
+
+          <span> Add Location </span>
+        </button>
+
+        <!-- Create Poll -->
+
+        <button type="button" class="create-menu__item" (click)="onCreatePoll()">
+          <span class="create-menu__icon create-menu__icon--blue">
+            <i class="pi pi-chart-bar"></i>
+          </span>
+
+          <span> Create Poll </span>
+        </button>
+      </div>
+      }
+    </div>
+  </div>
+
+  <!-- ========================================================
+       Editor
+  ========================================================= -->
+
+  <div class="flex-1 px-6 py-5">
+    <textarea #postContentInput [(ngModel)]="postContent" (ngModelChange)="onContentChange()"
+      [maxlength]="maxCharacters" rows="8" placeholder="What's on your mind today?"
+      class="w-full min-h-[220px] resize-none border-none outline-none text-[15px] leading-7 text-gray-700 placeholder:text-gray-400">
+    </textarea>
+  </div>
+
+  <!-- ========================================================
+       AI Prompt Panel
+  ========================================================= -->
+
+  @if (showAiPrompt) {
+  <div class="px-6 pb-5">
+    <div class="ai-prompt-panel" (click)="$event.stopPropagation()">
+      <!-- AI Header -->
+
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="ai-prompt-icon">
+            <i class="fa-solid fa-feather-pointed"></i>
+          </div>
+
+          <div>
+            <span class="ai-prompt-eyebrow">AI Assist</span>
+            <h3 class="text-sm font-semibold text-gray-900 mt-0.5">Draft this post</h3>
+          </div>
+        </div>
+
+        <!-- Close -->
+        <button type="button" class="ai-close-button" (click)="closeAiPrompt()">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- AI Instruction -->
+      <textarea #aiPromptInput [(ngModel)]="aiPrompt" rows="3" maxlength="1000"
+        placeholder="e.g. Announce our new AI-powered campaign feature, upbeat and concise..." class="ai-prompt-input">
+      </textarea>
+
+      <!-- Prompt Hint -->
+      <div class="flex items-center justify-between mt-2">
+        <span class="text-[11px] text-gray-400"> Tell it the topic, tone, or audience. </span>
+        <span class="text-[11px] text-gray-400"> {{ aiPrompt.length }} / 1000 </span>
+      </div>
+
+      <!-- AI Actions -->
+      <div class="flex items-center justify-end gap-2 mt-3">
+        <button type="button" class="ai-cancel-button" (click)="closeAiPrompt()">Cancel</button>
+
+        <button type="button" class="ai-generate-button" [disabled]="!aiPrompt.trim() || isGenerating"
+          (click)="generateAiDraft()">
+          @if (isGenerating) {
+          <i class="fa-solid fa-spinner fa-spin"></i>
+          <span>Drafting...</span>
+          } @else {
+          <i class="fa-solid fa-feather-pointed"></i>
+          <span>Draft post</span>
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+  }
+
+  <!-- ========================================================
+       Footer
+  ========================================================= -->
+
+  <div class="border-t border-gray-200 px-6 py-4">
+    <div class="flex items-center justify-between gap-4 flex-wrap">
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- AI -->
+        <button type="button" (click)="toggleAiPrompt($event)" [class.action-chip--ai-active]="showAiPrompt"
+          class="action-chip action-chip--ai">
+          <span class="action-chip__icon">
+            <i class="fa-solid fa-feather-pointed text-xs"></i>
+          </span>
+          <!-- <span class="text-xs font-medium">AI</span> -->
+        </button>
+      </div>
+
+      <!-- Character Count -->
+      <div class="text-sm font-medium" [ngClass]="{
+        'text-gray-500': postContent.length < maxCharacters,
+        'text-red-500': postContent.length >= maxCharacters,
+      }">
+        {{ postContent.length }} / {{ maxCharacters }}
+      </div>
+    </div>
+  </div>
+</div>

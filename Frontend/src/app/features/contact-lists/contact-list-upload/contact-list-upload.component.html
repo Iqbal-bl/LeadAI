@@ -1,0 +1,143 @@
+<p-dialog [header]="mode === 'upload' ? 'Upload Contact List' : 'Create List from Leads'" [(visible)]="visible"
+          [modal]="true" [style]="{ width: '700px', maxHeight: '90vh' }" (onHide)="onClose()" [draggable]="false">
+
+  <!-- Upload Mode -->
+  <div *ngIf="mode === 'upload'" class="flex flex-col gap-4">
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">List Name</label>
+      <input pInputText type="text" [(ngModel)]="listName" placeholder="e.g. Diwali 2026 Contacts" class="w-full" />
+    </div>
+
+    <!-- File Picker -->
+    <div *ngIf="!previewData">
+      <label class="block text-sm font-medium mb-2" style="color: var(--app-text);">Select File</label>
+      <div class="p-6 rounded-xl text-center cursor-pointer transition-all duration-200"
+           style="border: 2px dashed var(--app-border); background: var(--app-surface-alt);"
+           (click)="fileInput.click()">
+        <i class="pi pi-cloud-upload text-3xl mb-2" style="color: var(--app-text-muted);"></i>
+        <p class="text-sm font-medium" style="color: var(--app-text);">
+          {{ selectedFile ? selectedFile.name : 'Click to browse or drag a file' }}
+        </p>
+        <p class="text-xs mt-1" style="color: var(--app-text-muted);">Supported: .xlsx, .xls, .csv, .tsv, .docx</p>
+      </div>
+      <input #fileInput type="file" [accept]="acceptedFormats" (change)="onFileSelect($event)" class="hidden" />
+
+      <div *ngIf="previewError" class="mt-3 p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+        <i class="pi pi-exclamation-triangle mr-2"></i>{{ previewError }}
+      </div>
+
+      <div class="flex justify-end mt-3">
+        <p-button label="Preview" icon="pi pi-eye" [disabled]="!selectedFile" [loading]="previewLoading"
+                  (onClick)="previewFile()"></p-button>
+      </div>
+    </div>
+
+    <!-- Preview Results -->
+    <div *ngIf="previewData" class="flex flex-col gap-4">
+      <!-- Summary Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="p-3 rounded-xl text-center" style="background: var(--app-surface-alt);">
+          <p class="text-2xl font-bold" style="color: var(--app-text);">{{ previewData.total_rows | number }}</p>
+          <p class="text-xs" style="color: var(--app-text-muted);">Total Rows</p>
+        </div>
+        <div class="p-3 rounded-xl text-center" style="background: rgba(34,197,94,0.1);">
+          <p class="text-2xl font-bold text-green-500">{{ previewData.valid | number }}</p>
+          <p class="text-xs" style="color: var(--app-text-muted);">Valid</p>
+        </div>
+        <div class="p-3 rounded-xl text-center" style="background: rgba(239,68,68,0.1);">
+          <p class="text-2xl font-bold text-red-400">{{ previewData.invalid | number }}</p>
+          <p class="text-xs" style="color: var(--app-text-muted);">Invalid</p>
+        </div>
+        <div class="p-3 rounded-xl text-center" style="background: rgba(245,158,11,0.1);">
+          <p class="text-2xl font-bold text-amber-500">{{ previewData.duplicates | number }}</p>
+          <p class="text-xs" style="color: var(--app-text-muted);">Duplicates Removed</p>
+        </div>
+      </div>
+
+      <div class="p-3 rounded-lg text-sm" style="background: rgba(99,102,241,0.1); color: #6366f1;">
+        <i class="pi pi-info-circle mr-2"></i>
+        We read "<strong>{{ previewData.detected_phone_column }}</strong>" as the phone column.
+      </div>
+
+      <!-- Column Mapping -->
+      <div>
+        <h3 class="text-sm font-semibold mb-2" style="color: var(--app-text);">Column Mapping</h3>
+        <p class="text-xs mb-3" style="color: var(--app-text-muted);">Correct the mapping if the auto-detection was wrong. Unmapped columns become message variables.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <div *ngFor="let col of availableColumns" class="flex items-center gap-2">
+            <span class="text-sm flex-1 truncate" style="color: var(--app-text);">{{ col }}</span>
+            <p-dropdown [options]="mappingOptions" [(ngModel)]="editableColumnMap[col]"
+                        [style]="{ width: '140px' }" placeholder="Map to..." appendTo="body"></p-dropdown>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sample Data -->
+      <div *ngIf="previewData.sample && previewData.sample.length > 0">
+        <h3 class="text-sm font-semibold mb-2" style="color: var(--app-text);">Sample Data (masked)</h3>
+        <div class="overflow-x-auto rounded-lg" style="border: 1px solid var(--app-border);">
+          <table class="w-full text-sm">
+            <thead>
+              <tr style="background: var(--app-surface-alt);">
+                <th *ngFor="let col of availableColumns" class="px-3 py-2 text-left text-xs font-medium uppercase" style="color: var(--app-text-muted);">
+                  {{ col }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of previewData.sample" style="border-top: 1px solid var(--app-border);">
+                <td *ngFor="let col of availableColumns" class="px-3 py-2" style="color: var(--app-text-secondary);">
+                  {{ row[col] || '—' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex justify-between pt-2">
+        <p-button label="Choose Different File" icon="pi pi-arrow-left" [text]="true" severity="secondary"
+                  (onClick)="previewData = null; selectedFile = null"></p-button>
+        <p-button label="Save List" icon="pi pi-check" [disabled]="!canSave" [loading]="saveLoading"
+                  (onClick)="saveList()"></p-button>
+      </div>
+    </div>
+  </div>
+
+  <!-- From Leads Mode -->
+  <div *ngIf="mode === 'from-leads'" class="flex flex-col gap-4">
+    <div class="p-3 rounded-lg text-sm" style="background: rgba(245,158,11,0.1); color: #d97706;">
+      <i class="pi pi-info-circle mr-2"></i>
+      This creates a <strong>snapshot</strong> of matching leads at this moment. Leads created after saving will not appear in this list.
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">List Name</label>
+      <input pInputText type="text" [(ngModel)]="listName" placeholder="e.g. Hot Leads August 2026" class="w-full" />
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-muted);">Lead Status</label>
+        <p-dropdown [options]="[{label:'All', value:''},{label:'Hot', value:'hot'},{label:'Warm', value:'warm'},{label:'Qualified', value:'qualified'}]"
+                    [(ngModel)]="leadsFilterStatus" optionLabel="label" optionValue="value"
+                    placeholder="Any status" class="w-full" appendTo="body"></p-dropdown>
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-muted);">Min Score</label>
+        <input pInputText type="number" [(ngModel)]="leadsFilterMinScore" placeholder="e.g. 50" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-muted);">Channel</label>
+        <p-dropdown [options]="[{label:'All', value:''},{label:'WhatsApp', value:'whatsapp'},{label:'Web', value:'web'},{label:'Voice', value:'voice'}]"
+                    [(ngModel)]="leadsFilterChannel" optionLabel="label" optionValue="value"
+                    placeholder="Any channel" class="w-full" appendTo="body"></p-dropdown>
+      </div>
+    </div>
+
+    <div class="flex justify-end pt-2">
+      <p-button label="Create Snapshot List" icon="pi pi-camera" [disabled]="!listName.trim()"
+                [loading]="fromLeadsLoading" (onClick)="createFromLeads()"></p-button>
+    </div>
+  </div>
+</p-dialog>

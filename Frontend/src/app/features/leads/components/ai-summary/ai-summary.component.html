@@ -1,0 +1,86 @@
+<div *ngIf="summary" class="card-base p-5 relative overflow-hidden">
+  <!-- AI gradient accent -->
+  <div class="absolute top-0 left-0 right-0 h-1" style="background: var(--brand-gradient);"></div>
+
+  <h3 class="text-sm font-semibold mb-4 flex items-center gap-2" style="color: var(--app-text);">
+    <i class="pi pi-microchip-ai text-brand-500"></i> AI Summary
+    <p-tag value="AI Generated" severity="info" [rounded]="true" class="ml-auto"></p-tag>
+  </h3>
+
+  <p class="text-sm leading-relaxed mb-4" style="color: var(--app-text-secondary);">
+    {{ summary.conversationSummary }}
+  </p>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    <!-- Key Highlights -->
+    <div class="p-3 rounded-xl" style="background: var(--app-bg);">
+      <span class="text-xs font-semibold uppercase tracking-wider block mb-2"
+            style="color: var(--app-text-muted);">
+        <i class="pi pi-star-fill text-warning-500 mr-1"></i> Key Highlights
+      </span>
+      <ul class="space-y-1.5">
+        <li *ngFor="let h of summary.highlights"
+            class="text-xs flex items-start gap-2"
+            style="color: var(--app-text-secondary);">
+          <i class="pi pi-check-circle text-success-500 mt-0.5 flex-shrink-0" style="font-size: 0.65rem;"></i>
+          {{ h }}
+        </li>
+      </ul>
+    </div>
+
+    <!-- Key Requirements -->
+    <div class="p-3 rounded-xl" style="background: var(--app-bg);">
+      <span class="text-xs font-semibold uppercase tracking-wider block mb-2"
+            style="color: var(--app-text-muted);">
+        <i class="pi pi-list-check text-info-500 mr-1"></i> Key Requirements
+      </span>
+      <ul class="space-y-1.5">
+        <li *ngFor="let r of summary.keyRequirements"
+            class="text-xs flex items-start gap-2"
+            style="color: var(--app-text-secondary);">
+          <i class="pi pi-circle-fill text-brand-400 mt-0.5 flex-shrink-0" style="font-size: 0.35rem;"></i>
+          {{ r }}
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Pain Points -->
+  <div class="p-3 rounded-xl mb-4" style="background: var(--app-bg);">
+    <span class="text-xs font-semibold uppercase tracking-wider block mb-2"
+          style="color: var(--app-text-muted);">
+      <i class="pi pi-exclamation-triangle text-danger-500 mr-1"></i> Pain Points
+    </span>
+    <div class="flex flex-wrap gap-2">
+      <span *ngFor="let p of summary.painPoints"
+            class="px-2.5 py-1 rounded-lg text-xs"
+            style="background: var(--card-bg); color: var(--app-text-secondary); border: 1px solid var(--card-border);">
+        {{ p }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Quick Info Grid -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="text-center p-2.5 rounded-xl" style="background: var(--app-bg);">
+      <div class="text-[10px] uppercase tracking-wider font-medium mb-1" style="color: var(--app-text-muted);">Budget</div>
+      <div class="text-xs font-semibold" style="color: var(--app-text);">{{ summary.budget }}</div>
+    </div>
+    <div class="text-center p-2.5 rounded-xl" style="background: var(--app-bg);">
+      <div class="text-[10px] uppercase tracking-wider font-medium mb-1" style="color: var(--app-text-muted);">Timeline</div>
+      <div class="text-xs font-semibold" style="color: var(--app-text);">{{ summary.timeline }}</div>
+    </div>
+    <div class="text-center p-2.5 rounded-xl" style="background: var(--app-bg);">
+      <div class="text-[10px] uppercase tracking-wider font-medium mb-1" style="color: var(--app-text-muted);">Decision Maker</div>
+      <div class="text-xs font-semibold truncate" style="color: var(--app-text);">{{ summary.decisionMaker.split('—')[0] }}</div>
+    </div>
+    <div class="text-center p-2.5 rounded-xl" style="background: var(--app-bg);">
+      <div class="text-[10px] uppercase tracking-wider font-medium mb-1" style="color: var(--app-text-muted);">Buying Intent</div>
+      <p-tag
+        [value]="summary.buyingIntent"
+        [severity]="summary.buyingIntent === 'High' ? 'success' : summary.buyingIntent === 'Medium' ? 'warn' : 'danger'"
+        [rounded]="true">
+      </p-tag>
+    </div>
+  </div>
+</div>

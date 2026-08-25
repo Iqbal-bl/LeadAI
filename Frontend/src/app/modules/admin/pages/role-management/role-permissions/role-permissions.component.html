@@ -1,0 +1,229 @@
+<div class="space-y-6">
+  <!-- Header (Only show if no role is selected) -->
+  <div *ngIf="!selectedRole" class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <h1
+        class="text-2xl font-bold tracking-tight"
+        style="color: var(--app-text)"
+      >
+        Role Permission Management
+      </h1>
+      <p class="text-sm" style="color: var(--app-text-muted)">
+        Configure granular permission settings and view effective inherited permissions for every system role.
+      </p>
+    </div>
+  </div>
+
+  <!-- Page Loader -->
+  <div *ngIf="loading" class="flex justify-center py-16 card-base" style="background: var(--card-bg);">
+    <p-progressSpinner
+      strokeWidth="3"
+      styleClass="w-12 h-12"
+    ></p-progressSpinner>
+  </div>
+
+  <!-- Main Roles Overview Grid (Only show if no role is selected) -->
+  <div *ngIf="!selectedRole && !loading" class="grid grid-cols-1 md:grid-cols-2 gap-6 my-6 animate-fade-in">
+    <div 
+      *ngFor="let roleInfo of rolesInfo"
+      class="card-base p-6 hover:shadow-lg transition-all border duration-300 flex flex-col justify-between"
+      style="background: var(--card-bg); border-color: var(--card-border);"
+    >
+      <div>
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-base"
+                 style="background: var(--brand-gradient);">
+              {{ roleInfo.role.charAt(0).toUpperCase() }}
+            </div>
+            <div>
+              <h3 class="font-bold text-lg" style="color: var(--app-text);">
+                {{ formatRoleName(roleInfo.role) }}
+              </h3>
+              <span class="text-xs" style="color: var(--app-text-muted);">
+                {{ roleInfo.totalCount }} total permissions
+              </span>
+            </div>
+          </div>
+          
+          <button 
+            pButton 
+            label="Manage" 
+            icon="pi pi-cog" 
+            class="p-button-outlined p-button-sm cursor-pointer"
+            (click)="managePermissions(roleInfo.role)"></button>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-3 gap-2 border-t pt-4 border-slate-100 dark:border-slate-800">
+          <div class="text-center">
+            <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Granted</span>
+            <span class="text-base font-bold text-green-500">{{ roleInfo.grantedCount }}</span>
+          </div>
+          <div class="text-center border-x border-slate-100 dark:border-slate-800">
+            <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Default</span>
+            <span class="text-base font-bold text-indigo-500">{{ roleInfo.defaultCount }}</span>
+          </div>
+          <div class="text-center">
+            <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Overrides</span>
+            <span class="text-base font-bold" [class.text-amber-500]="roleInfo.customCount! > 0" [class.text-slate-400]="roleInfo.customCount === 0">
+              {{ roleInfo.customCount }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage Permissions Screen (Only show if a role is selected) -->
+  <div *ngIf="selectedRole && !loading" class="space-y-6 animate-fade-in">
+    <!-- Header with Back action -->
+    <div class="flex items-center gap-3 border-b pb-4" style="border-color: var(--app-border);">
+      <button 
+        pButton 
+        icon="pi pi-arrow-left" 
+        class="p-button-outlined p-button-secondary cursor-pointer p-button-sm"
+        pTooltip="Back to Roles"
+        (click)="selectedRole = null"
+      ></button>
+      <div>
+        <h2 class="text-xl font-bold tracking-tight" style="color: var(--app-text);">
+          Manage Permissions for {{ formatRoleName(selectedRole) }}
+        </h2>
+        <p class="text-xs" style="color: var(--app-text-muted);">
+          Toggle specific permission scopes or bulk save the active permission structure.
+        </p>
+      </div>
+    </div>
+
+    <div *ngIf="loadingDetails" class="flex flex-col items-center justify-center py-20 card-base" style="background: var(--card-bg);">
+      <i class="pi pi-spin pi-spinner text-3xl text-indigo-500 mb-3 animate-spin"></i>
+      <span class="text-sm font-medium" style="color: var(--app-text-muted);">Fetching role configurations...</span>
+    </div>
+
+    <div *ngIf="!loadingDetails" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Main Configuration (Table & Search) -->
+      <div class="lg:col-span-2 space-y-4">
+        <!-- Search bar -->
+        <div class="w-full">
+          <p-iconfield>
+            <p-inputicon styleClass="pi pi-search" />
+            <input 
+              type="text" 
+              pInputText 
+              [(ngModel)]="searchQuery" 
+              (input)="onSearchChange($event)"
+              placeholder="Search permissions by key or description..." 
+              class="w-full text-sm font-sans" />
+          </p-iconfield>
+        </div>
+
+        <!-- Permissions Table -->
+        <div class="border rounded-lg overflow-hidden card-base p-0" style="border-color: var(--app-border); background: var(--card-bg);">
+          <p-table 
+            [value]="getFilteredPermissions()" 
+            [rows]="8" 
+            [paginator]="true"
+            styleClass="p-datatable-sm"
+            responsiveLayout="scroll"
+          >
+            <ng-template pTemplate="header">
+              <tr>
+                <th class="py-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-400">Permission</th>
+                <th class="text-center w-28 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">Granted</th>
+                <th class="text-center w-32 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">Source</th>
+              </tr>
+            </ng-template>
+
+            <ng-template pTemplate="body" let-perm>
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors border-b last:border-0" style="border-color: var(--app-border);">
+                <td class="py-3 px-4">
+                  <div class="flex flex-col">
+                    <span class="font-bold text-sm" style="color: var(--app-text);">{{ perm.description }}</span>
+                    <span class="text-[11px] font-mono opacity-50" style="color: var(--app-text-muted);">{{ perm.permission_key }}</span>
+                  </div>
+                </td>
+                <td class="text-center">
+                  <p-inputSwitch 
+                    [(ngModel)]="perm.is_granted" 
+                    (onChange)="togglePermission(perm)"
+                    styleClass="p-inputswitch-sm"
+                  ></p-inputSwitch>
+                </td>
+                <td class="text-center">
+                  <p-tag 
+                    [value]="perm.is_granted === perm.is_default ? 'Default' : 'Custom Override'" 
+                    [severity]="perm.is_granted === perm.is_default ? 'success' : 'info'"
+                    styleClass="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  ></p-tag>
+                </td>
+              </tr>
+            </ng-template>
+
+            <ng-template pTemplate="emptymessage">
+              <tr>
+                <td colspan="3" class="text-center py-10" style="color: var(--app-text-muted);">
+                  <i class="pi pi-search text-3xl mb-2 opacity-35 block"></i>
+                  <span class="text-sm font-semibold">No permissions matched your query.</span>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </div>
+
+      <!-- Sidebar summary (Effective Permissions) -->
+      <div class="lg:col-span-1 space-y-4">
+        <!-- Effective Permissions summary -->
+        <div class="card-base p-5 flex flex-col h-full justify-between border" style="background: var(--card-bg); border-color: var(--app-border);">
+          <div>
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <i class="pi pi-key"></i>
+              Effective Permissions
+            </h3>
+            <div class="flex flex-wrap gap-1.5 max-h-80 overflow-y-auto pr-1">
+              <span 
+                *ngFor="let key of effectivePermissions" 
+                class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono border"
+                style="color: var(--app-text-secondary); border-color: var(--card-border);"
+              >
+                {{ key }}
+              </span>
+              <span *ngIf="effectivePermissions.length === 0" class="text-xs italic" style="color: var(--app-text-muted);">
+                No permissions granted to this role.
+              </span>
+            </div>
+          </div>
+
+          <!-- Bottom Footer actions for full page configuration -->
+          <div class="border-t pt-4 mt-6 flex flex-col gap-2" style="border-color: var(--app-border);">
+            <button 
+              pButton 
+              label="Save Changes" 
+              icon="pi pi-check" 
+              class="p-button-primary w-full cursor-pointer animate-fade-in"
+              [loading]="saving"
+              (click)="saveAllChanges()"></button>
+            <div class="grid grid-cols-2 gap-2">
+              <button 
+                pButton 
+                label="Reset Defaults" 
+                icon="pi pi-undo" 
+                class="p-button-outlined p-button-danger cursor-pointer p-button-sm w-full"
+                (click)="confirmReset()"></button>
+              <button 
+                pButton 
+                label="Cancel" 
+                icon="pi pi-times"
+                class="p-button-outlined p-button-secondary cursor-pointer p-button-sm w-full"
+                (click)="selectedRole = null"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- confirmation nodes -->
+<p-confirmDialog></p-confirmDialog>

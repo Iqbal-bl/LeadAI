@@ -1,0 +1,231 @@
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">Prompt & Script Studio</h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted);">Manage conversational XML scripts, model system prompts, voice speaker mapping, and live compiled previews.</p>
+  </div>
+</div>
+
+<p-tabs [value]="activeTab">
+  <p-tablist class="mb-4">
+    <p-tab value="scripts" (click)="activeTab = 'scripts'">
+      <i class="pi pi-file-code mr-2"></i> Scripts Library (XML)
+    </p-tab>
+    <p-tab value="prompts" (click)="activeTab = 'prompts'">
+      <i class="pi pi-sliders-h mr-2"></i> System Prompts
+    </p-tab>
+  </p-tablist>
+
+  <p-tabpanels>
+    <!-- ========================================== -->
+    <!-- SCRIPTS TAB PANEL                          -->
+    <!-- ========================================== -->
+    <p-tabpanel value="scripts">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Scripts List Sidebar -->
+        <app-script-list
+          *ngIf="!listCollapsed"
+          class="lg:col-span-3"
+          [scripts]="scripts"
+          [selectedScript]="selectedScript"
+          (onSelect)="selectScript($event)"
+          (onCreate)="openCreateScriptModal()"
+          (onImport)="openImportScriptModal()"
+          (onSetDefault)="setDefaultScript($event.script, $event.event)"
+          (onOpenSettings)="openEditScriptSettingsModal($event.script, $event.event)"
+          (onDelete)="deleteScript($event.script, $event.event)">
+        </app-script-list>
+
+        <!-- Script Workspace -->
+        <app-script-workspace
+          [class]="listCollapsed ? 'lg:col-span-12' : 'lg:col-span-9'"
+          [selectedScript]="selectedScript"
+          [(scriptXmlEditorContent)]="scriptXmlEditorContent"
+          [scriptPreview]="scriptPreview"
+          [previewChannel]="previewChannel"
+          [previewLoading]="previewLoading"
+          [scriptLoading]="scriptLoading"
+          [listCollapsed]="listCollapsed"
+          (toggleList)="listCollapsed = !listCollapsed"
+          (onSaveXml)="saveScriptXml()"
+          (onResetXml)="scriptXmlEditorContent = selectedScript?.script_xml || ''"
+          (onChannelChange)="onPreviewChannelChange($event)">
+        </app-script-workspace>
+      </div>
+    </p-tabpanel>
+
+    <!-- ========================================== -->
+    <!-- PROMPTS TAB PANEL                          -->
+    <!-- ========================================== -->
+    <p-tabpanel value="prompts">
+      <app-prompt-grid
+        [prompts]="prompts"
+        [promptsLoading]="promptsLoading"
+        (onEdit)="openEditPromptModal($event)"
+        (onReset)="resetPrompt($event.prompt, $event.event)">
+      </app-prompt-grid>
+    </p-tabpanel>
+  </p-tabpanels>
+</p-tabs>
+
+<!-- ========================================== -->
+<!-- MODALS                                     -->
+<!-- ========================================== -->
+
+<!-- CREATE/EDIT SCRIPT SETTINGS MODAL -->
+<p-dialog [header]="isEditingScript ? 'Edit Script Settings' : 'Create Script'" 
+          [(visible)]="showScriptModal" 
+          [modal]="true" 
+          [style]="{ width: '500px' }">
+  <div class="space-y-4 py-3">
+    <!-- Name Input -->
+    <div class="flex flex-col gap-1.5">
+      <label class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Script Name</label>
+      <input type="text" pInputText [(ngModel)]="scriptForm.name" placeholder="e.g. Inbound Support v2" class="w-full text-sm" />
+    </div>
+
+    <!-- Description Input -->
+    <div class="flex flex-col gap-1.5">
+      <label class="text-xs font-bold uppercase tracking-wider text-slate-505 dark:text-slate-400">Description</label>
+      <input type="text" pInputText [(ngModel)]="scriptForm.description" placeholder="Briefly describe the purpose of the script..." class="w-full text-sm" />
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <!-- Channel Selector -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-505 dark:text-slate-400">Channel</label>
+        <p-dropdown appendTo="body" [options]="channels" [(ngModel)]="scriptForm.channel" [style]="{ width: '100%' }"></p-dropdown>
+      </div>
+
+      <!-- Language Selector -->
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-bold uppercase tracking-wider text-slate-505 dark:text-slate-400">Language</label>
+        <p-dropdown appendTo="body" [options]="languages" [(ngModel)]="scriptForm.language" [style]="{ width: '100%' }"></p-dropdown>
+      </div>
+    </div>
+
+    <!-- VOICE CONFIGURATION PANEL (Show only if channel != chat) -->
+    <div *ngIf="scriptForm.channel !== 'chat'" class="p-4 rounded-xl border space-y-4"
+         style="border-color: var(--app-border); background: var(--app-bg-hover);">
+      <div class="flex items-center gap-1.5 text-xs font-bold text-violet-500 uppercase tracking-wide">
+        <i class="pi pi-volume-up"></i>
+        <span>Text-To-Speech Settings</span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Voice Gender -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[10px] font-bold uppercase text-slate-505 dark:text-slate-400">Voice Gender</label>
+          <p-dropdown appendTo="body" [options]="[{label: 'Male', value: 'male'}, {label: 'Female', value: 'female'}]" 
+                      [(ngModel)]="scriptForm.voice_gender" 
+                      [style]="{ width: '100%' }"></p-dropdown>
+        </div>
+
+        <!-- Voice Speaker -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[10px] font-bold uppercase text-slate-550 dark:text-slate-400">Voice Speaker</label>
+          <p-dropdown appendTo="body" [options]="voiceSpeakers[scriptForm.voice_gender]" 
+                      [(ngModel)]="scriptForm.voice_speaker" 
+                      [style]="{ width: '100%' }"></p-dropdown>
+        </div>
+      </div>
+
+      <!-- Multi-STT Switch -->
+      <div class="flex items-center justify-between pt-1">
+        <div class="flex flex-col gap-0.5">
+          <label class="text-xs font-bold" style="color: var(--app-text);">Multi-STT Engine</label>
+          <span class="text-[10px] text-slate-500">Run parallel Speech-To-Text translation for regional accuracy.</span>
+        </div>
+        <p-inputSwitch [(ngModel)]="scriptForm.multi_stt"></p-inputSwitch>
+      </div>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex justify-end gap-2.5">
+      <button pButton label="Cancel" class="p-button-text p-button-secondary" (click)="showScriptModal = false"></button>
+      <button pButton [label]="isEditingScript ? 'Save Settings' : 'Create Script'" 
+              [disabled]="!scriptForm.name.trim()"
+              (click)="submitScriptForm()"></button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- IMPORT SCRIPT MODAL -->
+<p-dialog header="Import Script from Disk" 
+          [(visible)]="showImportModal" 
+          [modal]="true" 
+          [style]="{ width: '450px' }">
+  <div class="space-y-4 py-3">
+    <p class="text-xs" style="color: var(--app-text-secondary);">
+      Select an importable XML script file stored in the local server `scripts/` directory to load it into the system database:
+    </p>
+
+    <!-- Import File Dropdown -->
+    <div class="flex flex-col gap-1.5" *ngIf="importableFiles.length > 0; else noImportable">
+      <label class="text-xs font-bold uppercase tracking-wider text-slate-505 dark:text-slate-400">Importable File</label>
+      <p-dropdown appendTo="body" [options]="importableFiles" [(ngModel)]="selectedImportFile" [style]="{ width: '100%' }"></p-dropdown>
+    </div>
+
+    <ng-template #noImportable>
+      <div class="p-3.5 text-center text-xs italic bg-slate-100 dark:bg-slate-900 border rounded-lg"
+           style="color: var(--app-text-muted); border-color: var(--app-border);">
+        No XML scripts detected in backend `scripts/` directory.
+      </div>
+    </ng-template>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex justify-end gap-2.5">
+      <button pButton label="Cancel" class="p-button-text p-button-secondary" (click)="showImportModal = false"></button>
+      <button pButton label="Import" 
+              [disabled]="!selectedImportFile || importLoading"
+              icon="pi pi-download"
+              (click)="importScript()"></button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- EDIT PROMPT MODAL -->
+<p-dialog [header]="'Edit Prompt Template — ' + selectedPrompt?.title" 
+          [(visible)]="showPromptEditModal" 
+          [modal]="true" 
+          [style]="{ width: '650px' }">
+  <div class="space-y-4 py-3">
+    <!-- Placeholders Helpers -->
+    <div class="p-3 rounded-lg border" style="border-color: var(--app-border); background: var(--app-bg-hover);">
+      <span class="text-[10px] font-bold uppercase tracking-wide block mb-2 text-slate-500 dark:text-slate-400">Inject Dynamic Placeholders</span>
+      <div class="flex flex-wrap gap-1.5">
+        <button class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-mono text-[10px] cursor-pointer"
+                (click)="promptEditContent = promptEditContent + ' {company} '">{{ '{' }}company{{ '}' }}</button>
+        <button class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-mono text-[10px] cursor-pointer"
+                (click)="promptEditContent = promptEditContent + ' {customer} '">{{ '{' }}customer{{ '}' }}</button>
+        <button class="px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-mono text-[10px] cursor-pointer"
+                (click)="promptEditContent = promptEditContent + ' {agent} '">{{ '{' }}agent{{ '}' }}</button>
+      </div>
+    </div>
+
+    <!-- Textarea Editor -->
+    <div class="flex flex-col gap-1.5">
+      <label class="text-xs font-bold uppercase tracking-wider text-slate-505 dark:text-slate-400">Prompt Text Content</label>
+      <textarea
+        [(ngModel)]="promptEditContent"
+        rows="12"
+        class="w-full p-4 rounded-xl border bg-slate-950/80 border-slate-800 text-sm leading-relaxed text-slate-200 placeholder-slate-650 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+        placeholder="Enter prompt text instructions..."></textarea>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex justify-end gap-2.5">
+      <button pButton label="Cancel" class="p-button-text p-button-secondary" (click)="showPromptEditModal = false"></button>
+      <button pButton label="Save Changes" 
+              icon="pi pi-check"
+              [disabled]="promptSaving || !promptEditContent.trim()"
+              (click)="savePrompt()"></button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Confirmation Dialog Container -->
+<p-confirmDialog [style]="{width: '450px'}"></p-confirmDialog>

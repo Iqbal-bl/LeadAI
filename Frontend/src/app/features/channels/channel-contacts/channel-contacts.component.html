@@ -1,0 +1,55 @@
+<p-dialog [header]="'Contacts — ' + (channel.name || channel.display_name || channel.display_number || channel.channel)" [(visible)]="visible" [modal]="true"
+          [style]="{ width: '720px', maxHeight: '85vh' }" (onHide)="onClose()" [draggable]="false">
+
+  <div class="flex items-center justify-between mb-3 pb-2" style="border-bottom: 1px solid var(--app-border);">
+    <div class="text-xs" style="color: var(--app-text-muted);">
+      Channel: <strong style="color: var(--app-text);">{{ channel.name || channel.display_name || channel.channel }}</strong>
+      <span *ngIf="channel.display_number" class="ml-2">({{ channel.display_number }})</span>
+    </div>
+    <p-button icon="pi pi-refresh" [rounded]="true" [text]="true" severity="secondary"
+              pTooltip="Refresh Contacts" (onClick)="loadContacts(currentPage)"></p-button>
+  </div>
+
+  <p-table [value]="contacts" [loading]="loading" [paginator]="true" [rows]="10" [rowHover]="true"
+           [tableStyle]="{ 'min-width': '100%' }">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>Contact ID / Number</th>
+        <th>Name</th>
+        <th>Session Status</th>
+        <th>Last Message</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-contact>
+      <tr>
+        <td>
+          <span class="text-sm font-mono" style="color: var(--app-text);">{{ contact.identifier_masked || contact.phone || contact.external_id || contact.id || '—' }}</span>
+        </td>
+        <td>
+          <span class="text-sm font-medium" style="color: var(--app-text);">{{ contact.name || '—' }}</span>
+        </td>
+        <td>
+          <p-tag [value]="getSessionBadgeText(contact.in_session_window)"
+                 [severity]="getSessionBadgeSeverity(contact.in_session_window)"
+                 [rounded]="true"></p-tag>
+        </td>
+        <td>
+          <span class="text-xs" style="color: var(--app-text-secondary);">
+            {{ contact.last_message_at ? (contact.last_message_at | date:'short') : '—' }}
+          </span>
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="4">
+          <div class="flex flex-col items-center justify-center py-8 gap-2">
+            <i class="pi pi-users text-3xl" style="color: var(--app-text-muted);"></i>
+            <p class="text-sm font-medium" style="color: var(--app-text-muted);">No contacts have messaged this channel yet</p>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</p-dialog>
+

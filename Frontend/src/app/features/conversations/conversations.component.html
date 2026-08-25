@@ -1,0 +1,181 @@
+<div class="mb-6">
+  <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+    Conversations
+  </h1>
+  <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+    View and manage all AI and human conversations
+  </p>
+</div>
+
+<!-- Filters Bar -->
+<div class="flex flex-wrap items-center gap-4 mb-4 card-base p-4">
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+      style="color: var(--app-text-muted)"
+      >Channel</label
+    >
+    <p-dropdown
+      [options]="channelOptions"
+      [(ngModel)]="selectedChannel"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="loadConversations()"
+      [style]="{ width: '200px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
+  <div class="flex flex-col gap-1.5" *ngIf="campaigns.length > 0">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+      style="color: var(--app-text-muted)"
+      >Campaign</label
+    >
+    <p-dropdown
+      [options]="campaigns"
+      [(ngModel)]="selectedCampaignId"
+      optionLabel="name"
+      optionValue="id"
+      placeholder="All Campaigns"
+      [showClear]="true"
+      (onChange)="loadConversations()"
+      [style]="{ width: '220px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
+  <div class="flex items-center gap-2 self-end pb-2">
+    <p-inputSwitch
+      [(ngModel)]="showAllLeads"
+      (onChange)="loadConversations()"
+    ></p-inputSwitch>
+    <label class="text-sm font-medium" style="color: var(--app-text)"
+      >Show all leads (escape hatch)</label
+    >
+  </div>
+</div>
+
+<div class="card-base overflow-hidden">
+  <p-table
+    [value]="conversations"
+    [paginator]="true"
+    [rows]="10"
+    [rowHover]="true"
+    dataKey="id"
+    [tableStyle]="{ 'min-width': '60rem' }"
+  >
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="leadName">
+          Lead <p-sortIcon field="leadName"></p-sortIcon>
+        </th>
+        <th>Channel</th>
+        <th pSortableColumn="type">
+          Type <p-sortIcon field="type"></p-sortIcon>
+        </th>
+        <th pSortableColumn="status">
+          Status <p-sortIcon field="status"></p-sortIcon>
+        </th>
+        <th pSortableColumn="startTime">
+          Time <p-sortIcon field="startTime"></p-sortIcon>
+        </th>
+        <th>Duration</th>
+        <th>Agent</th>
+        <th>Confidence</th>
+        <th>Summary</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-conv>
+      <tr>
+        <td>
+          <span class="font-medium" style="color: var(--app-text)">{{
+            conv.leadName
+          }}</span>
+        </td>
+        <td>
+          <div class="flex items-center gap-1.5">
+            <i
+              [class]="getChannelIcon(conv.channel)"
+              [style.color]="getChannelColor(conv.channel)"
+              class="text-base"
+            ></i>
+            <span
+              class="text-xs font-semibold capitalize"
+              style="color: var(--app-text-secondary)"
+              >{{ conv.channel }}</span
+            >
+          </div>
+        </td>
+        <td>
+          <p-tag
+            [value]="conv.type"
+            [severity]="getTypeSeverity(conv.type)"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+        <td>
+          <p-tag
+            [value]="conv.status"
+            [severity]="getStatusSeverity(conv.status)"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+        <td>
+          <span class="text-sm" style="color: var(--app-text-secondary)">{{
+            conv.startTime
+          }}</span>
+        </td>
+        <td>
+          <span class="text-sm" style="color: var(--app-text-secondary)">{{
+            conv.duration || "—"
+          }}</span>
+        </td>
+        <td>
+          <span class="text-sm" style="color: var(--app-text-secondary)">{{
+            conv.agent
+          }}</span>
+        </td>
+        <td>
+          <span
+            *ngIf="conv.confidence > 0"
+            class="text-sm font-medium"
+            style="color: var(--app-text)"
+            >{{ conv.confidence * 100 | number: "1.0-0" }}%</span
+          >
+          <span
+            *ngIf="conv.confidence === 0"
+            class="text-sm"
+            style="color: var(--app-text-muted)"
+            >—</span
+          >
+        </td>
+        <td>
+          <span
+            class="text-xs line-clamp-1"
+            style="color: var(--app-text-muted)"
+            >{{ conv.summary }}</span
+          >
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="9">
+          <div class="flex flex-col items-center justify-center py-12">
+            <i
+              class="pi pi-users text-4xl mb-3 block"
+              style="color: var(--app-text-muted); opacity: 0.4"
+            ></i>
+            <p class="text-sm font-medium" style="color: var(--app-text-muted)">
+              No Conversations found
+            </p>
+            <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+              Try adjusting your search or filters
+            </p>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>

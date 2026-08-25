@@ -1,0 +1,37 @@
+<div
+  class="flex h-screen overflow-hidden"
+  style="background-color: var(--app-bg)"
+>
+  <!-- Sidebar -->
+  <app-sidebar
+    [collapsed]="sidebarCollapsed"
+    (toggle)="onSidebarToggle($event)"
+  >
+  </app-sidebar>
+
+  <!-- Main Content Area -->
+  <div class="flex flex-col flex-1 min-w-0 transition-all duration-300">
+    <!-- Toolbar -->
+    <app-toolbar
+      [sidebarCollapsed]="sidebarCollapsed"
+      (toggleSidebar)="onSidebarToggle(!sidebarCollapsed)"
+    >
+    </app-toolbar>
+
+    <!-- Page Content -->
+    <main
+      class="flex-1 overflow-y-auto p-6 lg:p-8"
+      style="background-color: var(--app-bg)"
+    >
+      <div class="max-w-[1600px] mx-auto page-enter">
+        <router-outlet></router-outlet>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Global Notification Panel -->
+<app-notification-panel></app-notification-panel>
+
+<!-- Toast -->
+<p-toast position="top-right"></p-toast>

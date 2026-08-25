@@ -1,0 +1,126 @@
+<!-- Overview Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+  <div>
+    <h1
+      class="text-2xl font-bold tracking-tight"
+      style="color: var(--app-text)"
+    >
+      Clients List
+    </h1>
+    <p class="text-sm" style="color: var(--app-text-muted)">
+      Manage client accounts, workspace parameters, active sessions, and
+      administrator details.
+    </p>
+  </div>
+  <button
+    pButton
+    label="Onboard New Company"
+    icon="pi pi-plus"
+    class="p-button-primary cursor-pointer shadow-md hover:shadow-lg transition-all"
+    (click)="openCreateDialog()"
+  ></button>
+</div>
+
+<!-- KPI Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-5">
+  <!-- Total Companies -->
+  <div
+    class="card-base p-5 flex items-center justify-between"
+    style="background: var(--card-bg)"
+  >
+    <div class="space-y-1">
+      <span
+        class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+        >Total Companies</span
+      >
+      <h3 class="text-2xl font-bold" style="color: var(--app-text)">
+        {{ totalCompaniesCount }}
+      </h3>
+      <span class="text-[10px] text-indigo-500 font-semibold"
+        >Registered workspaces</span
+      >
+    </div>
+    <div
+      class="w-12 h-12 rounded-xl flex items-center justify-center bg-indigo-500/10 text-indigo-500"
+    >
+      <i class="pi pi-building text-xl"></i>
+    </div>
+  </div>
+
+  <!-- Active Workspaces -->
+  <div
+    class="card-base p-5 flex items-center justify-between"
+    style="background: var(--card-bg)"
+  >
+    <div class="space-y-1">
+      <span
+        class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+        >Active Workspaces</span
+      >
+      <h3 class="text-2xl font-bold text-green-500">
+        {{ activeCompaniesCount }}
+      </h3>
+      <span class="text-[10px] text-green-500 font-semibold"
+        >{{
+          (activeCompaniesCount / totalCompaniesCount || 0) * 100
+            | number: "1.0-0"
+        }}% active rate</span
+      >
+    </div>
+    <div
+      class="w-12 h-12 rounded-xl flex items-center justify-center bg-green-500/10 text-green-500"
+    >
+      <i class="pi pi-check-circle text-xl"></i>
+    </div>
+  </div>
+
+  <!-- User Licenses -->
+  <div
+    class="card-base p-5 flex items-center justify-between"
+    style="background: var(--card-bg)"
+  >
+    <div class="space-y-1">
+      <span
+        class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+        >User Licenses</span
+      >
+      <h3 class="text-2xl font-bold text-amber-500">
+        {{ totalUsersLicensed }}
+      </h3>
+      <span class="text-[10px] text-amber-500 font-semibold"
+        >Seats allocated</span
+      >
+    </div>
+    <div
+      class="w-12 h-12 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-500"
+    >
+      <i class="pi pi-users text-xl"></i>
+    </div>
+  </div>
+
+  <!-- Total Conversations -->
+  <div
+    class="card-base p-5 flex items-center justify-between"
+    style="background: var(--card-bg)"
+  >
+    <div class="space-y-1">
+      <span
+        class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+        >AI Interactions</span
+      >
+      <h3 class="text-2xl font-bold text-purple-500">
+        {{ totalConversationsCount }}
+      </h3>
+      <span class="text-[10px] text-purple-500 font-semibold"
+        >Processed system-wide</span
+      >
+    </div>
+    <div
+      class="w-12 h-12 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-500"
+    >
+      <i class="pi pi-comments text-xl"></i>
+    </div>
+  </div>
+</div>
+
+<app-companies-list />

@@ -1,0 +1,80 @@
+:host {
+  display: block;
+}
+
+/* Accordion Outer Container */
+:host ::ng-deep .p-accordion {
+  border: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+}
+
+:host ::ng-deep .p-accordionpanel {
+  border: none !important;
+  border-bottom: 1px solid var(--app-border, #f1f5f9) !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+
+:host-context(.dark) ::ng-deep .p-accordionpanel {
+  border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+:host ::ng-deep .p-accordionpanel:last-child {
+  border-bottom: none !important;
+}
+
+/* Accordion Header */
+:host ::ng-deep .p-accordionheader {
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 0.5rem 0.75rem !important;
+  transition: background 0.15s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+}
+
+:host ::ng-deep .p-accordionheader:hover {
+  background: rgba(99, 102, 241, 0.04) !important;
+}
+
+:host ::ng-deep .p-accordionheader > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+:host ::ng-deep .p-accordionheader-toggle-icon,
+:host ::ng-deep .p-accordionheader .p-icon {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.7rem !important;
+  color: #94a3b8 !important;
+}
+
+/* Active Panel Header */
+:host ::ng-deep .p-accordionpanel-active > .p-accordionheader {
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+/* Accordion Content */
+:host ::ng-deep .p-accordioncontent {
+  border: none !important;
+  background: transparent !important;
+}
+
+:host ::ng-deep .p-accordioncontent-content {
+  border: none !important;
+  border-radius: 0 !important;
+  background: rgba(248, 250, 252, 0.5) !important;
+  padding: 0.4rem 0.75rem 0.6rem !important;
+}
+
+:host-context(.dark) ::ng-deep .p-accordioncontent-content {
+  background: rgba(15, 23, 42, 0.4) !important;
+}

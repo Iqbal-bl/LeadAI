@@ -1,0 +1,217 @@
+.lead-gen-container {
+  position: relative;
+  background-color: #020617; /* Slate-950 */
+  overflow: hidden;
+
+  /* Ambient glowing background blobs */
+  &::before, &::after {
+    content: '';
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    filter: blur(150px);
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.25;
+  }
+  &::before {
+    top: -100px;
+    left: -100px;
+    background: radial-gradient(circle, #8b5cf6, #6366f1);
+  }
+  &::after {
+    bottom: -100px;
+    right: -100px;
+    background: radial-gradient(circle, #ec4899, #8b5cf6);
+  }
+
+  /* Make sure main content stands above ambient lights */
+  main, header {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Scrollbar customization for messages feed */
+  .messages-feed {
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.15);
+      border-radius: 4px;
+      &:hover {
+        background: rgba(148, 163, 184, 0.3);
+      }
+    }
+  }
+
+  /* Glassmorphism Card Style */
+  .glass-card {
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(51, 65, 85, 0.5) !important;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Target all PrimeNG input text boxes inside the container */
+  ::ng-deep {
+    .p-inputgroup {
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+
+      .p-inputgroup-addon {
+        background: rgba(15, 23, 42, 0.6) !important;
+        border: 1px solid rgba(51, 65, 85, 0.8) !important;
+        border-right: none !important;
+        color: #94a3b8 !important;
+      }
+    }
+
+    input.p-inputtext {
+      background: rgba(15, 23, 42, 0.4) !important;
+      border: 1px solid rgba(51, 65, 85, 0.8) !important;
+      color: #f1f5f9 !important;
+      font-size: 0.875rem !important;
+      padding: 0.75rem 1rem !important;
+      border-radius: 0 12px 12px 0 !important;
+      transition: all 0.2s ease-in-out !important;
+
+      &::placeholder {
+        color: #64748b !important;
+        opacity: 1 !important;
+      }
+
+      &:focus {
+        border-color: #8b5cf6 !important;
+        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3) !important;
+        outline: none !important;
+      }
+    }
+
+    /* Single inputs (without group addons) */
+    .p-inputtext:not(.p-inputgroup input) {
+      border-radius: 12px !important;
+    }
+
+    /* PrimeNG Dropdown styling */
+    .p-dropdown {
+      background: rgba(15, 23, 42, 0.4) !important;
+      border: 1px solid rgba(51, 65, 85, 0.8) !important;
+      border-radius: 12px !important;
+      color: #f1f5f9 !important;
+      transition: all 0.2s ease-in-out !important;
+
+      &:not(.p-disabled):hover {
+        border-color: rgba(139, 92, 246, 0.5) !important;
+      }
+
+      &.p-focus {
+        border-color: #8b5cf6 !important;
+        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3) !important;
+      }
+
+      .p-dropdown-label {
+        color: #f1f5f9 !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.875rem !important;
+      }
+
+      .p-dropdown-trigger {
+        color: #94a3b8 !important;
+      }
+    }
+
+    /* PrimeNG Divider style adjustments */
+    .p-divider-horizontal:before {
+      border-top: 1px solid rgba(51, 65, 85, 0.4) !important;
+    }
+  }
+
+  /* Keyframe Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes pulseSoft {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  .animate-pulse-soft {
+    animation: pulseSoft 2.5s ease-in-out infinite;
+  }
+
+  /* Typing dots bouncing animation */
+  .typing-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #94a3b8;
+    animation: bounceDot 1.4s infinite ease-in-out both;
+
+    &:nth-child(1) {
+      animation-delay: -0.32s;
+    }
+    &:nth-child(2) {
+      animation-delay: -0.16s;
+    }
+  }
+
+  @keyframes bounceDot {
+    0%, 80%, 100% {
+      transform: scale(0);
+    }
+    40% {
+      transform: scale(1);
+    }
+  }
+}
+
+/* PrimeNG Dropdown panel styling */
+::ng-deep .glass-dropdown-panel {
+  background: rgba(15, 23, 42, 0.95) !important;
+  backdrop-filter: blur(24px) !important;
+  border: 1px solid rgba(51, 65, 85, 0.6) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6) !important;
+  margin-top: 4px !important;
+
+  .p-dropdown-items {
+    padding: 6px !important;
+  }
+
+  .p-dropdown-item {
+    border-radius: 8px !important;
+    margin: 2px 0 !important;
+    padding: 8px 12px !important;
+    color: #cbd5e1 !important;
+    transition: all 0.2s ease !important;
+
+    &:hover, &.p-highlight {
+      background: rgba(139, 92, 246, 0.15) !important;
+      color: #a78bfa !important;
+    }
+  }
+}

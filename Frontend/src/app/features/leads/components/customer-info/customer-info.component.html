@@ -1,0 +1,334 @@
+<div class="card-base p-5">
+  <div class="flex items-center justify-between mb-4">
+    <h3
+      class="text-sm font-semibold flex items-center gap-2"
+      style="color: var(--app-text)"
+    >
+      <i class="pi pi-user text-brand-500"></i> Customer Information
+    </h3>
+    <p-button
+      [icon]="isContactRevealed ? 'pi pi-eye-slash' : 'pi pi-eye'"
+      [rounded]="true"
+      [text]="true"
+      [severity]="isContactRevealed ? 'success' : 'secondary'"
+      size="small"
+      [loading]="revealingContact"
+      [pTooltip]="
+        isContactRevealed
+          ? 'Hide Decrypted Details'
+          : 'Reveal Real Contact Details (Audited)'
+      "
+      tooltipPosition="left"
+      (onClick)="toggleRevealContact()"
+    ></p-button>
+  </div>
+  <div class="space-y-3">
+    <div class="flex items-center gap-3">
+      <p-avatar
+        [label]="getInitials(lead?.name)"
+        shape="circle"
+        size="xlarge"
+        [style]="{
+          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+          color: 'white',
+          'font-size': '1.2rem',
+          'font-weight': '700',
+        }"
+      >
+      </p-avatar>
+      <div class="flex-1 min-w-0">
+        <div
+          class="text-base font-semibold truncate"
+          style="color: var(--app-text)"
+        >
+          {{ "Customer" }}
+        </div>
+        <!-- <div class="text-xs truncate" style="color: var(--app-text-muted);">
+          {{ lead?.company || lead?.id }}
+        </div> -->
+      </div>
+    </div>
+    <!-- <div *ngIf="isContactRevealed && revealedContact"
+         class="p-2.5 rounded-lg text-xs flex items-start gap-2"
+         style="background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.2); color: var(--app-text-secondary);">
+      <i class="pi pi-shield text-green-500 mt-0.5 text-sm"></i>
+      <div class="flex-1">
+        <span class="font-semibold text-green-600 dark:text-green-400 block">PII Decrypted & Audited</span>
+        <span class="text-xs block" style="color: var(--app-text-muted);">
+          {{ revealedContact.warning || 'This reveal has been recorded in the security activity log.' }}
+        </span>
+      </div>
+    </div> -->
+    <p-divider></p-divider>
+    <!-- Contact Info Rows -->
+    <div class="space-y-2.5">
+      <!-- Name -->
+      <div class="flex items-center justify-between text-sm">
+        <div class="flex items-center gap-3 min-w-0">
+          <i
+            class="pi pi-person w-4 text-center"
+            style="color: var(--app-text-muted)"
+          ></i>
+          <span
+            class="truncate font-mono"
+            [style.color]="
+              isContactRevealed && lead?.email && lead?.email !== 'N/A'
+                ? 'var(--app-text)'
+                : 'var(--app-text-secondary)'
+            "
+          >
+            {{ isContactRevealed ? lead?.display_name || "N/A" : "*********" }}
+          </span>
+        </div>
+        <p-button
+          *ngIf="isContactRevealed && lead?.email && lead?.email !== 'N/A'"
+          icon="pi pi-copy"
+          [rounded]="true"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          pTooltip="Copy Email"
+          tooltipPosition="left"
+          (onClick)="copyToClipboard(lead?.email, 'Email')"
+        ></p-button>
+      </div>
+      <!-- Email -->
+      <div class="flex items-center justify-between text-sm">
+        <div class="flex items-center gap-3 min-w-0">
+          <i
+            class="pi pi-envelope w-4 text-center"
+            style="color: var(--app-text-muted)"
+          ></i>
+          <span
+            class="truncate font-mono"
+            [style.color]="
+              isContactRevealed && lead?.email && lead?.email !== 'N/A'
+                ? 'var(--app-text)'
+                : 'var(--app-text-secondary)'
+            "
+          >
+            {{ isContactRevealed ? lead?.email || "N/A" : "*********" }}
+          </span>
+        </div>
+        <p-button
+          *ngIf="isContactRevealed && lead?.email && lead?.email !== 'N/A'"
+          icon="pi pi-copy"
+          [rounded]="true"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          pTooltip="Copy Email"
+          tooltipPosition="left"
+          (onClick)="copyToClipboard(lead?.email, 'Email')"
+        ></p-button>
+      </div>
+
+      <!-- Phone -->
+      <div class="flex items-center justify-between text-sm">
+        <div class="flex items-center gap-3 min-w-0">
+          <i
+            class="pi pi-phone w-4 text-center"
+            style="color: var(--app-text-muted)"
+          ></i>
+          <span
+            class="truncate font-mono"
+            [style.color]="
+              isContactRevealed && lead?.phone && lead?.phone !== 'N/A'
+                ? 'var(--app-text)'
+                : 'var(--app-text-secondary)'
+            "
+          >
+            {{ isContactRevealed ? lead?.phone || "N/A" : "*********" }}
+          </span>
+        </div>
+        <div class="flex items-center gap-1">
+          <span
+            *ngIf="isContactRevealed"
+            class="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 font-medium"
+          >
+            Revealed
+          </span>
+          <p-button
+            *ngIf="isContactRevealed && lead?.phone && lead?.phone !== 'N/A'"
+            icon="pi pi-copy"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            pTooltip="Copy Phone"
+            tooltipPosition="left"
+            (onClick)="copyToClipboard(lead?.phone, 'Phone')"
+          ></p-button>
+        </div>
+      </div>
+
+      <!-- WhatsApp (if channel is WhatsApp or revealed has WhatsApp) -->
+      <div
+        *ngIf="
+          lead?.source === 'whatsapp' ||
+          lead?.channel === 'whatsapp' ||
+          revealedContact?.whatsapp
+        "
+        class="flex items-center justify-between text-sm"
+      >
+        <div class="flex items-center gap-3 min-w-0">
+          <i class="pi pi-whatsapp w-4 text-center" style="color: #25d366"></i>
+          <span
+            class="truncate font-mono"
+            [style.color]="
+              isContactRevealed && revealedContact?.whatsapp
+                ? 'var(--app-text)'
+                : 'var(--app-text-secondary)'
+            "
+          >
+            {{
+              isContactRevealed
+                ? revealedContact?.whatsapp || "N/A"
+                : "*********"
+            }}
+          </span>
+        </div>
+        <p-button
+          *ngIf="isContactRevealed && revealedContact?.whatsapp"
+          icon="pi pi-copy"
+          [rounded]="true"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          pTooltip="Copy WhatsApp"
+          tooltipPosition="left"
+          (onClick)="copyToClipboard(revealedContact?.whatsapp, 'WhatsApp')"
+        ></p-button>
+      </div>
+
+      <!-- Instagram (if channel is Instagram or revealed has Instagram) -->
+      <div
+        *ngIf="
+          lead?.source === 'instagram' ||
+          lead?.channel === 'instagram' ||
+          revealedContact?.instagram
+        "
+        class="flex items-center justify-between text-sm"
+      >
+        <div class="flex items-center gap-3 min-w-0">
+          <i class="pi pi-instagram w-4 text-center" style="color: #e4405f"></i>
+          <span
+            class="truncate font-mono"
+            [style.color]="
+              isContactRevealed && revealedContact?.instagram
+                ? 'var(--app-text)'
+                : 'var(--app-text-secondary)'
+            "
+          >
+            {{
+              isContactRevealed
+                ? revealedContact?.instagram || "N/A"
+                : "*********"
+            }}
+          </span>
+        </div>
+        <p-button
+          *ngIf="isContactRevealed && revealedContact?.instagram"
+          icon="pi pi-copy"
+          [rounded]="true"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          pTooltip="Copy Instagram"
+          tooltipPosition="left"
+          (onClick)="copyToClipboard(revealedContact?.instagram, 'Instagram')"
+        ></p-button>
+      </div>
+
+      <!-- Industry -->
+      <!-- <div class="flex items-center gap-3 text-sm">
+        <i class="pi pi-building w-4 text-center" style="color: var(--app-text-muted);"></i>
+        <span style="color: var(--app-text-secondary);">{{ lead?.industry || 'unknown' }}</span>
+      </div> -->
+
+      <!-- Address -->
+      <div class="flex items-center justify-between text-sm">
+        <div class="flex items-center gap-3 min-w-0">
+          <i
+            class="pi pi-map-marker w-4 text-center"
+            style="color: var(--app-text-muted)"
+          ></i>
+          <span
+            class="truncate font-mono"
+            [style.color]="
+              isContactRevealed && lead?.address && lead?.address !== 'N/A'
+                ? 'var(--app-text)'
+                : 'var(--app-text-secondary)'
+            "
+          >
+            {{ isContactRevealed ? lead?.address || "N/A" : "*********" }}
+          </span>
+        </div>
+        <p-button
+          *ngIf="isContactRevealed && lead?.address && lead?.address !== 'N/A'"
+          icon="pi pi-copy"
+          [rounded]="true"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          pTooltip="Copy Address"
+          tooltipPosition="left"
+          (onClick)="copyToClipboard(lead?.address, 'Address')"
+        ></p-button>
+      </div>
+    </div>
+    <p-divider></p-divider>
+    <div>
+      <span
+        class="text-xs font-medium uppercase tracking-wider block mb-2"
+        style="color: var(--app-text-muted)"
+        >Tags</span
+      >
+      <div class="flex flex-wrap gap-1.5">
+        <p-tag
+          *ngFor="let tag of lead?.tags"
+          [value]="tag"
+          severity="info"
+          [rounded]="true"
+        ></p-tag>
+        <span
+          *ngIf="!lead?.tags?.length"
+          class="text-xs"
+          style="color: var(--app-text-muted)"
+          >No tags</span
+        >
+      </div>
+    </div>
+    <div class="flex items-center justify-between">
+      <span
+        class="text-xs font-medium uppercase tracking-wider"
+        style="color: var(--app-text-muted)"
+        >Lead Score</span
+      >
+      <p-knob
+        [(ngModel)]="lead.leadScore"
+        [readonly]="true"
+        [size]="60"
+        [strokeWidth]="8"
+        valueColor="#6366f1"
+        rangeColor="var(--card-border)"
+        [valueTemplate]="'{value}'"
+      >
+      </p-knob>
+    </div>
+    <div
+      *ngIf="lead?.leadStatus === 'qualified'"
+      class="pt-4 border-t border-solid"
+      style="border-color: var(--app-border)"
+    >
+      <p-button
+        label="Convert to Customer"
+        icon="pi pi-user-plus"
+        severity="success"
+        styleClass="w-full"
+        [loading]="converting"
+        (onClick)="convertToCustomer()"
+      ></p-button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,243 @@
+<!-- Overview Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+  <div>
+    <h1
+      class="text-2xl font-bold tracking-tight animate-fade-in"
+      style="color: var(--app-text)"
+    >
+      {{ isEditMode ? 'Edit Client Details' : 'Create Client Workspace' }}
+    </h1>
+    <p class="text-sm animate-fade-in" style="color: var(--app-text-muted)">
+      {{ isEditMode ? 'Update company parameters, description, and active status.' : 'Manage client accounts, workspace parameters, active sessions, and administrator details.' }}
+    </p>
+  </div>
+</div>
+
+<!-- Page Loading State -->
+<div *ngIf="loadingCompany" class="flex flex-col items-center justify-center p-12 card-base my-5 min-h-[300px]" style="background: var(--card-bg);">
+  <i class="pi pi-spin pi-spinner text-4xl text-indigo-500 mb-3 animate-spin"></i>
+  <span class="text-sm font-medium animate-pulse" style="color: var(--app-text-secondary);">Fetching company details...</span>
+</div>
+
+<!-- Page Error State -->
+<div *ngIf="loadingError && !loadingCompany" class="flex flex-col items-center justify-center p-8 card-base my-5 border border-red-500/20 text-center" style="background: var(--card-bg);">
+  <i class="pi pi-exclamation-triangle text-4xl text-red-500 mb-3"></i>
+  <h3 class="text-base font-bold text-red-500 mb-1">Failed to Load Company Details</h3>
+  <p class="text-xs mb-4 max-w-md" style="color: var(--app-text-secondary);">
+    There was a problem retrieving the details for this company workspace. Please verify your connection or authorization and try again.
+  </p>
+  <button 
+    pButton 
+    label="Retry Loading" 
+    icon="pi pi-refresh" 
+    class="p-button-outlined p-button-danger cursor-pointer p-button-sm"
+    (click)="loadCompanyDetails()"></button>
+</div>
+
+<form
+  *ngIf="!loadingCompany && !loadingError"
+  [formGroup]="companyForm"
+  (ngSubmit)="submitForm()"
+  class="space-y-5 mt-5 animate-fade-in"
+>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <!-- Company Name -->
+    <div class="flex flex-col gap-1.5 col-span-2 md:col-span-1">
+      <label
+        class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+        >Company Name</label
+      >
+      <input
+        type="text"
+        pInputText
+        formControlName="name"
+        placeholder="Enter company name"
+        class="w-full text-sm"
+        [class.ng-invalid]="
+          companyForm.get('name')?.touched && companyForm.get('name')?.invalid
+        "
+      />
+      <span
+        *ngIf="
+          companyForm.get('name')?.touched && companyForm.get('name')?.invalid
+        "
+        class="text-red-500 text-xs font-medium"
+      >
+        Company name is required (min 2 chars).
+      </span>
+    </div>
+
+    <!-- Company Email -->
+    <div class="flex flex-col gap-1.5 col-span-2 md:col-span-1">
+      <label
+        class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+        >Company Email</label
+      >
+      <input
+        type="email"
+        pInputText
+        formControlName="email"
+        placeholder="billing@company.com"
+        class="w-full text-sm"
+        [class.ng-invalid]="
+          companyForm.get('email')?.touched && companyForm.get('email')?.invalid
+        "
+      />
+      <span
+        *ngIf="
+          companyForm.get('email')?.touched && companyForm.get('email')?.invalid
+        "
+        class="text-red-500 text-xs font-medium"
+      >
+        Please enter a valid email address.
+      </span>
+    </div>
+
+    <!-- Phone Number (Edit Mode Only) -->
+    <div
+      *ngIf="isEditMode"
+      class="flex flex-col gap-1.5 col-span-2 md:col-span-1"
+    >
+      <label
+        class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+        >Phone Number</label
+      >
+      <input
+        type="text"
+        pInputText
+        formControlName="phone_number"
+        placeholder="+1 (555) 019-2834"
+        class="w-full text-sm"
+      />
+    </div>
+
+    <!-- Active State Toggle (Edit Mode Only) -->
+    <div
+      *ngIf="isEditMode"
+      class="flex items-center gap-3 col-span-2 md:col-span-1 mt-4"
+    >
+      <p-inputSwitch formControlName="is_active"></p-inputSwitch>
+      <div class="flex flex-col">
+        <span class="text-sm font-semibold" style="color: var(--app-text)"
+          >Active Status</span
+        >
+        <span class="text-xs" style="color: var(--app-text-muted)"
+          >Controls workspace access</span
+        >
+      </div>
+    </div>
+
+    <!-- Description -->
+    <div class="flex flex-col gap-1.5 col-span-2">
+      <label
+        class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+        >Description</label
+      >
+      <textarea
+        pTextarea
+        formControlName="description"
+        rows="8"
+        placeholder="Brief details about this client..."
+        class="w-full p-3 border rounded-lg bg-transparent text-sm"
+        style="border-color: var(--card-border); color: var(--app-text)"
+      ></textarea>
+    </div>
+  </div>
+
+  <!-- Credentials Section (Create Mode Only) -->
+  <div
+    *ngIf="!isEditMode"
+    class="border-t pt-4 mt-6 animate-fade-in"
+    style="border-color: var(--app-border)"
+  >
+    <h3
+      class="text-xs font-bold text-brand-500 uppercase tracking-widest mb-4 flex items-center gap-2"
+    >
+      <i class="pi pi-user-plus text-xs"></i>
+      Administrator Credentials
+    </h3>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Admin Name -->
+      <div class="flex flex-col gap-1.5">
+        <label
+          class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+          >Admin Full Name</label
+        >
+        <input
+          type="text"
+          pInputText
+          formControlName="admin_name"
+          placeholder="John Doe"
+          class="w-full text-sm"
+          [class.ng-invalid]="
+            companyForm.get('admin_name')?.touched &&
+            companyForm.get('admin_name')?.invalid
+          "
+        />
+        <span
+          *ngIf="
+            companyForm.get('admin_name')?.touched &&
+            companyForm.get('admin_name')?.invalid
+          "
+          class="text-red-500 text-xs font-medium"
+        >
+          Admin full name is required.
+        </span>
+      </div>
+
+      <!-- Admin Email -->
+      <div class="flex flex-col gap-1.5">
+        <label
+          class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+          >Admin Email</label
+        >
+        <input
+          type="email"
+          pInputText
+          formControlName="admin_email"
+          placeholder="admin@company.com"
+          class="w-full text-sm"
+          [class.ng-invalid]="
+            companyForm.get('admin_email')?.touched &&
+            companyForm.get('admin_email')?.invalid
+          "
+        />
+        <span
+          *ngIf="
+            companyForm.get('admin_email')?.touched &&
+            companyForm.get('admin_email')?.invalid
+          "
+          class="text-red-500 text-xs font-medium"
+        >
+          Valid admin email is required.
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Footer Actions -->
+  <div
+    class="flex items-center justify-end gap-3 pt-4 border-t"
+    style="border-color: var(--app-border)"
+  >
+    <button
+      type="button"
+      pButton
+      label="Cancel"
+      icon="pi pi-times"
+      class="p-button-outlined p-button-secondary cursor-pointer"
+      (click)="cancel()"
+      [disabled]="loading"
+    ></button>
+    <button
+      type="submit"
+      pButton
+      [label]="isEditMode ? 'Save Changes' : 'Create Workspace'"
+      icon="pi pi-check"
+      class="p-button-primary cursor-pointer animate-fade-in"
+      [loading]="loading"
+      [disabled]="companyForm.invalid || loadingCompany || loading"
+    ></button>
+  </div>
+</form>

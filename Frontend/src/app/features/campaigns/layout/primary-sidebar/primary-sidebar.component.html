@@ -1,0 +1,88 @@
+<aside
+  class="w-16 h-screen flex flex-col items-center py-5 flex-shrink-0 overflow-y-auto border-r transition-colors duration-200"
+  style="background-color: var(--sidebar-bg); border-color: var(--app-border)"
+>
+  <!-- ==========================================================
+       Logo
+  =========================================================== -->
+  <div
+    class="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-[10px] tracking-tight flex-shrink-0 shadow-sm"
+    style="background: var(--brand-gradient)"
+  >
+    <i class="pi pi-microchip-ai text-white text-base"></i>
+  </div>
+
+  <!-- ==========================================================
+       Create Post Primary Action Slot
+  =========================================================== -->
+  <a
+    routerLink="/client/create-post"
+    routerLinkActive="ring-2 ring-brand-500"
+    class="mt-6 w-11 h-11 rounded-xl bg-brand-600 text-white flex items-center justify-center flex-shrink-0 shadow-md hover:bg-brand-500 hover:-translate-y-0.5 transition-all cursor-pointer"
+    title="Create a Post"
+  >
+    <i class="pi pi-send text-base"></i>
+  </a>
+
+  <!-- ==========================================================
+       Primary Navigation & Social Media Section
+  =========================================================== -->
+  <nav class="flex-1 min-h-0 flex flex-col items-center gap-2 mt-6 w-full px-2">
+    <!-- Dashboard -->
+    <a
+      routerLink="/client/dashboard"
+      routerLinkActive="nav-link--active"
+      class="nav-link"
+      title="Dashboard"
+    >
+      <i class="pi pi-th-large text-base"></i>
+    </a>
+
+    <!-- Social Media Divider / Label -->
+    <div class="w-8 h-[1px] my-2 bg-slate-200 dark:bg-slate-800"></div>
+
+    <!-- Social Media Analytics -->
+    <a
+      routerLink="/client/social-analytics"
+      routerLinkActive="nav-link--active"
+      class="nav-link"
+      title="Social Media Analytics"
+    >
+      <i class="pi pi-chart-pie text-base"></i>
+    </a>
+
+    <!-- Create Post Secondary Nav -->
+    <a
+      routerLink="/client/create-post"
+      routerLinkActive="nav-link--active"
+      class="nav-link"
+      title="Create a Post"
+    >
+      <i class="pi pi-pencil text-base"></i>
+    </a>
+
+    <!-- Accounts / Channels -->
+    <a
+      routerLink="/client/channels"
+      routerLinkActive="nav-link--active"
+      class="nav-link"
+      title="Accounts & Channels"
+    >
+      <i class="pi pi-link text-base"></i>
+    </a>
+  </nav>
+
+  <!-- ==========================================================
+       Bottom cluster: Settings
+  =========================================================== -->
+  <div class="flex flex-col items-center gap-3 flex-shrink-0 mt-auto">
+    <a
+      routerLink="/client/settings"
+      routerLinkActive="nav-link--active"
+      class="nav-link"
+      title="Settings"
+    >
+      <i class="pi pi-cog text-base"></i>
+    </a>
+  </div>
+</aside>

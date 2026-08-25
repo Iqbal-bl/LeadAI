@@ -1,0 +1,158 @@
+<div class="flowchart-canvas" (dragover)="onDragOver($event)" (drop)="onCanvasDrop($event)">
+
+  <!-- START NODE -->
+  <div class="flow-terminal flow-start">
+    <div class="terminal-dot start-dot"></div>
+    <span class="terminal-label">START</span>
+  </div>
+  <div class="connector-line"></div>
+
+  <!-- ADD FIRST NODE (if empty) -->
+  <button *ngIf="nodes.length === 0" class="add-node-btn solo" (click)="addNodeAt(nodes, 0, 0)">
+    <i class="pi pi-plus"></i>
+    <span>Add First Section</span>
+  </button>
+
+  <!-- SECTION NODES (recursive via ng-template) -->
+  <ng-container *ngFor="let node of nodes; let i = index; let last = last">
+    <ng-container *ngTemplateOutlet="nodeCard; context: { $implicit: node, index: i, parent: nodes, isLast: last }"></ng-container>
+
+    <!-- Connector + Add Button between top-level nodes -->
+    <div class="connector-segment">
+      <div class="connector-line"></div>
+      <button class="add-node-btn between" (click)="addNodeAt(nodes, i + 1, 0)" title="Add section here">
+        <i class="pi pi-plus"></i>
+      </button>
+      <div class="connector-line" *ngIf="!last || nodes.length > 0"></div>
+    </div>
+  </ng-container>
+
+  <!-- END NODE -->
+  <div class="flow-terminal flow-end">
+    <div class="terminal-dot end-dot"></div>
+    <span class="terminal-label">END</span>
+  </div>
+</div>
+
+<!-- ═══════ RECURSIVE NODE CARD TEMPLATE ═══════ -->
+<ng-template #nodeCard let-node let-index="index" let-parent="parent" let-isLast="isLast">
+  <div
+    class="flow-card"
+    [class.is-editing]="node.isEditing"
+    [class.is-dragging]="dragNodeId === node.id"
+    [class.drag-over-top]="dragOverNodeId === node.id && dragPosition === 'top'"
+    [class.drag-over-bottom]="dragOverNodeId === node.id && dragPosition === 'bottom'"
+    [class.has-children]="node.children?.length > 0"
+    [style.margin-left.px]="node.depth * 28"
+    draggable="true"
+    (dragstart)="onDragStart($event, node, parent)"
+    (dragend)="onDragEnd()"
+    (dragover)="onCardDragOver($event, node)"
+    (dragleave)="onCardDragLeave()"
+    (drop)="onCardDrop($event, node, parent)"
+  >
+    <!-- Depth Indicator Bar -->
+    <div *ngIf="node.depth > 0" class="depth-indicator"
+         [style.background]="getDepthColor(node.depth)"></div>
+
+    <!-- Card Header -->
+    <div class="card-header">
+      <div class="card-header-left">
+        <div class="drag-handle" title="Drag to reorder">
+          <i class="pi pi-bars"></i>
+        </div>
+        <div class="section-badge" [style.background]="getDepthGradient(node.depth)">
+          {{ getNodeDisplayIndex(node, parent) }}
+        </div>
+        <div *ngIf="!node.isEditing" class="section-name" (click)="startEditing(node)">
+          {{ node.name }}
+        </div>
+        <input
+          *ngIf="node.isEditing"
+          [(ngModel)]="node.name"
+          (ngModelChange)="onNodeChange()"
+          class="name-input"
+          placeholder="section-name"
+          (keydown.enter)="stopEditing(node)"
+        />
+        <!-- Sub-section depth badge -->
+        <span *ngIf="node.depth > 0" class="depth-badge"
+              [style.color]="getDepthColor(node.depth)"
+              [style.border-color]="getDepthColor(node.depth) + '33'">
+          L{{ node.depth }}
+        </span>
+      </div>
+      <div class="card-actions">
+        <!-- Collapse/Expand button (only if has children) -->
+        <button *ngIf="node.children?.length > 0"
+                class="action-btn collapse-btn"
+                (click)="toggleCollapse(node)"
+                [title]="node.isCollapsed ? 'Expand sub-sections' : 'Collapse sub-sections'">
+          <i [class]="node.isCollapsed ? 'pi pi-chevron-down' : 'pi pi-chevron-up'"></i>
+        </button>
+        <!-- Add sub-section -->
+        <button
+          class="action-btn sub-btn"
+          (click)="addSubSection(node)"
+          title="Add sub-section"
+        >
+          <i class="pi pi-plus-circle"></i>
+        </button>
+        <button
+          class="action-btn edit-btn"
+          (click)="toggleEditing(node)"
+          [title]="node.isEditing ? 'Done editing' : 'Edit section'"
+        >
+          <i [class]="node.isEditing ? 'pi pi-check' : 'pi pi-pencil'"></i>
+        </button>
+        <button
+          class="action-btn delete-btn"
+          (click)="deleteNode(parent, index)"
+          title="Delete section"
+        >
+          <i class="pi pi-trash"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Card Body -->
+    <div class="card-body" *ngIf="!node.isEditing" (click)="startEditing(node)">
+      <p class="content-preview">{{ node.content || 'Click to add content...' }}</p>
+    </div>
+    <div class="card-body editing" *ngIf="node.isEditing">
+      <textarea
+        [(ngModel)]="node.content"
+        (ngModelChange)="onNodeChange()"
+        class="content-textarea"
+        placeholder="Enter section content..."
+        rows="4"
+      ></textarea>
+    </div>
+
+    <!-- Children container -->
+    <div *ngIf="node.children?.length > 0 && !node.isCollapsed" class="children-container">
+      <div class="children-header">
+        <span class="children-label">
+          <i class="pi pi-sitemap" style="font-size: 9px;"></i>
+          {{ node.children.length }} sub-section{{ node.children.length > 1 ? 's' : '' }}
+        </span>
+      </div>
+      <div class="children-list">
+        <ng-container *ngFor="let child of node.children; let ci = index; let clast = last">
+          <!-- Recursive render -->
+          <ng-container *ngTemplateOutlet="nodeCard; context: { $implicit: child, index: ci, parent: node.children, isLast: clast }"></ng-container>
+
+          <!-- Connector between children -->
+          <div *ngIf="!clast" class="child-connector">
+            <div class="connector-line-sm"></div>
+          </div>
+        </ng-container>
+
+        <!-- Add child at end -->
+        <button class="add-node-btn child-add" (click)="addNodeAt(node.children, node.children.length, node.depth + 1)" title="Add sub-section">
+          <i class="pi pi-plus"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</ng-template>

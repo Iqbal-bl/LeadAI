@@ -1,0 +1,44 @@
+<div class="flex items-center justify-between gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 shadow-sm transition-colors duration-200">
+  <!-- Left Actions -->
+  <div class="flex items-center gap-2">
+    <button 
+      type="button" 
+      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+      (click)="onSaveDraft()"
+    >
+      <i class="pi pi-save"></i>
+      <span>Save Draft</span>
+    </button>
+
+    <button 
+      type="button" 
+      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/40 transition-all cursor-pointer"
+      (click)="onCancel()"
+    >
+      Cancel
+    </button>
+  </div>
+
+  <!-- Primary Action: Publish / Schedule -->
+  <button 
+    type="button" 
+    class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all cursor-pointer"
+    [disabled]="isPublishing" 
+    (click)="onPublish()"
+  >
+    @if (isPublishing) {
+      <i class="pi pi-spin pi-spinner text-sm"></i>
+      <span>Publishing...</span>
+    } @else {
+      <i
+        class="pi text-sm"
+        [class.pi-send]="publishMode === 'now'"
+        [class.pi-calendar-plus]="publishMode === 'schedule'"
+      >
+      </i>
+      <span>
+        {{ publishMode === 'schedule' ? 'Schedule Post' : 'Publish Now' }}
+      </span>
+    }
+  </button>
+</div>

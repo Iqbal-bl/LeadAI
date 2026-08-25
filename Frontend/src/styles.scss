@@ -1,0 +1,300 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* PrimeIcons */
+@import "primeicons/primeicons.css";
+@import "cropperjs/dist/cropper.css";
+
+/* ===== CSS Custom Properties for Theme ===== */
+:root {
+  --app-bg: #f8fafc;
+  --app-bg-secondary: #ffffff;
+  --app-text: #0f172a;
+  --app-text-secondary: #475569;
+  --app-text-muted: #94a3b8;
+  --app-border: #e2e8f0;
+  --app-border-light: #f1f5f9;
+  --sidebar-bg: #ffffff;
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 72px;
+  --toolbar-height: 64px;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --brand-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+  --brand-gradient-subtle: linear-gradient(135deg, #eef2ff 0%, #f5f3ff 50%, #faf5ff 100%);
+  --success-gradient: linear-gradient(135deg, #22c55e, #16a34a);
+  --warning-gradient: linear-gradient(135deg, #f59e0b, #d97706);
+  --danger-gradient: linear-gradient(135deg, #ef4444, #dc2626);
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-track: transparent;
+}
+
+.dark {
+  --app-bg: #0f172a;
+  --app-bg-secondary: #1e293b;
+  --app-text: #f1f5f9;
+  --app-text-secondary: #94a3b8;
+  --app-text-muted: #64748b;
+  --app-border: #334155;
+  --app-border-light: #1e293b;
+  --sidebar-bg: #1e293b;
+  --card-bg: #1e293b;
+  --card-border: #334155;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+  --glass-bg: rgba(30, 41, 59, 0.8);
+  --glass-border: rgba(51, 65, 85, 0.5);
+  --brand-gradient-subtle: linear-gradient(135deg, #1e1b4b 0%, #1e1b4b 50%, #1e1b4b 100%);
+  --scrollbar-thumb: #475569;
+  --scrollbar-track: transparent;
+}
+
+/* ===== Global Base Styles ===== */
+@layer base {
+  html {
+    @apply antialiased;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--app-bg);
+    color: var(--app-text);
+    @apply transition-colors duration-300;
+  }
+
+  ::selection {
+    @apply bg-brand-500/20 text-brand-700;
+  }
+
+  .dark ::selection {
+    @apply bg-brand-400/30 text-brand-200;
+  }
+}
+
+/* ===== Scrollbar Styling ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 100px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-text-muted);
+}
+
+/* ===== Glassmorphism Utilities ===== */
+@layer components {
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 1rem;
+    box-shadow: var(--card-shadow);
+  }
+
+  .card-base {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 0.75rem;
+    box-shadow: var(--card-shadow);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .card-base:hover {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08), 0 4px 10px rgba(0, 0, 0, 0.04);
+  }
+
+  .card-interactive {
+    @apply card-base cursor-pointer;
+  }
+
+  .card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08), 0 4px 10px rgba(0, 0, 0, 0.04);
+  }
+
+  .gradient-text {
+    background: var(--brand-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-bg {
+    background: var(--brand-gradient);
+  }
+
+  .gradient-border {
+    position: relative;
+    border: none;
+  }
+
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--brand-gradient);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+}
+
+/* ===== PrimeNG Theme Overrides ===== */
+/* Minimal overrides to harmonize PrimeNG with our design system */
+.p-datatable .p-datatable-thead > tr > th {
+  background: var(--card-bg) !important;
+  color: var(--app-text-secondary) !important;
+  border-color: var(--card-border) !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.p-datatable .p-datatable-tbody > tr {
+  background: var(--card-bg) !important;
+  color: var(--app-text) !important;
+  border-color: var(--card-border) !important;
+  transition: background-color 0.15s ease;
+}
+
+.p-datatable .p-datatable-tbody > tr:hover {
+  background: var(--app-bg) !important;
+}
+
+.p-dialog .p-dialog-header {
+  background: var(--card-bg) !important;
+  color: var(--app-text) !important;
+  border-bottom: 1px solid var(--card-border) !important;
+}
+
+.p-dialog .p-dialog-content {
+  background: var(--card-bg) !important;
+  color: var(--app-text) !important;
+}
+
+.p-dialog .p-dialog-footer {
+  background: var(--card-bg) !important;
+  border-top: 1px solid var(--card-border) !important;
+}
+
+.p-panelmenu .p-panelmenu-header-action {
+  background: transparent !important;
+  color: var(--app-text-secondary) !important;
+  border: none !important;
+  border-radius: 0.5rem !important;
+  transition: all 0.15s ease !important;
+}
+
+.p-panelmenu .p-panelmenu-header-action:hover {
+  background: var(--app-bg) !important;
+  color: var(--app-text) !important;
+}
+
+.p-panelmenu .p-menuitem-link {
+  border-radius: 0.5rem !important;
+  transition: all 0.15s ease !important;
+}
+
+.p-panelmenu .p-menuitem-link:hover {
+  background: var(--app-bg) !important;
+}
+
+/* Toast Overrides */
+.p-toast .p-toast-message {
+  backdrop-filter: blur(16px);
+  border-radius: 0.75rem !important;
+}
+
+/* Sidebar/Drawer Overrides */
+.p-drawer .p-drawer-content {
+  background: var(--card-bg) !important;
+}
+
+.p-drawer .p-drawer-header {
+  background: var(--card-bg) !important;
+  border-bottom: 1px solid var(--card-border) !important;
+}
+
+/* Button Overrides */
+.p-button {
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  transition: all 0.15s ease !important;
+}
+
+.p-button:hover {
+  transform: translateY(-1px);
+}
+
+/* Input Overrides */
+.p-inputtext {
+  border-radius: 0.5rem !important;
+  border-color: var(--card-border) !important;
+  background: var(--card-bg) !important;
+  color: var(--app-text) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.p-inputtext:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+}
+
+/* Chip/Tag Overrides */
+.p-tag {
+  border-radius: 9999px !important;
+  font-weight: 500 !important;
+  font-size: 0.75rem !important;
+}
+
+/* ===== Animations ===== */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--card-bg) 25%, var(--app-bg) 50%, var(--card-bg) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ===== Page Transition ===== */
+.page-enter {
+  animation: fadeIn 0.3s ease-out, slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

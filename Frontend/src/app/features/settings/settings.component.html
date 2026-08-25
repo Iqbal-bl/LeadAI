@@ -1,0 +1,270 @@
+<div class="mb-6">
+  <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+    Settings & Preferences
+  </h1>
+  <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+    Configure account, AI engine threshold, theme, and notifications
+  </p>
+</div>
+
+<p-tabs value="profile">
+  <p-tablist>
+    <p-tab value="profile"
+      ><i class="pi pi-user mr-2"></i> Profile & Account</p-tab
+    >
+    <p-tab value="ai"
+      ><i class="pi pi-microchip-ai mr-2"></i> AI Call Settings</p-tab
+    >
+    <p-tab value="notifications"
+      ><i class="pi pi-bell mr-2"></i> Notifications</p-tab
+    >
+    <p-tab value="threshold"><i class="pi pi-bell mr-2"></i> Threshold</p-tab>
+  </p-tablist>
+
+  <p-tabpanels>
+    <!-- Profile Tab -->
+    <p-tabpanel value="profile">
+      <div class="card-base p-6 mt-4 max-w-2xl space-y-4">
+        <div class="flex items-center gap-4 mb-4">
+          <p-avatar
+            label="SN"
+            size="xlarge"
+            shape="circle"
+            [style]="{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: 'white',
+              'font-size': '1.5rem',
+              'font-weight': '700',
+            }"
+          ></p-avatar>
+          <div>
+            <h3 class="text-lg font-bold" style="color: var(--app-text)">
+              {{ profile.name }}
+            </h3>
+            <p class="text-xs" style="color: var(--app-text-muted)">
+              {{ profile.role }} · LeadAI Operations
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label
+              class="text-xs font-medium block mb-1"
+              style="color: var(--app-text-muted)"
+              >Full Name</label
+            >
+            <input
+              pInputText
+              type="text"
+              [(ngModel)]="profile.name"
+              class="w-full text-sm"
+            />
+          </div>
+          <div>
+            <label
+              class="text-xs font-medium block mb-1"
+              style="color: var(--app-text-muted)"
+              >Email Address</label
+            >
+            <input
+              pInputText
+              type="email"
+              [(ngModel)]="profile.email"
+              class="w-full text-sm"
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label
+              class="text-xs font-medium block mb-1"
+              style="color: var(--app-text-muted)"
+              >Phone Number</label
+            >
+            <input
+              pInputText
+              type="text"
+              [(ngModel)]="profile.phone"
+              class="w-full text-sm"
+            />
+          </div>
+          <div>
+            <label
+              class="text-xs font-medium block mb-1"
+              style="color: var(--app-text-muted)"
+              >Timezone</label
+            >
+            <input
+              pInputText
+              type="text"
+              [(ngModel)]="profile.timeZone"
+              class="w-full text-sm"
+            />
+          </div>
+        </div>
+
+        <div class="pt-4 flex justify-end">
+          <p-button
+            label="Save Changes"
+            icon="pi pi-check"
+            (click)="saveProfile()"
+            [style]="{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+            }"
+          ></p-button>
+        </div>
+      </div>
+    </p-tabpanel>
+
+    <!-- AI Settings Tab -->
+    <p-tabpanel value="ai">
+      <div class="card-base p-6 mt-4 max-w-2xl space-y-6">
+        <div>
+          <label
+            class="text-xs font-semibold uppercase tracking-wider block mb-2"
+            style="color: var(--app-text-muted)"
+            >Base Model Selection</label
+          >
+          <p-dropdown
+            [options]="[
+              {
+                label: 'LeadAI-Opus-v4 (Recommended)',
+                value: 'LeadAI-Opus-v4',
+              },
+              { label: 'LeadAI-Fast-v3', value: 'LeadAI-Fast-v3' },
+            ]"
+            [(ngModel)]="aiConfig.model"
+            optionLabel="label"
+            optionValue="value"
+            [style]="{ width: '100%' }"
+          ></p-dropdown>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            <label
+              class="text-xs font-semibold uppercase tracking-wider"
+              style="color: var(--app-text-muted)"
+              >Minimum Confidence Threshold</label
+            >
+            <span class="text-sm font-bold text-brand-500"
+              >{{ aiConfig.confidenceThreshold }}%</span
+            >
+          </div>
+          <p-slider
+            [(ngModel)]="aiConfig.confidenceThreshold"
+            [min]="50"
+            [max]="95"
+            [step]="5"
+          ></p-slider>
+          <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+            If AI confidence falls below this value, call will auto-handoff to
+            human agent.
+          </p>
+        </div>
+
+        <div
+          class="flex items-center justify-between py-2 border-t"
+          style="border-color: var(--card-border)"
+        >
+          <div>
+            <div class="text-sm font-semibold" style="color: var(--app-text)">
+              Auto Human Handoff
+            </div>
+            <div class="text-xs" style="color: var(--app-text-muted)">
+              Seamlessly transfer call when lead requests human agent
+            </div>
+          </div>
+          <p-inputSwitch [(ngModel)]="aiConfig.autoHandoff"></p-inputSwitch>
+        </div>
+
+        <div
+          class="flex items-center justify-between py-2 border-t"
+          style="border-color: var(--card-border)"
+        >
+          <div>
+            <div class="text-sm font-semibold" style="color: var(--app-text)">
+              Real-time Sentiment Analysis
+            </div>
+            <div class="text-xs" style="color: var(--app-text-muted)">
+              Monitor lead mood and pitch adjustments during call
+            </div>
+          </div>
+          <p-inputSwitch [(ngModel)]="aiConfig.enableSentiment"></p-inputSwitch>
+        </div>
+
+        <div class="pt-4 flex justify-end">
+          <p-button
+            label="Update AI Config"
+            icon="pi pi-check"
+            (click)="saveAiConfig()"
+            [style]="{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+            }"
+          ></p-button>
+        </div>
+      </div>
+    </p-tabpanel>
+
+    <!-- Notifications Tab -->
+    <p-tabpanel value="notifications">
+      <div class="card-base p-6 mt-4 max-w-2xl space-y-4">
+        <div class="flex items-center justify-between py-2">
+          <div>
+            <div class="text-sm font-semibold" style="color: var(--app-text)">
+              Email Alerts
+            </div>
+            <div class="text-xs" style="color: var(--app-text-muted)">
+              Receive immediate emails on lead status changes
+            </div>
+          </div>
+          <p-inputSwitch
+            [(ngModel)]="notificationConfig.emailAlerts"
+          ></p-inputSwitch>
+        </div>
+
+        <div
+          class="flex items-center justify-between py-2 border-t"
+          style="border-color: var(--card-border)"
+        >
+          <div>
+            <div class="text-sm font-semibold" style="color: var(--app-text)">
+              AI Confidence Alerts
+            </div>
+            <div class="text-xs" style="color: var(--app-text-muted)">
+              Notify when AI confidence drops below threshold
+            </div>
+          </div>
+          <p-inputSwitch
+            [(ngModel)]="notificationConfig.aiConfidenceAlerts"
+          ></p-inputSwitch>
+        </div>
+
+        <div
+          class="flex items-center justify-between py-2 border-t"
+          style="border-color: var(--card-border)"
+        >
+          <div>
+            <div class="text-sm font-semibold" style="color: var(--app-text)">
+              Weekly Executive Summary
+            </div>
+            <div class="text-xs" style="color: var(--app-text-muted)">
+              Receive weekly email report of all KPI metrics
+            </div>
+          </div>
+          <p-inputSwitch
+            [(ngModel)]="notificationConfig.weeklyReport"
+          ></p-inputSwitch>
+        </div>
+      </div>
+    </p-tabpanel>
+
+    <p-tabpanel value="threshold">
+      <app-lead-threshold></app-lead-threshold>
+    </p-tabpanel>
+  </p-tabpanels>
+</p-tabs>

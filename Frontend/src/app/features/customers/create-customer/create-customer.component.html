@@ -1,0 +1,231 @@
+<p-dialog
+  header="Create Customer Manually"
+  [(visible)]="visible"
+  [modal]="true"
+  [style]="{ width: '700px', maxHeight: '90vh' }"
+  (onHide)="onClose()"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  <div class="flex flex-col gap-4 py-2">
+    <!-- Contact Info Section Header -->
+    <div class="border-b pb-1">
+      <h3 class="text-sm font-semibold tracking-wide uppercase text-indigo-600">Contact Information</h3>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">
+          Display Name <span class="text-red-500">*</span>
+        </label>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="displayName"
+          placeholder="e.g. John Doe"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Email Address</label>
+        <input
+          pInputText
+          type="email"
+          [(ngModel)]="email"
+          placeholder="e.g. john@example.com"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Phone Number</label>
+        <input
+          pInputText
+          type="tel"
+          [(ngModel)]="phone"
+          placeholder="e.g. +91 98765 43210"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">WhatsApp Number</label>
+        <input
+          pInputText
+          type="tel"
+          [(ngModel)]="whatsapp"
+          placeholder="e.g. +91 98765 43210"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <!-- Deal / Profile Section Header -->
+    <div class="border-b pb-1 mt-2">
+      <h3 class="text-sm font-semibold tracking-wide uppercase text-indigo-600">Customer Profile & Value</h3>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Company Name</label>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="companyName"
+          placeholder="e.g. Acme Corp"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Assigned Owner</label>
+        <p-dropdown
+          [options]="employees"
+          [(ngModel)]="ownerEmail"
+          placeholder="Select Owner"
+          optionLabel="label"
+          optionValue="value"
+          [showClear]="true"
+          class="w-full"
+          styleClass="w-full"
+          appendTo="body"
+        ></p-dropdown>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Stage</label>
+        <p-dropdown
+          [options]="stageOptions"
+          [(ngModel)]="stage"
+          optionLabel="label"
+          optionValue="value"
+          class="w-full"
+          styleClass="w-full"
+          appendTo="body"
+        ></p-dropdown>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Product Interest</label>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="product"
+          placeholder="e.g. Enterprise SaaS"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Deal Value</label>
+        <p-inputNumber
+          [(ngModel)]="value"
+          [min]="0"
+          placeholder="0"
+          class="w-full"
+          styleClass="w-full"
+          inputStyleClass="w-full"
+        ></p-inputNumber>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Currency</label>
+        <p-dropdown
+          [options]="currencyOptions"
+          [(ngModel)]="currency"
+          optionLabel="label"
+          optionValue="value"
+          class="w-full"
+          styleClass="w-full"
+          appendTo="body"
+        ></p-dropdown>
+      </div>
+    </div>
+
+    <!-- Date & Metadata Section Header -->
+    <div class="border-b pb-1 mt-2">
+      <h3 class="text-sm font-semibold tracking-wide uppercase text-indigo-600">Additional Info</h3>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Birthday</label>
+        <p-calendar
+          [(ngModel)]="birthday"
+          dateFormat="yy-mm-dd"
+          [showIcon]="true"
+          placeholder="Select Birthday"
+          class="w-full"
+          styleClass="w-full"
+          appendTo="body"
+        ></p-calendar>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Anniversary</label>
+        <p-calendar
+          [(ngModel)]="anniversary"
+          dateFormat="yy-mm-dd"
+          [showIcon]="true"
+          placeholder="Select Anniversary"
+          class="w-full"
+          styleClass="w-full"
+          appendTo="body"
+        ></p-calendar>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Lead Source</label>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="source"
+          placeholder="e.g. Referral, Website"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Tags</label>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="tags"
+          placeholder="e.g. warm-lead, direct-import"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text)">Notes</label>
+      <textarea
+        rows="3"
+        pInputText
+        [(ngModel)]="notes"
+        placeholder="Add any internal comments or history..."
+        class="w-full p-2 border rounded-lg"
+      ></textarea>
+    </div>
+
+    <!-- Dialog Footer -->
+    <div class="flex justify-end pt-3 gap-2 border-t mt-4">
+      <p-button
+        label="Cancel"
+        [text]="true"
+        severity="secondary"
+        (onClick)="onClose()"
+      ></p-button>
+      <p-button
+        label="Create Customer"
+        icon="pi pi-check"
+        [disabled]="!canSave"
+        [loading]="saving"
+        (onClick)="save()"
+      ></p-button>
+    </div>
+  </div>
+</p-dialog>

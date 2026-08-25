@@ -1,0 +1,108 @@
+<div class="card-base p-5">
+  <h3
+    class="text-sm font-semibold mb-4 flex items-center gap-2"
+    style="color: var(--app-text)"
+  >
+    <i class="pi pi-phone text-brand-500"></i> Calling Panel
+  </h3>
+
+  <!-- Standard Action Buttons -->
+  <div *ngIf="!isCallActive" class="space-y-2.5 mb-4 animate-fade-in">
+    <button
+      (click)="placeCall('ai_voice')"
+      class="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl text-white text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+      style="background: linear-gradient(135deg, #8b5cf6, #6366f1)"
+    >
+      <i class="pi pi-microchip-ai"></i> Call via AI
+    </button>
+    <button
+      (click)="placeCall('agent')"
+      class="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl text-white text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
+      style="background: linear-gradient(135deg, #22c55e, #16a34a)"
+    >
+      <i class="pi pi-phone"></i> Call via Human
+    </button>
+    <!-- <button class="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer border"
+            style="background: var(--card-bg); color: var(--app-text); border-color: var(--card-border);">
+      <i class="pi pi-calendar"></i> Schedule Call
+    </button> -->
+  </div>
+
+  <!-- Active Call Panel -->
+  <div
+    *ngIf="isCallActive"
+    class="mb-4 p-4 rounded-xl border animate-pulse-soft text-center space-y-4"
+    style="
+      background-color: var(--app-bg-secondary, #fafafa);
+      border-color: var(--app-border);
+    "
+  >
+    <div
+      class="flex items-center justify-center gap-2 text-sm font-semibold"
+      style="color: var(--app-text)"
+    >
+      <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping"></span>
+      <span>{{ callStatus }}</span>
+    </div>
+    <div class="text-3xl font-mono font-bold" style="color: var(--app-text)">
+      {{ formatTimer(callTimer) }}
+    </div>
+    <div class="text-xs" style="color: var(--app-text-muted)">
+      Calling: {{ lead?.phone }} ({{
+        callMode === "ai_voice" ? "AI Voice Agent" : "Human Specialist"
+      }})
+    </div>
+
+    <!-- Live Subtitles Panel -->
+    <div
+      *ngIf="liveSubtitle"
+      class="p-3 rounded-xl border text-xs text-left italic font-sans max-h-[85px] overflow-y-auto animate-fade-in"
+      style="
+        background: var(--app-bg-hover, #f8fafc);
+        border-color: var(--app-border, #e2e8f0);
+        color: var(--app-text-secondary);
+      "
+    >
+      <span
+        class="font-bold not-italic"
+        [ngClass]="
+          liveSubtitleType === 'agent' ? 'text-indigo-500' : 'text-emerald-500'
+        "
+      >
+        {{ liveSubtitleType === "agent" ? "Agent" : "Customer" }}:
+      </span>
+      {{ liveSubtitle }}
+    </div>
+
+    <button
+      (click)="hangup()"
+      class="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-sm font-semibold cursor-pointer transition-all duration-200 bg-red-500 hover:bg-red-600 hover:shadow-lg"
+    >
+      <i class="pi pi-phone-slash"></i> Hang Up
+    </button>
+  </div>
+
+  <p-divider></p-divider>
+
+  <!-- Call Status Info -->
+  <div class="space-y-2 text-xs">
+    <div class="flex items-center justify-between">
+      <span style="color: var(--app-text-muted)">Status</span>
+      <span
+        class="font-medium"
+        [class.text-green-500]="!isCallActive"
+        [class.text-amber-500]="isCallActive"
+      >
+        {{ isCallActive ? "On Call" : "Available" }}
+      </span>
+    </div>
+    <div class="flex items-center justify-between">
+      <span style="color: var(--app-text-muted)">Last Call</span>
+      <span style="color: var(--app-text-secondary)">Today, 2:30 PM</span>
+    </div>
+    <div class="flex items-center justify-between">
+      <span style="color: var(--app-text-muted)">Total Calls</span>
+      <span style="color: var(--app-text-secondary)">{{ totalCalls }}</span>
+    </div>
+  </div>
+</div>

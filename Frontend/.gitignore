@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.db
+node_modules/
+dist/
+.angular/
+.DS_Store
+package-lock.json
+docker-compose.yml
+.vscode/
+frontend/
+backend/

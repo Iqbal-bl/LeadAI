@@ -1,0 +1,20 @@
+:host {
+  display: block;
+}
+
+/* Cropper Frame styling */
+::ng-deep {
+  .cropper-view-box {
+    outline: 2px solid #10b981 !important;
+    outline-color: #10b981 !important;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  .cropper-line {
+    background-color: #10b981 !important;
+  }
+
+  .cropper-modal {
+    opacity: 0.65 !important;
+  }
+}

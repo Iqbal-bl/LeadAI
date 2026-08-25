@@ -1,0 +1,226 @@
+<!-- Top Toolbar -->
+<div
+  class="h-16 flex items-center justify-between px-4 lg:px-6 border-b"
+  style="background-color: var(--sidebar-bg); border-color: var(--app-border)"
+  (keydown)="onKeydown($event)"
+>
+  <!-- Left: Hamburger + Breadcrumb -->
+  <div class="flex items-center gap-4">
+    <!-- Mobile Sidebar Toggle -->
+    <button
+      (click)="toggleSidebar.emit()"
+      class="lg:hidden p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+      style="color: var(--app-text-secondary)"
+    >
+      <i class="pi pi-bars text-lg"></i>
+    </button>
+
+    <!-- Breadcrumb -->
+    <!-- <p-breadcrumb
+      [model]="breadcrumbItems"
+      [home]="breadcrumbHome"
+      class="hidden sm:block"
+      styleClass="border-none bg-transparent p-0 text-sm"
+    >
+    </p-breadcrumb> -->
+  </div>
+
+  <!-- Right: Developer Switcher, Search, Theme, Notifications, Profile -->
+  <div class="flex items-center gap-2">
+    <!-- Search Trigger -->
+    <button
+      (click)="openSearch()"
+      class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 hover:border-brand-300 dark:hover:border-brand-600 group cursor-pointer"
+      style="
+        background: var(--app-bg);
+        border-color: var(--card-border);
+        color: var(--app-text-muted);
+      "
+    >
+      <i class="pi pi-search text-sm"></i>
+      <span class="hidden md:inline text-sm">Search...</span>
+      <kbd
+        class="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium border"
+        style="
+          background: var(--card-bg);
+          border-color: var(--card-border);
+          color: var(--app-text-muted);
+        "
+      >
+        ⌘K
+      </kbd>
+    </button>
+
+    <!-- Theme Toggle -->
+    <button
+      (click)="toggleTheme()"
+      class="p-2.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 cursor-pointer"
+      style="color: var(--app-text-secondary)"
+      pTooltip="Toggle theme"
+      tooltipPosition="bottom"
+    >
+      <i
+        class="pi text-lg transition-transform duration-300"
+        [ngClass]="isDarkMode ? 'pi-sun' : 'pi-moon'"
+      ></i>
+    </button>
+
+    <!-- Notifications Toggle -->
+    <button
+      (click)="toggleNotifications()"
+      class="relative p-2.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 cursor-pointer"
+      style="color: var(--app-text-secondary)"
+      pTooltip="Notifications"
+      tooltipPosition="bottom"
+    >
+      <i class="pi pi-bell text-lg"></i>
+      <span
+        *ngIf="unreadNotifications > 0"
+        class="absolute top-1 right-1 w-4 h-4 rounded-full bg-danger-500 text-white text-[10px] font-bold flex items-center justify-center animate-pulse-soft"
+      >
+        {{ unreadNotifications }}
+      </span>
+    </button>
+
+    <!-- User Profile -->
+    <div class="flex items-center gap-2 ml-1">
+      <p-avatar
+        [label]="userNameAvatar[0]"
+        shape="circle"
+        [style]="{
+          'background-color': '#6366f1',
+          color: 'white',
+          'font-size': '0.75rem',
+          'font-weight': '600',
+          cursor: 'pointer',
+        }"
+        size="normal"
+        (click)="userMenu.toggle($event)"
+      >
+      </p-avatar>
+      <p-menu #userMenu [popup]="true" [model]="userMenuItems"></p-menu>
+    </div>
+  </div>
+</div>
+
+<!-- Search Dialog (Command Palette) -->
+<p-dialog
+  [(visible)]="showSearch"
+  [modal]="true"
+  [dismissableMask]="true"
+  [showHeader]="false"
+  [style]="{ width: '600px', 'max-width': '90vw' }"
+  [contentStyle]="{ padding: '0', 'border-radius': '1rem', overflow: 'hidden' }"
+  styleClass="search-dialog"
+  position="top"
+>
+  <div class="p-4" style="background: var(--card-bg)">
+    <!-- Search Input -->
+    <div
+      class="flex items-center gap-3 pb-3 border-b"
+      style="border-color: var(--card-border)"
+    >
+      <i class="pi pi-search text-lg" style="color: var(--app-text-muted)"></i>
+      <input
+        type="text"
+        [(ngModel)]="searchQuery"
+        (input)="onSearchInput({ query: searchQuery })"
+        placeholder="Search leads, team, documents, conversations..."
+        class="flex-1 bg-transparent border-none outline-none text-base"
+        style="color: var(--app-text)"
+        autofocus
+      />
+      <kbd
+        class="px-2 py-0.5 rounded text-xs font-mono border"
+        style="
+          background: var(--app-bg);
+          border-color: var(--card-border);
+          color: var(--app-text-muted);
+        "
+      >
+        ESC
+      </kbd>
+    </div>
+
+    <!-- Results -->
+    <div class="max-h-[360px] overflow-y-auto py-2">
+      <div
+        *ngIf="searchResults.length === 0 && searchQuery.length >= 2"
+        class="py-8 text-center"
+        style="color: var(--app-text-muted)"
+      >
+        <i class="pi pi-search text-3xl mb-2 block opacity-40"></i>
+        <p class="text-sm">No results found for "{{ searchQuery }}"</p>
+      </div>
+
+      <div
+        *ngIf="searchQuery.length < 2 && searchResults.length === 0"
+        class="py-6 text-center"
+        style="color: var(--app-text-muted)"
+      >
+        <p class="text-sm">Type at least 2 characters to search</p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+          <span
+            class="px-2 py-1 rounded-lg text-xs"
+            style="background: var(--app-bg)"
+            >Leads</span
+          >
+          <span
+            class="px-2 py-1 rounded-lg text-xs"
+            style="background: var(--app-bg)"
+            >Team</span
+          >
+          <span
+            class="px-2 py-1 rounded-lg text-xs"
+            style="background: var(--app-bg)"
+            >Documents</span
+          >
+          <span
+            class="px-2 py-1 rounded-lg text-xs"
+            style="background: var(--app-bg)"
+            >Conversations</span
+          >
+          <span
+            class="px-2 py-1 rounded-lg text-xs"
+            style="background: var(--app-bg)"
+            >Prompts</span
+          >
+        </div>
+      </div>
+
+      <button
+        *ngFor="let item of searchResults"
+        (click)="onSearchSelect(item)"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-150 hover:bg-brand-500/10 cursor-pointer text-left"
+      >
+        <div
+          class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style="background: var(--app-bg)"
+        >
+          <i
+            [class]="item.icon"
+            class="text-sm"
+            style="color: var(--app-text-muted)"
+          ></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div
+            class="text-sm font-medium truncate"
+            style="color: var(--app-text)"
+          >
+            {{ item.label }}
+          </div>
+          <div class="text-xs truncate" style="color: var(--app-text-muted)">
+            {{ item.detail }}
+          </div>
+        </div>
+        <p-tag
+          [value]="item.type"
+          [severity]="getTypeSeverity(item.type)"
+          [rounded]="true"
+          class="text-xs"
+        ></p-tag>
+      </button>
+    </div>
+  </div>
+</p-dialog>

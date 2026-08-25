@@ -1,0 +1,278 @@
+<p-dialog header="Connect Channel" [(visible)]="visible" [modal]="true" [closable]="true"
+          [style]="{ width: '680px', maxHeight: '90vh' }" (onHide)="onClose()" [draggable]="false">
+
+  <!-- Step Indicators -->
+  <div class="flex items-center justify-center gap-2 mb-6 pb-4" style="border-bottom: 1px solid var(--app-border);">
+    <div *ngFor="let step of ['Create Account', 'Configure Meta', 'Verify']; let i = index"
+         class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300"
+           [style.background]="activeStep >= i ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--app-surface-alt)'"
+           [style.color]="activeStep >= i ? '#fff' : 'var(--app-text-muted)'">
+        <i *ngIf="activeStep > i" class="pi pi-check text-xs"></i>
+        <span *ngIf="activeStep <= i">{{ i + 1 }}</span>
+      </div>
+      <span class="text-sm font-medium hidden sm:inline"
+            [style.color]="activeStep >= i ? 'var(--app-text)' : 'var(--app-text-muted)'">{{ step }}</span>
+      <i *ngIf="i < 2" class="pi pi-chevron-right text-xs mx-1" style="color: var(--app-text-muted);"></i>
+    </div>
+  </div>
+
+  <!-- Step 1: Create Account -->
+  <div *ngIf="activeStep === 0" class="flex flex-col gap-4">
+    <div>
+      <label class="block text-sm font-medium mb-2" style="color: var(--app-text);">Channel Type</label>
+      <div class="flex gap-3">
+        <div *ngFor="let ct of channelTypes"
+             class="flex-1 p-3 rounded-xl cursor-pointer border-2 transition-all duration-200 flex flex-col items-center gap-2"
+             [style.border-color]="channelType === ct.value ? ct.color : 'var(--app-border)'"
+             [style.background]="channelType === ct.value ? ct.color + '10' : 'transparent'"
+             (click)="channelType = ct.value">
+          <i [class]="ct.icon" class="text-2xl" [style.color]="ct.color"></i>
+          <span class="text-sm font-medium" style="color: var(--app-text);">{{ ct.label }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Instagram OAuth Quick Connect -->
+    <div *ngIf="channelType === 'instagram'" class="p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 border text-left"
+         style="border-color: rgba(228, 64, 95, 0.3); background: linear-gradient(135deg, rgba(228, 64, 95, 0.08), rgba(240, 148, 51, 0.08));">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
+             style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);">
+          <i class="pi pi-instagram text-lg"></i>
+        </div>
+        <div>
+          <h4 class="text-sm font-semibold" style="color: var(--app-text);">Connect with Instagram (OAuth)</h4>
+          <p class="text-xs" style="color: var(--app-text-muted);">Authorize via Meta login without manually copying API tokens</p>
+        </div>
+      </div>
+      <p-button
+        label="Connect with Instagram"
+        icon="pi pi-external-link"
+        iconPos="right"
+        [loading]="oauthLoading"
+        (onClick)="connectWithInstagram()"
+        [style]="{ 'background': 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)', 'border': 'none' }"
+      ></p-button>
+    </div>
+
+    <!-- LinkedIn OAuth Quick Connect -->
+    <div *ngIf="channelType === 'linkedin'" class="p-4 rounded-xl flex flex-col gap-3 border text-left"
+         style="border-color: rgba(10, 102, 194, 0.3); background: linear-gradient(135deg, rgba(10, 102, 194, 0.08), rgba(0, 119, 181, 0.04));">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
+               style="background: linear-gradient(135deg, #0A66C2, #004182);">
+            <i class="pi pi-linkedin text-lg"></i>
+          </div>
+          <div>
+            <h4 class="text-sm font-semibold" style="color: var(--app-text);">Connect LinkedIn Profile (OAuth)</h4>
+            <p class="text-xs" style="color: var(--app-text-muted);">Link your company's LinkedIn Profile to schedule and publish updates.</p>
+          </div>
+        </div>
+        <p-button
+          label="{{ linkedinConnecting ? 'Waiting for LinkedIn Consent...' : 'Connect LinkedIn Profile' }}"
+          icon="{{ linkedinConnecting ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
+          iconPos="right"
+          [loading]="linkedinConnecting"
+          (onClick)="connectWithLinkedIn()"
+          [style]="{ 'background': '#0A66C2', 'border': 'none' }"
+        ></p-button>
+      </div>
+
+      <div class="p-2.5 rounded-lg text-xs flex items-center gap-2"
+           style="background: rgba(10, 102, 194, 0.08); color: var(--app-text-secondary); border: 1px solid rgba(10, 102, 194, 0.15);">
+        <i class="pi pi-info-circle text-sm shrink-0" style="color: #0A66C2;"></i>
+        <span>Opens a secure LinkedIn popup. Once you sign in and authorize, LeadAI will automatically link your account and close the window.</span>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Display Name</label>
+      <input pInputText type="text" [(ngModel)]="displayName" placeholder="e.g. Main Business Line"
+             class="w-full" />
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">{{ getExternalIdLabel() }}</label>
+      <input pInputText type="text" [(ngModel)]="externalId" [placeholder]="getExternalIdPlaceholder()"
+             class="w-full" />
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Access Token</label>
+      <input pInputText type="password" [(ngModel)]="accessToken" placeholder="Paste your access token"
+             class="w-full" />
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">App Secret <span class="text-xs" style="color: var(--app-text-muted);">(optional)</span></label>
+      <input pInputText type="password" [(ngModel)]="appSecret" placeholder="Optional app secret"
+             class="w-full" />
+    </div>
+
+    <!-- Auto-Reply Script Selection -->
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Auto-Reply Script <span class="text-xs" style="color: var(--app-text-muted);">(optional)</span></label>
+      <p-dropdown appendTo="body" [options]="scripts" [(ngModel)]="scriptId" optionValue="id" optionLabel="name"
+                  placeholder="Select a script to handle auto-replies" [showClear]="true" [style]="{ width: '100%' }"></p-dropdown>
+    </div>
+
+    <!-- Webhook Verify Token Configuration -->
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Verify Token <span class="text-xs" style="color: var(--app-text-muted);">(optional, autogenerated if left blank)</span></label>
+      <input pInputText type="text" [(ngModel)]="verifyTokenInput" placeholder="Specify a custom verify token"
+             class="w-full" />
+    </div>
+
+    <!-- Auto-Reply Toggle Switch -->
+    <div class="flex items-center justify-between p-3.5 rounded-xl border text-left" style="border-color: var(--app-border); background: var(--app-surface-alt);">
+      <div class="flex flex-col gap-0.5">
+        <label class="text-sm font-medium" style="color: var(--app-text);">Auto-Reply Enabled</label>
+        <span class="text-xs" style="color: var(--app-text-muted);">Enable automated AI responses for incoming messages on this channel.</span>
+      </div>
+      <p-inputSwitch [(ngModel)]="autoReply"></p-inputSwitch>
+    </div>
+
+    <!-- WhatsApp Specific Config -->
+    <div *ngIf="channelType === 'whatsapp'" class="p-4 rounded-xl flex flex-col gap-4 border text-left" style="border-color: var(--app-border); background: var(--app-surface-alt);">
+      <h4 class="text-sm font-semibold flex items-center gap-2" style="color: var(--app-text);">
+        <i class="pi pi-whatsapp" style="color: #25D366;"></i> WhatsApp Account Details
+      </h4>
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">WhatsApp Business Account ID</label>
+          <input pInputText type="text" [(ngModel)]="businessAccountId" placeholder="e.g. 1029384756" class="w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Display Phone Number</label>
+          <input pInputText type="text" [(ngModel)]="displayNumber" placeholder="e.g. +1 555-0199" class="w-full" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Meta API Version</label>
+          <input pInputText type="text" [(ngModel)]="apiVersion" placeholder="e.g. v21.0" class="w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Default Language</label>
+          <input pInputText type="text" [(ngModel)]="defaultLanguage" placeholder="e.g. en_US" class="w-full" />
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="step1Error" class="p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+      <i class="pi pi-exclamation-triangle mr-2"></i>{{ step1Error }}
+    </div>
+
+    <div class="flex justify-end pt-2">
+      <p-button label="Create & Get Webhook" icon="pi pi-arrow-right" iconPos="right"
+                [disabled]="!step1Valid" [loading]="step1Loading" (onClick)="submitStep1()"></p-button>
+    </div>
+  </div>
+
+  <!-- Step 2: Configure Meta -->
+  <div *ngIf="activeStep === 1" class="flex flex-col gap-4">
+    <div class="p-4 rounded-xl" style="background: var(--app-surface-alt);">
+      <h3 class="text-base font-semibold mb-3" style="color: var(--app-text);">
+        <i class="pi pi-info-circle mr-2" style="color: #6366f1;"></i>Paste these into Meta's App Dashboard
+      </h3>
+
+      <div class="flex flex-col gap-3">
+        <div>
+          <label class="block text-xs font-medium mb-1 uppercase tracking-wider" style="color: var(--app-text-muted);">Webhook URL</label>
+          <div class="flex items-center gap-2 p-2 rounded-lg" style="background: var(--app-bg); border: 1px solid var(--app-border);">
+            <code class="flex-1 text-sm break-all" style="color: var(--app-text);">{{ webhookUrl }}</code>
+            <p-button icon="pi pi-copy" [rounded]="true" [text]="true" severity="secondary"
+                      pTooltip="Copy URL" (onClick)="copyToClipboard(webhookUrl, 'Webhook URL')"></p-button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1 uppercase tracking-wider" style="color: var(--app-text-muted);">Verify Token</label>
+          <div class="flex items-center gap-2 p-2 rounded-lg" style="background: var(--app-bg); border: 1px solid var(--app-border);">
+            <code class="flex-1 text-sm" style="color: var(--app-text);">{{ verifyToken }}</code>
+            <p-button icon="pi pi-copy" [rounded]="true" [text]="true" severity="secondary"
+                      pTooltip="Copy Token" (onClick)="copyToClipboard(verifyToken, 'Verify Token')"></p-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-4 rounded-xl" style="border: 1px solid var(--app-border);">
+      <h3 class="text-sm font-semibold mb-3" style="color: var(--app-text);">Steps in Meta App Dashboard:</h3>
+      <ol class="text-sm flex flex-col gap-2 pl-5 list-decimal" style="color: var(--app-text-secondary);">
+        <li>Go to <strong>Meta App Dashboard</strong> → Your App → <strong>Webhooks</strong></li>
+        <li>Click <strong>Edit Subscription</strong></li>
+        <li>Paste the <strong>Webhook URL</strong> and <strong>Verify Token</strong> above</li>
+        <li>Subscribe to the <code class="px-1 py-0.5 rounded text-xs" style="background: var(--app-surface-alt);">messages</code> and <code class="px-1 py-0.5 rounded text-xs" style="background: var(--app-surface-alt);">messaging_postbacks</code> fields</li>
+        <li>Meta will immediately send a GET handshake — if the token matches, it turns <span class="text-green-500 font-medium">green</span></li>
+      </ol>
+    </div>
+
+    <div class="flex justify-between pt-2">
+      <p-button label="Back" icon="pi pi-arrow-left" [text]="true" severity="secondary" (onClick)="activeStep = 0"></p-button>
+      <p-button label="I've configured Meta — Verify" icon="pi pi-arrow-right" iconPos="right" (onClick)="goToStep3()"></p-button>
+    </div>
+  </div>
+
+  <!-- Step 3: Verify -->
+  <div *ngIf="activeStep === 2" class="flex flex-col gap-4">
+    <div class="p-4 rounded-xl" style="background: var(--app-surface-alt);">
+      <h3 class="text-base font-semibold mb-2" style="color: var(--app-text);">
+        <i class="pi pi-send mr-2" style="color: #6366f1;"></i>Send a Test Message
+      </h3>
+      <p class="text-sm" style="color: var(--app-text-secondary);">
+        This sends a test message through Meta to prove credentials work before campaigns depend on them.
+      </p>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Recipient Phone Number / ID <span class="text-red-500">*</span></label>
+      <input pInputText type="text" [(ngModel)]="testTo" placeholder="e.g. +1234567890 or WhatsApp ID"
+             class="w-full" />
+      <small class="text-xs mt-1 block" style="color: var(--app-text-muted);">Enter the recipient's phone number in E.164 format (with country code).</small>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Message Text</label>
+      <input pInputText type="text" [(ngModel)]="testMessage" placeholder="Enter message text"
+             class="w-full" />
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Template Name <span class="text-xs" style="color: var(--app-text-muted);">(optional)</span></label>
+        <input pInputText type="text" [(ngModel)]="testTemplateName" placeholder="e.g. hello_world" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Template Language</label>
+        <input pInputText type="text" [(ngModel)]="testTemplateLanguage" placeholder="en" class="w-full" />
+      </div>
+    </div>
+
+    <div class="p-3 rounded-lg text-xs" style="background: rgba(99, 102, 241, 0.08); color: var(--app-text-secondary); border: 1px solid rgba(99, 102, 241, 0.2);">
+      <i class="pi pi-info-circle mr-1" style="color: #6366f1;"></i>
+      <strong>WhatsApp 24-hour rule:</strong> A free-form test only reaches a number that has messaged you in the last 24 hours. Use an approved template name (e.g. <code>hello_world</code>) otherwise.
+    </div>
+
+    <div *ngIf="testError" class="p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+      <i class="pi pi-times-circle mr-2"></i>{{ testError }}
+    </div>
+
+    <div *ngIf="testSuccess" class="p-3 rounded-lg text-sm" style="background: rgba(34,197,94,0.1); color: #22c55e;">
+      <i class="pi pi-check-circle mr-2"></i>Test message sent successfully! Your channel is verified and ready to use.
+    </div>
+
+    <div class="flex justify-between pt-2">
+      <p-button label="Back" icon="pi pi-arrow-left" [text]="true" severity="secondary" (onClick)="activeStep = 1"></p-button>
+      <div class="flex gap-2">
+        <p-button label="Send Test" icon="pi pi-send"
+                  [disabled]="!testTo.trim()" [loading]="testLoading" (onClick)="submitTest()"></p-button>
+        <p-button label="Done" icon="pi pi-check" severity="success" (onClick)="finishWizard()"></p-button>
+      </div>
+    </div>
+  </div>
+</p-dialog>
+

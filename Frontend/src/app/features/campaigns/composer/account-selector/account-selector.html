@@ -1,0 +1,76 @@
+<div>
+  <div class="flex items-center justify-between mb-3">
+    <div>
+      <h2 class="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wider">
+        <i class="pi pi-share-alt text-brand-500 text-xs"></i> Target Platforms
+      </h2>
+      <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+        Select target channels to publish content
+      </p>
+    </div>
+  </div>
+
+  <div class="space-y-1.5">
+    @for (account of accounts; track account.key) {
+      <div
+        (click)="toggleAccount(account)"
+        class="flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all select-none"
+        [pTooltip]="!isPlatformSupported(account) ? unsupportedMessage(account) : undefined"
+        tooltipPosition="top"
+        [tooltipDisabled]="isPlatformSupported(account)"
+        [ngClass]="{
+          'border-slate-200 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/40 opacity-70 cursor-not-allowed': !isPlatformSupported(account),
+          'border-brand-500/80 bg-brand-500/10 dark:bg-brand-500/20 cursor-pointer shadow-xs': isPlatformSupported(account) && isSelected(account),
+          'border-slate-200 dark:border-slate-700/60 bg-white dark:bg-slate-800 hover:border-brand-400 hover:bg-slate-50 dark:hover:bg-slate-700/40 cursor-pointer': isPlatformSupported(account) && !isSelected(account)
+        }"
+      >
+        <!-- Checkbox / Ban Icon -->
+        @if (isPlatformSupported(account)) {
+          <p-checkbox
+            (click)="$event.stopPropagation()"
+            [binary]="true"
+            [ngModel]="isSelected(account)"
+            (ngModelChange)="toggleAccount(account)"
+          >
+          </p-checkbox>
+        } @else {
+          <span class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 flex items-center justify-center flex-shrink-0">
+            <i class="pi pi-slash text-[10px]"></i>
+          </span>
+        }
+
+        <!-- Platform Icon -->
+        <i
+          [class]="account.icon"
+          class="text-xs w-4 text-center transition-colors"
+          [ngClass]="{
+            'text-brand-600 dark:text-brand-400': isSelected(account),
+            'text-slate-600 dark:text-slate-300': isPlatformSupported(account) && !isSelected(account),
+            'text-slate-400': !isPlatformSupported(account)
+          }"
+        >
+        </i>
+
+        <!-- Platform Name & Badge -->
+        <div class="flex-1 flex items-center justify-between gap-2 min-w-0">
+          <span
+            class="text-xs font-semibold truncate min-w-0"
+            [ngClass]="{
+              'text-brand-700 dark:text-brand-300': isSelected(account),
+              'text-slate-800 dark:text-slate-200': isPlatformSupported(account) && !isSelected(account),
+              'text-slate-400': !isPlatformSupported(account)
+            }"
+          >
+            {{ account.name }}
+          </span>
+
+          @if (!isPlatformSupported(account)) {
+            <span class="flex-shrink-0 text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+              Coming Soon
+            </span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>

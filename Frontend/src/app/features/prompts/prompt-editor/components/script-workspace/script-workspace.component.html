@@ -1,0 +1,256 @@
+<div
+  *ngIf="selectedScript; else noSelectedScript"
+  class="grid grid-cols-1 2xl:grid-cols-12 gap-6"
+>
+  <!-- XML Editor Area -->
+  <div class="2xl:col-span-7 space-y-4">
+    <div class="card-base p-5 flex flex-col h-full">
+      <div class="flex items-center justify-between mb-4 flex-shrink-0">
+        <div class="flex items-center gap-2">
+          <!-- Sidebar Toggle Button -->
+          <button
+            pButton
+            type="button"
+            [icon]="
+              listCollapsed ? 'pi pi-chevron-right' : 'pi pi-chevron-left'
+            "
+            class="p-button-text p-button-sm p-button-secondary -ml-2 mr-1"
+            [pTooltip]="
+              listCollapsed ? 'Expand Scripts List' : 'Collapse Scripts List'
+            "
+            tooltipPosition="top"
+            (click)="toggleList.emit()"
+          ></button>
+          <div
+            class="w-2.5 h-2.5 rounded-full bg-violet-500 shadow-sm animate-pulse-soft"
+          ></div>
+          <span class="text-sm font-bold" style="color: var(--app-text)"
+            >XML Schema Editor</span
+          >
+          <span
+            class="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-mono px-1.5 py-0.5 rounded"
+            >v{{ selectedScript.version }}</span
+          >
+
+          <!-- Editor Mode Toggle -->
+          <div
+            class="flex rounded-lg border p-0.5 ml-2"
+            style="
+              border-color: var(--app-border);
+              background: var(--app-bg-hover);
+            "
+          >
+            <button
+              class="px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer"
+              [ngClass]="
+                editorMode === 'code'
+                  ? 'bg-indigo-500 text-white'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              "
+              (click)="editorMode = 'code'"
+            >
+              <i class="pi pi-code mr-1" style="font-size: 9px"></i>Code
+            </button>
+            <button
+              class="px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer"
+              [ngClass]="
+                editorMode === 'flowchart'
+                  ? 'bg-violet-500 text-white'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+              "
+              (click)="editorMode = 'flowchart'"
+            >
+              <i class="pi pi-sitemap mr-1" style="font-size: 9px"></i>Flowchart
+            </button>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button
+            *appHasPermission="PERMISSIONS.PROMPT_MANAGE"
+            pButton
+            icon="pi pi-save"
+            label="Save Script"
+            class="p-button-sm"
+            (click)="onSaveXml.emit(scriptXmlEditorContent)"
+          ></button>
+          <button
+            *appHasPermission="PERMISSIONS.PROMPT_MANAGE"
+            pButton
+            icon="pi pi-times"
+            label="Reset"
+            class="p-button-sm p-button-secondary p-button-outlined"
+            (click)="onResetXml.emit()"
+          ></button>
+        </div>
+      </div>
+
+      <!-- CODE Editor (existing textarea) -->
+      <div
+        *ngIf="editorMode === 'code'"
+        class="flex-1 min-h-[350px] 2xl:min-h-[480px] rounded-xl border p-4 font-mono text-xs leading-relaxed"
+        style="background: #090d16; color: #cbd5e1; border-color: #1e293b"
+      >
+        <textarea
+          [(ngModel)]="scriptXmlEditorContent"
+          (ngModelChange)="scriptXmlEditorContentChange.emit($event)"
+          class="w-full h-full bg-transparent border-none outline-none font-mono text-xs text-indigo-200 resize-none"
+          style="
+            font-family:
+              &quot;JetBrains Mono&quot;, &quot;Fira Code&quot;, monospace;
+            line-height: 1.6;
+          "
+          placeholder="<!-- Write XML schema flow here -->"
+        ></textarea>
+      </div>
+
+      <!-- FLOWCHART Editor (new visual editor) -->
+      <div
+        *ngIf="editorMode === 'flowchart'"
+        class="flex-1 min-h-[350px] 2xl:min-h-[480px] rounded-xl border overflow-y-auto"
+        style="background: #090d16; border-color: #1e293b"
+      >
+        <app-flowchart-editor
+          [xmlContent]="scriptXmlEditorContent"
+          (xmlContentChange)="onFlowchartChange($event)"
+        >
+        </app-flowchart-editor>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Panel Area -->
+  <div class="2xl:col-span-5 space-y-4">
+    <div class="card-base p-5 flex flex-col h-full">
+      <!-- Preview Header -->
+      <div class="flex items-center justify-between mb-4 flex-shrink-0">
+        <div class="flex items-center gap-1.5">
+          <i class="pi pi-eye text-emerald-500"></i>
+          <span class="text-sm font-bold" style="color: var(--app-text)"
+            >Rendered Preview</span
+          >
+        </div>
+        <!-- Preview Channel Selector -->
+        <div
+          class="flex rounded-lg border p-0.5"
+          style="
+            border-color: var(--app-border);
+            background: var(--app-bg-hover);
+          "
+        >
+          <button
+            class="px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer"
+            [ngClass]="
+              previewChannel === 'chat'
+                ? 'bg-indigo-500 text-white'
+                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            "
+            (click)="onChannelChange.emit('chat')"
+          >
+            Chat
+          </button>
+          <button
+            class="px-2.5 py-1 text-[10px] font-bold rounded-md transition-all cursor-pointer"
+            [ngClass]="
+              previewChannel === 'voice'
+                ? 'bg-indigo-500 text-white'
+                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            "
+            (click)="onChannelChange.emit('voice')"
+          >
+            Voice
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 flex flex-col space-y-4 min-h-0">
+        <!-- Prompt Text Box -->
+        <div class="flex-1 flex flex-col min-h-0">
+          <div
+            class="flex justify-between items-center mb-1 text-[11px] font-bold text-slate-500"
+          >
+            <span>COMPILED SYSTEM PROMPT</span>
+            <span *ngIf="scriptPreview"
+              >{{ scriptPreview.character_count | number }} chars</span
+            >
+          </div>
+
+          <div
+            class="flex-1 p-3.5 rounded-xl border font-mono text-[11px] leading-relaxed overflow-y-auto max-h-[300px] 2xl:max-h-[400px] whitespace-pre-wrap select-all"
+            style="background: #090d16; color: #cbd5e1; border-color: #1e293b"
+          >
+            <div
+              *ngIf="previewLoading"
+              class="flex flex-col items-center justify-center h-full py-8 text-slate-400"
+            >
+              <i
+                class="pi pi-spin pi-spinner text-2xl mb-2 text-indigo-400"
+              ></i>
+              <span>Compiling XML schema...</span>
+            </div>
+            <span *ngIf="!previewLoading && scriptPreview">{{
+              scriptPreview.system_prompt
+            }}</span>
+            <span
+              *ngIf="!previewLoading && !scriptPreview"
+              class="text-slate-500 italic"
+              >No prompt preview generated. Click Save or change channel to
+              re-compile.</span
+            >
+          </div>
+        </div>
+
+        <!-- Parsed Sections -->
+        <div
+          class="flex-shrink-0 border-t pt-4"
+          style="border-color: var(--app-border)"
+        >
+          <span
+            class="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-2"
+            >Parsed Sections</span
+          >
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              *ngFor="let sec of selectedScript?.sections"
+              class="px-2 py-0.5 rounded font-mono text-[10px] border"
+              style="
+                background: var(--app-bg);
+                border-color: var(--app-border);
+                color: var(--app-text-secondary);
+              "
+              [pTooltip]="sec.content"
+              tooltipPosition="top"
+            >
+              {{ sec.name }}
+            </span>
+            <span
+              *ngIf="
+                !selectedScript?.sections ||
+                selectedScript?.sections?.length === 0
+              "
+              class="text-xs text-slate-500 italic"
+            >
+              No XML sections parsed.
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #noSelectedScript>
+  <div
+    class="card-base p-12 text-center flex flex-col items-center justify-center text-slate-500"
+  >
+    <div
+      class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-indigo-400 mb-4"
+    >
+      <i class="pi pi-file-code text-3xl"></i>
+    </div>
+    <h3 class="text-lg font-semibold text-slate-300">No Script Selected</h3>
+    <p class="text-sm mt-1 max-w-sm">
+      Please select a script from the library or create a new one to open the
+      prompt compiler workspace.
+    </p>
+  </div>
+</ng-template>

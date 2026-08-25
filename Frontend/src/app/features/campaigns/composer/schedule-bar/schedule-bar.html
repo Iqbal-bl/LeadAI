@@ -1,0 +1,139 @@
+<!-- ==========================================================
+     Header
+========================================================== -->
+
+<div class="px-4 py-3.5 border-b border-slate-100 dark:border-slate-700/60">
+  <div class="flex items-center gap-3">
+    <div class="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+      <i class="pi pi-calendar text-sm"></i>
+    </div>
+
+    <div>
+      <h3 class="text-xs font-bold text-slate-900 dark:text-slate-100">Schedule & Publishing</h3>
+      <p class="text-[11px] text-slate-500 dark:text-slate-400">Choose immediate or scheduled publishing</p>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================
+     Body
+========================================================== -->
+
+<div class="p-4">
+  <!-- Publish Toggle -->
+  <div class="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-700/60 border border-slate-200/60 dark:border-slate-700">
+    <button
+      type="button"
+      class="py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer text-center"
+      [ngClass]="{
+        'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm': publishMode === 'now',
+        'text-slate-600 dark:text-slate-400': publishMode !== 'now'
+      }"
+      (click)="setPublishMode('now')"
+    >
+      Publish Now
+    </button>
+
+    <button
+      type="button"
+      class="py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer text-center"
+      [ngClass]="{
+        'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-sm': publishMode === 'schedule',
+        'text-slate-600 dark:text-slate-400': publishMode !== 'schedule'
+      }"
+      (click)="setPublishMode('schedule')"
+    >
+      Schedule
+    </button>
+  </div>
+
+  <!-- Schedule Mode Options -->
+  @if (publishMode === 'schedule') {
+    <div class="mt-4 space-y-3">
+      <!-- Date Picker Row -->
+      <div>
+        <div 
+          class="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 hover:border-brand-500 transition-all cursor-pointer"
+          (click)="datePopover.toggle($event)"
+        >
+          <div class="flex items-center gap-2.5">
+            <div class="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center text-xs">
+              <i class="pi pi-calendar"></i>
+            </div>
+            <div>
+              <div class="text-[10px] font-medium text-slate-400">Date</div>
+              <div class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                {{ selectedDate ? (selectedDate | date: 'dd MMM yyyy') : 'Select date' }}
+              </div>
+            </div>
+          </div>
+          <i class="pi pi-chevron-right text-xs text-slate-400"></i>
+        </div>
+
+        <p-popover #datePopover showTransitionOptions="0ms" hideTransitionOptions="0ms">
+          <p-datepicker
+            [(ngModel)]="selectedDate"
+            [inline]="true"
+            (onSelect)="onDateSelect(datePopover)"
+          >
+          </p-datepicker>
+        </p-popover>
+      </div>
+
+      <!-- Time Picker Row -->
+      <div>
+        <div 
+          class="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 hover:border-brand-500 transition-all cursor-pointer"
+          (click)="timePopover.toggle($event)"
+        >
+          <div class="flex items-center gap-2.5">
+            <div class="w-7 h-7 rounded-lg bg-orange-500/10 text-orange-600 flex items-center justify-center text-xs">
+              <i class="pi pi-clock"></i>
+            </div>
+            <div>
+              <div class="text-[10px] font-medium text-slate-400">Time</div>
+              <div class="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                {{ selectedTime ? (selectedTime | date: 'hh:mm a') : 'Select time' }}
+              </div>
+            </div>
+          </div>
+          <i class="pi pi-chevron-right text-xs text-slate-400"></i>
+        </div>
+
+        <p-popover #timePopover showTransitionOptions="0ms" hideTransitionOptions="0ms">
+          <p-datepicker
+            [(ngModel)]="selectedTime"
+            (onSelect)="onTimeSelect(timePopover)"
+            (ngModelChange)="onTimeSelect()"
+            [inline]="true"
+            [timeOnly]="true"
+            hourFormat="12"
+          >
+          </p-datepicker>
+        </p-popover>
+      </div>
+
+      <!-- Summary -->
+      <div class="p-3 rounded-xl bg-brand-500/10 dark:bg-brand-500/20 border border-brand-500/20 text-xs">
+        <div class="flex items-center gap-2 font-semibold text-slate-900 dark:text-slate-100">
+          <i class="pi pi-clock text-brand-600 dark:text-brand-400"></i> Scheduled
+        </div>
+        <p class="text-slate-600 dark:text-slate-300 mt-1 text-[11px]">
+          {{ selectedDate ? (selectedDate | date: 'dd MMM yyyy') : 'Select date' }} • {{ selectedTime ? (selectedTime | date: 'hh:mm a') : 'Select time' }}
+        </p>
+      </div>
+    </div>
+  }
+
+  <!-- Publish Now Mode Info -->
+  @if (publishMode === 'now') {
+    <div class="mt-4 p-3 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 border border-emerald-500/20 text-xs">
+      <div class="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-400">
+        <i class="pi pi-check-circle"></i> Immediate Publishing
+      </div>
+      <p class="text-slate-600 dark:text-slate-300 mt-1 text-[11px]">
+        Content will be pushed directly to selected channels upon clicking Publish.
+      </p>
+    </div>
+  }
+</div>

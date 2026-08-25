@@ -1,0 +1,115 @@
+<!-- Sidebar -->
+<aside
+  class="h-screen flex flex-col border-r transition-all duration-300 ease-in-out relative z-20"
+  [class]="collapsed ? 'w-[72px]' : 'w-[260px]'"
+  [style.background-color]="'var(--sidebar-bg)'"
+  [style.border-color]="'var(--app-border)'"
+>
+  <!-- Logo Area -->
+  <div
+    class="flex items-center h-16 px-4 border-b"
+    [style.border-color]="'var(--app-border)'"
+  >
+    <div class="flex items-center gap-3 overflow-hidden">
+      <!-- Logo Icon -->
+      <div
+        class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+        style="background: var(--brand-gradient)"
+      >
+        <i class="pi pi-microchip-ai text-white text-lg"></i>
+      </div>
+      <!-- Logo Text -->
+      <div *ngIf="!collapsed" class="flex flex-col animate-fade-in">
+        <span
+          class="text-lg font-bold tracking-tight"
+          style="color: var(--app-text)"
+          >LeadAI</span
+        >
+        <span
+          class="text-[10px] font-medium tracking-wider uppercase animate-pulse-soft"
+          style="color: var(--app-text-muted)"
+          >{{ currentRole | uppercase }} PORTAL</span
+        >
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Menu -->
+  <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-6">
+    <div *ngFor="let section of menuSections" class="space-y-1.5">
+      <!-- Section Title -->
+      <div
+        *ngIf="!collapsed && section.items.length > 0"
+        class="text-[9px] font-bold tracking-widest uppercase px-3 py-1 text-slate-400 dark:text-slate-500"
+      >
+        {{ section.title }}
+      </div>
+      <div
+        *ngIf="collapsed && section.items.length > 0"
+        class="h-[1px] my-2 bg-slate-100 dark:bg-slate-800/60"
+      ></div>
+
+      <!-- Section Items -->
+      <button
+        *ngFor="let item of section.items"
+        routerLink="{{ item.routerLink }}"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group cursor-pointer"
+        [class.justify-center]="collapsed"
+        [ngClass]="{
+          'bg-brand-500/10 text-brand-600 dark:text-brand-400': isActive(
+            item.routerLink
+          ),
+          'hover:bg-black/5 dark:hover:bg-white/5': !isActive(item.routerLink),
+        }"
+        [style.color]="
+          isActive(item.routerLink) ? '' : 'var(--app-text-secondary)'
+        "
+        [pTooltip]="collapsed ? item.label : ''"
+        tooltipPosition="right"
+      >
+        <i
+          [class]="item.icon"
+          class="text-lg flex-shrink-0 w-5 text-center transition-colors duration-200"
+          [ngClass]="{
+            'text-brand-600 dark:text-brand-400': isActive(item.routerLink),
+          }"
+        >
+        </i>
+        <span
+          *ngIf="!collapsed"
+          class="text-sm font-medium truncate animate-fade-in transition-colors duration-200"
+          [ngClass]="{
+            'text-brand-600 dark:text-brand-400 font-semibold': isActive(
+              item.routerLink
+            ),
+          }"
+        >
+          {{ item.label }}
+        </span>
+        <!-- Active Indicator -->
+        <div
+          *ngIf="isActive(item.routerLink) && !collapsed"
+          class="ml-auto w-1.5 h-1.5 rounded-full bg-brand-500"
+        ></div>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Collapse Toggle -->
+  <div class="p-3 border-t" [style.border-color]="'var(--app-border)'">
+    <button
+      (click)="toggleSidebar()"
+      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+      [class.justify-center]="collapsed"
+      style="color: var(--app-text-muted)"
+    >
+      <i
+        class="pi transition-transform duration-300"
+        [ngClass]="collapsed ? 'pi-chevron-right' : 'pi-chevron-left'"
+      ></i>
+      <span *ngIf="!collapsed" class="text-sm font-medium animate-fade-in"
+        >Collapse</span
+      >
+    </button>
+  </div>
+</aside>

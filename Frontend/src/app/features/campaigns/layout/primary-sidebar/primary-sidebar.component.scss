@@ -1,0 +1,45 @@
+/* ==========================================================
+   Nav links — base state (Theme aware)
+========================================================== */
+
+.nav-link {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--app-text-muted, #64748b);
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+  color: var(--app-text, #0f172a);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:host-context(.dark) .nav-link:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ==========================================================
+   Nav links — active state
+========================================================== */
+
+.nav-link--active {
+  background: var(--brand-500, #6366f1);
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+}
+
+.nav-link--active::before {
+  content: '';
+  position: absolute;
+  left: -0.5rem;
+  width: 3px;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background: var(--brand-500, #6366f1);
+}

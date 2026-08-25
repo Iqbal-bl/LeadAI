@@ -1,0 +1,382 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
+<!-- Loading State -->
+<div *ngIf="loading" class="flex flex-col items-center justify-center py-24">
+  <i class="pi pi-spin pi-spinner text-4xl mb-3 text-indigo-500"></i>
+  <span class="text-sm font-medium" style="color: var(--app-text-muted)"
+    >Loading client details & service configuration...</span
+  >
+</div>
+
+<div *ngIf="!loading && company" class="space-y-6">
+  <!-- Top Navigation & Header -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="flex items-center gap-4">
+      <button
+        pButton
+        icon="pi pi-arrow-left"
+        class="p-button-rounded p-button-text p-button-secondary cursor-pointer"
+        (click)="goBack()"
+        pTooltip="Back to Clients List"
+      ></button>
+
+      <div class="flex items-center gap-3.5">
+        <div
+          class="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white text-lg shadow-sm"
+          style="background: var(--brand-gradient)"
+        >
+          {{ company.name.charAt(0).toUpperCase() }}
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1
+              class="text-2xl font-bold tracking-tight"
+              style="color: var(--app-text)"
+            >
+              {{ company.name }}
+            </h1>
+            <p-tag
+              [value]="company.is_active ? 'Active' : 'Inactive'"
+              [severity]="company.is_active ? 'success' : 'secondary'"
+              [rounded]="true"
+            ></p-tag>
+          </div>
+          <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+            ID: <span class="font-mono">{{ company.id }}</span> · {{ company.email }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="flex items-center gap-2.5">
+      <p-button
+        [label]="company.is_active ? 'Deactivate' : 'Activate'"
+        [icon]="company.is_active ? 'pi pi-pause' : 'pi pi-play'"
+        [severity]="company.is_active ? 'secondary' : 'success'"
+        [outlined]="true"
+        size="small"
+        (onClick)="toggleActiveStatus()"
+      ></p-button>
+
+      <p-button
+        label="Edit Client"
+        icon="pi pi-pencil"
+        severity="secondary"
+        size="small"
+        (onClick)="editCompany()"
+      ></p-button>
+
+      <p-button
+        icon="pi pi-trash"
+        severity="danger"
+        [text]="true"
+        [rounded]="true"
+        size="small"
+        pTooltip="Delete Client Workspace"
+        (onClick)="deleteCompany()"
+      ></p-button>
+    </div>
+  </div>
+
+  <!-- KPI Summary Row -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="card-base p-4">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+          Licensed Seats
+        </span>
+        <i class="pi pi-users text-sm text-indigo-500"></i>
+      </div>
+      <div class="text-2xl font-bold" style="color: var(--app-text)">
+        {{ company.user_count || 0 }}
+      </div>
+      <span class="text-[11px]" style="color: var(--app-text-muted)">Assigned user licenses</span>
+    </div>
+
+    <div class="card-base p-4">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+          Knowledge Base
+        </span>
+        <i class="pi pi-book text-sm text-emerald-500"></i>
+      </div>
+      <div class="text-2xl font-bold" style="color: var(--app-text)">
+        {{ company.document_count || 0 }} <span class="text-sm font-normal text-slate-400">docs</span>
+      </div>
+      <span class="text-[11px]" style="color: var(--app-text-muted)">{{ company.chunk_count || 0 }} vector chunks</span>
+    </div>
+
+    <div class="card-base p-4">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+          AI Traffic
+        </span>
+        <i class="pi pi-chart-line text-sm text-amber-500"></i>
+      </div>
+      <div class="text-2xl font-bold" style="color: var(--app-text)">
+        {{ company.conversation_count || 0 }}
+      </div>
+      <span class="text-[11px]" style="color: var(--app-text-muted)">Total AI conversations & calls</span>
+    </div>
+
+    <div class="card-base p-4">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+          Active Services
+        </span>
+        <i class="pi pi-sparkles text-sm text-purple-500"></i>
+      </div>
+      <div class="text-2xl font-bold" style="color: var(--app-text)">
+        {{ services.length }}
+      </div>
+      <span class="text-[11px]" style="color: var(--app-text-muted)">Omnichannel access channels</span>
+    </div>
+  </div>
+
+  <!-- Services & Channels Hub Title Bar -->
+  <div class="card-base p-5">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 pb-4 border-b border-solid" style="border-color: var(--app-border)">
+      <div>
+        <h2 class="text-lg font-bold flex items-center gap-2" style="color: var(--app-text)">
+          <i class="pi pi-th-large text-indigo-500"></i> Provided Services & Channel Access
+        </h2>
+        <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+          Configure and monitor communication channels and automated AI services provisioned for this workspace
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="text-xs px-2.5 py-1 rounded-full font-medium" style="background: var(--app-surface-alt, #f1f5f9); color: var(--app-text-secondary)">
+          Omnichannel Engine v2.5
+        </span>
+      </div>
+    </div>
+
+    <!-- Grid of Services Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div
+        *ngFor="let s of services"
+        class="service-card flex flex-col justify-between p-5 rounded-xl border transition-all duration-200"
+        style="background: var(--card-bg); border-color: var(--app-border);"
+      >
+        <div>
+          <!-- Service Card Header -->
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div class="flex items-center gap-3">
+              <div
+                class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm"
+                [style.background]="s.bgGradient"
+              >
+                <i [class]="s.icon" class="text-lg"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-bold" style="color: var(--app-text)">
+                  {{ s.name }}
+                </h3>
+                <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
+                  {{ s.category }}
+                </span>
+              </div>
+            </div>
+            <p-tag
+              [value]="s.statusLabel"
+              [severity]="s.badgeSeverity"
+              [rounded]="true"
+            ></p-tag>
+          </div>
+
+          <!-- Description -->
+          <p class="text-xs leading-relaxed mb-4" style="color: var(--app-text-secondary)">
+            {{ s.description }}
+          </p>
+
+          <!-- Key Features Included -->
+          <div class="space-y-1.5 mb-4">
+            <span class="text-[10px] font-bold uppercase tracking-wider block" style="color: var(--app-text-muted)">
+              Included Capabilities
+            </span>
+            <div
+              *ngFor="let feat of s.features"
+              class="flex items-center gap-2 text-xs"
+              style="color: var(--app-text)"
+            >
+              <i class="pi pi-check text-[10px] text-emerald-500"></i>
+              <span>{{ feat }}</span>
+            </div>
+          </div>
+
+          <!-- Config / Metadata Box -->
+          <div
+            *ngIf="s.configDetails"
+            class="p-2.5 rounded-lg text-xs space-y-1 mb-4"
+            style="background: var(--app-bg); border: 1px solid var(--app-border-light);"
+          >
+            <div *ngIf="s.configDetails.accountName" class="flex justify-between">
+              <span style="color: var(--app-text-muted)">Account:</span>
+              <span class="font-medium" style="color: var(--app-text)">{{ s.configDetails.accountName }}</span>
+            </div>
+            <div *ngIf="s.configDetails.displayNumber" class="flex justify-between">
+              <span style="color: var(--app-text-muted)">Number:</span>
+              <span class="font-mono font-medium" style="color: var(--app-text)">{{ s.configDetails.displayNumber }}</span>
+            </div>
+            <div *ngIf="s.configDetails.accountHandle" class="flex justify-between">
+              <span style="color: var(--app-text-muted)">Handle:</span>
+              <span class="font-medium" style="color: var(--app-text)">{{ s.configDetails.accountHandle }}</span>
+            </div>
+            <div *ngIf="s.configDetails.extraNote" class="flex justify-between">
+              <span style="color: var(--app-text-muted)">Details:</span>
+              <span class="font-medium truncate max-w-[180px]" [title]="s.configDetails.extraNote" style="color: var(--app-text)">
+                {{ s.configDetails.extraNote }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Footer Actions -->
+        <div class="pt-3 border-t flex items-center justify-between" style="border-color: var(--app-border);">
+          <span class="text-xs font-semibold" [style.color]="s.brandColor">
+            ● Provisioned
+          </span>
+          <div class="flex items-center gap-1">
+            <button
+              pButton
+              icon="pi pi-copy"
+              class="p-button-text p-button-sm p-button-secondary"
+              pTooltip="Copy Service ID"
+              (click)="copySnippet(s.id, s.name)"
+            ></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Details & Automation Parameters Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Company Profile Details Card -->
+    <div class="card-base p-5">
+      <div class="flex items-center justify-between mb-4 pb-3 border-b border-solid" style="border-color: var(--app-border)">
+        <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--app-text)">
+          <i class="pi pi-building text-indigo-500"></i> Organization Profile
+        </h3>
+        <p-button
+          icon="pi pi-pencil"
+          label="Edit"
+          [text]="true"
+          size="small"
+          (onClick)="editCompany()"
+        ></p-button>
+      </div>
+
+      <div class="space-y-3 text-sm">
+        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
+          <span style="color: var(--app-text-muted)">Company Name</span>
+          <span class="font-semibold" style="color: var(--app-text)">{{ company.name }}</span>
+        </div>
+        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
+          <span style="color: var(--app-text-muted)">Billing / Admin Email</span>
+          <span class="font-mono" style="color: var(--app-text)">{{ company.email }}</span>
+        </div>
+        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
+          <span style="color: var(--app-text-muted)">Phone Contact</span>
+          <span class="font-mono" style="color: var(--app-text)">{{ company.phone_number || 'Not Provided' }}</span>
+        </div>
+        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
+          <span style="color: var(--app-text-muted)">Created Date</span>
+          <span style="color: var(--app-text)">{{ company.created_at | date:'mediumDate' }}</span>
+        </div>
+        <div class="py-1">
+          <span class="text-xs font-semibold uppercase tracking-wider block mb-1" style="color: var(--app-text-muted)">
+            Description / Mission
+          </span>
+          <p class="text-xs leading-relaxed" style="color: var(--app-text-secondary)">
+            {{ company.description || 'No specific description recorded for this enterprise workspace.' }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Automation & Service Tuning Card -->
+    <div class="card-base p-5">
+      <div class="flex items-center justify-between mb-4 pb-3 border-b border-solid" style="border-color: var(--app-border)">
+        <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--app-text)">
+          <i class="pi pi-sliders-h text-purple-500"></i> AI Engine & Policy Rules
+        </h3>
+        <span class="text-xs font-semibold text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">
+          Active Policies
+        </span>
+      </div>
+
+      <div class="space-y-4 text-sm" *ngIf="companySettings">
+        <!-- Handoff Threshold -->
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+              Human Handoff Threshold
+            </span>
+            <span class="text-[11px]" style="color: var(--app-text-muted)">
+              Confidence level below which queries route to human specialist
+            </span>
+          </div>
+          <span class="font-bold text-sm text-indigo-500">
+            {{ companySettings.handoff_threshold }}%
+          </span>
+        </div>
+
+        <!-- Top K Retrieval -->
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+              RAG Vector Retrieval (Top-K)
+            </span>
+            <span class="text-[11px]" style="color: var(--app-text-muted)">
+              Number of knowledge chunks supplied to LLM context
+            </span>
+          </div>
+          <span class="font-bold text-sm" style="color: var(--app-text)">
+            {{ companySettings.retrieval_top_k }} chunks
+          </span>
+        </div>
+
+        <!-- Auto Hot Lead Calling -->
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+              Auto-Dial Hot Leads
+            </span>
+            <span class="text-[11px]" style="color: var(--app-text-muted)">
+              Automatically trigger AI Voice dialler on qualified leads
+            </span>
+          </div>
+          <p-tag
+            [value]="companySettings.auto_call_on_hot_lead ? 'Enabled' : 'Disabled'"
+            [severity]="companySettings.auto_call_on_hot_lead ? 'success' : 'secondary'"
+            [rounded]="true"
+          ></p-tag>
+        </div>
+
+        <!-- Website Widget Code Snippet -->
+        <div class="pt-2">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-semibold" style="color: var(--app-text)">
+              Website Embed Script
+            </span>
+            <button
+              pButton
+              icon="pi pi-copy"
+              label="Copy Snippet"
+              class="p-button-text p-button-sm text-xs"
+              (click)="copySnippet(getWidgetEmbedSnippet(), 'Widget Script')"
+            ></button>
+          </div>
+          <pre
+            class="p-2.5 rounded-lg text-[11px] font-mono overflow-x-auto select-all"
+            style="background: var(--app-bg); border: 1px solid var(--app-border); color: var(--app-text-secondary);"
+          >{{ getWidgetEmbedSnippet() }}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

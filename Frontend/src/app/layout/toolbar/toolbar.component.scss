@@ -1,0 +1,14 @@
+:host {
+  display: block;
+}
+
+::ng-deep .search-dialog .p-dialog {
+  border-radius: 1rem !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid var(--card-border) !important;
+  overflow: hidden;
+}
+
+::ng-deep .search-dialog .p-dialog-content {
+  padding: 0 !important;
+}

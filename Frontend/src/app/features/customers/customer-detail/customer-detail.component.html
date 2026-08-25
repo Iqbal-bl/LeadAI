@@ -1,0 +1,144 @@
+<div *ngIf="loading" class="flex items-center justify-center py-20">
+  <p-progressSpinner strokeWidth="3" [style]="{ width: '50px', height: '50px' }"></p-progressSpinner>
+</div>
+
+<div *ngIf="!loading && customer">
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-6">
+    <p-button icon="pi pi-arrow-left" [rounded]="true" [text]="true" severity="secondary" (onClick)="goBack()"></p-button>
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold" style="color: var(--app-text);">{{ customer.name }}</h1>
+      <p class="text-sm" style="color: var(--app-text-muted);">{{ customer.company || 'No company' }}</p>
+    </div>
+    <p-button label="Send Message" icon="pi pi-send" (onClick)="showMessageForm = true"></p-button>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left: Info -->
+    <div class="lg:col-span-2 flex flex-col gap-4">
+      <!-- Basic Info Card -->
+      <div class="card-base p-5">
+        <h2 class="text-base font-semibold mb-4" style="color: var(--app-text);">Customer Details</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Stage</label>
+            <p class="text-sm font-medium mt-1 capitalize" style="color: var(--app-text);">{{ customer.stage }}</p>
+          </div>
+          <div>
+            <label class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Status</label>
+            <p class="text-sm font-medium mt-1 capitalize" style="color: var(--app-text);">{{ customer.status }}</p>
+          </div>
+          <div>
+            <label class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Owner</label>
+            <p class="text-sm mt-1" style="color: var(--app-text);">{{ customer.owner_name || '—' }}</p>
+          </div>
+          <div>
+            <label class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Follow-up Due</label>
+            <p class="text-sm mt-1" [style.color]="customer.follow_up_due ? '#f59e0b' : 'var(--app-text-muted)'">
+              {{ customer.follow_up_due || 'None scheduled' }}
+            </p>
+          </div>
+        </div>
+        <!-- Tags -->
+        <div class="mt-4" *ngIf="customer.tags?.length">
+          <label class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Tags</label>
+          <div class="flex flex-wrap gap-1 mt-1">
+            <span *ngFor="let tag of customer.tags" class="px-2 py-0.5 rounded text-xs"
+                  style="background: var(--app-surface-alt); color: #6366f1;">{{ tag }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contact Information -->
+      <div class="card-base p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-semibold" style="color: var(--app-text);">Contact Information</h2>
+          <p-button *ngIf="!revealedPhone && !revealedEmail" label="Reveal Contact" icon="pi pi-eye"
+                    severity="warn" [outlined]="true" [loading]="revealLoading"
+                    (onClick)="revealContact()"></p-button>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Phone</label>
+            <p class="text-sm font-medium mt-1" style="color: var(--app-text);">
+              {{ revealedPhone || customer.phone_masked || '—' }}
+            </p>
+          </div>
+          <div>
+            <label class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Email</label>
+            <p class="text-sm font-medium mt-1" style="color: var(--app-text);">
+              {{ revealedEmail || customer.email_masked || '—' }}
+            </p>
+          </div>
+        </div>
+        <p *ngIf="!revealedPhone && !revealedEmail" class="text-xs mt-3"
+           style="color: var(--app-text-muted);">
+          <i class="pi pi-lock mr-1"></i>Contact details are masked. Click "Reveal Contact" to view — this action is audit-logged.
+        </p>
+      </div>
+    </div>
+
+    <!-- Right: Consent & Messaging -->
+    <div class="flex flex-col gap-4">
+      <!-- Consent Card -->
+      <div class="card-base p-5">
+        <h2 class="text-base font-semibold mb-4" style="color: var(--app-text);">Consent & Permissions</h2>
+        <div class="flex flex-col gap-3">
+          <div *ngFor="let ch of channelOptions" class="flex items-center justify-between p-2 rounded-lg"
+               style="background: var(--app-surface-alt);">
+            <div class="flex items-center gap-2">
+              <i [class]="ch.icon" class="text-lg" [style.color]="hasConsent(ch.value) ? '#22c55e' : '#6b7280'"></i>
+              <span class="text-sm" style="color: var(--app-text);">{{ ch.label }}</span>
+            </div>
+            <p-tag [value]="hasConsent(ch.value) ? 'Opted In' : 'Not Opted'"
+                   [severity]="hasConsent(ch.value) ? 'success' : 'secondary'"
+                   [rounded]="true" class="text-xs"></p-tag>
+          </div>
+          <div *ngIf="customer.consent?.do_not_disturb"
+               class="flex items-center gap-2 p-2 rounded-lg" style="background: rgba(239,68,68,0.1);">
+            <i class="pi pi-ban text-red-400"></i>
+            <span class="text-sm font-medium text-red-400">Do Not Disturb — Active</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Message Form Dialog -->
+  <p-dialog header="Send Message" [(visible)]="showMessageForm" [modal]="true"
+            [style]="{ width: '500px' }" [draggable]="false">
+    <div class="flex flex-col gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-2" style="color: var(--app-text);">Channel</label>
+        <div class="flex gap-2">
+          <div *ngFor="let ch of channelOptions"
+               class="flex-1 p-3 rounded-lg cursor-pointer border-2 text-center transition-all duration-200"
+               [style.border-color]="messageChannel === ch.value ? '#6366f1' : 'var(--app-border)'"
+               [style.background]="messageChannel === ch.value ? 'rgba(99,102,241,0.1)' : 'transparent'"
+               [style.opacity]="hasConsent(ch.value) ? 1 : 0.4"
+               [style.pointer-events]="hasConsent(ch.value) ? 'auto' : 'none'"
+               [pTooltip]="!hasConsent(ch.value) ? 'Customer has not opted in for ' + ch.label : ''"
+               (click)="hasConsent(ch.value) && (messageChannel = ch.value)">
+            <i [class]="ch.icon" class="text-lg mb-1" style="color: var(--app-text);"></i>
+            <p class="text-xs" style="color: var(--app-text-muted);">{{ ch.label }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Message</label>
+        <textarea pInputText [(ngModel)]="messageText" [rows]="4" class="w-full" placeholder="Type your message..."></textarea>
+      </div>
+
+      <div *ngIf="!hasConsent(messageChannel)" class="p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+        <i class="pi pi-exclamation-triangle mr-2"></i>Customer has not consented to receive messages via {{ messageChannel }}. This message will be rejected.
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <p-button label="Cancel" [text]="true" severity="secondary" (onClick)="showMessageForm = false"></p-button>
+        <p-button label="Send" icon="pi pi-send" [disabled]="!messageText.trim() || !hasConsent(messageChannel)"
+                  [loading]="sendingMessage" (onClick)="sendMessage()"></p-button>
+      </div>
+    </div>
+  </p-dialog>
+</div>

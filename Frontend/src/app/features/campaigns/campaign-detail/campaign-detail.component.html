@@ -1,0 +1,146 @@
+<div *ngIf="loading" class="flex items-center justify-center py-20">
+  <p-progressSpinner strokeWidth="3" [style]="{ width: '50px', height: '50px' }"></p-progressSpinner>
+</div>
+
+<div *ngIf="!loading && campaign">
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-6">
+    <p-button icon="pi pi-arrow-left" [rounded]="true" [text]="true" severity="secondary" (onClick)="goBack()"></p-button>
+    <div class="flex-1">
+      <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">{{ campaign.name }}</h1>
+      <div class="flex items-center gap-2 mt-1">
+        <p-tag [value]="campaign.status" [severity]="campaign.status === 'running' ? 'success' : campaign.status === 'paused' ? 'warn' : campaign.status === 'cancelled' || campaign.status === 'failed' ? 'danger' : 'secondary'" [rounded]="true"></p-tag>
+        <span class="text-sm capitalize" style="color: var(--app-text-muted);">{{ campaign.channel }} · {{ campaign.kind }} · {{ campaign.purpose }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Counters -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6" *ngIf="campaign.counters">
+    <div class="card-base p-4 text-center">
+      <p class="text-2xl font-bold" style="color: var(--app-text);">{{ campaign.counters.total | number }}</p>
+      <p class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Total</p>
+    </div>
+    <div class="card-base p-4 text-center">
+      <p class="text-2xl font-bold" style="color: #3b82f6;">{{ campaign.counters.sent | number }}</p>
+      <p class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Sent</p>
+    </div>
+    <div class="card-base p-4 text-center">
+      <p class="text-2xl font-bold text-green-500">{{ campaign.counters.delivered | number }}</p>
+      <p class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Delivered</p>
+    </div>
+    <div class="card-base p-4 text-center">
+      <p class="text-2xl font-bold text-red-400">{{ campaign.counters.failed | number }}</p>
+      <p class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Failed</p>
+    </div>
+    <div class="card-base p-4 text-center">
+      <p class="text-2xl font-bold" style="color: #8b5cf6;">{{ campaign.counters.replied | number }}</p>
+      <p class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">Replied</p>
+    </div>
+  </div>
+
+  <!-- Progress Bar -->
+  <div class="mb-6" *ngIf="campaign.status === 'running' || getProgressPercent() > 0">
+    <p-progressBar [value]="getProgressPercent()" [style]="{ height: '10px' }"></p-progressBar>
+    <p class="text-xs mt-1 text-right" style="color: var(--app-text-muted);">{{ getProgressPercent() }}% processed</p>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="flex flex-wrap gap-2 mb-6">
+    <p-button *ngIf="campaign.status === 'draft'" label="Build Audience" icon="pi pi-cog" severity="info"
+              (onClick)="buildCampaign()"></p-button>
+
+    <p-button *ngIf="campaign.status === 'ready'" label="Start Campaign" icon="pi pi-send"
+              [disabled]="!canSend"
+              [pTooltip]="!canSend ? 'You need the campaign.send permission to start campaigns' : ''"
+              (onClick)="startCampaign()"></p-button>
+
+    <p-button *ngIf="campaign.status === 'running'" label="Pause" icon="pi pi-pause" severity="warn"
+              (onClick)="pauseCampaign()"></p-button>
+
+    <p-button *ngIf="campaign.status === 'paused'" label="Resume" icon="pi pi-play" severity="success"
+              (onClick)="resumeCampaign()"></p-button>
+
+    <p-button *ngIf="campaign.status === 'running' || campaign.status === 'paused'"
+              label="Cancel" icon="pi pi-times" severity="danger" [outlined]="true"
+              (onClick)="cancelCampaign()"></p-button>
+
+    <p-button *ngIf="campaign?.counters && campaign.counters.failed > 0"
+              label="Retry Failed" icon="pi pi-replay" severity="warn" [outlined]="true"
+              (onClick)="retryFailed()"></p-button>
+  </div>
+
+  <!-- Building Status Panel -->
+  <div *ngIf="campaign?.status === 'building'" class="card-base p-8 text-center mb-6 flex flex-col items-center justify-center gap-3">
+    <p-progressSpinner strokeWidth="3" [style]="{ width: '40px', height: '40px' }"></p-progressSpinner>
+    <h3 class="text-base font-semibold" style="color: var(--app-text);">Resolving Audience & Generating Recipients...</h3>
+    <p class="text-sm max-w-md mx-auto" style="color: var(--app-text-muted);">We are resolving the contact lists/leads database and materialising sendable messages for each recipient. This page will update automatically.</p>
+  </div>
+
+  <!-- Preview Section -->
+  <div *ngIf="preview" class="card-base p-5 mb-6">
+    <h2 class="text-lg font-semibold mb-4" style="color: var(--app-text);">
+      <i class="pi pi-eye mr-2" style="color: #6366f1;"></i>Preview
+    </h2>
+
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <div class="text-center">
+        <p class="text-xl font-bold" style="color: var(--app-text);">{{ preview.recipient_count | number }}</p>
+        <p class="text-xs" style="color: var(--app-text-muted);">Recipients</p>
+      </div>
+      <div class="text-center">
+        <p class="text-xl font-bold" style="color: var(--app-text);">~{{ preview.eta_minutes }} min</p>
+        <p class="text-xs" style="color: var(--app-text-muted);">Estimated Time</p>
+      </div>
+      <div class="text-center">
+        <p class="text-xl font-bold" style="color: var(--app-text);">{{ preview.warnings.length }}</p>
+        <p class="text-xs" style="color: var(--app-text-muted);">Warnings</p>
+      </div>
+    </div>
+
+    <!-- Warnings -->
+    <div *ngFor="let w of preview.warnings" class="p-3 rounded-lg mb-2 text-sm flex items-start gap-2"
+         [style.background]="getWarningSeverity(w.severity)" [style.color]="getWarningColor(w.severity)">
+      <i class="pi pi-exclamation-triangle mt-0.5"></i>
+      <span>{{ w.message }}</span>
+    </div>
+
+    <!-- Sample Messages -->
+    <div *ngIf="preview.sample_messages && preview.sample_messages.length > 0" class="mt-4">
+      <h3 class="text-sm font-semibold mb-2" style="color: var(--app-text);">Sample Messages</h3>
+      <div *ngFor="let msg of preview.sample_messages; let i = index" class="p-3 rounded-lg mb-2"
+           style="background: var(--app-surface-alt); border: 1px solid var(--app-border);">
+        <p class="text-xs font-medium mb-1" style="color: var(--app-text-muted);">To: {{ msg.recipient }}</p>
+        <p class="text-sm" style="color: var(--app-text);">{{ msg.rendered_body }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Failed Recipients -->
+  <div *ngIf="failedRecipients.length > 0" class="card-base overflow-hidden">
+    <div class="p-4 flex items-center gap-2" style="border-bottom: 1px solid var(--app-border);">
+      <i class="pi pi-exclamation-triangle text-red-400"></i>
+      <h2 class="text-base font-semibold" style="color: var(--app-text);">Failed Recipients</h2>
+    </div>
+    <p-table [value]="failedRecipients" [paginator]="true" [rows]="10" [rowHover]="true">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Recipient</th>
+          <th>Name</th>
+          <th>Reason</th>
+          <th>Sent At</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-r>
+        <tr>
+          <td><span class="font-mono text-sm" style="color: var(--app-text);">{{ r.identifier_masked }}</span></td>
+          <td><span class="text-sm" style="color: var(--app-text);">{{ r.name || '—' }}</span></td>
+          <td><span class="text-sm text-red-400">{{ r.failure_reason }}</span></td>
+          <td><span class="text-sm" style="color: var(--app-text-muted);">{{ r.sent_at || '—' }}</span></td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>
+
+<p-confirmDialog></p-confirmDialog>

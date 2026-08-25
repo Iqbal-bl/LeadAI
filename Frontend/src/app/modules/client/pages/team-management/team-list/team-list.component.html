@@ -1,0 +1,306 @@
+<!-- Page Header -->
+<div
+  class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
+>
+  <div>
+    <h1
+      class="text-2xl font-bold tracking-tight"
+      style="color: var(--app-text)"
+    >
+      Team Management
+    </h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+      Manage roles, permissions, and agent assignments
+    </p>
+  </div>
+  <div class="flex items-center gap-3">
+    <p-button
+      *appHasPermission="PERMISSIONS.ROLE_MANAGE"
+      label="Add Member"
+      icon="pi pi-user-plus"
+      size="small"
+      (click)="openAddDialog()"
+      [style]="{
+        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+        border: 'none',
+      }"
+    ></p-button>
+  </div>
+</div>
+
+<!-- DataTable -->
+<div class="card-base overflow-hidden">
+  <p-table
+    #dtTeam
+    [value]="team"
+    [paginator]="true"
+    [rows]="10"
+    [rowHover]="true"
+    dataKey="id"
+    [globalFilterFields]="['name', 'email', 'role', 'status']"
+    [tableStyle]="{ 'min-width': '65rem' }"
+  >
+    <ng-template pTemplate="caption">
+      <div
+        class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-2"
+      >
+        <p-iconfield>
+          <p-inputicon styleClass="pi pi-search" />
+          <input
+            pInputText
+            type="text"
+            placeholder="Search team..."
+            (input)="dtTeam.filterGlobal($any($event.target).value, 'contains')"
+            class="text-sm"
+          />
+        </p-iconfield>
+      </div>
+    </ng-template>
+
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="name" style="min-width: 14rem">
+          Member <p-sortIcon field="name"></p-sortIcon>
+        </th>
+        <th pSortableColumn="role" style="min-width: 9rem">
+          Role <p-sortIcon field="role"></p-sortIcon>
+        </th>
+        <th pSortableColumn="status" style="min-width: 8rem">
+          Status <p-sortIcon field="status"></p-sortIcon>
+        </th>
+        <th>Phone</th>
+        <th pSortableColumn="assignedLeads">
+          Assigned Leads <p-sortIcon field="assignedLeads"></p-sortIcon>
+        </th>
+        <th pSortableColumn="lastActive">
+          Last Active <p-sortIcon field="lastActive"></p-sortIcon>
+        </th>
+        <th style="width: 5rem">Actions</th>
+      </tr>
+    </ng-template>
+
+    <ng-template pTemplate="body" let-member>
+      <tr>
+        <td>
+          <div class="flex items-center gap-3">
+            <p-avatar
+              [label]="getInitials(member.name)"
+              shape="circle"
+              size="normal"
+              [style]="{
+                'background-color': getAvatarColor(member.id),
+                color: 'white',
+                'font-weight': '600',
+                'font-size': '0.75rem',
+              }"
+            ></p-avatar>
+            <div>
+              <div class="text-sm font-semibold" style="color: var(--app-text)">
+                {{ member.name }}
+              </div>
+              <div class="text-xs" style="color: var(--app-text-muted)">
+                {{ member.email }}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <p-tag
+            [value]="member.role"
+            [severity]="getRoleSeverity(member.role)"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+        <td>
+          <p-tag
+            [value]="member.status"
+            [severity]="getStatusSeverity(member.status)"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+        <td>
+          <span class="text-sm" style="color: var(--app-text-secondary)">{{
+            member.phone
+          }}</span>
+        </td>
+        <td>
+          <span
+            class="text-sm font-semibold"
+            style="color: var(--app-text-secondary)"
+            >{{ member.assignedLeads }}</span
+          >
+        </td>
+        <td>
+          <span class="text-xs" style="color: var(--app-text-muted)">{{
+            member.lastActive
+          }}</span>
+        </td>
+        <td>
+          <p-button
+            icon="pi pi-ellipsis-v"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            (click)="teamMenu.toggle($event)"
+          ></p-button>
+          <p-menu
+            #teamMenu
+            [popup]="true"
+            appendTo="body"
+            [model]="[
+              {
+                label: 'Edit Member',
+                icon: 'pi pi-user-edit',
+                command: editMember.bind(this, member),
+              },
+              { label: 'Reassign Leads', icon: 'pi pi-arrow-right-left' },
+              { separator: true },
+              {
+                label: 'Remove',
+                icon: 'pi pi-trash',
+                command: deleteMember.bind(this, member),
+              },
+            ]"
+          ></p-menu>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<!-- Add Team Member Dialog -->
+<p-dialog
+  [header]="isEditMode ? 'Edit Team Member' : 'Add Team Member'"
+  [(visible)]="showAddDialog"
+  [modal]="true"
+  [style]="{ width: '520px' }"
+>
+  <div class="py-2 space-y-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label
+          class="text-xs font-medium block mb-1"
+          style="color: var(--app-text-muted)"
+          >Full Name *</label
+        >
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="newMember.name"
+          class="w-full text-sm"
+          placeholder="John Doe"
+        />
+      </div>
+      <div>
+        <label
+          class="text-xs font-medium block mb-1"
+          style="color: var(--app-text-muted)"
+          >Email Address *</label
+        >
+        <input
+          pInputText
+          type="email"
+          [(ngModel)]="newMember.email"
+          class="w-full text-sm"
+          placeholder="john@leadai.com"
+          [disabled]="isEditMode"
+        />
+      </div>
+    </div>
+
+    <div *ngIf="!isEditMode" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label
+          class="text-xs font-medium block mb-1"
+          style="color: var(--app-text-muted)"
+          >Password</label
+        >
+        <p-password
+          [(ngModel)]="newMember.password"
+          [toggleMask]="true"
+          [feedback]="false"
+          styleClass="w-full"
+          inputStyleClass="w-full text-sm"
+        ></p-password>
+      </div>
+      <div>
+        <label
+          class="text-xs font-medium block mb-1"
+          style="color: var(--app-text-muted)"
+          >Confirm Password</label
+        >
+        <p-password
+          [(ngModel)]="newMember.confirmPassword"
+          [toggleMask]="true"
+          [feedback]="false"
+          styleClass="w-full"
+          inputStyleClass="w-full text-sm"
+        ></p-password>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div>
+        <label
+          class="text-xs font-medium block mb-1"
+          style="color: var(--app-text-muted)"
+          >Role</label
+        >
+        <p-dropdown
+          [options]="roles"
+          [(ngModel)]="newMember.role"
+          optionLabel="label"
+          optionValue="value"
+          [style]="{ width: '100%' }"
+          appendTo="body"
+        ></p-dropdown>
+      </div>
+      <div>
+        <label
+          class="text-xs font-medium block mb-1"
+          style="color: var(--app-text-muted)"
+          >Status</label
+        >
+        <p-dropdown
+          [options]="statuses"
+          [(ngModel)]="newMember.status"
+          optionLabel="label"
+          optionValue="value"
+          [style]="{ width: '100%' }"
+          appendTo="body"
+        ></p-dropdown>
+      </div>
+      <div>
+        <label
+          class="text-xs font-medium block mb-1"
+          style="color: var(--app-text-muted)"
+          >Phone Number</label
+        >
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="newMember.phone"
+          class="w-full text-sm"
+          placeholder="+1 (555) 123-4567"
+        />
+      </div>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button
+      label="Cancel"
+      [text]="true"
+      (click)="showAddDialog = false"
+    ></p-button>
+    <p-button
+      [label]="isEditMode ? 'Save Changes' : 'Save Member'"
+      icon="pi pi-check"
+      (click)="saveMember()"
+      [style]="{
+        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+        border: 'none',
+      }"
+    ></p-button>
+  </ng-template>
+</p-dialog>

@@ -1,0 +1,410 @@
+<p-confirmDialog></p-confirmDialog>
+
+<div class="mb-6">
+  <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">Channel Connections</h1>
+  <p class="text-sm mt-0.5" style="color: var(--app-text-muted);">Connect, configure, and manage WhatsApp, Messenger, Instagram & LinkedIn channels</p>
+</div>
+
+<!-- LinkedIn Company Connection Card -->
+<div class="card-base p-5 mb-6 border transition-all duration-200"
+     [style.border-color]="linkedinStatus?.connected ? 'rgba(10, 102, 194, 0.4)' : 'var(--app-border)'"
+     [style.background]="linkedinStatus?.connected ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.08), rgba(0, 65, 130, 0.04))' : 'var(--app-surface)'">
+  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div class="flex items-center gap-3.5">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+           style="background: linear-gradient(135deg, #0A66C2, #004182);">
+        <i class="pi pi-linkedin text-2xl"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <h3 class="text-base font-semibold" style="color: var(--app-text);">Company LinkedIn Profile</h3>
+          <p-tag *ngIf="linkedinStatus?.connected" value="Connected" severity="success" [rounded]="true"></p-tag>
+          <p-tag *ngIf="linkedinStatus && !linkedinStatus.connected" value="Not Connected" severity="secondary" [rounded]="true"></p-tag>
+        </div>
+        <p *ngIf="linkedinStatus?.connected" class="text-xs font-mono mt-1" style="color: var(--app-text-secondary);">
+          Member: <span class="font-bold" style="color: var(--app-text);">{{ linkedinStatus?.person_urn }}</span>
+          <span *ngIf="linkedinStatus?.access_token_valid" class="ml-2 text-emerald-400">● Token Valid</span>
+          <span *ngIf="linkedinStatus?.has_refresh_token" class="ml-2 text-blue-400">● Auto-Refresh Enabled</span>
+        </p>
+        <p *ngIf="!linkedinStatus?.connected" class="text-xs mt-1" style="color: var(--app-text-muted);">
+          Link your company's LinkedIn Profile to schedule, manage, and publish company updates.
+        </p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
+      <p-button
+        *ngIf="!linkedinStatus?.connected"
+        label="{{ linkedinLoading ? 'Waiting for Consent...' : 'Connect LinkedIn' }}"
+        icon="{{ linkedinLoading ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
+        iconPos="right"
+        [loading]="linkedinLoading"
+        (onClick)="connectLinkedIn()"
+        [rounded]="true"
+        [style]="{ 'background': '#0A66C2', 'border': 'none' }"
+      ></p-button>
+
+      <p-button
+        *ngIf="linkedinStatus?.connected"
+        label="Disconnect"
+        icon="pi pi-power-off"
+        severity="danger"
+        [outlined]="true"
+        [rounded]="true"
+        size="small"
+        (onClick)="disconnectLinkedIn()"
+      ></p-button>
+    </div>
+  </div>
+</div>
+
+<!-- Status Tiles -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6" *ngIf="channelStatus">
+  <div class="card-base p-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+        <i class="pi pi-link text-white text-lg"></i>
+      </div>
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wider" style="color: var(--app-text-muted);">Total Channels</p>
+        <p class="text-xl font-bold" style="color: var(--app-text);">{{ channelStatus.total_channels ?? channels.length }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="card-base p-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
+        <i class="pi pi-check-circle text-white text-lg"></i>
+      </div>
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wider" style="color: var(--app-text-muted);">Active</p>
+        <p class="text-xl font-bold" style="color: var(--app-text);">{{ channelStatus.active_channels ?? 0 }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="card-base p-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+        <i class="pi pi-users text-white text-lg"></i>
+      </div>
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wider" style="color: var(--app-text-muted);">Contacts</p>
+        <p class="text-xl font-bold" style="color: var(--app-text);">{{ channelStatus.total_contacts ?? 0 }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="card-base p-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+        <i class="pi pi-envelope text-white text-lg"></i>
+      </div>
+      <div>
+        <p class="text-xs font-medium uppercase tracking-wider" style="color: var(--app-text-muted);">Messages Today</p>
+        <p class="text-xl font-bold" style="color: var(--app-text);">{{ channelStatus.messages_today ?? 0 }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Actions Bar -->
+<div class="flex justify-between items-center mb-4">
+  <div class="flex items-center gap-2">
+    <p-button icon="pi pi-refresh" [rounded]="true" [text]="true" severity="secondary"
+              pTooltip="Refresh Channels" (onClick)="loadChannels(); loadStatus()"></p-button>
+  </div>
+  <p-button label="Connect Channel" icon="pi pi-plus" (onClick)="openWizard()" [rounded]="true"></p-button>
+</div>
+
+<!-- Channel Table -->
+<div class="card-base overflow-hidden">
+  <p-table [value]="channels" [loading]="loading" [paginator]="true" [rows]="10" [rowHover]="true" dataKey="id"
+           [tableStyle]="{ 'min-width': '55rem' }">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>Channel</th>
+        <th>Display Name & ID</th>
+        <th>Status</th>
+        <th>Credentials</th>
+        <th>Auto-Reply</th>
+        <th>Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-channel>
+      <tr>
+        <td>
+          <div class="flex items-center gap-2">
+            <i [class]="getChannelIcon(channel.channel)" [style.color]="getChannelColor(channel.channel)" class="text-xl"></i>
+            <div>
+              <span class="font-semibold capitalize block" style="color: var(--app-text);">{{ channel.channel }}</span>
+              <span *ngIf="channel.provider" class="text-xs uppercase tracking-wider" style="color: var(--app-text-muted);">{{ channel.provider }}</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div>
+            <span class="font-medium block" style="color: var(--app-text);">{{ channel.name || channel.display_name || '—' }}</span>
+            <span class="text-xs font-mono" style="color: var(--app-text-muted);">
+              {{ channel.display_number || channel.external_id || 'ID: ' + channel.id }}
+            </span>
+          </div>
+        </td>
+        <td>
+          <div class="flex items-center gap-2">
+            <p-inputSwitch [(ngModel)]="channel.is_active" (onChange)="toggleActiveStatus(channel)"
+                           pTooltip="Toggle active status"></p-inputSwitch>
+            <span class="text-xs font-medium" [style.color]="channel.is_active ? 'var(--app-success, #22c55e)' : 'var(--app-text-muted)'">
+              {{ channel.is_active ? 'Active' : 'Inactive' }}
+            </span>
+          </div>
+        </td>
+        <td>
+          <div class="flex flex-col gap-1">
+            <p-tag [value]="channel.has_access_token ? 'Token Configured' : 'Token Missing'"
+                   [severity]="channel.has_access_token ? 'success' : 'danger'" [rounded]="true"></p-tag>
+            <span *ngIf="channel.has_app_secret" class="text-xs" style="color: var(--app-text-muted);">
+              <i class="pi pi-shield text-xs mr-1"></i>Secret Set
+            </span>
+          </div>
+        </td>
+        <td>
+          <div class="flex items-center gap-2">
+            <p-inputSwitch [(ngModel)]="channel.auto_reply" (onChange)="toggleAutoReply(channel)"
+                           pTooltip="Toggle automated replies"></p-inputSwitch>
+          </div>
+        </td>
+        <td (click)="$event.stopPropagation()">
+          <p-button
+            icon="pi pi-ellipsis-v"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            pTooltip="Actions"
+            (click)="actionMenu.toggle($event)"
+          ></p-button>
+          <p-menu
+            #actionMenu
+            [popup]="true"
+            appendTo="body"
+            [model]="getChannelMenuItems(channel)"
+          ></p-menu>
+        </td>
+
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="6">
+          <div class="flex flex-col items-center justify-center py-12 gap-3">
+            <i class="pi pi-link text-4xl" style="color: var(--app-text-muted);"></i>
+            <p class="text-lg font-medium" style="color: var(--app-text-muted);">No channels connected yet</p>
+            <p class="text-sm" style="color: var(--app-text-muted);">Click "Connect Channel" to set up WhatsApp, Messenger, Instagram, or LinkedIn</p>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<!-- Edit Channel Dialog -->
+<p-dialog header="Edit Channel Settings" [(visible)]="showEditDialog" [modal]="true" [closable]="true"
+          [style]="{ width: '600px', maxHeight: '90vh' }" (onHide)="closeEditDialog()" [draggable]="false">
+  <div *ngIf="editingChannel" class="flex flex-col gap-4">
+    <div class="flex items-center gap-2 p-3 rounded-xl mb-1" style="background: var(--app-surface-alt);">
+      <i [class]="getChannelIcon(editingChannel.channel)" [style.color]="getChannelColor(editingChannel.channel)" class="text-2xl"></i>
+      <div>
+        <span class="font-semibold capitalize block" style="color: var(--app-text);">{{ editingChannel.channel }} Channel</span>
+        <span class="text-xs font-mono" style="color: var(--app-text-muted);">ID: {{ editingChannel.id }}</span>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Display Name</label>
+      <input pInputText type="text" [(ngModel)]="editForm.name" placeholder="Channel display name" class="w-full" />
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Display Number</label>
+        <input pInputText type="text" [(ngModel)]="editForm.display_number" placeholder="e.g. +1 555-0199" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">API Version</label>
+        <input pInputText type="text" [(ngModel)]="editForm.api_version" placeholder="e.g. v21.0" class="w-full" />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Auto-Reply Script</label>
+        <p-dropdown appendTo="body" [options]="scripts" [(ngModel)]="editForm.script_id" optionValue="id" optionLabel="name"
+                    placeholder="Select auto-reply script" [showClear]="true" [style]="{ width: '100%' }"></p-dropdown>
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Default Language</label>
+        <input pInputText type="text" [(ngModel)]="editForm.default_language" placeholder="e.g. en" class="w-full" />
+      </div>
+    </div>
+
+    <!-- Credentials update (optional) -->
+    <div class="p-3.5 rounded-xl border flex flex-col gap-3" style="border-color: var(--app-border); background: var(--app-surface-alt);">
+      <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted);">Update Credentials (leave blank to keep existing)</span>
+      
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">New Access Token</label>
+        <input pInputText type="password" [(ngModel)]="editForm.access_token" placeholder="Enter new access token if updating" class="w-full" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">New App Secret</label>
+        <input pInputText type="password" [(ngModel)]="editForm.app_secret" placeholder="Enter new app secret if updating" class="w-full" />
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Verify Token</label>
+        <input pInputText type="text" [(ngModel)]="editForm.verify_token" placeholder="Custom verify token" class="w-full" />
+      </div>
+    </div>
+
+    <!-- Switches -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div class="flex items-center justify-between p-3 rounded-xl border" style="border-color: var(--app-border);">
+        <span class="text-sm font-medium" style="color: var(--app-text);">Active</span>
+        <p-inputSwitch [(ngModel)]="editForm.is_active"></p-inputSwitch>
+      </div>
+      <div class="flex items-center justify-between p-3 rounded-xl border" style="border-color: var(--app-border);">
+        <span class="text-sm font-medium" style="color: var(--app-text);">Auto-Reply</span>
+        <p-inputSwitch [(ngModel)]="editForm.auto_reply"></p-inputSwitch>
+      </div>
+    </div>
+
+    <div *ngIf="editError" class="p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+      <i class="pi pi-times-circle mr-2"></i>{{ editError }}
+    </div>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <p-button label="Cancel" [text]="true" severity="secondary" (onClick)="closeEditDialog()"></p-button>
+      <p-button label="Save Changes" icon="pi pi-check" [loading]="editLoading" (onClick)="saveEdit()"></p-button>
+    </div>
+  </div>
+</p-dialog>
+
+<!-- Send Test Message Dialog -->
+<p-dialog header="Send Test Message" [(visible)]="showTestDialog" [modal]="true" [closable]="true"
+          [style]="{ width: '550px', maxHeight: '90vh' }" (onHide)="closeTestDialog()" [draggable]="false">
+  <div *ngIf="testingChannel" class="flex flex-col gap-4">
+    <div class="p-3 rounded-xl flex items-center gap-2" style="background: var(--app-surface-alt);">
+      <i [class]="getChannelIcon(testingChannel.channel)" [style.color]="getChannelColor(testingChannel.channel)" class="text-xl"></i>
+      <div class="text-xs" style="color: var(--app-text-secondary);">
+        Sending test via <strong>{{ testingChannel.name || testingChannel.display_name || testingChannel.channel }}</strong>
+        <span *ngIf="testingChannel.display_number" class="ml-1">({{ testingChannel.display_number }})</span>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Recipient Phone Number / ID <span class="text-red-500">*</span></label>
+      <input pInputText type="text" [(ngModel)]="testForm.to" placeholder="e.g. +1234567890 or WhatsApp ID" class="w-full" />
+      <small class="text-xs mt-1 block" style="color: var(--app-text-muted);">Enter recipient phone number in international E.164 format.</small>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Message Text</label>
+      <input pInputText type="text" [(ngModel)]="testForm.message" placeholder="Message content" class="w-full" />
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Template Name <span class="text-xs" style="color: var(--app-text-muted);">(optional)</span></label>
+        <input pInputText type="text" [(ngModel)]="testForm.template_name" placeholder="e.g. hello_world" class="w-full" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium mb-1" style="color: var(--app-text-secondary);">Template Language</label>
+        <input pInputText type="text" [(ngModel)]="testForm.template_language" placeholder="en" class="w-full" />
+      </div>
+    </div>
+
+    <div class="p-3 rounded-lg text-xs" style="background: rgba(99, 102, 241, 0.08); color: var(--app-text-secondary); border: 1px solid rgba(99, 102, 241, 0.2);">
+      <i class="pi pi-info-circle mr-1" style="color: #6366f1;"></i>
+      <strong>WhatsApp 24-hour rule:</strong> A free-form test only reaches a number that has messaged you in the last 24 hours. Use an approved template name otherwise.
+    </div>
+
+    <div *ngIf="testError" class="p-3 rounded-lg text-sm" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+      <i class="pi pi-times-circle mr-2"></i>{{ testError }}
+    </div>
+
+    <div *ngIf="testSuccess" class="p-3 rounded-lg text-sm" style="background: rgba(34,197,94,0.1); color: #22c55e;">
+      <i class="pi pi-check-circle mr-2"></i>Test message sent successfully!
+    </div>
+
+    <div class="flex justify-end gap-2 pt-2">
+      <p-button label="Close" [text]="true" severity="secondary" (onClick)="closeTestDialog()"></p-button>
+      <p-button label="Send Test" icon="pi pi-send" [disabled]="!testForm.to.trim()" [loading]="testLoading" (onClick)="sendTest()"></p-button>
+    </div>
+  </div>
+</p-dialog>
+
+<!-- Webhook & Meta Details Dialog -->
+<p-dialog header="Webhook & Meta Configuration" [(visible)]="showWebhookDialog" [modal]="true" [closable]="true"
+          [style]="{ width: '620px', maxHeight: '90vh' }" (onHide)="closeWebhookInfo()" [draggable]="false">
+  <div *ngIf="webhookChannel" class="flex flex-col gap-4">
+    <div class="p-3.5 rounded-xl flex flex-col gap-3" style="background: var(--app-surface-alt);">
+      <div>
+        <label class="block text-xs font-medium mb-1 uppercase tracking-wider" style="color: var(--app-text-muted);">Webhook Callback URL</label>
+        <div class="flex items-center gap-2 p-2 rounded-lg" style="background: var(--app-bg); border: 1px solid var(--app-border);">
+          <code class="flex-1 text-sm break-all" style="color: var(--app-text);">{{ webhookChannel.webhook_url || 'https://concise-tick-cheerful.ngrok-free.app/api/leadai/channels/webhook' }}</code>
+          <p-button icon="pi pi-copy" [rounded]="true" [text]="true" severity="secondary"
+                    pTooltip="Copy URL" (onClick)="copyToClipboard(webhookChannel.webhook_url, 'Webhook URL')"></p-button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium mb-1 uppercase tracking-wider" style="color: var(--app-text-muted);">Verify Token</label>
+        <div class="flex items-center gap-2 p-2 rounded-lg" style="background: var(--app-bg); border: 1px solid var(--app-border);">
+          <code class="flex-1 text-sm font-mono" style="color: var(--app-text);">{{ webhookChannel.verify_token || '—' }}</code>
+          <p-button icon="pi pi-copy" [rounded]="true" [text]="true" severity="secondary"
+                    pTooltip="Copy Token" (onClick)="copyToClipboard(webhookChannel.verify_token, 'Verify Token')"></p-button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+      <div class="p-3 rounded-lg border" style="border-color: var(--app-border);">
+        <span class="block text-muted" style="color: var(--app-text-muted);">External ID</span>
+        <span class="font-mono font-medium" style="color: var(--app-text);">{{ webhookChannel.external_id }}</span>
+      </div>
+      <div class="p-3 rounded-lg border" style="border-color: var(--app-border);">
+        <span class="block text-muted" style="color: var(--app-text-muted);">API Version</span>
+        <span class="font-mono font-medium" style="color: var(--app-text);">{{ webhookChannel.api_version || 'v21.0' }}</span>
+      </div>
+      <div class="p-3 rounded-lg border" style="border-color: var(--app-border);">
+        <span class="block text-muted" style="color: var(--app-text-muted);">Provider</span>
+        <span class="font-medium" style="color: var(--app-text);">{{ webhookChannel.provider || 'meta' }}</span>
+      </div>
+      <div class="p-3 rounded-lg border" style="border-color: var(--app-border);">
+        <span class="block text-muted" style="color: var(--app-text-muted);">Business Account ID</span>
+        <span class="font-mono font-medium" style="color: var(--app-text);">{{ webhookChannel.business_account_id || '—' }}</span>
+      </div>
+    </div>
+
+    <div class="flex justify-end pt-2">
+      <p-button label="Done" (onClick)="closeWebhookInfo()"></p-button>
+    </div>
+  </div>
+</p-dialog>
+
+<!-- Channel Wizard Dialog -->
+<app-channel-wizard
+  *ngIf="showWizard"
+  [visible]="showWizard"
+  (complete)="onWizardComplete()"
+  (close)="onWizardClose()">
+</app-channel-wizard>
+
+<!-- Channel Contacts Dialog -->
+<app-channel-contacts
+  *ngIf="showContacts && selectedChannel"
+  [visible]="showContacts"
+  [channel]="selectedChannel"
+  (close)="closeContacts()">
+</app-channel-contacts>
+

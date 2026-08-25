@@ -1,0 +1,225 @@
+<p-dialog
+  header="Create Campaign"
+  [(visible)]="visible"
+  [modal]="true"
+  [style]="{ width: '720px', maxHeight: '90vh' }"
+  (onHide)="onClose()"
+  [draggable]="false"
+>
+  <div class="flex flex-col gap-4">
+    <!-- Name -->
+    <div>
+      <label
+        class="block text-sm font-medium mb-1"
+        style="color: var(--app-text)"
+        >Campaign Name</label
+      >
+      <input
+        pInputText
+        type="text"
+        [(ngModel)]="name"
+        placeholder="e.g. Diwali 2026 Promo"
+        class="w-full"
+      />
+    </div>
+
+    <!-- Kind & Channel -->
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label
+          class="block text-sm font-medium mb-1"
+          style="color: var(--app-text)"
+          >Kind</label
+        >
+        <p-dropdown
+          [options]="kindOptions"
+          [(ngModel)]="kind"
+          optionLabel="label"
+          optionValue="value"
+          class="w-full"
+          appendTo="body"
+        ></p-dropdown>
+      </div>
+      <div>
+        <label
+          class="block text-sm font-medium mb-1"
+          style="color: var(--app-text)"
+          >Channel</label
+        >
+        <p-dropdown
+          [options]="channelOptions"
+          [(ngModel)]="channel"
+          optionLabel="label"
+          optionValue="value"
+          class="w-full"
+          appendTo="body"
+        ></p-dropdown>
+      </div>
+    </div>
+
+    <!-- Purpose -->
+    <div>
+      <label
+        class="block text-sm font-medium mb-1"
+        style="color: var(--app-text)"
+        >Purpose</label
+      >
+      <p-dropdown
+        [options]="purposeOptions"
+        [(ngModel)]="purpose"
+        optionLabel="label"
+        optionValue="value"
+        class="w-full"
+        appendTo="body"
+      >
+        <ng-template let-item pTemplate="item">
+          <div class="flex flex-col">
+            <span class="font-medium">{{ item.label }}</span>
+            <span class="text-xs" style="color: var(--app-text-muted)">{{
+              item.hint
+            }}</span>
+          </div>
+        </ng-template>
+      </p-dropdown>
+      <small
+        *ngIf="purpose === 'transactional'"
+        class="text-xs mt-1 block"
+        style="color: #f59e0b"
+      >
+        <i class="pi pi-info-circle mr-1"></i>Transactional campaigns bypass
+        quiet hours. Only use for genuinely transactional messages.
+      </small>
+    </div>
+
+    <!-- Audience -->
+    <div>
+      <label
+        class="block text-sm font-medium mb-1"
+        style="color: var(--app-text)"
+        >Audience</label
+      >
+      <div class="grid grid-cols-3 gap-2 mb-2">
+        <div
+          *ngFor="let opt of audienceTypeOptions"
+          class="p-2 rounded-lg text-center cursor-pointer border-2 transition-all duration-200 text-sm"
+          [style.border-color]="
+            audienceType === opt.value ? '#6366f1' : 'var(--app-border)'
+          "
+          [style.background]="
+            audienceType === opt.value ? 'rgba(99,102,241,0.1)' : 'transparent'
+          "
+          (click)="audienceType = opt.value"
+        >
+          {{ opt.label }}
+        </div>
+      </div>
+      <p-dropdown
+        *ngIf="audienceType === 'list'"
+        [options]="contactLists"
+        [(ngModel)]="audienceId"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Select a contact list"
+        class="w-full"
+        appendTo="body"
+      ></p-dropdown>
+    </div>
+
+    <!-- Body / Template -->
+    <div>
+      <label
+        class="block text-sm font-medium mb-1"
+        style="color: var(--app-text)"
+        >Message Body</label
+      >
+      <textarea
+        pInputText
+        [(ngModel)]="body"
+        [rows]="5"
+        class="w-full"
+        placeholder="Hi {{ name }}, we have an exclusive offer for you..."
+      ></textarea>
+      <div
+        class="flex flex-wrap gap-1 mt-2"
+        *ngIf="availableVariables.length > 0"
+      >
+        <span class="text-xs mr-1" style="color: var(--app-text-muted)"
+          >Variables:</span
+        >
+        <span
+          *ngFor="let v of availableVariables"
+          class="px-2 py-0.5 rounded text-xs cursor-pointer transition-all duration-200"
+          style="
+            background: var(--app-surface-alt);
+            color: #6366f1;
+            border: 1px solid var(--app-border);
+          "
+          (click)="insertVariable(v)"
+        >
+          {{ '{{' + v + '}}' }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Optional: Schedule, Concurrency, Rate Limit -->
+    <div class="grid grid-cols-3 gap-3">
+      <div>
+        <label
+          class="block text-xs font-medium mb-1"
+          style="color: var(--app-text-muted)"
+          >Schedule (optional)</label
+        >
+        <input
+          pInputText
+          type="datetime-local"
+          [(ngModel)]="scheduledAt"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label
+          class="block text-xs font-medium mb-1"
+          style="color: var(--app-text-muted)"
+          >Concurrency</label
+        >
+        <input
+          pInputText
+          type="number"
+          [(ngModel)]="concurrency"
+          placeholder="Auto"
+          class="w-full"
+        />
+      </div>
+      <div>
+        <label
+          class="block text-xs font-medium mb-1"
+          style="color: var(--app-text-muted)"
+          >Rate Limit / sec</label
+        >
+        <input
+          pInputText
+          type="number"
+          [(ngModel)]="rateLimit"
+          placeholder="Auto"
+          class="w-full"
+        />
+      </div>
+    </div>
+
+    <div class="flex justify-end pt-2 gap-2">
+      <p-button
+        label="Cancel"
+        [text]="true"
+        severity="secondary"
+        (onClick)="onClose()"
+      ></p-button>
+      <p-button
+        label="Create Draft"
+        icon="pi pi-check"
+        [disabled]="!canSave"
+        [loading]="saving"
+        (onClick)="save()"
+      ></p-button>
+    </div>
+  </div>
+</p-dialog>

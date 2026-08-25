@@ -1,0 +1,528 @@
+<!-- Header -->
+<div
+  class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
+>
+  <div>
+    <h1
+      class="text-2xl font-bold tracking-tight"
+      style="color: var(--app-text)"
+    >
+      Knowledge Base
+    </h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+      Manage training documents, FAQs, and test AI response retrieval
+    </p>
+  </div>
+  <div class="flex items-center gap-3">
+    <p-button
+      *appHasPermission="PERMISSIONS.KB_MANAGE"
+      label="Upload Document"
+      icon="pi pi-upload"
+      size="small"
+      (click)="showUploadDialog = true"
+      [style]="{
+        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+        border: 'none',
+      }"
+    ></p-button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<p-tabs value="docs">
+  <p-tablist>
+    <p-tab value="docs"
+      ><i class="pi pi-file mr-2"></i> Documents ({{ docs.length }})</p-tab
+    >
+    <p-tab value="test"><i class="pi pi-bolt mr-2"></i> Document Testing</p-tab>
+    <p-tab value="faq"
+      ><i class="pi pi-question-circle mr-2"></i> FAQ Management ({{
+        faqs.length
+      }})</p-tab
+    >
+  </p-tablist>
+
+  <p-tabpanels>
+    <!-- Documents Tab -->
+    <p-tabpanel value="docs">
+      <div class="card-base overflow-hidden mt-4">
+        <p-table
+          #dtDocs
+          [value]="docs"
+          [paginator]="true"
+          [rows]="10"
+          [rowHover]="true"
+          dataKey="id"
+          [tableStyle]="{ 'min-width': '60rem' }"
+        >
+          <ng-template pTemplate="header">
+            <tr>
+              <th pSortableColumn="fileName">
+                File Name <p-sortIcon field="fileName"></p-sortIcon>
+              </th>
+              <th pSortableColumn="fileType">
+                Type <p-sortIcon field="fileType"></p-sortIcon>
+              </th>
+              <th pSortableColumn="chunks">
+                Chunks <p-sortIcon field="chunks"></p-sortIcon>
+              </th>
+              <th pSortableColumn="uploadDate">
+                Upload Date <p-sortIcon field="uploadDate"></p-sortIcon>
+              </th>
+              <th pSortableColumn="uploadedBy">
+                Uploaded By <p-sortIcon field="uploadedBy"></p-sortIcon>
+              </th>
+              <th pSortableColumn="status">
+                Status <p-sortIcon field="status"></p-sortIcon>
+              </th>
+              <th style="width: 5rem">Actions</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-doc>
+            <tr>
+              <td>
+                <div
+                  class="flex items-center gap-2.5 font-medium"
+                  style="color: var(--app-text)"
+                >
+                  <i
+                    class="pi"
+                    [ngClass]="{
+                      'pi-file-pdf text-danger-500': doc.fileType === 'PDF',
+                      'pi-file-word text-info-500': doc.fileType === 'DOCX',
+                      'pi-file-excel text-success-500': doc.fileType === 'CSV',
+                      'pi-file text-brand-500': doc.fileType === 'TXT',
+                    }"
+                  ></i>
+                  {{ doc.fileName }}
+                </div>
+              </td>
+              <td>
+                <p-tag
+                  [value]="doc.fileType"
+                  severity="secondary"
+                  [rounded]="true"
+                ></p-tag>
+              </td>
+              <td>
+                <span
+                  class="text-sm font-semibold"
+                  style="color: var(--app-text-secondary)"
+                  >{{ doc.chunks }}</span
+                >
+              </td>
+              <td>
+                <span
+                  class="text-sm"
+                  style="color: var(--app-text-secondary)"
+                  >{{ doc.uploadDate }}</span
+                >
+              </td>
+              <td>
+                <span
+                  class="text-sm"
+                  style="color: var(--app-text-secondary)"
+                  >{{ doc.uploadedBy }}</span
+                >
+              </td>
+              <td>
+                <p-tag
+                  [value]="doc.status"
+                  [severity]="getStatusSeverity(doc.status)"
+                  [rounded]="true"
+                ></p-tag>
+              </td>
+              <td>
+                <p-button
+                  icon="pi pi-ellipsis-v"
+                  [rounded]="true"
+                  [text]="true"
+                  severity="secondary"
+                  size="small"
+                  (click)="docMenu.toggle($event)"
+                ></p-button>
+                <p-menu
+                  #docMenu
+                  [popup]="true"
+                  appendTo="body"
+                  styleClass="[&_#delete-option:not(:has(a))]:!hidden [&_#delete-separator:has(+_#delete-option:not(:has(a)))]:!hidden"
+                  [model]="[
+                    { label: 'View Document', icon: 'pi pi-eye' },
+                    { label: 'Test Queries', icon: 'pi pi-bolt' },
+                    { label: 'Download', icon: 'pi pi-download' },
+                    { id: 'delete-separator', separator: true },
+                    {
+                      id: 'delete-option',
+                      label: 'Delete',
+                      icon: 'pi pi-trash',
+                      command: deleteDoc.bind(this, doc),
+                    },
+                  ]"
+                >
+                  <!-- <ng-template pTemplate="item" let-item>
+                    <ng-container
+                      *ngIf="item.id === 'delete-option'; else standardItem"
+                    >
+                      <a
+                        *appHasPermission="PERMISSIONS.KB_MANAGE"
+                        class="p-menuitem-link flex items-center gap-2"
+                      >
+                        <span
+                          [class]="item.icon"
+                          class="p-menuitem-icon text-red-600 dark:text-red-400"
+                        ></span>
+                        <span
+                          class="p-menuitem-text text-red-600 dark:text-red-400"
+                          >{{ item.label }}</span
+                        >
+                      </a>
+                    </ng-container>
+                    <ng-template #standardItem>
+                      <a class="p-menuitem-link flex items-center gap-2">
+                        <span
+                          [class]="item.icon"
+                          class="p-menuitem-icon"
+                        ></span>
+                        <span class="p-menuitem-text">{{ item.label }}</span>
+                      </a>
+                    </ng-template>
+                  </ng-template> -->
+                </p-menu>
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template #emptymessage>
+            <tr>
+              <td colspan="7">
+                <app-empty-state
+                  [title]="'No Documents'"
+                  [description]="'No documents found'"
+                  [icon]="'pi pi-file'"
+                />
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    </p-tabpanel>
+
+    <!-- Document Testing Tab -->
+    <p-tabpanel *appHasPermission="PERMISSIONS.KB_TEST" value="test">
+      <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-1 card-base p-5">
+          <h3 class="text-sm font-semibold mb-3" style="color: var(--app-text)">
+            Test Query Playground
+          </h3>
+          <p class="text-xs mb-4" style="color: var(--app-text-muted)">
+            Simulate AI context retrieval against knowledge base chunks.
+          </p>
+
+          <div class="space-y-4">
+            <div>
+              <label
+                class="text-xs font-medium block mb-1.5"
+                style="color: var(--app-text-muted)"
+                >Question</label
+              >
+              <textarea
+                pTextarea
+                [(ngModel)]="testQuestion"
+                rows="4"
+                class="w-full text-sm"
+                placeholder="Ask anything..."
+              ></textarea>
+            </div>
+            <p-button
+              label="Test Retrieval"
+              icon="pi pi-search"
+              [loading]="isTesting"
+              (click)="runTest()"
+              styleClass="w-full"
+              [style]="{
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                border: 'none',
+              }"
+            ></p-button>
+          </div>
+        </div>
+
+        <div class="lg:col-span-2 card-base p-5">
+          <h3 class="text-sm font-semibold mb-4" style="color: var(--app-text)">
+            Retrieval Results
+          </h3>
+
+          <div
+            *ngIf="!testResult && !isTesting"
+            class="py-12 text-center"
+            style="color: var(--app-text-muted)"
+          >
+            <i class="pi pi-compass text-4xl mb-3 block opacity-30"></i>
+            <p class="text-sm">
+              Type a question on the left and click 'Test Retrieval' to inspect
+              match scores.
+            </p>
+          </div>
+
+          <div *ngIf="testResult" class="space-y-5 animate-fade-in">
+            <div
+              class="p-4 rounded-xl"
+              style="
+                background: var(--app-bg);
+                border: 1px solid var(--card-border);
+              "
+            >
+              <div class="flex items-center justify-between mb-2">
+                <span
+                  class="text-xs font-semibold uppercase tracking-wider text-brand-500"
+                  >AI Response Synthesis</span
+                >
+                <p-tag
+                  [value]="testResult.confidenceScore + '% Confidence'"
+                  severity="success"
+                  [rounded]="true"
+                ></p-tag>
+              </div>
+              <p class="text-sm leading-relaxed" style="color: var(--app-text)">
+                {{ testResult.aiResponse }}
+              </p>
+              <div
+                class="mt-2 text-xs flex items-center gap-2"
+                style="color: var(--app-text-muted)"
+              >
+                <i class="pi pi-file text-xs"></i> Source Document:
+                <span class="font-medium text-brand-500">{{
+                  testResult.sourceDoc
+                }}</span>
+              </div>
+            </div>
+
+            <div>
+              <h4
+                class="text-xs font-semibold uppercase tracking-wider mb-2"
+                style="color: var(--app-text-muted)"
+              >
+                Matching Vector Chunks
+              </h4>
+              <div class="space-y-2">
+                <div
+                  *ngFor="let chunk of testResult.matchingChunks"
+                  class="p-3 rounded-lg border text-xs"
+                  style="
+                    background: var(--card-bg);
+                    border-color: var(--card-border);
+                  "
+                >
+                  <div class="flex justify-between items-center mb-1">
+                    <span class="font-semibold text-brand-600"
+                      >Chunk #{{ chunk.id }}</span
+                    >
+                    <span class="text-success-600 font-medium"
+                      >{{ chunk.relevance }}% match</span
+                    >
+                  </div>
+                  <p style="color: var(--app-text-secondary)">
+                    "{{ chunk.text }}"
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </p-tabpanel>
+
+    <!-- FAQ Management Tab -->
+    <p-tabpanel value="faq">
+      <div class="mt-4">
+        <div class="flex justify-between items-center mb-4">
+          <p-iconfield>
+            <p-inputicon styleClass="pi pi-search" />
+            <input
+              pInputText
+              type="text"
+              placeholder="Search FAQs..."
+              class="text-sm"
+            />
+          </p-iconfield>
+          <p-button
+            label="Add FAQ"
+            icon="pi pi-plus"
+            size="small"
+            (click)="showAddFaqDialog = true"
+            [style]="{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+            }"
+          ></p-button>
+        </div>
+
+        <div class="card-base overflow-hidden">
+          <p-table [value]="faqs" [paginator]="true" [rows]="5" dataKey="id">
+            <ng-template pTemplate="header">
+              <tr>
+                <th style="min-width: 14rem">Question</th>
+                <th style="min-width: 18rem">Answer</th>
+                <th>Category</th>
+                <th>Updated Date</th>
+                <th style="width: 6rem">Actions</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-faq>
+              <tr>
+                <td>
+                  <span
+                    class="font-medium text-sm"
+                    style="color: var(--app-text)"
+                    >{{ faq.question }}</span
+                  >
+                </td>
+                <td>
+                  <span
+                    class="text-xs line-clamp-2"
+                    style="color: var(--app-text-secondary)"
+                    >{{ faq.answer }}</span
+                  >
+                </td>
+                <td>
+                  <p-tag
+                    [value]="faq.category"
+                    severity="info"
+                    [rounded]="true"
+                  ></p-tag>
+                </td>
+                <td>
+                  <span class="text-xs" style="color: var(--app-text-muted)">{{
+                    faq.updatedDate
+                  }}</span>
+                </td>
+                <td>
+                  <div class="flex items-center gap-1">
+                    <p-button
+                      icon="pi pi-pencil"
+                      [rounded]="true"
+                      [text]="true"
+                      severity="secondary"
+                      size="small"
+                    ></p-button>
+                    <p-button
+                      icon="pi pi-trash"
+                      [rounded]="true"
+                      [text]="true"
+                      severity="danger"
+                      size="small"
+                      (click)="deleteFaq(faq)"
+                    ></p-button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </div>
+    </p-tabpanel>
+  </p-tabpanels>
+</p-tabs>
+
+<!-- Upload Dialog -->
+<p-dialog
+  header="Upload Document to Knowledge Base"
+  [(visible)]="showUploadDialog"
+  [modal]="true"
+  [style]="{ width: '500px' }"
+>
+  <div class="py-3 space-y-4">
+    <p-fileUpload
+      name="demo[]"
+      [customUpload]="true"
+      [multiple]="true"
+      accept=".pdf,.docx,.txt,.csv"
+      maxFileSize="10000000"
+      (uploadHandler)="onUpload($event)"
+    >
+      <ng-template pTemplate="content">
+        <div class="py-8 text-center" style="color: var(--app-text-muted)">
+          <i class="pi pi-cloud-upload text-4xl mb-2 text-brand-500"></i>
+          <p class="text-sm font-medium">Drag and drop files here to upload</p>
+          <p class="text-xs mt-1">Supports PDF, DOCX, TXT, CSV up to 10MB</p>
+        </div>
+      </ng-template>
+    </p-fileUpload>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button
+      label="Close"
+      icon="pi pi-times"
+      [text]="true"
+      (click)="showUploadDialog = false"
+    ></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- Add FAQ Dialog -->
+<p-dialog
+  header="Add FAQ Entry"
+  [(visible)]="showAddFaqDialog"
+  [modal]="true"
+  [style]="{ width: '500px' }"
+>
+  <div class="py-2 space-y-4">
+    <div>
+      <label
+        class="text-xs font-medium block mb-1"
+        style="color: var(--app-text-muted)"
+        >Category</label
+      >
+      <p-dropdown
+        [options]="[
+          { label: 'Product', value: 'Product' },
+          { label: 'Pricing', value: 'Pricing' },
+          { label: 'Technical', value: 'Technical' },
+        ]"
+        [(ngModel)]="newFaq.category"
+        optionLabel="label"
+        optionValue="value"
+        [style]="{ width: '100%' }"
+      ></p-dropdown>
+    </div>
+    <div>
+      <label
+        class="text-xs font-medium block mb-1"
+        style="color: var(--app-text-muted)"
+        >Question</label
+      >
+      <input
+        pInputText
+        type="text"
+        [(ngModel)]="newFaq.question"
+        class="w-full text-sm"
+        placeholder="Enter question..."
+      />
+    </div>
+    <div>
+      <label
+        class="text-xs font-medium block mb-1"
+        style="color: var(--app-text-muted)"
+        >Answer</label
+      >
+      <textarea
+        pTextarea
+        [(ngModel)]="newFaq.answer"
+        rows="4"
+        class="w-full text-sm"
+        placeholder="Enter answer..."
+      ></textarea>
+    </div>
+  </div>
+  <ng-template pTemplate="footer">
+    <p-button
+      label="Cancel"
+      [text]="true"
+      (click)="showAddFaqDialog = false"
+    ></p-button>
+    <p-button
+      label="Save FAQ"
+      icon="pi pi-check"
+      (click)="saveFaq()"
+    ></p-button>
+  </ng-template>
+</p-dialog>

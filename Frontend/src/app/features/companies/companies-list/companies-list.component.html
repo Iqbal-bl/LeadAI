@@ -1,0 +1,154 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
+<div class="space-y-6">
+  <!-- Search & Toolbar Actions -->
+  <div class="flex items-center justify-between gap-4 p-4 card-base" style="background: var(--card-bg);">
+    <div class="w-full max-w-md">
+      <p-iconfield>
+        <p-inputicon styleClass="pi pi-search" />
+        <input 
+          type="text" 
+          pInputText 
+          [(ngModel)]="searchQuery" 
+          placeholder="Search by company name, email, or domain details..." 
+          class="w-full text-sm" />
+      </p-iconfield>
+    </div>
+    
+    <div class="flex items-center gap-2">
+      <button 
+        pButton 
+        icon="pi pi-refresh" 
+        class="p-button-outlined p-button-secondary cursor-pointer" 
+        pTooltip="Refresh List"
+        tooltipPosition="left"
+        (click)="loadCompanies()"></button>
+    </div>
+  </div>
+
+  <!-- Companies Table -->
+  <div class="card-base overflow-hidden" style="background: var(--card-bg);">
+    <p-table 
+      [value]="getFilteredCompanies()" 
+      [loading]="loading" 
+      [paginator]="true" 
+      [rows]="10"
+      responsiveLayout="scroll"
+      styleClass="p-datatable-responsive">
+      
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Company</th>
+          <th>Description</th>
+          <th class="text-center">Active Seats</th>
+          <th class="text-center">Ingested Content</th>
+          <th class="text-center">AI Traffic</th>
+          <th class="text-center">Status</th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-company>
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+          
+          <!-- Company Info -->
+          <td>
+            <div class="flex items-center gap-3 cursor-pointer group" (click)="viewCompanyDetail(company)">
+              <div class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-white text-sm transition-transform group-hover:scale-105"
+                   style="background: var(--brand-gradient);">
+                {{ company.name.charAt(0).toUpperCase() }}
+              </div>
+              <div class="flex flex-col">
+                <span class="font-bold text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style="color: var(--app-text);">{{ company.name }}</span>
+                <span class="text-xs" style="color: var(--app-text-muted);">{{ company.email }}</span>
+              </div>
+            </div>
+          </td>
+
+          <!-- Description -->
+          <td>
+            <p class="text-xs max-w-xs truncate" style="color: var(--app-text-secondary);" [pTooltip]="company.description">
+              {{ company.description || 'No description provided' }}
+            </p>
+          </td>
+
+          <!-- Seats -->
+          <td class="text-center">
+            <span class="text-xs font-semibold" style="color: var(--app-text);">{{ company.user_count }} seats</span>
+          </td>
+
+          <!-- Ingested documents -->
+          <td class="text-center">
+            <div class="flex flex-col items-center">
+              <span class="text-xs font-semibold" style="color: var(--app-text);">{{ company.document_count }} docs</span>
+              <span class="text-[10px]" style="color: var(--app-text-muted);">{{ company.chunk_count }} vectors</span>
+            </div>
+          </td>
+
+          <!-- AI Calls -->
+          <td class="text-center">
+            <div class="flex flex-col items-center">
+              <span class="text-xs font-semibold" style="color: var(--app-text);">{{ company.conversation_count }} calls</span>
+              <span class="text-[10px] text-indigo-500 font-medium">{{ company.script_count }} prompts</span>
+            </div>
+          </td>
+
+          <!-- Status toggle -->
+          <td class="text-center">
+            <div class="flex items-center justify-center gap-2">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                    [ngClass]="{
+                      'bg-green-500/10 text-green-600 dark:text-green-400': company.is_active,
+                      'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400': !company.is_active
+                    }">
+                {{ company.is_active ? 'Active' : 'Inactive' }}
+              </span>
+              <p-inputSwitch 
+                [ngModel]="company.is_active" 
+                (onChange)="toggleActiveStatus(company)"
+                styleClass="p-inputswitch-sm"></p-inputSwitch>
+            </div>
+          </td>
+
+          <!-- Actions -->
+          <td class="text-center">
+            <div class="flex items-center justify-center gap-1">
+              <button 
+                pButton 
+                icon="pi pi-eye" 
+                class="p-button-text p-button-secondary p-button-sm cursor-pointer"
+                pTooltip="View Client & Services Details"
+                (click)="viewCompanyDetail(company)"></button>
+              <button 
+                pButton 
+                icon="pi pi-pencil" 
+                class="p-button-text p-button-secondary p-button-sm cursor-pointer"
+                pTooltip="Edit Company Details"
+                (click)="openEditDialog(company)"></button>
+              <button 
+                pButton 
+                icon="pi pi-trash" 
+                class="p-button-text p-button-danger p-button-sm cursor-pointer"
+                pTooltip="Delete Workspace"
+                (click)="deleteCompany(company)"></button>
+            </div>
+          </td>
+
+        </tr>
+      </ng-template>
+
+      <!-- Empty state -->
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7" class="text-center py-12" style="color: var(--app-text-muted);">
+            <i class="pi pi-search text-3xl mb-2 opacity-35 block"></i>
+            <span class="text-sm font-semibold">No companies found matching search filters.</span>
+          </td>
+        </tr>
+      </ng-template>
+
+    </p-table>
+  </div>
+
+</div>

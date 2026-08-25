@@ -1,0 +1,314 @@
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+      Leads
+    </h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+      View and manage all incoming leads and qualification status
+    </p>
+  </div>
+  <div class="flex items-center gap-3">
+    <p-button
+      label="Export"
+      icon="pi pi-download"
+      severity="secondary"
+      [outlined]="true"
+      size="small"
+      (click)="exportCSV()"
+    ></p-button>
+  </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="flex flex-wrap items-center gap-4 mb-4 card-base p-4">
+  <!-- Channel Filter -->
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider"
+      style="color: var(--app-text-muted)"
+      >Channel</label
+    >
+    <p-dropdown
+      [options]="channelOptions"
+      [(ngModel)]="selectedChannel"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="onFilterChange()"
+      [style]="{ width: '180px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
+  <!-- Status Filter -->
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider"
+      style="color: var(--app-text-muted)"
+      >Status</label
+    >
+    <p-dropdown
+      [options]="statusOptions"
+      [(ngModel)]="selectedStatus"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="onFilterChange()"
+      [style]="{ width: '160px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
+  <!-- Priority Filter -->
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider"
+      style="color: var(--app-text-muted)"
+      >Priority</label
+    >
+    <p-dropdown
+      [options]="priorityOptions"
+      [(ngModel)]="selectedPriority"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="onFilterChange()"
+      [style]="{ width: '150px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
+  <!-- Show all leads toggle -->
+  <div class="flex items-center gap-2 self-end pb-2">
+    <p-inputSwitch
+      [(ngModel)]="showAllLeads"
+      (onChange)="onFilterChange()"
+    ></p-inputSwitch>
+    <label class="text-sm font-medium" style="color: var(--app-text)"
+      >Show all leads (escape hatch)</label
+    >
+  </div>
+
+  <!-- Search Input -->
+  <div class="flex-1 min-w-[220px] self-end pb-0.5 ml-auto">
+    <p-iconfield class="w-full">
+      <p-inputicon styleClass="pi pi-search" />
+      <input
+        pInputText
+        type="text"
+        placeholder="Search leads..."
+        (input)="onGlobalFilter($event)"
+        class="text-sm w-full"
+      />
+    </p-iconfield>
+  </div>
+</div>
+
+<!-- Leads DataTable -->
+<div class="card-base overflow-hidden">
+  <p-table
+    #dt
+    [value]="filteredLeads"
+    [paginator]="true"
+    [rows]="10"
+    [rowsPerPageOptions]="[5, 10, 25, 50]"
+    [globalFilterFields]="[
+      'name',
+      'email',
+      'company',
+      'phone',
+      'status',
+      'priority',
+      'source',
+      'assignedTo',
+      'summary',
+    ]"
+    [loading]="loading"
+    [(selection)]="selectedLeads"
+    [rowHover]="true"
+    dataKey="id"
+    [showCurrentPageReport]="true"
+    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} leads"
+    [tableStyle]="{ 'min-width': '75rem' }"
+  >
+    <!-- Header -->
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="name" style="min-width: 14rem">
+          Lead <p-sortIcon field="name"></p-sortIcon>
+        </th>
+        <th pSortableColumn="source" style="min-width: 10rem">
+          Channel <p-sortIcon field="source"></p-sortIcon>
+        </th>
+        <th pSortableColumn="status" style="min-width: 8rem">
+          Status <p-sortIcon field="status"></p-sortIcon>
+        </th>
+        <th pSortableColumn="priority" style="min-width: 8rem">
+          Priority <p-sortIcon field="priority"></p-sortIcon>
+        </th>
+        <th pSortableColumn="leadScore" style="min-width: 8rem">
+          Score <p-sortIcon field="leadScore"></p-sortIcon>
+        </th>
+        <th pSortableColumn="updatedAt" style="min-width: 11rem">
+          Time <p-sortIcon field="updatedAt"></p-sortIcon>
+        </th>
+        <th pSortableColumn="assignedTo" style="min-width: 11rem">
+          Agent <p-sortIcon field="assignedTo"></p-sortIcon>
+        </th>
+        <th style="min-width: 14rem">Summary</th>
+        <th style="width: 5rem; text-align: center">Actions</th>
+      </tr>
+    </ng-template>
+
+    <!-- Body -->
+    <ng-template pTemplate="body" let-lead>
+      <tr class="cursor-pointer" (click)="viewLead(lead)">
+        <!-- Lead -->
+        <td>
+          <div class="flex items-center gap-3">
+            <p-avatar
+              [label]="getInitials(lead.name)"
+              shape="circle"
+              size="normal"
+              [style]="{
+                'background-color': getAvatarColor(lead.id),
+                color: 'white',
+                'font-size': '0.75rem',
+                'font-weight': '600',
+                'min-width': '32px',
+                height: '32px'
+              }"
+            >
+            </p-avatar>
+            <div class="overflow-hidden">
+              <div class="text-sm font-semibold truncate" style="color: var(--app-text)">
+                {{ lead.name }}
+              </div>
+              <div class="text-xs truncate" style="color: var(--app-text-muted)">
+                {{ lead.phone || lead.email }}
+              </div>
+            </div>
+          </div>
+        </td>
+
+        <!-- Channel -->
+        <td>
+          <div class="flex items-center gap-2">
+            <i
+              [class]="getChannelIcon(lead.source)"
+              [style.color]="getChannelColor(lead.source)"
+              class="text-base"
+            ></i>
+            <span
+              class="text-xs font-semibold capitalize"
+              style="color: var(--app-text-secondary)"
+              >{{ lead.source }}</span
+            >
+          </div>
+        </td>
+
+        <!-- Status -->
+        <td>
+          <p-tag
+            [value]="lead.status"
+            [severity]="getStatusSeverity(lead.status)"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+
+        <!-- Priority -->
+        <td>
+          <p-tag
+            [value]="lead.priority"
+            [severity]="getPrioritySeverity(lead.priority)"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+
+        <!-- Score -->
+        <td>
+          <div class="flex items-center gap-2">
+            <p-progressBar
+              [value]="lead.leadScore"
+              [showValue]="false"
+              [style]="{ height: '6px', width: '50px' }"
+              [ngClass]="{
+                'score-high': lead.leadScore >= 80,
+                'score-medium': lead.leadScore >= 50 && lead.leadScore < 80,
+                'score-low': lead.leadScore < 50,
+              }"
+            >
+            </p-progressBar>
+            <span
+              class="text-xs font-semibold"
+              style="color: var(--app-text)"
+              >{{ lead.leadScore }}%</span
+            >
+          </div>
+        </td>
+
+        <!-- Time -->
+        <td>
+          <span class="text-xs font-mono" style="color: var(--app-text-secondary)">{{
+            lead.updatedAt || lead.createdAt || '—'
+          }}</span>
+        </td>
+
+        <!-- Agent -->
+        <td>
+          <span class="text-sm" style="color: var(--app-text-secondary)">{{
+            lead.assignedTo || 'AI Assistant'
+          }}</span>
+        </td>
+
+        <!-- Summary -->
+        <td>
+          <span
+            class="text-xs line-clamp-1"
+            style="color: var(--app-text-muted)"
+            [title]="lead.summary"
+            >{{ lead.summary }}</span
+          >
+        </td>
+
+        <!-- Actions -->
+        <td (click)="$event.stopPropagation()" style="text-align: center">
+          <p-button
+            icon="pi pi-ellipsis-v"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            (click)="menu.toggle($event)"
+            pTooltip="Options"
+          ></p-button>
+          <p-menu
+            #menu
+            [popup]="true"
+            appendTo="body"
+            [model]="getLeadMenuItems(lead)"
+          ></p-menu>
+        </td>
+      </tr>
+    </ng-template>
+
+    <!-- Empty State -->
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="9">
+          <div class="flex flex-col items-center justify-center py-12">
+            <i
+              class="pi pi-users text-4xl mb-3 block"
+              style="color: var(--app-text-muted); opacity: 0.4"
+            ></i>
+            <p class="text-sm font-medium" style="color: var(--app-text-muted)">
+              No leads found
+            </p>
+            <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+              Try adjusting your search or filters
+            </p>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+

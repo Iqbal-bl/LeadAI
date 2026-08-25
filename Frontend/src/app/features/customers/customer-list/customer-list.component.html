@@ -1,0 +1,267 @@
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+      Customers
+    </h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+      Manage your customer relationships and outreach
+    </p>
+  </div>
+  <p-button
+    label="Add Customer"
+    icon="pi pi-plus"
+    size="small"
+    [style]="{
+      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+      border: 'none'
+    }"
+    (onClick)="openCreateCustomerDialog()"
+  ></p-button>
+</div>
+
+<!-- Upcoming Greetings Widget -->
+<div *ngIf="greetings.length > 0" class="card-base p-4 mb-6">
+  <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center gap-2">
+      <div
+        class="w-8 h-8 rounded-lg flex items-center justify-center"
+        style="background: linear-gradient(135deg, #f59e0b, #d97706)"
+      >
+        <i class="pi pi-gift text-white"></i>
+      </div>
+      <h2 class="text-base font-semibold" style="color: var(--app-text)">
+        Upcoming Occasions
+      </h2>
+    </div>
+    <p-button
+      label="Create Festive Campaign"
+      icon="pi pi-megaphone"
+      [text]="true"
+      severity="warn"
+      (onClick)="createFestiveCampaign()"
+    ></p-button>
+  </div>
+  <div class="flex flex-wrap gap-2">
+    <div
+      *ngFor="let g of greetings"
+      class="px-3 py-2 rounded-lg flex items-center gap-2"
+      style="
+        background: var(--app-surface-alt);
+        border: 1px solid var(--app-border);
+      "
+    >
+      <i
+        [class]="g.event_type === 'birthday' ? 'pi pi-star' : 'pi pi-heart'"
+        class="text-sm"
+        [style.color]="g.event_type === 'birthday' ? '#f59e0b' : '#ec4899'"
+      ></i>
+      <span class="text-sm" style="color: var(--app-text)">{{
+        g.customer_name
+      }}</span>
+      <span
+        class="text-xs px-1.5 py-0.5 rounded"
+        style="background: rgba(99, 102, 241, 0.1); color: #6366f1"
+      >
+        {{ g.days_until === 0 ? "Today!" : g.days_until + "d" }}
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="flex flex-wrap gap-3 mb-4 items-center">
+  <div class="flex-1 min-w-[200px]">
+    <span class="p-input-icon-left w-full">
+      <input
+        pInputText
+        type="text"
+        [(ngModel)]="searchText"
+        placeholder="Search customers..."
+        class="w-full"
+        (keyup.enter)="onSearch()"
+      />
+    </span>
+  </div>
+  <p-dropdown
+    [options]="stageOptions"
+    [(ngModel)]="stageFilter"
+    optionLabel="label"
+    optionValue="value"
+    (onChange)="onSearch()"
+    [style]="{ width: '150px' }"
+    appendTo="body"
+  ></p-dropdown>
+  <p-dropdown
+    [options]="statusOptions"
+    [(ngModel)]="statusFilter"
+    optionLabel="label"
+    optionValue="value"
+    (onChange)="onSearch()"
+    [style]="{ width: '150px' }"
+    appendTo="body"
+  ></p-dropdown>
+  <div class="flex items-center gap-2">
+    <p-inputSwitch
+      [(ngModel)]="followUpDueOnly"
+      (onChange)="onSearch()"
+    ></p-inputSwitch>
+    <label class="text-sm" style="color: var(--app-text-muted)"
+      >Follow-up due</label
+    >
+  </div>
+</div>
+
+<!-- Customer Table -->
+<div class="card-base overflow-hidden">
+  <p-table
+    [value]="customers"
+    [loading]="loading"
+    [paginator]="true"
+    [rows]="10"
+    [rowHover]="true"
+    dataKey="id"
+    [tableStyle]="{ 'min-width': '60rem' }"
+  >
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="name">
+          Name <p-sortIcon field="name"></p-sortIcon>
+        </th>
+        <th>Stage</th>
+        <th>Owner</th>
+        <th>Tags</th>
+        <th>Consent</th>
+        <th>Follow-up</th>
+        <th>Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-customer>
+      <tr class="cursor-pointer" (click)="viewCustomer(customer)">
+        <td>
+          <div>
+            <span class="font-medium" style="color: var(--app-text)">{{
+              customer.name
+            }}</span>
+            <p class="text-xs" style="color: var(--app-text-muted)">
+              {{ customer.phone_masked || customer.email_masked }}
+            </p>
+          </div>
+        </td>
+        <td>
+          <p-tag
+            [value]="customer.stage"
+            [severity]="getStageSeverity(customer.stage)"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+        <td>
+          <span class="text-sm" style="color: var(--app-text-secondary)">{{
+            customer.owner_name || "—"
+          }}</span>
+        </td>
+        <td>
+          <div class="flex flex-wrap gap-1">
+            <span
+              *ngFor="let tag of customer.tags?.slice(0, 3)"
+              class="px-2 py-0.5 rounded text-xs"
+              style="
+                background: var(--app-surface-alt);
+                color: var(--app-text-muted);
+              "
+              >{{ tag }}</span
+            >
+          </div>
+        </td>
+        <td>
+          <div class="flex gap-1">
+            <i
+              class="pi pi-whatsapp text-xs"
+              [style.color]="
+                customer.consent?.whatsapp_opt_in ? '#22c55e' : '#6b7280'
+              "
+              [style.opacity]="customer.consent?.whatsapp_opt_in ? 1 : 0.3"
+              pTooltip="WhatsApp"
+            ></i>
+            <i
+              class="pi pi-envelope text-xs"
+              [style.color]="
+                customer.consent?.email_opt_in ? '#3b82f6' : '#6b7280'
+              "
+              [style.opacity]="customer.consent?.email_opt_in ? 1 : 0.3"
+              pTooltip="Email"
+            ></i>
+            <i
+              class="pi pi-mobile text-xs"
+              [style.color]="
+                customer.consent?.sms_opt_in ? '#8b5cf6' : '#6b7280'
+              "
+              [style.opacity]="customer.consent?.sms_opt_in ? 1 : 0.3"
+              pTooltip="SMS"
+            ></i>
+            <i
+              class="pi pi-phone text-xs"
+              [style.color]="
+                customer.consent?.voice_opt_in ? '#f59e0b' : '#6b7280'
+              "
+              [style.opacity]="customer.consent?.voice_opt_in ? 1 : 0.3"
+              pTooltip="Voice"
+            ></i>
+            <i
+              *ngIf="customer.consent?.do_not_disturb"
+              class="pi pi-ban text-xs text-red-400"
+              pTooltip="Do Not Disturb"
+            ></i>
+          </div>
+        </td>
+        <td>
+          <span
+            *ngIf="customer.follow_up_due"
+            class="text-sm"
+            style="color: #f59e0b"
+            >{{ customer.follow_up_due }}</span
+          >
+          <span
+            *ngIf="!customer.follow_up_due"
+            class="text-sm"
+            style="color: var(--app-text-muted)"
+            >—</span
+          >
+        </td>
+        <td (click)="$event.stopPropagation()">
+          <p-button
+            icon="pi pi-eye"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            pTooltip="View Details"
+            (onClick)="viewCustomer(customer)"
+          ></p-button>
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="7">
+          <div class="flex flex-col items-center justify-center py-12 gap-3">
+            <i
+              class="pi pi-users text-4xl"
+              style="color: var(--app-text-muted)"
+            ></i>
+            <p class="text-lg font-medium" style="color: var(--app-text-muted)">
+              No customers found
+            </p>
+            <p class="text-sm" style="color: var(--app-text-muted)">
+              Convert qualified leads to build your customer base
+            </p>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<app-create-customer
+  [visible]="showCreateDialog"
+  (close)="showCreateDialog = false"
+  (complete)="onCustomerCreated()"
+></app-create-customer>

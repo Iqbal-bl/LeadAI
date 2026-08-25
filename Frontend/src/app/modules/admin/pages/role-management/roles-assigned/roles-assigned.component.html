@@ -1,0 +1,425 @@
+<div class="space-y-6">
+  <!-- Header -->
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div>
+      <h1
+        class="text-2xl font-bold tracking-tight"
+        style="color: var(--app-text)"
+      >
+        Role Client Management
+      </h1>
+      <p class="text-sm" style="color: var(--app-text-muted)">
+        Manage user access roles, permissions, and assignments across
+        workspaces.
+      </p>
+    </div>
+    <button
+      pButton
+      label="Add Role"
+      icon="pi pi-plus"
+      class="p-button-primary cursor-pointer shadow-md hover:shadow-lg transition-all"
+      (click)="openCreateDialog()"
+    ></button>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- Total Roles -->
+    <div
+      class="card-base p-5 flex items-center justify-between"
+      style="background: var(--card-bg)"
+    >
+      <div class="space-y-1">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+          >Total Roles</span
+        >
+        <h3 class="text-2xl font-bold" style="color: var(--app-text)">
+          {{ totalRolesCount }}
+        </h3>
+        <span class="text-[10px] text-indigo-500 font-semibold"
+          >Assigned grants</span
+        >
+      </div>
+      <div
+        class="w-12 h-12 rounded-xl flex items-center justify-center bg-indigo-500/10 text-indigo-500"
+      >
+        <i class="pi pi-shield text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Active Roles -->
+    <div
+      class="card-base p-5 flex items-center justify-between"
+      style="background: var(--card-bg)"
+    >
+      <div class="space-y-1">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+          >Active Roles</span
+        >
+        <h3 class="text-2xl font-bold text-green-500">
+          {{ activeRolesCount }}
+        </h3>
+        <span class="text-[10px] text-green-500 font-semibold"
+          >{{
+            totalRolesCount
+              ? ((activeRolesCount / totalRolesCount) * 100 | number: "1.0-0")
+              : 0
+          }}% active rate</span
+        >
+      </div>
+      <div
+        class="w-12 h-12 rounded-xl flex items-center justify-center bg-green-500/10 text-green-500"
+      >
+        <i class="pi pi-check-circle text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Inactive Roles -->
+    <div
+      class="card-base p-5 flex items-center justify-between"
+      style="background: var(--card-bg)"
+    >
+      <div class="space-y-1">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+          >Inactive Roles</span
+        >
+        <h3 class="text-2xl font-bold text-amber-500">
+          {{ totalRolesCount - activeRolesCount }}
+        </h3>
+        <span class="text-[10px] text-amber-500 font-semibold"
+          >Deactivated grants</span
+        >
+      </div>
+      <div
+        class="w-12 h-12 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-500"
+      >
+        <i class="pi pi-ban text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Companies Covered -->
+    <div
+      class="card-base p-5 flex items-center justify-between"
+      style="background: var(--card-bg)"
+    >
+      <div class="space-y-1">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+          >Companies Covered</span
+        >
+        <h3 class="text-2xl font-bold text-purple-500">
+          {{ companies.length }}
+        </h3>
+        <span class="text-[10px] text-purple-500 font-semibold"
+          >Registered tenants</span
+        >
+      </div>
+      <div
+        class="w-12 h-12 rounded-xl flex items-center justify-center bg-purple-500/10 text-purple-500"
+      >
+        <i class="pi pi-building text-xl"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search & Toolbar -->
+  <div
+    class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 card-base"
+    style="background: var(--card-bg)"
+  >
+    <div class="flex flex-col md:flex-row items-start md:items-center gap-3 w-full md:w-auto">
+      <div class="w-full md:w-80">
+        <p-iconfield>
+          <p-inputicon styleClass="pi pi-search" />
+          <input
+            type="text"
+            pInputText
+            [(ngModel)]="searchQuery"
+            placeholder="Search by name or email..."
+            class="w-full text-sm"
+          />
+        </p-iconfield>
+      </div>
+
+      <!-- Company filter (Platform Admin only) -->
+      <p-dropdown
+        *ngIf="isPlatformAdmin"
+        [options]="companies"
+        [(ngModel)]="selectedCompanyFilter"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="All Companies"
+        [showClear]="true"
+        (onChange)="onCompanyFilterChange()"
+        styleClass="w-full md:w-56 text-sm"
+      ></p-dropdown>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button
+        pButton
+        icon="pi pi-refresh"
+        class="p-button-outlined p-button-secondary cursor-pointer"
+        pTooltip="Refresh List"
+        tooltipPosition="left"
+        (click)="loadRoles()"
+      ></button>
+    </div>
+  </div>
+
+  <!-- Roles Table -->
+  <div class="card-base overflow-hidden" style="background: var(--card-bg)">
+    <p-table
+      [value]="getFilteredRoles()"
+      [loading]="loading"
+      [paginator]="true"
+      [rows]="10"
+      [sortField]="'created_at'"
+      [sortOrder]="-1"
+      responsiveLayout="scroll"
+      styleClass="p-datatable-responsive"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="full_name">
+            Name <p-sortIcon field="full_name"></p-sortIcon>
+          </th>
+          <th pSortableColumn="user_email">
+            Email <p-sortIcon field="user_email"></p-sortIcon>
+          </th>
+          <th>Company</th>
+          <th pSortableColumn="role">
+            Role <p-sortIcon field="role"></p-sortIcon>
+          </th>
+          <th class="text-center">Status</th>
+          <th pSortableColumn="created_at">
+            Created <p-sortIcon field="created_at"></p-sortIcon>
+          </th>
+          <th class="text-center">Actions</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-role>
+        <tr
+          class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+        >
+          <!-- Name -->
+          <td>
+            <div class="flex items-center gap-3">
+              <div
+                class="w-9 h-9 rounded-lg flex items-center justify-center font-bold text-white text-sm flex-shrink-0"
+                style="background: var(--brand-gradient)"
+              >
+                {{ (role.full_name || role.user_email || '?').charAt(0).toUpperCase() }}
+              </div>
+              <span
+                class="font-bold text-sm"
+                style="color: var(--app-text)"
+                >{{ role.full_name || role.user_email }}</span
+              >
+            </div>
+          </td>
+
+          <!-- Email -->
+          <td>
+            <span class="text-xs" style="color: var(--app-text-muted)">{{
+              role.user_email
+            }}</span>
+          </td>
+
+          <!-- Company -->
+          <td>
+            <span
+              class="text-xs font-medium"
+              style="color: var(--app-text-secondary)"
+              >{{ role.client_name || "—" }}</span
+            >
+          </td>
+
+          <!-- Role -->
+          <td>
+            <p-tag
+              [value]="getRoleLabel(role.role)"
+              [severity]="getRoleSeverity(role.role)"
+              [rounded]="true"
+            ></p-tag>
+          </td>
+
+          <!-- Status -->
+          <td class="text-center">
+            <div class="flex items-center justify-center gap-2">
+              <span
+                class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider"
+                [ngClass]="{
+                  'bg-green-500/10 text-green-600 dark:text-green-400':
+                    role.is_active,
+                  'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400':
+                    !role.is_active
+                }"
+              >
+                {{ role.is_active ? "Active" : "Inactive" }}
+              </span>
+              <p-inputSwitch
+                [ngModel]="role.is_active"
+                (onChange)="toggleActiveStatus(role)"
+                styleClass="p-inputswitch-sm"
+              ></p-inputSwitch>
+            </div>
+          </td>
+
+          <!-- Created -->
+          <td>
+            <span class="text-xs" style="color: var(--app-text-muted)">{{
+              role.created_at | date: "mediumDate"
+            }}</span>
+          </td>
+
+          <!-- Actions -->
+          <td class="text-center">
+            <div class="flex items-center justify-center gap-1">
+              <button
+                pButton
+                icon="pi pi-pencil"
+                class="p-button-text p-button-secondary p-button-sm cursor-pointer"
+                pTooltip="Edit Role"
+                (click)="openEditDialog(role)"
+              ></button>
+              <button
+                pButton
+                icon="pi pi-trash"
+                class="p-button-text p-button-danger p-button-sm cursor-pointer"
+                pTooltip="Revoke Role"
+                (click)="deleteRole(role)"
+              ></button>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+
+      <!-- Empty state -->
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td
+            colspan="7"
+            class="text-center py-12"
+            style="color: var(--app-text-muted)"
+          >
+            <i class="pi pi-users text-4xl mb-3 opacity-30 block"></i>
+            <span class="text-sm font-semibold block"
+              >No roles found matching your criteria.</span
+            >
+            <span class="text-xs opacity-60 block mt-1"
+              >Try adjusting your search or filters.</span
+            >
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>
+
+<!-- Create / Edit Role Dialog -->
+<p-dialog
+  [(visible)]="displayDialog"
+  [modal]="true"
+  [header]="isEditMode ? 'Edit Role' : 'Assign New Role'"
+  [style]="{ width: '520px' }"
+  [dismissableMask]="true"
+  *ngIf="displayDialog"
+>
+  <div class="space-y-5 pt-2">
+    <!-- Full Name -->
+    <div class="flex flex-col gap-1.5">
+      <label
+        class="text-xs font-semibold uppercase tracking-wider"
+        style="color: var(--app-text-secondary)"
+        >Full Name <span class="text-red-500">*</span></label
+      >
+      <input
+        type="text"
+        pInputText
+        [(ngModel)]="formFullName"
+        placeholder="e.g. John Doe"
+        class="w-full"
+      />
+    </div>
+
+    <!-- Email -->
+    <div class="flex flex-col gap-1.5">
+      <label
+        class="text-xs font-semibold uppercase tracking-wider"
+        style="color: var(--app-text-secondary)"
+        >Email <span class="text-red-500">*</span></label
+      >
+      <input
+        type="email"
+        pInputText
+        [(ngModel)]="formEmail"
+        placeholder="e.g. john@company.com"
+        class="w-full"
+        [disabled]="isEditMode"
+      />
+    </div>
+
+    <!-- Role -->
+    <div class="flex flex-col gap-1.5">
+      <label
+        class="text-xs font-semibold uppercase tracking-wider"
+        style="color: var(--app-text-secondary)"
+        >Role <span class="text-red-500">*</span></label
+      >
+      <p-dropdown
+        [options]="roleOptions"
+        [(ngModel)]="formRole"
+        optionLabel="label"
+        optionValue="value"
+        placeholder="Select Role"
+        styleClass="w-full"
+      ></p-dropdown>
+    </div>
+
+    <!-- Company (Platform Admin only) -->
+    <div *ngIf="isPlatformAdmin" class="flex flex-col gap-1.5">
+      <label
+        class="text-xs font-semibold uppercase tracking-wider"
+        style="color: var(--app-text-secondary)"
+        >Company</label
+      >
+      <p-dropdown
+        [options]="companies"
+        [(ngModel)]="formCompanyId"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Select Company"
+        [showClear]="true"
+        styleClass="w-full"
+      ></p-dropdown>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex justify-end gap-2">
+      <button
+        pButton
+        label="Cancel"
+        icon="pi pi-times"
+        class="p-button-secondary p-button-outlined p-button-sm cursor-pointer"
+        (click)="onDialogCancel()"
+      ></button>
+      <button
+        pButton
+        [label]="isEditMode ? 'Update' : 'Create'"
+        [icon]="isEditMode ? 'pi pi-check' : 'pi pi-plus'"
+        class="p-button-primary p-button-sm cursor-pointer"
+        [disabled]="!isFormValid"
+        (click)="onDialogSave()"
+      ></button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Confirmation Dialog -->
+<p-confirmDialog></p-confirmDialog>

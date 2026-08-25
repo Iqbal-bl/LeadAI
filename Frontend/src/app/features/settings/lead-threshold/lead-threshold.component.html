@@ -1,0 +1,155 @@
+<!-- <div class="mb-6">
+  <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">Lead Threshold Settings</h1>
+  <p class="text-sm mt-0.5" style="color: var(--app-text-muted);">Configure the lead scoring threshold — small screen, real consequences</p>
+</div> -->
+
+<div *ngIf="loading" class="flex items-center justify-center py-20">
+  <p-progressSpinner
+    strokeWidth="3"
+    [style]="{ width: '50px', height: '50px' }"
+  ></p-progressSpinner>
+</div>
+
+<div *ngIf="!loading && settings" class="max-w-2xl">
+  <!-- Current Stats -->
+  <!-- <div class="grid grid-cols-2 gap-4 mb-6">
+    <div class="card-base p-5 text-center">
+      <p class="text-3xl font-bold text-green-500">{{ settings.leads_above | number }}</p>
+      <p class="text-sm mt-1" style="color: var(--app-text-muted);">Leads above threshold</p>
+    </div>
+    <div class="card-base p-5 text-center">
+      <p class="text-3xl font-bold" style="color: var(--app-text-muted);">{{ settings.leads_below | number }}</p>
+      <p class="text-sm mt-1" style="color: var(--app-text-muted);">Leads below threshold</p>
+    </div>
+  </div> -->
+
+  <!-- Settings Form -->
+  <div class="card-base p-6">
+    <h2 class="text-lg font-semibold mb-5" style="color: var(--app-text)">
+      <i class="pi pi-sliders-h mr-2" style="color: #6366f1"></i>Threshold
+      Configuration
+    </h2>
+
+    <div class="flex flex-col gap-5">
+      <!-- Score Threshold -->
+      <div class="w-full">
+        <label
+          class="block text-sm font-medium mb-2"
+          style="color: var(--app-text)"
+          >Lead Score Threshold</label
+        >
+        <p class="text-xs mb-3" style="color: var(--app-text-muted)">
+          The bar for "worth a human's attention". Leads scoring above this
+          appear in the dashboard.
+        </p>
+        <div class="flex items-center gap-4">
+          <p-slider
+            [(ngModel)]="scoreThreshold"
+            [min]="0"
+            [max]="100"
+            class="w-full"
+          ></p-slider>
+          <span
+            class="text-xl font-bold min-w-[3rem] text-center"
+            style="color: var(--app-text)"
+            >{{ scoreThreshold }}</span
+          >
+        </div>
+      </div>
+
+      <p-divider></p-divider>
+
+      <!-- Hide Below Threshold -->
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium" style="color: var(--app-text)">
+            Hide below threshold
+          </p>
+          <p class="text-xs" style="color: var(--app-text-muted)">
+            Default inbox view hides leads below the threshold
+          </p>
+        </div>
+        <p-inputSwitch [(ngModel)]="hideBelowThreshold"></p-inputSwitch>
+      </div>
+
+      <!-- Notify on Threshold -->
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium" style="color: var(--app-text)">
+            Notify when threshold crossed
+          </p>
+          <p class="text-xs" style="color: var(--app-text-muted)">
+            Fires a real-time notification when a lead crosses the threshold
+          </p>
+        </div>
+        <p-inputSwitch [(ngModel)]="notifyOnThreshold"></p-inputSwitch>
+      </div>
+
+      <p-divider></p-divider>
+
+      <!-- Auto Convert -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <p class="text-sm font-medium" style="color: var(--app-text)">
+              Auto-convert to customer
+            </p>
+            <p class="text-xs" style="color: var(--app-text-muted)">
+              Automatically promote leads to customers at this score. Leave off
+              to keep humans in the loop (recommended).
+            </p>
+          </div>
+          <p-inputSwitch [(ngModel)]="enableAutoConvert"></p-inputSwitch>
+        </div>
+        <div
+          *ngIf="enableAutoConvert"
+          class="flex items-center gap-4 mt-2 pl-4"
+          style="border-left: 3px solid #6366f1"
+        >
+          <label class="text-sm" style="color: var(--app-text)"
+            >Convert at score:</label
+          >
+          <p-inputNumber
+            [(ngModel)]="autoConvertThreshold"
+            [min]="1"
+            [max]="100"
+            [showButtons]="true"
+            [style]="{ width: '120px' }"
+          ></p-inputNumber>
+        </div>
+        <div
+          *ngIf="!enableAutoConvert"
+          class="p-2 rounded-lg mt-2 text-xs"
+          style="background: rgba(34, 197, 94, 0.1); color: #22c55e"
+        >
+          <i class="pi pi-check mr-1"></i>Recommended: Humans review leads
+          before converting to customers.
+        </div>
+      </div>
+
+      <p-divider></p-divider>
+
+      <!-- Preview -->
+      <div
+        *ngIf="previewMessage && hasChanges"
+        class="p-3 rounded-lg text-sm"
+        style="background: rgba(99, 102, 241, 0.1); color: #6366f1"
+      >
+        <i class="pi pi-info-circle mr-2"></i>{{ previewMessage }}
+      </div>
+
+      <!-- Save -->
+      <div class="flex justify-end pt-2">
+        <p-button
+          label="Save Threshold"
+          icon="pi pi-check"
+          [disabled]="!hasChanges"
+          [loading]="saving"
+          (onClick)="saveThreshold()"
+        ></p-button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p-confirmDialog></p-confirmDialog>
