@@ -264,13 +264,15 @@ export class InstagramCallbackComponent implements OnInit {
           this.status = 'error';
           this.errorMessage =
             'Authorization code or state parameter missing from callback URL.';
+          this.notifyOpener('INSTAGRAM_AUTH_ERROR', { error: this.errorMessage });
           return;
         }
 
         this.status = 'processing';
         this.authService.handleInstagramCallback({ code, state }).subscribe({
-          next: () => {
+          next: (account) => {
             this.status = 'success';
+            this.notifyOpener('INSTAGRAM_AUTH_SUCCESS', { channel: account });
             this.startRedirectCountdown();
           },
           error: (err) => {
@@ -280,18 +282,34 @@ export class InstagramCallbackComponent implements OnInit {
               err?.error?.message ||
               err?.message ||
               'Failed to verify Instagram authorization code. Please try again.';
+            this.notifyOpener('INSTAGRAM_AUTH_ERROR', { error: this.errorMessage });
           },
         });
       },
       error: (err) => {
         this.status = 'error';
         this.errorMessage = 'Failed to parse callback parameters.';
+        this.notifyOpener('INSTAGRAM_AUTH_ERROR', { error: this.errorMessage });
       },
     });
   }
 
+  private notifyOpener(type: string, payload: any): void {
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(
+          {
+            type,
+            ...payload,
+          },
+          window.location.origin
+        );
+      }
+    } catch (e) {}
+  }
+
   startRedirectCountdown(): void {
-    this.countdown = 3;
+    this.countdown = 2;
     this.timerInterval = setInterval(() => {
       this.countdown--;
       if (this.countdown <= 0) {
@@ -305,6 +323,13 @@ export class InstagramCallbackComponent implements OnInit {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
     }
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.close();
+        return;
+      }
+    } catch (e) {}
+
     const path = '/client/channels';
     this.router.navigate([path]);
   }

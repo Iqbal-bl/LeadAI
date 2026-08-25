@@ -113,6 +113,7 @@
     [globalFilterFields]="[
       'name',
       'email',
+      'customerRef',
       'company',
       'phone',
       'status',
@@ -147,8 +148,8 @@
         <th pSortableColumn="leadScore" style="min-width: 8rem">
           Score <p-sortIcon field="leadScore"></p-sortIcon>
         </th>
-        <th pSortableColumn="updatedAt" style="min-width: 11rem">
-          Time <p-sortIcon field="updatedAt"></p-sortIcon>
+        <th pSortableColumn="createdAt" style="min-width: 12rem">
+          Date of Origin <p-sortIcon field="createdAt"></p-sortIcon>
         </th>
         <th pSortableColumn="assignedTo" style="min-width: 11rem">
           Agent <p-sortIcon field="assignedTo"></p-sortIcon>
@@ -183,7 +184,7 @@
                 {{ lead.name }}
               </div>
               <div class="text-xs truncate" style="color: var(--app-text-muted)">
-                {{ lead.phone || lead.email }}
+                {{ lead.phone || lead.email || lead.customerRef || '—' }}
               </div>
             </div>
           </div>
@@ -245,10 +246,10 @@
           </div>
         </td>
 
-        <!-- Time -->
+        <!-- Date of Origin -->
         <td>
           <span class="text-xs font-mono" style="color: var(--app-text-secondary)">{{
-            lead.updatedAt || lead.createdAt || '—'
+            (lead.createdAt || lead.updatedAt) ? ((lead.createdAt || lead.updatedAt) | date: 'MM/dd/yyyy hh:mm a') : '—'
           }}</span>
         </td>
 
@@ -277,15 +278,9 @@
             [text]="true"
             severity="secondary"
             size="small"
-            (click)="menu.toggle($event)"
+            (click)="openLeadMenu($event, lead)"
             pTooltip="Options"
           ></p-button>
-          <p-menu
-            #menu
-            [popup]="true"
-            appendTo="body"
-            [model]="getLeadMenuItems(lead)"
-          ></p-menu>
         </td>
       </tr>
     </ng-template>
@@ -311,4 +306,6 @@
     </ng-template>
   </p-table>
 </div>
+
+<p-menu #leadActionMenu [popup]="true" appendTo="body" [model]="activeLeadMenuItems"></p-menu>
 

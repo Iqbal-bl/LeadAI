@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { RoleManagementService } from '../../../../../services/role-management.service';
-import { MessageService, ConfirmationService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../../../shared/services/confirmation.service';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 

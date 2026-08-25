@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { ThresholdService } from '../../../services/threshold.service';
 import { ThresholdSettings } from '../../../models/threshold.models';
-import { MessageService, ConfirmationService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { CheckboxModule } from 'primeng/checkbox';
 import { InputNumberModule } from 'primeng/inputnumber';
 

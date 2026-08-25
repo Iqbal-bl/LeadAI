@@ -117,6 +117,15 @@ export const CLIENT_ROUTES: Routes = [
           ),
       },
       {
+        path: 'linkedin',
+        canActivate: [ClientPermissionGuard],
+        data: { permission: 'channel.read' },
+        loadComponent: () =>
+          import('../../features/linkedin/linkedin-dashboard.component').then(
+            (m) => m.LinkedinDashboardComponent,
+          ),
+      },
+      {
         path: 'contact-lists',
         canActivate: [ClientPermissionGuard],
         data: { permission: 'campaign.manage' },

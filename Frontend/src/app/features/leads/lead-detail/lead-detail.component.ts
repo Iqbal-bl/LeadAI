@@ -388,6 +388,8 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
             agent: m.sender === 'agent' ? 'Agent' : 'AI',
             callSid: m.call_sid || null,
             sender: m.sender,
+            delivery_status: m.delivery_status || m.deliveryStatus || null,
+            delivery_error: m.delivery_error || m.deliveryError || null,
           }),
         );
       },

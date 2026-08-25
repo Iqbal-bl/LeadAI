@@ -1,5 +1,5 @@
 <p-toast></p-toast>
-<p-confirmDialog></p-confirmDialog>
+<app-confirmation-dialog></app-confirmation-dialog>
 
 <!-- Loading State -->
 <div *ngIf="loading" class="flex flex-col items-center justify-center py-24">
@@ -236,16 +236,24 @@
 
         <!-- Card Footer Actions -->
         <div class="pt-3 border-t flex items-center justify-between" style="border-color: var(--app-border);">
-          <span class="text-xs font-semibold" [style.color]="s.brandColor">
-            ● Provisioned
-          </span>
+          <div class="flex items-center gap-2">
+            <p-inputSwitch
+              *ngIf="s.key && s.key !== 'web'"
+              [ngModel]="s.isEnabled"
+              (onChange)="toggleServiceEnabled(s.key!, s.isEnabled ?? true)"
+              pTooltip="Enable / Disable Service for this Client"
+            ></p-inputSwitch>
+            <span class="text-xs font-semibold" [style.color]="s.isEnabled ? s.brandColor : 'var(--app-text-muted)'">
+              {{ s.isEnabled ? '● Enabled' : '○ Disabled' }}
+            </span>
+          </div>
           <div class="flex items-center gap-1">
             <button
               pButton
               icon="pi pi-copy"
               class="p-button-text p-button-sm p-button-secondary"
-              pTooltip="Copy Service ID"
-              (click)="copySnippet(s.id, s.name)"
+              pTooltip="Copy Service Key"
+              (click)="copySnippet(s.key || s.id, s.name)"
             ></button>
           </div>
         </div>

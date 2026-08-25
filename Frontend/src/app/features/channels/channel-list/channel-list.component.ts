@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { ChannelService } from '../../../services/channel.service';
 import {
@@ -7,7 +7,9 @@ import {
   ChannelUpdateRequest,
   LinkedInStatus,
 } from '../../../models/channel.models';
-import { MessageService, ConfirmationService, MenuItem } from 'primeng/api';
+import { MessageService, MenuItem } from 'primeng/api';
+import { Menu } from 'primeng/menu';
+import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { ChannelWizardComponent } from '../channel-wizard/channel-wizard.component';
 import { ChannelContactsComponent } from '../channel-contacts/channel-contacts.component';
 import { ScriptService } from '../../../services/script.service';
@@ -20,12 +22,15 @@ import { Script } from '../../../models/script.models';
   templateUrl: './channel-list.component.html',
   styleUrl: './channel-list.component.scss',
 })
-export class ChannelListComponent implements OnInit {
+export class ChannelListComponent implements OnInit, OnDestroy {
+  @ViewChild('channelActionMenu') channelActionMenu!: Menu;
+
   channels: Channel[] = [];
   channelStatus: ChannelStatus | null = null;
   linkedinStatus: LinkedInStatus | null = null;
   linkedinLoading = false;
   private linkedinPollingInterval: any;
+  private messageEventListener!: (event: MessageEvent) => void;
   loading = true;
 
   // Scripts for dropdown selection
@@ -81,13 +86,37 @@ export class ChannelListComponent implements OnInit {
   ngOnInit(): void {
     this.loadChannels();
     this.loadStatus();
-    this.loadLinkedInStatus();
+    // this.loadLinkedInStatus();
     this.loadScripts();
+    this.messageEventListener = (event: MessageEvent) => this.handleOAuthMessage(event);
+    window.addEventListener('message', this.messageEventListener);
   }
 
   ngOnDestroy(): void {
+    window.removeEventListener('message', this.messageEventListener);
     if (this.linkedinPollingInterval) {
       clearInterval(this.linkedinPollingInterval);
+    }
+  }
+
+  private handleOAuthMessage(event: MessageEvent): void {
+    if (!event.data || typeof event.data !== 'object') return;
+    const { type, channel, error } = event.data;
+
+    if (type === 'FACEBOOK_AUTH_SUCCESS' || type === 'INSTAGRAM_AUTH_SUCCESS') {
+      this.messageService.add({
+        severity: 'success',
+        summary: 'OAuth Success',
+        detail: `${type === 'FACEBOOK_AUTH_SUCCESS' ? 'Facebook Page' : 'Instagram'} connected successfully!`,
+      });
+      this.loadChannels();
+      this.loadStatus();
+    } else if (type === 'FACEBOOK_AUTH_ERROR' || type === 'INSTAGRAM_AUTH_ERROR') {
+      this.messageService.add({
+        severity: 'error',
+        summary: 'OAuth Error',
+        detail: error || 'Authentication failed.',
+      });
     }
   }
 
@@ -486,6 +515,14 @@ export class ChannelListComponent implements OnInit {
       linkedin: '#0A66C2',
     };
     return (type && colors[type.toLowerCase()]) || '#6366f1';
+  }
+
+  activeChannelMenuItems: MenuItem[] = [];
+
+  openChannelMenu(event: Event, channel: Channel): void {
+    event.stopPropagation();
+    this.activeChannelMenuItems = this.getChannelMenuItems(channel);
+    this.channelActionMenu.toggle(event);
   }
 
   getChannelMenuItems(channel: Channel): MenuItem[] {

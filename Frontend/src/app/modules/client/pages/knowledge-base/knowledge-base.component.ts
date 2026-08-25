@@ -1,9 +1,13 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { KbService } from '../../../../services/kb.service';
 
 import { SharedModule } from '../../../../shared/shared.module';
 import { Faq, KnowledgeBaseDoc } from '../../../../models/kb.models';
 import { CLIENT_PERMISSIONS } from '../../constants/permission.constants';
+import { MenuItem } from 'primeng/api';
+import { Menu } from 'primeng/menu';
+import { ConfirmationService } from '../../../../shared/services/confirmation.service';
+import { ToastService } from '../../../../shared/services/toast.service';
 
 @Component({
   selector: 'app-knowledge-base',
@@ -13,9 +17,13 @@ import { CLIENT_PERMISSIONS } from '../../constants/permission.constants';
   styleUrl: './knowledge-base.component.scss',
 })
 export class KnowledgeBaseComponent implements OnInit {
+  @ViewChild('docActionMenu') docActionMenu!: Menu;
+
   PERMISSIONS = CLIENT_PERMISSIONS;
   docs: KnowledgeBaseDoc[] = [];
   faqs: Faq[] = [];
+
+  activeDocMenuItems: MenuItem[] = [];
 
   // Testing tab state
   testQuestion = 'What is the enterprise pricing model and refund policy?';
@@ -28,7 +36,11 @@ export class KnowledgeBaseComponent implements OnInit {
 
   showUploadDialog = false;
 
-  constructor(private kbService: KbService) {}
+  constructor(
+    private kbService: KbService,
+    private confirmationService: ConfirmationService,
+    private toastService: ToastService,
+  ) {}
 
   ngOnInit(): void {
     this.loadDocuments();
@@ -159,17 +171,42 @@ export class KnowledgeBaseComponent implements OnInit {
     this.faqs = this.faqs.filter((f) => f.id !== faq.id);
   }
 
+  openDocMenu(event: Event, doc: KnowledgeBaseDoc): void {
+    event.stopPropagation();
+    this.activeDocMenuItems = [
+      { label: 'View Document', icon: 'pi pi-eye' },
+      { label: 'Test Queries', icon: 'pi pi-bolt' },
+      { label: 'Download', icon: 'pi pi-download' },
+      { separator: true },
+      {
+        label: 'Delete',
+        icon: 'pi pi-trash',
+        styleClass: 'text-red-500',
+        command: () => this.deleteDoc(doc),
+      },
+    ];
+    this.docActionMenu.toggle(event);
+  }
+
   deleteDoc(doc: KnowledgeBaseDoc): void {
-    if (typeof doc.id === 'string') {
-      this.kbService.deleteDocument(doc.id).subscribe({
-        next: () => this.loadDocuments(),
-        error: () => {
+    this.confirmationService.confirmDelete(
+      `Are you sure you want to delete document "${doc.fileName}"?`,
+      () => {
+        if (typeof doc.id === 'string') {
+          this.kbService.deleteDocument(doc.id).subscribe({
+            next: () => {
+              this.toastService.success(`Document "${doc.fileName}" deleted.`);
+              this.loadDocuments();
+            },
+            error: () => {
+              this.docs = this.docs.filter((d) => d.id !== doc.id);
+            },
+          });
+        } else {
           this.docs = this.docs.filter((d) => d.id !== doc.id);
-        },
-      });
-    } else {
-      this.docs = this.docs.filter((d) => d.id !== doc.id);
-    }
+        }
+      }
+    );
   }
 
   onUpload(event: any): void {

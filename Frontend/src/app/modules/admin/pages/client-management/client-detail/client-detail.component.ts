@@ -6,11 +6,14 @@ import { VoiceService } from '../../../../../services/voice.service';
 import { AuthService } from '../../../../../services/auth.service';
 import { Company, CompanySettings } from '../../../../../models/company.models';
 import { Channel, LinkedInStatus } from '../../../../../models/channel.models';
-import { ConfirmationService, MessageService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../../../shared/services/confirmation.service';
 import { SharedModule } from '../../../../../shared/shared.module';
 
 export interface ServiceAccessItem {
   id: string;
+  key?: string;
+  isEnabled?: boolean;
   name: string;
   category: 'Voice' | 'Social' | 'Web' | 'Messaging';
   description: string;
@@ -61,6 +64,15 @@ export class ClientDetailComponent implements OnInit {
 
   // Available Services & Integrations Overview
   services: ServiceAccessItem[] = [];
+  companyServicesMap: Record<string, boolean> = {
+    whatsapp: true,
+    facebook: true,
+    messenger: true,
+    instagram: true,
+    voice_agent: true,
+    linkedin: true,
+    email_marketing: true,
+  };
 
   ngOnInit(): void {
     this.route.params.subscribe((params) => {
@@ -70,7 +82,61 @@ export class ClientDetailComponent implements OnInit {
         this.loadSettings();
         this.loadChannels();
         this.loadLinkedInStatus();
+        this.loadCompanyServices();
       }
+    });
+  }
+
+  loadCompanyServices(): void {
+    const options: any = {};
+    if (this.authService.isPlatformAdmin()) {
+      options.params = { client_id: this.companyId };
+    }
+    this.companyService.getCompanyServices(this.companyId, options).subscribe({
+      next: (res) => {
+        if (res?.services && res.services.length > 0) {
+          const map: Record<string, boolean> = {};
+          res.services.forEach((s) => {
+            map[s.key.toLowerCase()] = s.is_enabled;
+          });
+          this.companyServicesMap = { ...this.companyServicesMap, ...map };
+          this.buildServicesList();
+        }
+      },
+      error: () => {
+        this.buildServicesList();
+      },
+    });
+  }
+
+  toggleServiceEnabled(serviceKey: string, currentVal: boolean): void {
+    const newStatus = !currentVal;
+    const options: any = {};
+    if (this.authService.isPlatformAdmin()) {
+      options.params = { client_id: this.companyId };
+    }
+
+    this.companyService.patchCompanyServices(
+      this.companyId,
+      { services: [{ key: serviceKey, is_enabled: newStatus }] },
+      options
+    ).subscribe({
+      next: () => {
+        this.companyServicesMap[serviceKey.toLowerCase()] = newStatus;
+        this.buildServicesList();
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Service Updated',
+          detail: `Service "${serviceKey}" is now ${newStatus ? 'Enabled' : 'Disabled'}.`,
+        });
+      },
+      error: (err) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Update Failed',
+          detail: err?.message || 'Failed to update service status',
+        });
+      },
     });
   }
 
@@ -165,16 +231,25 @@ export class ClientDetailComponent implements OnInit {
       (c) => c.channel?.toLowerCase() === 'whatsapp'
     );
     const messengerCh = this.channels.find(
-      (c) => c.channel?.toLowerCase() === 'messenger'
+      (c) => c.channel?.toLowerCase() === 'messenger' || c.channel?.toLowerCase() === 'facebook'
     );
     const instagramCh = this.channels.find(
       (c) => c.channel?.toLowerCase() === 'instagram'
     );
     const isLinkedInConnected = !!(this.linkedinStatus && this.linkedinStatus.connected);
 
+    const isVoiceEnabled = this.companyServicesMap['voice_agent'] !== false;
+    const isWhatsappEnabled = this.companyServicesMap['whatsapp'] !== false;
+    const isMessengerEnabled = (this.companyServicesMap['facebook'] ?? this.companyServicesMap['messenger']) !== false;
+    const isInstagramEnabled = this.companyServicesMap['instagram'] !== false;
+    const isLinkedInEnabled = this.companyServicesMap['linkedin'] !== false;
+    const isEmailEnabled = this.companyServicesMap['email_marketing'] !== false;
+
     this.services = [
       {
         id: 'voice-calling',
+        key: 'voice_agent',
+        isEnabled: isVoiceEnabled,
         name: 'AI Voice & Dialler',
         category: 'Voice',
         description:
@@ -182,11 +257,13 @@ export class ClientDetailComponent implements OnInit {
         icon: 'pi pi-phone',
         brandColor: '#f59e0b',
         bgGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        status: this.companySettings?.auto_call_on_hot_lead ? 'active' : 'configured',
-        statusLabel: this.companySettings?.auto_call_on_hot_lead
+        status: !isVoiceEnabled ? 'disabled' : this.companySettings?.auto_call_on_hot_lead ? 'active' : 'configured',
+        statusLabel: !isVoiceEnabled
+          ? 'Disabled'
+          : this.companySettings?.auto_call_on_hot_lead
           ? 'Active (Auto-Dial On)'
           : 'Configured',
-        badgeSeverity: 'success',
+        badgeSeverity: !isVoiceEnabled ? 'secondary' : 'success',
         features: [
           'Outbound AI Lead Calling',
           'Live Call Transcripts',
@@ -201,6 +278,8 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'whatsapp',
+        key: 'whatsapp',
+        isEnabled: isWhatsappEnabled,
         name: 'WhatsApp Business API',
         category: 'Social',
         description:
@@ -208,13 +287,17 @@ export class ClientDetailComponent implements OnInit {
         icon: 'pi pi-whatsapp',
         brandColor: '#25D366',
         bgGradient: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
-        status: whatsappCh?.is_active ? 'active' : whatsappCh ? 'configured' : 'available',
-        statusLabel: whatsappCh?.is_active
+        status: !isWhatsappEnabled ? 'disabled' : whatsappCh?.is_active ? 'active' : whatsappCh ? 'configured' : 'available',
+        statusLabel: !isWhatsappEnabled
+          ? 'Disabled'
+          : whatsappCh?.is_active
           ? 'Active'
           : whatsappCh
           ? 'Connected (Inactive)'
           : 'Ready to Connect',
-        badgeSeverity: whatsappCh?.is_active
+        badgeSeverity: !isWhatsappEnabled
+          ? 'secondary'
+          : whatsappCh?.is_active
           ? 'success'
           : whatsappCh
           ? 'warn'
@@ -234,6 +317,8 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'messenger',
+        key: 'facebook',
+        isEnabled: isMessengerEnabled,
         name: 'Facebook Messenger',
         category: 'Social',
         description:
@@ -241,13 +326,17 @@ export class ClientDetailComponent implements OnInit {
         icon: 'pi pi-facebook',
         brandColor: '#0084FF',
         bgGradient: 'linear-gradient(135deg, #0084FF 0%, #0063E6 100%)',
-        status: messengerCh?.is_active ? 'active' : messengerCh ? 'configured' : 'available',
-        statusLabel: messengerCh?.is_active
+        status: !isMessengerEnabled ? 'disabled' : messengerCh?.is_active ? 'active' : messengerCh ? 'configured' : 'available',
+        statusLabel: !isMessengerEnabled
+          ? 'Disabled'
+          : messengerCh?.is_active
           ? 'Active'
           : messengerCh
           ? 'Configured'
           : 'Ready to Connect',
-        badgeSeverity: messengerCh?.is_active
+        badgeSeverity: !isMessengerEnabled
+          ? 'secondary'
+          : messengerCh?.is_active
           ? 'success'
           : messengerCh
           ? 'warn'
@@ -266,6 +355,8 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'instagram',
+        key: 'instagram',
+        isEnabled: isInstagramEnabled,
         name: 'Instagram Direct (DM)',
         category: 'Social',
         description:
@@ -273,13 +364,17 @@ export class ClientDetailComponent implements OnInit {
         icon: 'pi pi-instagram',
         brandColor: '#E4405F',
         bgGradient: 'linear-gradient(135deg, #E4405F 0%, #833AB4 100%)',
-        status: instagramCh?.is_active ? 'active' : instagramCh ? 'configured' : 'available',
-        statusLabel: instagramCh?.is_active
+        status: !isInstagramEnabled ? 'disabled' : instagramCh?.is_active ? 'active' : instagramCh ? 'configured' : 'available',
+        statusLabel: !isInstagramEnabled
+          ? 'Disabled'
+          : instagramCh?.is_active
           ? 'Active'
           : instagramCh
           ? 'Configured'
           : 'Ready to Connect',
-        badgeSeverity: instagramCh?.is_active
+        badgeSeverity: !isInstagramEnabled
+          ? 'secondary'
+          : instagramCh?.is_active
           ? 'success'
           : instagramCh
           ? 'warn'
@@ -298,6 +393,8 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'linkedin',
+        key: 'linkedin',
+        isEnabled: isLinkedInEnabled,
         name: 'LinkedIn Automation',
         category: 'Social',
         description:
@@ -305,9 +402,17 @@ export class ClientDetailComponent implements OnInit {
         icon: 'pi pi-linkedin',
         brandColor: '#0A66C2',
         bgGradient: 'linear-gradient(135deg, #0A66C2 0%, #004182 100%)',
-        status: isLinkedInConnected ? 'active' : 'available',
-        statusLabel: isLinkedInConnected ? 'Connected' : 'Available',
-        badgeSeverity: isLinkedInConnected ? 'success' : 'secondary',
+        status: !isLinkedInEnabled ? 'disabled' : isLinkedInConnected ? 'active' : 'available',
+        statusLabel: !isLinkedInEnabled
+          ? 'Disabled'
+          : isLinkedInConnected
+          ? 'Connected'
+          : 'Available',
+        badgeSeverity: !isLinkedInEnabled
+          ? 'secondary'
+          : isLinkedInConnected
+          ? 'success'
+          : 'secondary',
         features: [
           'LinkedIn OAuth Authorization',
           'Profile & Company Sync',
@@ -324,7 +429,34 @@ export class ClientDetailComponent implements OnInit {
         },
       },
       {
+        id: 'sms-email',
+        key: 'email_marketing',
+        isEnabled: isEmailEnabled,
+        name: 'Email Marketing & Outreach',
+        category: 'Messaging',
+        description:
+          'Two-way messaging, transactional email drip campaigns, and automated follow-up triggers.',
+        icon: 'pi pi-envelope',
+        brandColor: '#8b5cf6',
+        bgGradient: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
+        status: !isEmailEnabled ? 'disabled' : 'active',
+        statusLabel: !isEmailEnabled ? 'Disabled' : 'Active',
+        badgeSeverity: !isEmailEnabled ? 'secondary' : 'success',
+        features: [
+          'Automated SMS Follow-ups',
+          'Transactional Email Delivery',
+          'Opt-In / Opt-Out Consent Tracking',
+          'Delivery Status Webhooks',
+        ],
+        configDetails: {
+          displayNumber: '+1 (555) 018-9922',
+          extraNote: 'AWS SES Active',
+        },
+      },
+      {
         id: 'webchat',
+        key: 'web',
+        isEnabled: true,
         name: 'Web Chat Widget',
         category: 'Web',
         description:
@@ -344,29 +476,6 @@ export class ClientDetailComponent implements OnInit {
         configDetails: {
           extraNote: `Greeting: "${this.companySettings?.widget_greeting || 'Hello!'}"`,
           autoReply: true,
-        },
-      },
-      {
-        id: 'sms-email',
-        name: 'SMS & Email Outreach',
-        category: 'Messaging',
-        description:
-          'Two-way SMS text messaging, transactional email drip campaigns, and automated follow-up triggers.',
-        icon: 'pi pi-envelope',
-        brandColor: '#8b5cf6',
-        bgGradient: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
-        status: 'active',
-        statusLabel: 'Active',
-        badgeSeverity: 'success',
-        features: [
-          'Automated SMS Follow-ups',
-          'Transactional Email Delivery',
-          'Opt-In / Opt-Out Consent Tracking',
-          'Delivery Status Webhooks',
-        ],
-        configDetails: {
-          displayNumber: '+1 (555) 018-9922',
-          extraNote: 'AWS SES & Twilio SMS Active',
         },
       },
     ];

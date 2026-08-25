@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, Output, OnInit, OnDestroy } from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { ChannelService } from '../../../services/channel.service';
 import { AuthService } from '../../../services/auth.service';
@@ -15,7 +15,7 @@ import { Script } from '../../../models/script.models';
   templateUrl: './channel-wizard.component.html',
   styleUrl: './channel-wizard.component.scss',
 })
-export class ChannelWizardComponent implements OnInit {
+export class ChannelWizardComponent implements OnInit, OnDestroy {
   @Input() visible = false;
   @Output() complete = new EventEmitter<void>();
   @Output() close = new EventEmitter<void>();
@@ -36,6 +36,10 @@ export class ChannelWizardComponent implements OnInit {
   verifyTokenInput = '';
   autoReply = true;
   oauthLoading = false;
+  fbOauthLoading = false;
+
+  private activeOAuthPopup: Window | null = null;
+  private messageEventListener!: (event: MessageEvent) => void;
 
   // Scripts library for dropdown
   scripts: Script[] = [];
@@ -63,6 +67,9 @@ export class ChannelWizardComponent implements OnInit {
     { label: 'LinkedIn', value: 'linkedin', icon: 'pi pi-linkedin', color: '#0A66C2' },
   ];
 
+  linkedinConnecting = false;
+  private linkedinPollingInterval: any;
+
   constructor(
     private channelService: ChannelService,
     private authService: AuthService,
@@ -72,6 +79,55 @@ export class ChannelWizardComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadScripts();
+    this.messageEventListener = (event: MessageEvent) => this.handleOAuthMessage(event);
+    window.addEventListener('message', this.messageEventListener);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('message', this.messageEventListener);
+    if (this.linkedinPollingInterval) {
+      clearInterval(this.linkedinPollingInterval);
+    }
+  }
+
+  private handleOAuthMessage(event: MessageEvent): void {
+    if (!event.data || typeof event.data !== 'object') return;
+    const { type, channel, error } = event.data;
+
+    if (type === 'FACEBOOK_AUTH_SUCCESS' || type === 'INSTAGRAM_AUTH_SUCCESS') {
+      this.oauthLoading = false;
+      this.fbOauthLoading = false;
+      if (this.activeOAuthPopup && !this.activeOAuthPopup.closed) {
+        this.activeOAuthPopup.close();
+      }
+      this.messageService.add({
+        severity: 'success',
+        summary: 'Connected!',
+        detail: `Successfully linked ${type === 'FACEBOOK_AUTH_SUCCESS' ? 'Facebook Page' : 'Instagram'} via OAuth.`,
+      });
+      this.finishWizard();
+    } else if (type === 'FACEBOOK_AUTH_ERROR' || type === 'INSTAGRAM_AUTH_ERROR') {
+      this.oauthLoading = false;
+      this.fbOauthLoading = false;
+      this.messageService.add({
+        severity: 'error',
+        summary: 'OAuth Error',
+        detail: error || 'Failed to complete OAuth authorization.',
+      });
+    }
+  }
+
+  private openOAuthPopup(url: string, title: string): Window | null {
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    this.activeOAuthPopup = window.open(
+      url,
+      title,
+      `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
+    );
+    return this.activeOAuthPopup;
   }
 
   loadScripts(): void {
@@ -190,18 +246,12 @@ export class ChannelWizardComponent implements OnInit {
     });
   }
 
-  private linkedinPollingInterval: any;
-  linkedinConnecting = false;
-
-  ngOnDestroy(): void {
-    if (this.linkedinPollingInterval) {
-      clearInterval(this.linkedinPollingInterval);
-    }
-  }
-
   finishWizard(): void {
     if (this.linkedinPollingInterval) {
       clearInterval(this.linkedinPollingInterval);
+    }
+    if (this.activeOAuthPopup && !this.activeOAuthPopup.closed) {
+      this.activeOAuthPopup.close();
     }
     this.complete.emit();
   }
@@ -212,7 +262,7 @@ export class ChannelWizardComponent implements OnInit {
       next: (res) => {
         this.oauthLoading = false;
         if (res && res.authorize_url) {
-          window.location.assign(res.authorize_url);
+          this.openOAuthPopup(res.authorize_url, 'Instagram Connect');
         }
       },
       error: (err) => {
@@ -224,6 +274,29 @@ export class ChannelWizardComponent implements OnInit {
             err?.error?.detail ||
             err?.message ||
             'Failed to initiate Instagram OAuth authorization.',
+        });
+      },
+    });
+  }
+
+  connectWithFacebook(): void {
+    this.fbOauthLoading = true;
+    this.authService.getFacebookAuthorizeUrl().subscribe({
+      next: (res) => {
+        this.fbOauthLoading = false;
+        if (res && res.authorize_url) {
+          window.location.href = res.authorize_url;
+        }
+      },
+      error: (err) => {
+        this.fbOauthLoading = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'OAuth Error',
+          detail:
+            err?.error?.detail ||
+            err?.message ||
+            'Failed to initiate Facebook OAuth authorization.',
         });
       },
     });

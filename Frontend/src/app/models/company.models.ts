@@ -24,3 +24,25 @@ export interface CompanySettings {
   effective_handoff_threshold?: number;
   effective_retrieval_top_k?: number;
 }
+
+export interface ServiceItemOut {
+  key: string; // e.g. "whatsapp", "facebook", "instagram", "voice_agent", "linkedin"
+  is_enabled: boolean;
+}
+
+export interface CompanyServicesOut {
+  company_id: string;
+  company_name: string;
+  services: ServiceItemOut[];
+}
+
+export interface ServicePatchItem {
+  key: string;
+  is_enabled: boolean;
+  config_json?: Record<string, any> | null;
+}
+
+export interface CompanyServicesPatchIn {
+  services: ServicePatchItem[];
+}
+

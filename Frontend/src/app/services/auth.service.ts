@@ -486,6 +486,58 @@ export class AuthService {
     );
   }
 
+  // Facebook OAuth: Get authorization URL
+  public getFacebookAuthorizeUrl(publishing: boolean = false): Observable<{
+    authorize_url: string;
+    state: string;
+  }> {
+    let url = `${environment.apiPrefix}/channels/facebook/connect`;
+    if (publishing) url += '?publishing=true';
+    return this.http.get<{ authorize_url: string; state: string }>(url, {
+      headers: {
+        'ngrok-skip-browser-warning': 'sdf',
+      },
+    });
+  }
+
+  // Facebook OAuth: Handle callback code & state (exchanges for page selection)
+  public handleFacebookCallback(payload: {
+    code: string;
+    state: string;
+  }): Observable<{
+    selection: string;
+    pages: Array<{
+      page_id: string;
+      name: string;
+      category?: string;
+      instagram_username?: string;
+      instagram_id?: string;
+    }>;
+  }> {
+    return this.http.post<{
+      selection: string;
+      pages: Array<{
+        page_id: string;
+        name: string;
+        category?: string;
+        instagram_username?: string;
+        instagram_id?: string;
+      }>;
+    }>(`${environment.apiPrefix}/channels/facebook/callback`, payload);
+  }
+
+  // Facebook OAuth: Select Page to finalize connection
+  public selectFacebookPage(payload: {
+    selection: string;
+    page_id: string;
+    connect_instagram?: boolean;
+  }): Observable<any> {
+    return this.http.post<any>(
+      `${environment.apiPrefix}/channels/facebook/select`,
+      payload,
+    );
+  }
+
   // LinkedIn OAuth: Get authorization URL
   public getLinkedInConnectUrl(): Observable<{ authorize_url: string }> {
     return this.http.get<{ authorize_url: string }>(

@@ -19,6 +19,13 @@ export const routes: Routes = [
             (m) => m.InstagramCallbackComponent,
           ),
       },
+      {
+        path: 'facebook/callback',
+        loadComponent: () =>
+          import('./features/auth/facebook/facebook-callback.component').then(
+            (m) => m.FacebookCallbackComponent,
+          ),
+      },
       // {
       //   path: 'instagram',
       //   loadComponent: () =>

@@ -142,32 +142,15 @@
             [text]="true"
             severity="secondary"
             size="small"
-            (click)="teamMenu.toggle($event)"
+            (click)="openTeamMenu($event, member)"
           ></p-button>
-          <p-menu
-            #teamMenu
-            [popup]="true"
-            appendTo="body"
-            [model]="[
-              {
-                label: 'Edit Member',
-                icon: 'pi pi-user-edit',
-                command: editMember.bind(this, member),
-              },
-              { label: 'Reassign Leads', icon: 'pi pi-arrow-right-left' },
-              { separator: true },
-              {
-                label: 'Remove',
-                icon: 'pi pi-trash',
-                command: deleteMember.bind(this, member),
-              },
-            ]"
-          ></p-menu>
         </td>
       </tr>
     </ng-template>
   </p-table>
 </div>
+
+<p-menu #teamActionMenu [popup]="true" appendTo="body" [model]="activeTeamMenuItems"></p-menu>
 
 <!-- Add Team Member Dialog -->
 <p-dialog
@@ -304,3 +287,5 @@
     ></p-button>
   </ng-template>
 </p-dialog>
+
+<app-confirmation-dialog></app-confirmation-dialog>

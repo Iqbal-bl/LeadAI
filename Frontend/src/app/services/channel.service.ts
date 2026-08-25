@@ -124,5 +124,19 @@ export class ChannelService {
       },
     );
   }
+
+  /** POST /channels/instagram/connect — get Instagram OAuth authorization URL */
+  public getInstagramConnectUrl(): Observable<{ auth_url: string }> {
+    return this.apiService.post<{ auth_url: string }>('channels/instagram/connect', {}, { companyScoped: true });
+  }
+
+  /** POST /channels/{channel_id}/refresh-token — refresh Instagram 60-day token */
+  public refreshToken(channelId: string): Observable<import('../models/channel.models').TokenRefreshOut> {
+    return this.apiService.post<import('../models/channel.models').TokenRefreshOut>(
+      `channels/${channelId}/refresh-token`,
+      {},
+      { companyScoped: true }
+    );
+  }
 }
 

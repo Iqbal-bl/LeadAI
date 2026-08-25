@@ -31,9 +31,20 @@ export interface Channel {
   last_outbound_at?: string | null;
   last_error?: string | null;
   last_error_at?: string | null;
+  login_type?: 'facebook' | 'instagram' | null;
+  app_id?: string | null;
+  token_expires_at?: string | null;
+  token_refreshed_at?: string | null;
   created_at?: string;
   updated_at?: string;
   status?: 'active' | 'inactive' | 'pending' | string;
+}
+
+export interface TokenRefreshOut {
+  id: string;
+  refreshed: boolean;
+  expires_at?: string | null;
+  message: string;
 }
 
 export interface ChannelCreateRequest {

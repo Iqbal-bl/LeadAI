@@ -8,7 +8,8 @@ import {
   CampaignPreview,
   CampaignRecipient,
 } from '../../../models/campaign.models';
-import { MessageService, ConfirmationService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../shared/services/confirmation.service';
 
 @Component({
   selector: 'app-campaign-detail',

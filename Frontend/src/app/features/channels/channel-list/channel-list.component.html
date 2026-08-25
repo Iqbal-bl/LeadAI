@@ -1,4 +1,4 @@
-<p-confirmDialog></p-confirmDialog>
+<app-confirmation-dialog></app-confirmation-dialog>
 
 <div class="mb-6">
   <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">Channel Connections</h1>
@@ -6,7 +6,7 @@
 </div>
 
 <!-- LinkedIn Company Connection Card -->
-<div class="card-base p-5 mb-6 border transition-all duration-200"
+<!-- <div class="card-base p-5 mb-6 border transition-all duration-200"
      [style.border-color]="linkedinStatus?.connected ? 'rgba(10, 102, 194, 0.4)' : 'var(--app-border)'"
      [style.background]="linkedinStatus?.connected ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.08), rgba(0, 65, 130, 0.04))' : 'var(--app-surface)'">
   <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -56,7 +56,7 @@
       ></p-button>
     </div>
   </div>
-</div>
+</div> -->
 
 <!-- Status Tiles -->
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6" *ngIf="channelStatus">
@@ -180,14 +180,8 @@
             severity="secondary"
             size="small"
             pTooltip="Actions"
-            (click)="actionMenu.toggle($event)"
+            (click)="openChannelMenu($event, channel)"
           ></p-button>
-          <p-menu
-            #actionMenu
-            [popup]="true"
-            appendTo="body"
-            [model]="getChannelMenuItems(channel)"
-          ></p-menu>
         </td>
 
       </tr>
@@ -205,6 +199,8 @@
     </ng-template>
   </p-table>
 </div>
+
+<p-menu #channelActionMenu [popup]="true" appendTo="body" [model]="activeChannelMenuItems"></p-menu>
 
 <!-- Edit Channel Dialog -->
 <p-dialog header="Edit Channel Settings" [(visible)]="showEditDialog" [modal]="true" [closable]="true"

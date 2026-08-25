@@ -1,0 +1,32 @@
+:host {
+  display: block;
+}
+
+.card-base {
+  background: var(--app-surface, #ffffff);
+  border: 1px solid var(--app-border, #e2e8f0);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+:host-context(.dark) .card-base {
+  background: var(--app-surface, #1e293b);
+  border-color: var(--app-border, #334155);
+}
+
+.text-muted {
+  color: var(--app-text-muted, #64748b);
+}
+
+.p-inputgroup {
+  display: flex;
+  width: 100%;
+}
+
+.p-inputgroup input {
+  flex: 1 1 auto;
+}
+
+textarea {
+  resize: vertical;
+}

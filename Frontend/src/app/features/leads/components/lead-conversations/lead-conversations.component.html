@@ -129,6 +129,33 @@
         <div class="whitespace-pre-wrap leading-relaxed">
           {{ msg.summary }}
         </div>
+
+        <!-- Social / Omnichannel Delivery Status -->
+        <div
+          *ngIf="msg.delivery_status || msg.deliveryStatus"
+          class="mt-1.5 pt-1 border-t border-dashed border-white/20 text-[10px] flex items-center gap-1.5"
+        >
+          <span
+            *ngIf="(msg.delivery_status || msg.deliveryStatus) === 'sent'"
+            class="text-emerald-400 flex items-center gap-1"
+          >
+            <i class="pi pi-check text-[9px]"></i> Sent to channel
+          </span>
+          <span
+            *ngIf="(msg.delivery_status || msg.deliveryStatus) === 'failed'"
+            class="text-rose-400 flex items-center gap-1 font-medium"
+            [pTooltip]="msg.delivery_error || msg.deliveryError"
+          >
+            <i class="pi pi-exclamation-circle text-[9px]"></i> Failed: {{ msg.delivery_error || msg.deliveryError || 'Provider rejected' }}
+          </span>
+          <span
+            *ngIf="(msg.delivery_status || msg.deliveryStatus) === 'skipped'"
+            class="text-amber-400 flex items-center gap-1 font-medium"
+            [pTooltip]="msg.delivery_error || msg.deliveryError"
+          >
+            <i class="pi pi-clock text-[9px]"></i> 24h window closed
+          </span>
+        </div>
       </div>
     </div>
   </ng-container>

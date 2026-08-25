@@ -1,13 +1,152 @@
 <p-dialog header="Connect Channel" [(visible)]="visible" [modal]="true" [closable]="true"
-          [style]="{ width: '680px', maxHeight: '90vh' }" (onHide)="onClose()" [draggable]="false">
+          [style]="{ width: '700px', maxWidth: '95vw', maxHeight: '90vh' }" (onHide)="onClose()" [draggable]="false">
 
-  <!-- Step Indicators -->
+  <!-- Header Subtitle / Intro -->
+  <!-- <div class="mb-5 pb-3" style="border-bottom: 1px solid var(--app-border, #e2e8f0);">
+    <p class="text-sm font-medium" style="color: var(--app-text-secondary, #64748b);">
+      Choose a platform below to authenticate and connect seamlessly via official OAuth:
+    </p>
+  </div> -->
+
+  <!-- OAuth Platforms List -->
+  <div class="flex flex-col gap-3.5 mt-4">
+    <!-- Facebook Messenger -->
+    <div class="platform-card facebook-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div class="flex items-start sm:items-center gap-3.5">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+             style="background: linear-gradient(135deg, #1877f2 0%, #0d5cb6 100%);">
+          <i class="pi pi-facebook text-2xl"></i>
+        </div>
+        <div class="flex flex-col text-left">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">Facebook Messenger</h4>
+            <span class="platform-badge bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800">
+              OAuth 2.0
+            </span>
+          </div>
+          <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
+            Connect your Facebook Business Page for automated Messenger replies, lead capturing, and page inbox sync.
+          </p>
+        </div>
+      </div>
+      <p-button
+        label="Connect Facebook"
+        icon="pi pi-arrow-right"
+        iconPos="right"
+        [rounded]="true"
+        [loading]="fbOauthLoading"
+        (onClick)="connectWithFacebook()"
+        [style]="{ 'background': 'linear-gradient(135deg, #1877f2, #0d5cb6)', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
+      ></p-button>
+    </div>
+
+    <!-- Instagram Direct -->
+    <div class="platform-card instagram-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div class="flex items-start sm:items-center gap-3.5">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+             style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);">
+          <i class="pi pi-instagram text-2xl"></i>
+        </div>
+        <div class="flex flex-col text-left">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">Instagram Direct</h4>
+            <span class="platform-badge bg-pink-50 text-pink-700 border border-pink-200 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800">
+              Meta Direct
+            </span>
+          </div>
+          <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
+            Link your Instagram Professional account to manage DMs, story mentions, and customer inquiries with AI auto-replies.
+          </p>
+        </div>
+      </div>
+      <p-button
+        label="Connect Instagram"
+        icon="pi pi-arrow-right"
+        iconPos="right"
+        [rounded]="true"
+        [loading]="oauthLoading"
+        (onClick)="connectWithInstagram()"
+        [style]="{ 'background': 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
+      ></p-button>
+    </div>
+
+    <!-- LinkedIn Profile -->
+    <div class="platform-card linkedin-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div class="flex items-start sm:items-center gap-3.5">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+             style="background: linear-gradient(135deg, #0A66C2 0%, #004182 100%);">
+          <i class="pi pi-linkedin text-2xl"></i>
+        </div>
+        <div class="flex flex-col text-left">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">LinkedIn</h4>
+            <span class="platform-badge bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800">
+              OAuth 2.0
+            </span>
+          </div>
+          <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
+            Link your company or personal LinkedIn profile to schedule and publish updates and engage with professional prospects.
+          </p>
+        </div>
+      </div>
+      <p-button
+        label="{{ linkedinConnecting ? 'Waiting for Consent...' : 'Connect LinkedIn' }}"
+        icon="{{ linkedinConnecting ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
+        iconPos="right"
+        [rounded]="true"
+        [loading]="linkedinConnecting"
+        (onClick)="connectWithLinkedIn()"
+        [style]="{ 'background': '#0A66C2', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
+      ></p-button>
+    </div>
+
+    <!-- WhatsApp Business -->
+    <!-- <div class="platform-card whatsapp-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div class="flex items-start sm:items-center gap-3.5">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+             style="background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);">
+          <i class="pi pi-whatsapp text-2xl"></i>
+        </div>
+        <div class="flex flex-col text-left">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">WhatsApp Business</h4>
+            <span class="platform-badge bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+              Meta Cloud
+            </span>
+          </div>
+          <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
+            Connect your WhatsApp Business number via Meta to send automated template messages and interact with customers.
+          </p>
+        </div>
+      </div>
+      <p-button
+        label="Connect WhatsApp"
+        icon="pi pi-arrow-right"
+        iconPos="right"
+        [rounded]="true"
+        [loading]="fbOauthLoading"
+        (onClick)="connectWithFacebook()"
+        [style]="{ 'background': 'linear-gradient(135deg, #25D366, #128C7E)', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
+      ></p-button>
+    </div> -->
+  </div>
+
+  <!-- Security / Info Footer -->
+  <div class="info-banner mt-5 p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-left">
+    <i class="pi pi-shield text-base text-indigo-500 shrink-0"></i>
+    <span class="font-medium">All channel connections use secure OAuth 2.0 authentication. No manual API tokens or secrets required.</span>
+  </div>
+
+  <!-- =========================================================================
+       MANUAL CONFIGURATION FORM (COMMENTED OUT AS REQUESTED)
+       ========================================================================= -->
+  <!--
   <div class="flex items-center justify-center gap-2 mb-6 pb-4" style="border-bottom: 1px solid var(--app-border);">
     <div *ngFor="let step of ['Create Account', 'Configure Meta', 'Verify']; let i = index"
          class="flex items-center gap-2">
       <div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300"
-           [style.background]="activeStep >= i ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--app-surface-alt)'"
-           [style.color]="activeStep >= i ? '#fff' : 'var(--app-text-muted)'">
+            [style.background]="activeStep >= i ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--app-surface-alt)'"
+            [style.color]="activeStep >= i ? '#fff' : 'var(--app-text-muted)'">
         <i *ngIf="activeStep > i" class="pi pi-check text-xs"></i>
         <span *ngIf="activeStep <= i">{{ i + 1 }}</span>
       </div>
@@ -17,7 +156,6 @@
     </div>
   </div>
 
-  <!-- Step 1: Create Account -->
   <div *ngIf="activeStep === 0" class="flex flex-col gap-4">
     <div>
       <label class="block text-sm font-medium mb-2" style="color: var(--app-text);">Channel Type</label>
@@ -30,60 +168,6 @@
           <i [class]="ct.icon" class="text-2xl" [style.color]="ct.color"></i>
           <span class="text-sm font-medium" style="color: var(--app-text);">{{ ct.label }}</span>
         </div>
-      </div>
-    </div>
-
-    <!-- Instagram OAuth Quick Connect -->
-    <div *ngIf="channelType === 'instagram'" class="p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 border text-left"
-         style="border-color: rgba(228, 64, 95, 0.3); background: linear-gradient(135deg, rgba(228, 64, 95, 0.08), rgba(240, 148, 51, 0.08));">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-             style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);">
-          <i class="pi pi-instagram text-lg"></i>
-        </div>
-        <div>
-          <h4 class="text-sm font-semibold" style="color: var(--app-text);">Connect with Instagram (OAuth)</h4>
-          <p class="text-xs" style="color: var(--app-text-muted);">Authorize via Meta login without manually copying API tokens</p>
-        </div>
-      </div>
-      <p-button
-        label="Connect with Instagram"
-        icon="pi pi-external-link"
-        iconPos="right"
-        [loading]="oauthLoading"
-        (onClick)="connectWithInstagram()"
-        [style]="{ 'background': 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)', 'border': 'none' }"
-      ></p-button>
-    </div>
-
-    <!-- LinkedIn OAuth Quick Connect -->
-    <div *ngIf="channelType === 'linkedin'" class="p-4 rounded-xl flex flex-col gap-3 border text-left"
-         style="border-color: rgba(10, 102, 194, 0.3); background: linear-gradient(135deg, rgba(10, 102, 194, 0.08), rgba(0, 119, 181, 0.04));">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-               style="background: linear-gradient(135deg, #0A66C2, #004182);">
-            <i class="pi pi-linkedin text-lg"></i>
-          </div>
-          <div>
-            <h4 class="text-sm font-semibold" style="color: var(--app-text);">Connect LinkedIn Profile (OAuth)</h4>
-            <p class="text-xs" style="color: var(--app-text-muted);">Link your company's LinkedIn Profile to schedule and publish updates.</p>
-          </div>
-        </div>
-        <p-button
-          label="{{ linkedinConnecting ? 'Waiting for LinkedIn Consent...' : 'Connect LinkedIn Profile' }}"
-          icon="{{ linkedinConnecting ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
-          iconPos="right"
-          [loading]="linkedinConnecting"
-          (onClick)="connectWithLinkedIn()"
-          [style]="{ 'background': '#0A66C2', 'border': 'none' }"
-        ></p-button>
-      </div>
-
-      <div class="p-2.5 rounded-lg text-xs flex items-center gap-2"
-           style="background: rgba(10, 102, 194, 0.08); color: var(--app-text-secondary); border: 1px solid rgba(10, 102, 194, 0.15);">
-        <i class="pi pi-info-circle text-sm shrink-0" style="color: #0A66C2;"></i>
-        <span>Opens a secure LinkedIn popup. Once you sign in and authorize, LeadAI will automatically link your account and close the window.</span>
       </div>
     </div>
 
@@ -111,21 +195,18 @@
              class="w-full" />
     </div>
 
-    <!-- Auto-Reply Script Selection -->
     <div>
       <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Auto-Reply Script <span class="text-xs" style="color: var(--app-text-muted);">(optional)</span></label>
       <p-dropdown appendTo="body" [options]="scripts" [(ngModel)]="scriptId" optionValue="id" optionLabel="name"
                   placeholder="Select a script to handle auto-replies" [showClear]="true" [style]="{ width: '100%' }"></p-dropdown>
     </div>
 
-    <!-- Webhook Verify Token Configuration -->
     <div>
       <label class="block text-sm font-medium mb-1" style="color: var(--app-text);">Verify Token <span class="text-xs" style="color: var(--app-text-muted);">(optional, autogenerated if left blank)</span></label>
       <input pInputText type="text" [(ngModel)]="verifyTokenInput" placeholder="Specify a custom verify token"
              class="w-full" />
     </div>
 
-    <!-- Auto-Reply Toggle Switch -->
     <div class="flex items-center justify-between p-3.5 rounded-xl border text-left" style="border-color: var(--app-border); background: var(--app-surface-alt);">
       <div class="flex flex-col gap-0.5">
         <label class="text-sm font-medium" style="color: var(--app-text);">Auto-Reply Enabled</label>
@@ -134,7 +215,6 @@
       <p-inputSwitch [(ngModel)]="autoReply"></p-inputSwitch>
     </div>
 
-    <!-- WhatsApp Specific Config -->
     <div *ngIf="channelType === 'whatsapp'" class="p-4 rounded-xl flex flex-col gap-4 border text-left" style="border-color: var(--app-border); background: var(--app-surface-alt);">
       <h4 class="text-sm font-semibold flex items-center gap-2" style="color: var(--app-text);">
         <i class="pi pi-whatsapp" style="color: #25D366;"></i> WhatsApp Account Details
@@ -173,7 +253,6 @@
     </div>
   </div>
 
-  <!-- Step 2: Configure Meta -->
   <div *ngIf="activeStep === 1" class="flex flex-col gap-4">
     <div class="p-4 rounded-xl" style="background: var(--app-surface-alt);">
       <h3 class="text-base font-semibold mb-3" style="color: var(--app-text);">
@@ -217,7 +296,6 @@
     </div>
   </div>
 
-  <!-- Step 3: Verify -->
   <div *ngIf="activeStep === 2" class="flex flex-col gap-4">
     <div class="p-4 rounded-xl" style="background: var(--app-surface-alt);">
       <h3 class="text-base font-semibold mb-2" style="color: var(--app-text);">
@@ -274,5 +352,5 @@
       </div>
     </div>
   </div>
+  -->
 </p-dialog>
-

@@ -1,7 +1,8 @@
 import { Component, EventEmitter, OnInit, Output, inject } from '@angular/core';
 import { CompanyService } from '../../../services/company.service';
 import { Company } from '../../../models/company.models';
-import { ConfirmationService, MessageService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { Router } from '@angular/router';
 
 import { SharedModule } from '../../../shared/shared.module';
@@ -10,7 +11,6 @@ import { SharedModule } from '../../../shared/shared.module';
   selector: 'app-companies-list',
   standalone: true,
   imports: [SharedModule],
-  providers: [ConfirmationService, MessageService],
   templateUrl: './companies-list.component.html',
   styleUrl: './companies-list.component.scss',
 })

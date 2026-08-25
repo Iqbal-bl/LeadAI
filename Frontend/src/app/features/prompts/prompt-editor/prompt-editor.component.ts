@@ -1,5 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { ConfirmationService, MessageService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { ScriptService } from '../../../services/script.service';
 import { Script, ScriptPreview, PromptTemplate } from '../../../models/script.models';
 import { SharedModule } from '../../../shared/shared.module';

@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { Table } from 'primeng/table';
+import { Menu } from 'primeng/menu';
 import { Subscription } from 'rxjs';
 import { InboxService, InboxQueryParams } from '../../../services/inbox.service';
 import { AuthService } from '../../../services/auth.service';
@@ -18,6 +19,7 @@ import { SharedModule } from '../../../shared/shared.module';
 })
 export class LeadListComponent implements OnInit, OnDestroy {
   @ViewChild('dt') dt!: Table;
+  @ViewChild('leadActionMenu') leadActionMenu!: Menu;
 
   leads: any[] = [];
   filteredLeads: any[] = [];
@@ -126,10 +128,9 @@ export class LeadListComponent implements OnInit, OnDestroy {
           return {
             id: item.id,
             name: item.customer_name || item.customer_ref || 'Unknown Lead',
-            email: item.customer_name
-              ? `${item.customer_name.toLowerCase().replace(/\s+/g, '')}@example.com`
-              : 'info@example.com',
-            phone: item.customer_phone_masked || '',
+            email: item.customer_email || item.email || '',
+            phone: item.customer_phone_masked || item.phone || '',
+            customerRef: item.customer_ref || '',
             company: item.client_id || 'N/A',
             address: 'N/A',
             industry: item.lead?.product || 'N/A',
@@ -193,6 +194,14 @@ export class LeadListComponent implements OnInit, OnDestroy {
     }
 
     this.filteredLeads = result;
+  }
+
+  activeLeadMenuItems: any[] = [];
+
+  openLeadMenu(event: Event, lead: any): void {
+    event.stopPropagation();
+    this.activeLeadMenuItems = this.getLeadMenuItems(lead);
+    this.leadActionMenu.toggle(event);
   }
 
   getLeadMenuItems(lead: any): any[] {

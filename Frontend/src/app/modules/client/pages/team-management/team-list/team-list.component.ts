@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { SharedModule } from '../../../../../shared/shared.module';
 import { TeamManagementService } from '../../../../../services/team-management.service';
 import { TeamMember } from '../../../../../models/auth.models';
@@ -10,6 +10,11 @@ import {
 import { RoleManagementService } from '../../../../../services/role-management.service';
 import { CLIENT_PERMISSIONS } from '../../../constants/permission.constants';
 
+import { MenuItem } from 'primeng/api';
+import { Menu } from 'primeng/menu';
+import { ConfirmationService } from '../../../../../shared/services/confirmation.service';
+import { ToastService } from '../../../../../shared/services/toast.service';
+
 @Component({
   selector: 'client-team-list',
   standalone: true,
@@ -18,11 +23,15 @@ import { CLIENT_PERMISSIONS } from '../../../constants/permission.constants';
   styleUrl: './team-list.component.scss',
 })
 export class TeamListComponent implements OnInit {
+  @ViewChild('teamActionMenu') teamActionMenu!: Menu;
+
   team: (TeamMember & { grantId?: string })[] = [];
   showAddDialog = false;
   isEditMode = false;
   editingMemberId: string | null = null;
   PERMISSIONS = CLIENT_PERMISSIONS;
+
+  activeTeamMenuItems: MenuItem[] = [];
 
   newMember: {
     name: string;
@@ -57,7 +66,50 @@ export class TeamListComponent implements OnInit {
   constructor(
     private tmService: TeamManagementService,
     private roleManagementService: RoleManagementService,
+    private confirmationService: ConfirmationService,
+    private toastService: ToastService,
   ) {}
+
+  openTeamMenu(event: Event, member: any): void {
+    event.stopPropagation();
+    this.activeTeamMenuItems = [
+      {
+        label: 'Edit Member',
+        icon: 'pi pi-user-edit',
+        command: () => this.editMember(member),
+      },
+      { label: 'Reassign Leads', icon: 'pi pi-arrow-right-left' },
+      { separator: true },
+      {
+        label: 'Remove',
+        icon: 'pi pi-trash',
+        styleClass: 'text-red-500',
+        command: () => this.deleteMember(member),
+      },
+    ];
+    this.teamActionMenu.toggle(event);
+  }
+
+  deleteMember(member: any): void {
+    this.confirmationService.confirmDelete(
+      `Are you sure you want to remove ${member.name} from the team?`,
+      () => {
+        if (member.grantId) {
+          this.roleManagementService.revokeRole(member.grantId).subscribe({
+            next: () => {
+              this.toastService.success(`${member.name} has been removed.`);
+              this.loadTeamMembers();
+            },
+            error: () => {
+              this.team = this.team.filter((t) => t.id !== member.id);
+            },
+          });
+        } else {
+          this.team = this.team.filter((t) => t.id !== member.id);
+        }
+      }
+    );
+  }
 
   ngOnInit(): void {
     this.loadTeamMembers();
@@ -200,19 +252,6 @@ export class TeamListComponent implements OnInit {
       phone: '',
       status: 'Active',
     };
-  }
-
-  deleteMember(member: TeamMember & { grantId?: string }): void {
-    if (member.grantId) {
-      this.roleManagementService.revokeRole(member.grantId).subscribe({
-        next: () => this.loadTeamMembers(),
-        error: () => {
-          this.team = this.team.filter((t) => t.id !== member.id);
-        },
-      });
-    } else {
-      this.team = this.team.filter((t) => t.id !== member.id);
-    }
   }
 
   getInitials(name: string): string {

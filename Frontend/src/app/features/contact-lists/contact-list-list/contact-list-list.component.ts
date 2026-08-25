@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { ContactListService } from '../../../services/contact-list.service';
 import { ContactList, ContactListPreview } from '../../../models/contact-list.models';
-import { MessageService, ConfirmationService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { ContactListUploadComponent } from '../contact-list-upload/contact-list-upload.component';
 
 @Component({

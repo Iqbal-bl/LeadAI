@@ -41,6 +41,28 @@ export class CreateUpdateClientComponent implements OnInit {
   loadingError = false;
   companyId: string | null = null;
 
+  availableServices = [
+    { key: 'whatsapp', name: 'WhatsApp Business', icon: 'pi pi-whatsapp', desc: 'Meta Cloud API & auto-reply' },
+    { key: 'facebook', name: 'Facebook Messenger', icon: 'pi pi-facebook', desc: 'Page messaging & ads chat' },
+    { key: 'instagram', name: 'Instagram Direct', icon: 'pi pi-instagram', desc: 'DMs, Story replies & comments' },
+    { key: 'voice_agent', name: 'AI Voice & Dialler', icon: 'pi pi-phone', desc: 'Outbound AI calls & transcriptions' },
+    { key: 'linkedin', name: 'LinkedIn Outreach', icon: 'pi pi-linkedin', desc: 'B2B outreach & connection automation' },
+    { key: 'email_marketing', name: 'Email Marketing', icon: 'pi pi-envelope', desc: 'Campaigns & automated sequences' },
+  ];
+  selectedServices: string[] = ['whatsapp', 'facebook', 'instagram', 'voice_agent', 'linkedin'];
+
+  toggleService(key: string): void {
+    if (this.selectedServices.includes(key)) {
+      this.selectedServices = this.selectedServices.filter((k) => k !== key);
+    } else {
+      this.selectedServices = [...this.selectedServices, key];
+    }
+  }
+
+  isServiceSelected(key: string): boolean {
+    return this.selectedServices.includes(key);
+  }
+
   ngOnInit(): void {
     this.route.params.subscribe((params) => {
       const companyIdParam = params['company_id'] || params['clientId'];
@@ -123,6 +145,18 @@ export class CreateUpdateClientComponent implements OnInit {
         });
       },
     });
+
+    // Also load configured company services
+    this.companyService.getCompanyServices(this.companyId, options).subscribe({
+      next: (res) => {
+        if (res?.services && res.services.length > 0) {
+          this.selectedServices = res.services
+            .filter((s) => s.is_enabled)
+            .map((s) => s.key.toLowerCase());
+        }
+      },
+      error: () => {},
+    });
   }
 
   submitForm(): void {
@@ -155,6 +189,18 @@ export class CreateUpdateClientComponent implements OnInit {
         options.params = { client_id: this.companyId };
       }
 
+      // Patch services in parallel
+      this.companyService.patchCompanyServices(
+        this.companyId,
+        {
+          services: this.availableServices.map((s) => ({
+            key: s.key,
+            is_enabled: this.selectedServices.includes(s.key),
+          })),
+        },
+        options
+      ).subscribe({ error: () => {} });
+
       this.companyService.updateCompany(this.companyId, payload, options).subscribe({
         next: () => {
           this.loading = false;
@@ -180,6 +226,9 @@ export class CreateUpdateClientComponent implements OnInit {
         },
       });
     } else {
+      // Create Mode with selected services
+      formValue.services = this.selectedServices;
+
       this.companyService.createCompany(formValue).subscribe({
         next: () => {
           this.loading = false;

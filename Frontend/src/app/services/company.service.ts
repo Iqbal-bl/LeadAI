@@ -78,4 +78,28 @@ export class CompanyService {
       settings,
     );
   }
+
+  // GET /companies/{company_id}/services
+  public getCompanyServices(
+    companyId: string,
+    options?: any,
+  ): Observable<import('../models/company.models').CompanyServicesOut> {
+    return this.apiService.get<import('../models/company.models').CompanyServicesOut>(
+      `companies/${companyId}/services`,
+      options,
+    );
+  }
+
+  // PATCH /companies/{company_id}/services
+  public patchCompanyServices(
+    companyId: string,
+    payload: import('../models/company.models').CompanyServicesPatchIn,
+    options?: any,
+  ): Observable<import('../models/company.models').CompanyServicesOut> {
+    return this.apiService.patch<import('../models/company.models').CompanyServicesOut>(
+      `companies/${companyId}/services`,
+      payload,
+      options,
+    );
+  }
 }

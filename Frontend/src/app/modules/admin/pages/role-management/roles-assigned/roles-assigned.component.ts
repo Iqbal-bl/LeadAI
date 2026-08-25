@@ -4,7 +4,8 @@ import { CompanyService } from '../../../../../services/company.service';
 import { RoleManagementService } from '../../../../../services/role-management.service';
 import { RoleGrant } from '../../../../../models/auth.models';
 import { Company } from '../../../../../models/company.models';
-import { ConfirmationService, MessageService } from 'primeng/api';
+import { MessageService } from 'primeng/api';
+import { ConfirmationService } from '../../../../../shared/services/confirmation.service';
 
 import { SharedModule } from '../../../../../shared/shared.module';
 

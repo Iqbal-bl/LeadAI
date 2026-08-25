@@ -63,6 +63,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'channel.read',
       },
       {
+        label: 'LinkedIn Automation',
+        icon: 'pi pi-linkedin',
+        routerLink: '/client/linkedin',
+        permission: 'channel.read',
+      },
+      {
         label: 'Contact Lists',
         icon: 'pi pi-list',
         routerLink: '/client/contact-lists',
