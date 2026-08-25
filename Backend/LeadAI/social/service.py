@@ -240,3 +240,81 @@ def urls_to_media(urls: list[str], video_flags: list[bool] | None = None) -> lis
     """Adapt already-public URLs into the shape the posters expect."""
     flags = video_flags or [False] * len(urls)
     return [{"url": u, "is_video": bool(f)} for u, f in zip(urls, flags)]
+
+
+from ..services import jobs
+from ..models_social import POST_STATUS_SCHEDULED
+
+
+@jobs.register("social.publish")
+def execute_scheduled_post(db: Session, payload: dict) -> dict | None:
+    """Background worker handler for scheduled social posts."""
+    import asyncio
+
+    post_id = payload.get("post_id")
+    if not post_id:
+        return {"error": "Missing post_id"}
+
+    row = db.get(LeadSocialPost, post_id)
+    if row is None or row.IsDeleted:
+        return {"error": f"Post {post_id} not found"}
+
+    if row.Status != POST_STATUS_SCHEDULED:
+        logger.info("[social] Scheduled post %s has status %s, skipping", post_id, row.Status)
+        return {"status": row.Status, "skipped": True}
+
+    row.Status = POST_STATUS_PUBLISHING
+    row.UpdatedAt = utcnow()
+    db.commit()
+
+    platforms = [p for p in (row.Platforms or "").split(",") if p]
+    media_urls = row.MediaUrls or []
+    uploaded = urls_to_media(media_urls)
+
+    loop = asyncio.new_event_loop()
+    try:
+        results, updated_row = loop.run_until_complete(
+            publish(
+                db,
+                row.ClientId,
+                caption=row.Caption or "",
+                uploaded=uploaded,
+                platforms=platforms,
+                actor=row.CreatedBy or "system",
+                account_id=row.ChannelAccountId,
+                mode=row.Mode or "direct",
+                topic=row.Topic,
+                instructions=row.Instructions,
+                campaign_id=row.CampaignId,
+                record=False,
+            )
+        )
+    finally:
+        loop.close()
+
+    duration_ms = updated_row.DurationMs if updated_row else 0
+    succeeded = [p for p, r in results.items() if r.get("success")]
+    failed = [p for p, r in results.items() if not r.get("success")]
+
+    row.Results = results
+    row.DurationMs = duration_ms
+    if succeeded and not failed:
+        row.Status = POST_STATUS_PUBLISHED
+    elif succeeded:
+        row.Status = POST_STATUS_PARTIAL
+    else:
+        row.Status = POST_STATUS_FAILED
+        row.Error = "; ".join(f"{p}: {results[p].get('error')}" for p in failed)[:2000]
+
+    if succeeded:
+        row.PublishedAt = utcnow()
+
+    fb = results.get("facebook") or {}
+    ig = results.get("instagram") or {}
+    row.FacebookPostId = fb.get("id")
+    row.InstagramMediaId = ig.get("id")
+    row.UpdatedAt = utcnow()
+    db.commit()
+
+    return {"post_id": row.Id, "status": row.Status, "results": results}
+

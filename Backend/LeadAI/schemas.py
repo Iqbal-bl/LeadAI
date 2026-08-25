@@ -41,6 +41,9 @@ class CompanyCreate(BaseModel):
     # Optionally grant the first company admin in the same call.
     admin_email: EmailStr | None = None
     admin_name: str | None = None
+    # Services/features to enable for the company (e.g. ["instagram", "facebook", "linkedin", "voice_agent"])
+    services: list[str] | None = Field(default=None, description="Features/services to enable. If omitted or null, features default to unenabled/disabled.")
+
 
 
 class CompanyUpdate(BaseModel):
@@ -125,6 +128,28 @@ class CompanySettingsOut(CompanySettingsIn):
     client_id: str
     effective_handoff_threshold: float
     effective_retrieval_top_k: int
+
+
+class ServiceItemOut(BaseModel):
+    key: str
+    is_enabled: bool
+
+
+class CompanyServicesOut(BaseModel):
+    company_id: str
+    company_name: str
+    services: list[ServiceItemOut]
+
+
+class ServiceStatusPatch(BaseModel):
+    key: str
+    is_enabled: bool
+
+
+class CompanyServicesPatchIn(BaseModel):
+    services: list[ServiceStatusPatch]
+
+
 
 
 # ===========================================================================

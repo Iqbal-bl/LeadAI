@@ -49,6 +49,11 @@ class _PlatformsMixin(BaseModel):
         description="Pin a specific connected channel account (for companies with more "
         "than one Page). Omit to use the company's first active account.",
     )
+    schedule_time: datetime | None = Field(
+        default=None,
+        description="Optional UTC ISO 8601 timestamp for scheduled publishing. Must be in the future. If null, publishes immediately.",
+    )
+
 
     @field_validator("platforms")
     @classmethod
