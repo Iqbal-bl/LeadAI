@@ -8,6 +8,8 @@ than duplicating the company record.
 """
 from __future__ import annotations
 
+from LeadAI.models_ext import LeadCompanyService
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -33,6 +35,8 @@ from ..rbac import (
 from ..schemas import (
     CompanyCreate,
     CompanyOut,
+    CompanyServicesOut,
+    CompanyServicesPatchIn,
     CompanySettingsIn,
     CompanySettingsOut,
     CompanyUpdate,
