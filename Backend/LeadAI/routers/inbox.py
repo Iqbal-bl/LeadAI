@@ -652,7 +652,7 @@ def reveal_contact(
 
     social = []
     for ident in identities:
-        handle = ident.ProfileName
+        handle = ident.ProfileName or ident.ExternalUsername
         profile_url = None
         if ident.Channel == "instagram" and handle:
             # Only a resolved username makes a working link; a raw IGSID does not.
@@ -676,7 +676,7 @@ def reveal_contact(
         email=decrypt_pii(customer.EmailEnc),
         whatsapp=decrypt_pii(customer.WhatsAppEnc),
         instagram=decrypt_pii(customer.InstagramEnc),
-        display_name=customer.DisplayName,
+        display_name=customer.DisplayName or decrypt_pii(customer.InstagramEnc),
         social_identities=social,
         revealed_at=datetime.now(timezone.utc),
     )

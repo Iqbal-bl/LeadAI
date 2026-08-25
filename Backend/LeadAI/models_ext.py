@@ -166,6 +166,12 @@ class LeadChannelIdentity(LeadAIBase):
     CustomerId = Column(String(36), nullable=False)
     ConversationId = Column(String(36), nullable=True)     # current open thread
     ProfileName = Column(String(160), nullable=True)
+     # Global @handle, resolved once from the Graph API and cached. Sender ids are
+    # scoped to the RECEIVING account, so this is the only identifier that can be
+    # compared across tenants — see the bot-to-bot guard in routers/webhooks.py.
+    # Tri-state: NULL = never looked up, "" = looked up and unresolvable (so we
+    # don't retry forever), value = resolved. Do NOT give this a "" default.
+    ExternalUsername = Column(String(120), nullable=True)
     # WhatsApp/Messenger only allow free-form replies inside a 24h window after
     # the user's last message; outside it a pre-approved template is required.
     LastUserMessageAt = Column(DateTime, nullable=True)

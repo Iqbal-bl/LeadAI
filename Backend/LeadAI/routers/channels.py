@@ -18,8 +18,10 @@ or "Add token", which is all it needs.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import timedelta
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -36,6 +38,7 @@ from ..schemas_ext import (
     ChannelAccountUpdate,
     ChannelStatusOut,
     ChannelTestSend,
+    FacebookCallbackIn,
     InstagramCallbackIn,
 )
 from ..schemas import Ok
@@ -43,6 +46,7 @@ from ..security import encrypt_pii
 from ..serializers_ext import channel_account_out
 from ..services import cache, channels as ch
 from ..services import instagram_login as ig_login
+from ..services import facebook_login as fb_login
 
 logger = logging.getLogger(__name__)
 
@@ -343,6 +347,86 @@ def instagram_connect(
         ),
     }
 
+
+@router.get(
+    "/facebook/connect",
+    summary="Start connecting a standalone Facebook account (no Instagram Page)",
+)
+def facebook_connect(
+    request: Request,
+    publishing: bool = False,
+    scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Returns the URL to send the company to.
+
+    The caller redirects the browser there; Facebook sends the person back to
+    FACEBOOK_REDIRECT_URI with `code` and `state`.
+
+    `state` binds the callback to this company. It is returned here and stored
+    server-side; the callback rejects any state it did not issue. Without that
+    check, anyone who can reach the callback URL could attach a Facebook
+    account of their choosing to a tenant.
+    """
+    principal, client_id = scope
+    try:
+        url, state = fb_login.authorize_url(publishing=publishing)
+    except fb_login.FacebookLoginError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    # Short TTL: this is a browser round-trip, not a session. Ten minutes is
+    # generous for a consent screen and short enough that a leaked state is
+    # useless by the time anyone finds it.
+    cache.set_value(f"leadai:fblogin:{state}", client_id, ttl=600)
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.CHANNEL_CONNECTED,
+        client_id=client_id,
+        entity_type="channel",
+        message="Started standalone Facebook connection",
+        request=request,
+    )
+    db.commit()
+
+    return {
+        "authorize_url": url,
+        "state": state,
+        "expires_in": 600,
+        "note": (
+            "Open this URL in a browser. The Instagram account must be a "
+            "professional (Business or Creator) account."
+        ),
+    }
+
+@router.post("/facebook/callback", summary="Exchange the code and list Pages")
+def facebook_callback(payload: FacebookCallbackIn, db: Session = Depends(get_leadai_db)):
+    client_id = cache.get_value(f"leadai:fblogin:{payload.state}")
+    if not client_id:
+        raise HTTPException(400, "That connection link has expired or was already used.")
+    cache.set_value(f"leadai:fblogin:{payload.state}", "", ttl=1)   # single-use
+
+    result = fb_login.complete_connection(payload.code)
+
+    # Page tokens are credentials. Hold them server-side under a short-lived
+    # selection token and return only display fields — never send a Page token
+    # to the browser so it can be posted back.
+    selection = secrets.token_urlsafe(24)
+    cache.set_value(
+        f"leadai:fbselect:{selection}",
+        json.dumps({"client_id": client_id, "pages": result["pages"]}),
+        ttl=900,
+    )
+    return {
+        "selection": selection,
+        "pages": [
+            {"page_id": p["page_id"], "name": p["name"], "category": p["category"],
+             "instagram_username": (p["instagram"] or {}).get("username"),
+             "instagram_id": (p["instagram"] or {}).get("id")}
+            for p in result["pages"]
+        ],
+    }
 
 @router.post(
     "/instagram/callback",

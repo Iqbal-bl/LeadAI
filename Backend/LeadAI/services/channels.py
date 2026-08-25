@@ -618,7 +618,24 @@ def fetch_profile(
     )
     return result
 
-
+# services/channels.py
+def resolve_username(account: LeadChannelAccount, external_user_id: str) -> str | None:
+    """Instagram sender ids are scoped to the RECEIVING account, so two tenants
+    cannot recognise each other by id. The username is global — it's the only
+    thing that works for bot-to-bot detection."""
+    if account.Channel != CHANNEL_INSTAGRAM:
+        return None
+    token = _token_for(account)
+    if not token:
+        return None
+    try:
+        import httpx
+        r = httpx.get(_graph_url(account, external_user_id),
+                      params={"fields": "username", "access_token": token}, timeout=10.0)
+        return (r.json() or {}).get("username")
+    except Exception:  # noqa: BLE001
+        return None   # never let this block a real lead
+        
 def send_text(
     account: LeadChannelAccount | None,
     channel: str,

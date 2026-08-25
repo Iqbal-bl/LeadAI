@@ -38,8 +38,13 @@ import hashlib
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
+from numpy.ma import identity
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+from LeadAI.models_ext import CHANNEL_INSTAGRAM
+
+from LeadAI.models_ext import CHANNEL_INSTAGRAM
 
 from .. import activity
 from ..activity import A
@@ -48,9 +53,11 @@ from ..db import get_leadai_db, session as new_session
 from ..models import (
     LeadChannelAccount,
     LeadChannelEvent,
+    LeadMessage,
     LeadChannelIdentity,
     utcnow,
 )
+from datetime import timedelta
 from ..services import campaign_runner, channels, conversation_flow
 
 logger = logging.getLogger(__name__)
@@ -61,7 +68,8 @@ router = APIRouter(prefix="/public/webhooks", tags=["LeadAI • Inbound webhooks
 # requires an honoured opt-out path; this is it.
 OPT_OUT_WORDS = {"stop", "unsubscribe", "opt out", "optout", "band karo", "cancel"}
 OPT_IN_WORDS = {"start", "subscribe", "unstop", "resume"}
-
+LOOP_WINDOW_MINUTES = 10
+LOOP_MAX_TURNS = 8
 
 @router.get("/meta", summary="Meta webhook verification handshake")
 def verify_webhook(
@@ -256,6 +264,8 @@ def _process_one(db: Session, item: dict) -> None:
     )
 
     # ---- opt-out / opt-in keywords, handled BEFORE the AI sees the message --
+    # These run ahead of the loop guards on purpose: a STOP must be honoured
+    # even if the conversation is already mid-loop.
     lowered = text.lower().strip(" .!")
     if lowered in OPT_OUT_WORDS:
         identity.OptedOut = True
@@ -292,6 +302,70 @@ def _process_one(db: Session, item: dict) -> None:
         # the agent sees that something arrived.
         text = f"[{item.get('media_type') or 'attachment'} received]"
 
+    # ---- loop guard 1: another tenant's bot on this platform -------------- #
+    # Instagram sender ids are scoped to the RECEIVING account, so two tenants
+    # cannot recognise each other by id — the username is the only global
+    # handle. Cached on the identity so this costs one API call per contact.
+    if account.Channel == CHANNEL_INSTAGRAM and identity.ExternalUsername is None:
+        identity.ExternalUsername = channels.resolve_username(
+            account, item["external_user_id"]) or ""
+        db.commit()
+
+        if account.Channel == CHANNEL_INSTAGRAM and identity.ExternalUsername:
+        
+            handle = identity.ExternalUsername.lstrip("@").lower()
+            peer = next(
+                (
+                    a for a in db.query(LeadChannelAccount).filter(
+                        LeadChannelAccount.Channel == account.Channel,
+                        LeadChannelAccount.IsDeleted == False,  # noqa: E712
+                    ).all()
+                    if (a.Name or "").lstrip("@").lower() == handle
+                ),
+                None,
+            )
+            if peer is not None and peer.Id != account.Id:
+                logger.warning("[LeadAI webhook] bot-to-bot: %s -> %s, not replying",
+                            peer.Id, account.Id)
+                return
+    # ---- loop guard 2: runaway exchange, whatever the cause --------------- #
+    # Guard 1 only knows about bots on this platform. This one needs no theory
+    # about who is on the far end — a third-party autoresponder, a retry storm,
+    # or a human hammering send all trip it the same way.
+    recent_ai_turns = (
+        db.query(LeadMessage)
+        .filter(
+            LeadMessage.ConversationId == conversation.Id,
+            LeadMessage.Sender == "ai",
+            LeadMessage.CreatedAt >= utcnow() - timedelta(minutes=LOOP_WINDOW_MINUTES),
+        )
+        .count()
+    )
+    if recent_ai_turns >= LOOP_MAX_TURNS:
+        # needs_human rather than a new status value: routers/inbox.py validates
+        # the status filter against ^(open|needs_human|assigned|closed)$, so a
+        # custom value would be invisible in your own inbox filters.
+        conversation.Status = "needs_human"
+        conversation.HandoffReason = (
+            f"Auto-paused: {recent_ai_turns} AI replies in {LOOP_WINDOW_MINUTES}m"
+        )
+        activity.log(
+            db,
+            action=A.CHANNEL_SEND_FAILED,
+            client_id=client.Id,
+            actor_email=account.Channel,
+            entity_type="conversation",
+            entity_id=conversation.Id,
+            message=conversation.HandoffReason,
+            log_type="Warning",
+        )
+        db.commit()
+        logger.warning(
+            "[LeadAI webhook] loop breaker tripped on conversation %s (%s)",
+            conversation.Id, account.Channel,
+        )
+        return
+
     # A reply to a campaign is the metric that matters most; record it before
     # the pipeline mutates the conversation.
     campaign_runner.note_reply(db, conversation)
@@ -311,8 +385,6 @@ def _process_one(db: Session, item: dict) -> None:
     if not account.AutoReply:
         # Human-only channel: persist the customer's message and notify the
         # inbox, but do not let the AI answer.
-        from ..models import LeadMessage
-
         db.add(
             LeadMessage(
                 ClientId=client.Id,

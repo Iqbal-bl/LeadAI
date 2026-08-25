@@ -574,7 +574,25 @@ class JobStatsOut(BaseModel):
     enabled: bool
     queue: dict[str, int] = {}
 
+class FacebookCallbackIn(BaseModel):
+    code: str = Field(min_length=10)
+    state: str = Field(min_length=8, description="State issued by /channels/facebook/connect")
 
+
+class FacebookPageOut(BaseModel):
+    page_id: str
+    name: str | None = None
+    category: str | None = None
+    instagram_username: str | None = None
+    instagram_id: str | None = None
+
+
+class FacebookSelectIn(BaseModel):
+    """Second half of the connect flow — which Page the company chose."""
+    selection: str = Field(min_length=8, description="Token from /channels/facebook/callback")
+    page_id: str
+    connect_instagram: bool = True
+    
 class InstagramCallbackIn(BaseModel):
     """The OAuth callback from a standalone Instagram connection.
 

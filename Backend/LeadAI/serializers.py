@@ -236,6 +236,16 @@ def conversation_out(
     # The masking gate. `can_reveal` is the ONLY thing that unlocks identity.
     can_reveal = principal.can("lead.reveal_pii")
     display_name = customer.DisplayName if (customer and can_reveal) else None
+
+    # For Instagram standalone accounts, DisplayName is often None because the
+    # Graph API cannot look up other users' profiles with a User token.  Fall
+    # back to the decrypted InstagramEnc which holds the @username or raw
+    # IG-scoped id.
+    if can_reveal and not display_name and customer and conversation.Channel == "instagram":
+        ig_handle = decrypt_pii(customer.InstagramEnc)
+        if ig_handle:
+            display_name = ig_handle
+
     phone_masked = None
     if customer:
         # Even for privileged roles this stays masked in list/detail responses —

@@ -115,6 +115,8 @@ class LeadAISettings:
     # `leadai_channel_accounts` and always win — env vars only exist so a single
     # -tenant deployment or a local test can work without touching the DB.
     meta_app_secret: str | None = os.getenv("META_APP_SECRET") or None
+    meta_app_id: str | None = os.getenv("META_APP_ID") or None
+    facebook_redirect_uri: str | None = os.getenv("FACEBOOK_REDIRECT_URI") or None
     meta_verify_token: str = os.getenv("META_VERIFY_TOKEN", "leadai-verify")
     meta_graph_version: str = os.getenv("META_GRAPH_VERSION", "v21.0")
     meta_graph_base: str = os.getenv("META_GRAPH_BASE", "https://graph.facebook.com")

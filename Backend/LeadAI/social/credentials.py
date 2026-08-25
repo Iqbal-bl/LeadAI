@@ -186,6 +186,11 @@ def resolve(
         app_secret=_secret(account),
         api_version=account.ApiVersion,
         account_name=account.Name,
+        graph_base=(
+            "https://graph.instagram.com"
+            if (account.LoginType or "facebook") == "instagram"
+            else None
+        ),
         meta={"channel": account.Channel, "external_id": account.ExternalId},
     )
 

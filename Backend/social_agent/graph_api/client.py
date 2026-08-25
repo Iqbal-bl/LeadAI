@@ -22,7 +22,7 @@ import os
 
 import httpx
 
-from social_agent.context import resolve_access_token, resolve_api_version
+from social_agent.context import resolve_access_token, resolve_api_version, resolve_graph_base
 
 GRAPH_API_VERSION = "v25.0"  # v21.0 was confirmed deprecated by Meta's own
 # response headers (2026-07-31) — they were auto-upgrading calls to v25.0
@@ -37,8 +37,11 @@ def _base_url() -> str:
     A connected account carries its own ApiVersion (companies onboard at
     different times and Meta deprecates versions on a rolling schedule), so the
     base URL cannot be a module constant shared by every tenant.
+
+    Standalone Instagram accounts (LoginType='instagram') must use
+    graph.instagram.com; Page-linked accounts use graph.facebook.com.
     """
-    return f"https://graph.facebook.com/{resolve_api_version(GRAPH_API_VERSION)}"
+    return f"{resolve_graph_base()}/{resolve_api_version(GRAPH_API_VERSION)}"
 
 
 # Kept for any caller that still imports it; per-request code uses _base_url().

@@ -74,6 +74,9 @@ class SocialCredentials:
     app_secret: str | None = None
     api_version: str | None = None
     account_name: str = ""
+    graph_base: str | None = None
+    """Graph API host override.  Standalone Instagram accounts must use
+    graph.instagram.com; Page-linked accounts use graph.facebook.com."""
     meta: dict = field(default_factory=dict)
 
 
@@ -169,3 +172,16 @@ def resolve_api_version(default: str) -> str:
     if creds is not None and creds.api_version:
         return creds.api_version
     return os.environ.get("GRAPH_API_VERSION", default)
+
+
+def resolve_graph_base() -> str:
+    """Return the Graph API host for the current credentials.
+
+    Standalone Instagram accounts (LoginType='instagram') must use
+    graph.instagram.com; Page-linked accounts use graph.facebook.com.
+    Falls back to graph.facebook.com for single-tenant CLI use.
+    """
+    creds = _current.get()
+    if creds is not None and creds.graph_base:
+        return creds.graph_base
+    return os.environ.get("GRAPH_BASE_URL", "https://graph.facebook.com")
