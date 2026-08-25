@@ -39,6 +39,7 @@ from ..schemas_ext import (
     ChannelStatusOut,
     ChannelTestSend,
     FacebookCallbackIn,
+    FacebookSelectIn,
     InstagramCallbackIn,
 )
 from ..schemas import Ok
@@ -354,7 +355,7 @@ def instagram_connect(
 )
 def facebook_connect(
     request: Request,
-    publishing: bool = False,
+    with_instagram: bool = False,
     scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -370,7 +371,7 @@ def facebook_connect(
     """
     principal, client_id = scope
     try:
-        url, state = fb_login.authorize_url(publishing=publishing)
+        url, state = fb_login.authorize_url(with_instagram=with_instagram)
     except fb_login.FacebookLoginError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
@@ -399,6 +400,178 @@ def facebook_connect(
             "professional (Business or Creator) account."
         ),
     }
+@router.post(
+    "/facebook/select",
+    response_model=list[ChannelAccountOut],
+    summary="Finish connecting a Facebook Page (and its linked Instagram)",
+)
+def facebook_select(
+    payload: FacebookSelectIn,
+    request: Request,
+    db: Session = Depends(get_leadai_db),
+):
+    """Turn the chosen Page into channel account rows.
+
+    Not scoped through `scoped(...)` for the same reason as instagram_callback:
+    the company is recovered from the server-side selection created by
+    /facebook/callback. That cache entry IS the authorisation, which is why the
+    client_id comes from it and never from the request body — otherwise anyone
+    holding a selection token could attach a Page to a tenant of their choosing.
+    """
+    raw = cache.get_value(f"leadai:fbselect:{payload.selection}")
+    if not raw:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "That Page selection has expired. Start again from Channels > Connect Facebook.",
+        )
+    stored = json.loads(raw)
+    client_id = stored["client_id"]
+
+    page = next(
+        (p for p in stored["pages"] if p["page_id"] == payload.page_id), None
+    )
+    if page is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "That Page was not in the list you were offered.",
+        )
+
+    # Subscribe BEFORE writing any rows. subscribe_page() raises if the
+    # subscription did not actually take, and a channel that shows Connected in
+    # the UI while receiving nothing is the single most expensive failure mode
+    # in this integration — better to fail the connect loudly.
+    try:
+        fields = fb_login.subscribe_page(page["page_id"], page["access_token"])
+    except fb_login.FacebookLoginError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    created: list[LeadChannelAccount] = []
+
+    created.append(
+        _upsert_fb_account(
+            db,
+            client_id=client_id,
+            channel="messenger",
+            external_id=page["page_id"],
+            name=page.get("name") or page["page_id"],
+            page_token=page["access_token"],
+            meta={
+                "page_name": page.get("name"),
+                "category": page.get("category"),
+                "subscribed_fields": fields,
+                "login": "facebook",
+            },
+        )
+    )
+
+    ig = page.get("instagram")
+    if payload.connect_instagram and ig:
+        # Second row, SAME Page token. A Page-linked Instagram account is
+        # addressed at graph.facebook.com with the Page token and signed with
+        # the Meta app secret — which is what makes it different from a
+        # standalone LoginType=instagram account. See facebook_login's docstring.
+        created.append(
+            _upsert_fb_account(
+                db,
+                client_id=client_id,
+                channel="instagram",
+                external_id=ig["id"],
+                name=f"@{ig.get('username') or ig['id']}",
+                page_token=page["access_token"],
+                meta={
+                    "username": ig.get("username"),
+                    "profile_picture_url": ig.get("profile_picture_url"),
+                    "page_id": page["page_id"],
+                    "login": "facebook",
+                },
+            )
+        )
+
+    db.flush()
+
+    # Single-use: burn the selection so a replay cannot rebind the Page.
+    cache.set_value(f"leadai:fbselect:{payload.selection}", "", ttl=1)
+
+    for account in created:
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=client_id,
+            actor_email="facebook-login",
+            entity_type="channel",
+            entity_id=account.Id,
+            message=f"Connected {account.Channel} {account.Name}",
+            meta={"external_id": account.ExternalId, "login_type": "facebook"},
+            request=request,
+        )
+    db.commit()
+
+    base = _public_base(request)
+    out = []
+    for account in created:
+        db.refresh(account)
+        logger.info(
+            "[LeadAI fb-login] connected %s %s (%s) to company %s",
+            account.Channel, account.Name, account.ExternalId, client_id,
+        )
+        out.append(channel_account_out(account, base))
+    return out
+
+def _upsert_fb_account(
+    db: Session,
+    *,
+    client_id: str,
+    channel: str,
+    external_id: str,
+    name: str,
+    page_token: str,
+    meta: dict,
+) -> LeadChannelAccount:
+    """Create or update one channel row from a Facebook Page connection."""
+    existing = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.Channel == channel,
+            LeadChannelAccount.ExternalId == external_id,
+            LeadChannelAccount.IsDeleted == False,  # noqa: E712
+        )
+        .first()
+    )
+    if existing is not None and existing.ClientId != client_id:
+        # Inbound webhooks route by ExternalId, so one Page serving two tenants
+        # would deliver one company's messages into another company's inbox.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"{name} is already connected to a different company.",
+        )
+
+    account = existing or LeadChannelAccount(
+        ClientId=client_id,
+        Channel=channel,
+        Provider="meta",
+        ExternalId=external_id,
+        CreatedBy="facebook-login",
+    )
+    account.LoginType = fb_login.LOGIN_TYPE_FACEBOOK
+    account.AppId = settings.meta_app_id
+    account.Name = name
+    account.AccessTokenEnc = encrypt_pii(page_token)
+    # META app secret, not the Instagram one — this is what app_secret_for()
+    # reads to verify inbound signatures, and the two apps sign differently.
+    account.AppSecretEnc = encrypt_pii(settings.meta_app_secret)
+    account.VerifyToken = settings.meta_verify_token
+    account.ApiVersion = settings.meta_graph_version
+    # Page tokens derived from a long-lived user token do not expire, so there
+    # is deliberately nothing here for refresh_due() to find.
+    account.TokenExpiresAt = None
+    account.TokenRefreshedAt = utcnow()
+    account.IsActive = True
+    account.LastError = None
+    account.LastErrorAt = None
+    account.MetaJson = meta
+    if existing is None:
+        db.add(account)
+    return account
 
 @router.post("/facebook/callback", summary="Exchange the code and list Pages")
 def facebook_callback(payload: FacebookCallbackIn, db: Session = Depends(get_leadai_db)):

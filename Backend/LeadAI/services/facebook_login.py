@@ -339,7 +339,7 @@ SUBSCRIBE_FIELDS = (
     "messaging_postbacks",
     "messaging_optins",
     "message_reactions",
-    "messaging_referral",   # SINGULAR. Meta's field name has no trailing s.
+    "messaging_referrals",   # SINGULAR. Meta's field name has no trailing s.
 )
 
 
