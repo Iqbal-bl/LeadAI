@@ -29,7 +29,7 @@ from ..activity import A
 from ..config import settings
 from ..db import get_leadai_db
 from ..models import LeadChannelAccount, LeadChannelIdentity, utcnow
-from ..rbac import Principal, assert_owns, scoped
+from ..rbac import Principal, assert_owns, require, scoped
 from ..schemas_ext import (
     ChannelAccountCreate,
     ChannelAccountOut,
@@ -124,6 +124,14 @@ def create_account(
     db: Session = Depends(get_leadai_db),
 ):
     principal, client_id = scope
+
+    channel_lower = (payload.channel or "").strip().lower()
+    if channel_lower in ("messenger", "facebook"):
+        principal.require("social.facebook")
+    elif channel_lower == "instagram":
+        principal.require("social.instagram")
+    elif channel_lower == "whatsapp":
+        principal.require("social.whatsapp")
 
     # The (channel, external_id) pair is globally unique — the same WhatsApp
     # number cannot be claimed by two companies, or inbound routing would be
@@ -299,6 +307,7 @@ def instagram_connect(
     request: Request,
     publishing: bool = False,
     scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     """Returns the URL to send the company to.
@@ -468,6 +477,7 @@ def instagram_refresh_token(
     account_id: str,
     request: Request,
     scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     """Extend the 60-day token by another 60 days.

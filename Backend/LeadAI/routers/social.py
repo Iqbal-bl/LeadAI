@@ -54,7 +54,7 @@ from ..models_social import (
     LeadSocialPost,
     LeadSocialTopic,
 )
-from ..rbac import Principal, assert_owns, scoped
+from ..rbac import Principal, assert_owns, require, scoped
 from ..schemas import Ok
 from ..services import jobs
 from ..social import agent_bridge, service
@@ -481,6 +481,7 @@ def get_post(
 async def facebook_ai_post(
     body: SinglePlatformAiRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
@@ -496,6 +497,7 @@ async def facebook_ai_post(
 async def facebook_direct(
     body: DirectUrlPostRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     """Text-only when `media` is empty; single photo or video when it has one item."""
@@ -516,6 +518,7 @@ async def facebook_direct(
 async def facebook_multi_photo(
     body: DirectUrlPostRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     if len(body.media) < 2:
@@ -542,6 +545,7 @@ async def facebook_recent_posts(
     limit: int = Query(10, ge=1, le=100),
     account_id: str | None = Query(None),
     scope: tuple[Principal, str] = Depends(scoped("social.read")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
@@ -556,6 +560,7 @@ async def facebook_delete_post(
     post_id: str,
     account_id: str | None = Query(None),
     scope: tuple[Principal, str] = Depends(scoped("social.manage")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     """Deletes on the company's own Page.
@@ -575,6 +580,7 @@ async def facebook_delete_post(
 async def facebook_reply_comments(
     body: ReplyAllRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     """Replies are grounded in this company's knowledge base, so two companies
@@ -590,6 +596,7 @@ async def facebook_reply_comments(
 async def facebook_reply_messages(
     body: ReplyAllRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
@@ -605,6 +612,7 @@ async def facebook_leads(
     limit: int = Query(50, ge=1, le=500),
     account_id: str | None = Query(None),
     scope: tuple[Principal, str] = Depends(scoped("social.read", "lead.read.all")),
+    _: Principal = Depends(require("social.facebook")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
@@ -621,6 +629,7 @@ async def facebook_leads(
 async def instagram_ai_post(
     body: SinglePlatformAiRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
@@ -636,6 +645,7 @@ async def instagram_ai_post(
 async def instagram_direct(
     body: DirectUrlPostRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     """Instagram has no text-only post, so `media` must contain at least one item."""
@@ -661,6 +671,7 @@ async def instagram_direct(
 async def instagram_carousel(
     body: DirectUrlPostRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     """Mixed images and videos are allowed — this is the only surface either
@@ -682,6 +693,7 @@ async def instagram_delete(
     media_id: str,
     account_id: str | None = Query(None),
     scope: tuple[Principal, str] = Depends(scoped("social.manage")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
@@ -695,6 +707,7 @@ async def instagram_delete(
 async def instagram_reply_comments(
     body: ReplyAllRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
@@ -708,6 +721,7 @@ async def instagram_reply_comments(
 async def instagram_reply_messages(
     body: ReplyAllRequest,
     scope: tuple[Principal, str] = Depends(scoped("social.post")),
+    _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
