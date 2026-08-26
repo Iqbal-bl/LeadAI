@@ -102,6 +102,11 @@ P = {
     "social.read": "View connected publishing targets and post history",
     "social.post": "Publish posts and AI replies to connected social accounts",
     "social.manage": "Delete published posts",
+    # Platform-specific permissions
+    "social.facebook": "Access Facebook publishing, webhooks, and pages",
+    "social.instagram": "Access Instagram publishing, webhooks, and media",
+    "social.whatsapp": "Access WhatsApp channel and messaging",
+    "social.linkedin": "Access LinkedIn publishing",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {

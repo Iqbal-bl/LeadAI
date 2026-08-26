@@ -515,22 +515,22 @@ class LeadJob(LeadAIBase):
     Error = Column(String(1000), nullable=True)
 
 
-class LeadCompanyService(LeadAIBase):
-    """Tracks which services/features are enabled for a company.
+class LeadCompanyPermission(LeadAIBase):
+    """Tracks which permissions/features are enabled for a company.
 
-    Extensible by design: Any new feature key (e.g. 'instagram', 'facebook',
-    'linkedin', 'voice_agent', 'whatsapp') can be granted/revoked per company
-    without schema changes or migrations.
+    Extensible by design: Any permission key (e.g. 'social.instagram', 'social.facebook',
+    'social.linkedin', 'social.whatsapp') can be granted/revoked
+    per company without schema changes or migrations.
     """
 
-    __tablename__ = "leadai_company_services"
+    __tablename__ = "leadai_company_permissions"
     __table_args__ = (
-        UniqueConstraint("ClientId", "ServiceKey", name="uq_leadai_comp_service"),
-        Index("ix_leadai_comp_service_client", "ClientId"),
+        UniqueConstraint("ClientId", "PermissionKey", name="uq_leadai_comp_permission"),
+        Index("ix_leadai_comp_permission_client", "ClientId"),
     )
 
     ClientId = Column(String(36), nullable=False)
-    ServiceKey = Column(String(60), nullable=False)
+    PermissionKey = Column(String(80), nullable=False)
     IsEnabled = Column(Boolean, nullable=False, default=False)
     ConfigJson = Column(JSON, nullable=True)
     GrantedBy = Column(String(100), nullable=True)
@@ -549,6 +549,6 @@ ALL_LEADAI_EXT_TABLES = (
     LeadAccountNote,
     LeadFile,
     LeadJob,
-    LeadCompanyService,
+    LeadCompanyPermission,
 )
 
