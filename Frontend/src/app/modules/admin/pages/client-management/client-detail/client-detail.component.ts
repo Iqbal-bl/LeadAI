@@ -92,11 +92,12 @@ export class ClientDetailComponent implements OnInit {
     if (this.authService.isPlatformAdmin()) {
       options.params = { client_id: this.companyId };
     }
-    this.companyService.getCompanyServices(this.companyId, options).subscribe({
+    this.companyService.getCompanyPermissions(this.companyId, options).subscribe({
       next: (res) => {
-        if (res?.services && res.services.length > 0) {
+        const items = res?.permissions || (res as any)?.services || [];
+        if (items.length > 0) {
           const map: Record<string, boolean> = {};
-          res.services.forEach((s) => {
+          items.forEach((s: any) => {
             map[s.key.toLowerCase()] = s.is_enabled;
           });
           this.companyServicesMap = { ...this.companyServicesMap, ...map };
@@ -116,9 +117,9 @@ export class ClientDetailComponent implements OnInit {
       options.params = { client_id: this.companyId };
     }
 
-    this.companyService.patchCompanyServices(
+    this.companyService.patchCompanyPermissions(
       this.companyId,
-      { services: [{ key: serviceKey, is_enabled: newStatus }] },
+      { permissions: [{ key: serviceKey, is_enabled: newStatus }] },
       options
     ).subscribe({
       next: () => {
@@ -238,12 +239,12 @@ export class ClientDetailComponent implements OnInit {
     );
     const isLinkedInConnected = !!(this.linkedinStatus && this.linkedinStatus.connected);
 
-    const isVoiceEnabled = this.companyServicesMap['voice_agent'] !== false;
-    const isWhatsappEnabled = this.companyServicesMap['whatsapp'] !== false;
-    const isMessengerEnabled = (this.companyServicesMap['facebook'] ?? this.companyServicesMap['messenger']) !== false;
-    const isInstagramEnabled = this.companyServicesMap['instagram'] !== false;
-    const isLinkedInEnabled = this.companyServicesMap['linkedin'] !== false;
-    const isEmailEnabled = this.companyServicesMap['email_marketing'] !== false;
+    const isVoiceEnabled = (this.companyServicesMap['voice_agent']) !== false;
+    const isWhatsappEnabled = (this.companyServicesMap['social.whatsapp'] ?? this.companyServicesMap['whatsapp']) !== false;
+    const isMessengerEnabled = (this.companyServicesMap['social.facebook'] ?? this.companyServicesMap['facebook'] ?? this.companyServicesMap['messenger']) !== false;
+    const isInstagramEnabled = (this.companyServicesMap['social.instagram'] ?? this.companyServicesMap['instagram']) !== false;
+    const isLinkedInEnabled = (this.companyServicesMap['social.linkedin'] ?? this.companyServicesMap['linkedin']) !== false;
+    const isEmailEnabled = (this.companyServicesMap['email_marketing'] ?? this.companyServicesMap['email']) !== false;
 
     this.services = [
       {
@@ -278,7 +279,7 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'whatsapp',
-        key: 'whatsapp',
+        key: 'social.whatsapp',
         isEnabled: isWhatsappEnabled,
         name: 'WhatsApp Business API',
         category: 'Social',
@@ -317,7 +318,7 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'messenger',
-        key: 'facebook',
+        key: 'social.facebook',
         isEnabled: isMessengerEnabled,
         name: 'Facebook Messenger',
         category: 'Social',
@@ -355,7 +356,7 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'instagram',
-        key: 'instagram',
+        key: 'social.instagram',
         isEnabled: isInstagramEnabled,
         name: 'Instagram Direct (DM)',
         category: 'Social',
@@ -393,7 +394,7 @@ export class ClientDetailComponent implements OnInit {
       },
       {
         id: 'linkedin',
-        key: 'linkedin',
+        key: 'social.linkedin',
         isEnabled: isLinkedInEnabled,
         name: 'LinkedIn Automation',
         category: 'Social',

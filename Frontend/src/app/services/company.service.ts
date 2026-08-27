@@ -1,7 +1,13 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
-import { Company, CompanySettings } from '../models/company.models';
+import {
+  Company,
+  CompanyCreatePayload,
+  CompanyPermissionsOut,
+  CompanyPermissionsPatchIn,
+  CompanySettings,
+} from '../models/company.models';
 
 @Injectable({
   providedIn: 'root',
@@ -17,13 +23,7 @@ export class CompanyService {
   }
 
   // POST /companies
-  public createCompany(payload: {
-    name: string;
-    email: string;
-    description: string;
-    admin_email: string;
-    admin_name: string;
-  }): Observable<Company> {
+  public createCompany(payload: CompanyCreatePayload): Observable<Company> {
     return this.apiService.post<Company>('companies', payload);
   }
 
@@ -79,27 +79,41 @@ export class CompanyService {
     );
   }
 
-  // GET /companies/{company_id}/services
-  public getCompanyServices(
+  // GET /companies/{company_id}/permissions
+  public getCompanyPermissions(
     companyId: string,
     options?: any,
-  ): Observable<import('../models/company.models').CompanyServicesOut> {
-    return this.apiService.get<import('../models/company.models').CompanyServicesOut>(
-      `companies/${companyId}/services`,
+  ): Observable<CompanyPermissionsOut> {
+    return this.apiService.get<CompanyPermissionsOut>(
+      `companies/${companyId}/permissions`,
       options,
     );
   }
 
-  // PATCH /companies/{company_id}/services
-  public patchCompanyServices(
+  // PATCH /companies/{company_id}/permissions
+  public patchCompanyPermissions(
     companyId: string,
-    payload: import('../models/company.models').CompanyServicesPatchIn,
+    payload: CompanyPermissionsPatchIn,
     options?: any,
-  ): Observable<import('../models/company.models').CompanyServicesOut> {
-    return this.apiService.patch<import('../models/company.models').CompanyServicesOut>(
-      `companies/${companyId}/services`,
+  ): Observable<CompanyPermissionsOut> {
+    return this.apiService.patch<CompanyPermissionsOut>(
+      `companies/${companyId}/permissions`,
       payload,
       options,
     );
   }
+
+  // Backward compatibility aliases
+  public getCompanyServices(companyId: string, options?: any): Observable<any> {
+    return this.getCompanyPermissions(companyId, options);
+  }
+
+  public patchCompanyServices(
+    companyId: string,
+    payload: any,
+    options?: any,
+  ): Observable<any> {
+    return this.patchCompanyPermissions(companyId, payload, options);
+  }
 }
+

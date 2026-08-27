@@ -25,23 +25,35 @@ export interface CompanySettings {
   effective_retrieval_top_k?: number;
 }
 
-export interface ServiceItemOut {
-  key: string; // e.g. "whatsapp", "facebook", "instagram", "voice_agent", "linkedin"
+export interface CompanyCreatePayload {
+  name: string;
+  email?: string;
+  phone_number?: string;
+  description?: string;
+  admin_email?: string;
+  admin_name?: string;
+  permissions?: string[];
+}
+
+export interface PermissionItemOut {
+  key: string; // e.g. "social.whatsapp", "social.facebook", "social.instagram", "voice_agent", "social.linkedin", "email_marketing"
   is_enabled: boolean;
 }
 
-export interface CompanyServicesOut {
+export interface CompanyPermissionsOut {
   company_id: string;
   company_name: string;
-  services: ServiceItemOut[];
+  permissions: PermissionItemOut[];
 }
 
-export interface ServicePatchItem {
-  key: string;
-  is_enabled: boolean;
-  config_json?: Record<string, any> | null;
+export interface CompanyPermissionsPatchIn {
+  permissions: PermissionItemOut[];
 }
 
+// Backward compatibility aliases
+export type ServiceItemOut = PermissionItemOut;
+export type CompanyServicesOut = CompanyPermissionsOut;
+export type ServicePatchItem = PermissionItemOut & { config_json?: Record<string, any> | null };
 export interface CompanyServicesPatchIn {
   services: ServicePatchItem[];
 }
