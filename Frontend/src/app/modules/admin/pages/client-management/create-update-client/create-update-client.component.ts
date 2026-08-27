@@ -42,14 +42,20 @@ export class CreateUpdateClientComponent implements OnInit {
   companyId: string | null = null;
 
   availableServices = [
-    { key: 'whatsapp', name: 'WhatsApp Business', icon: 'pi pi-whatsapp', desc: 'Meta Cloud API & auto-reply' },
-    { key: 'facebook', name: 'Facebook Messenger', icon: 'pi pi-facebook', desc: 'Page messaging & ads chat' },
-    { key: 'instagram', name: 'Instagram Direct', icon: 'pi pi-instagram', desc: 'DMs, Story replies & comments' },
+    { key: 'social.whatsapp', name: 'WhatsApp Business', icon: 'pi pi-whatsapp', desc: 'Meta Cloud API & auto-reply' },
+    { key: 'social.facebook', name: 'Facebook Messenger', icon: 'pi pi-facebook', desc: 'Page messaging & ads chat' },
+    { key: 'social.instagram', name: 'Instagram Direct', icon: 'pi pi-instagram', desc: 'DMs, Story replies & comments' },
     { key: 'voice_agent', name: 'AI Voice & Dialler', icon: 'pi pi-phone', desc: 'Outbound AI calls & transcriptions' },
-    { key: 'linkedin', name: 'LinkedIn Outreach', icon: 'pi pi-linkedin', desc: 'B2B outreach & connection automation' },
+    { key: 'social.linkedin', name: 'LinkedIn Outreach', icon: 'pi pi-linkedin', desc: 'B2B outreach & connection automation' },
     { key: 'email_marketing', name: 'Email Marketing', icon: 'pi pi-envelope', desc: 'Campaigns & automated sequences' },
   ];
-  selectedServices: string[] = ['whatsapp', 'facebook', 'instagram', 'voice_agent', 'linkedin'];
+  selectedServices: string[] = [
+    'social.whatsapp',
+    'social.facebook',
+    'social.instagram',
+    'voice_agent',
+    'social.linkedin',
+  ];
 
   toggleService(key: string): void {
     if (this.selectedServices.includes(key)) {
@@ -146,13 +152,13 @@ export class CreateUpdateClientComponent implements OnInit {
       },
     });
 
-    // Also load configured company services
-    this.companyService.getCompanyServices(this.companyId, options).subscribe({
+    // Also load configured company permissions
+    this.companyService.getCompanyPermissions(this.companyId, options).subscribe({
       next: (res) => {
-        if (res?.services && res.services.length > 0) {
-          this.selectedServices = res.services
-            .filter((s) => s.is_enabled)
-            .map((s) => s.key.toLowerCase());
+        if (res?.permissions && res.permissions.length > 0) {
+          this.selectedServices = res.permissions
+            .filter((p) => p.is_enabled)
+            .map((p) => p.key.toLowerCase());
         }
       },
       error: () => {},
@@ -189,11 +195,11 @@ export class CreateUpdateClientComponent implements OnInit {
         options.params = { client_id: this.companyId };
       }
 
-      // Patch services in parallel
-      this.companyService.patchCompanyServices(
+      // Patch permissions in parallel
+      this.companyService.patchCompanyPermissions(
         this.companyId,
         {
-          services: this.availableServices.map((s) => ({
+          permissions: this.availableServices.map((s) => ({
             key: s.key,
             is_enabled: this.selectedServices.includes(s.key),
           })),
@@ -226,10 +232,17 @@ export class CreateUpdateClientComponent implements OnInit {
         },
       });
     } else {
-      // Create Mode with selected services
-      formValue.services = this.selectedServices;
+      // Create Mode with selected permissions array
+      const createPayload = {
+        name: formValue.name,
+        email: formValue.email,
+        description: formValue.description,
+        admin_name: formValue.admin_name,
+        admin_email: formValue.admin_email,
+        permissions: this.selectedServices,
+      };
 
-      this.companyService.createCompany(formValue).subscribe({
+      this.companyService.createCompany(createPayload).subscribe({
         next: () => {
           this.loading = false;
           this.messageService.add({
