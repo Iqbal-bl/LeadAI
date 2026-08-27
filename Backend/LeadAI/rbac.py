@@ -36,6 +36,7 @@ from .models import (
     LeadRolePermission,
     LeadUserRole,
 )
+from .models_ext import LeadCompanyPermission
 
 logger = logging.getLogger(__name__)
 
@@ -354,15 +355,35 @@ def current_principal(
     if platform:
         # Platform admin: may target any company, but must name one for
         # company-scoped endpoints. resolve_scope() enforces that per-route.
+        perms = effective_permissions_for(db, ROLE_ADMIN)
+        if client_id:
+            comp_rows = (
+                db.query(LeadCompanyPermission)
+                .filter(
+                    LeadCompanyPermission.ClientId == client_id,
+                    LeadCompanyPermission.IsDeleted == False,  # noqa: E712
+                )
+                .all()
+            )
+            if comp_rows:
+                disabled_features = {
+                    r.PermissionKey.strip().lower() for r in comp_rows if not r.IsEnabled
+                }
+                if disabled_features:
+                    perms = {
+                        p for p in perms if p.strip().lower() not in disabled_features
+                    }
+
         return Principal(
             email=email,
             role=ROLE_ADMIN,
             client_id=client_id,
             full_name=platform.FullName,
             user_id=platform.UserId,
-            permissions=effective_permissions_for(db, ROLE_ADMIN),
+            permissions=perms,
             accessible_client_ids=accessible,
         )
+
 
     # Company-scoped. If the caller holds grants in several companies they may
     # select one with ?client_id=, but only from their own set.
@@ -382,15 +403,35 @@ def current_principal(
             key=lambda g: order.index(g.Role) if g.Role in order else 99,
         )[0]
 
+    effective_perms = effective_permissions_for(db, chosen.Role)
+    if chosen.ClientId:
+        comp_rows = (
+            db.query(LeadCompanyPermission)
+            .filter(
+                LeadCompanyPermission.ClientId == chosen.ClientId,
+                LeadCompanyPermission.IsDeleted == False,  # noqa: E712
+            )
+            .all()
+        )
+        if comp_rows:
+            disabled_features = {
+                r.PermissionKey.strip().lower() for r in comp_rows if not r.IsEnabled
+            }
+            if disabled_features:
+                effective_perms = {
+                    p for p in effective_perms if p.strip().lower() not in disabled_features
+                }
+
     return Principal(
         email=email,
         role=chosen.Role,
         client_id=chosen.ClientId,
         full_name=chosen.FullName,
         user_id=chosen.UserId,
-        permissions=effective_permissions_for(db, chosen.Role),
+        permissions=effective_perms,
         accessible_client_ids=accessible,
     )
+
 
 
 def require(*permissions: str) -> Callable[..., Principal]:
