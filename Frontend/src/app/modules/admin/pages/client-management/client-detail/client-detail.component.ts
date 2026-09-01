@@ -64,15 +64,10 @@ export class ClientDetailComponent implements OnInit {
 
   // Available Services & Integrations Overview
   services: ServiceAccessItem[] = [];
-  companyServicesMap: Record<string, boolean> = {
-    whatsapp: true,
-    facebook: true,
-    messenger: true,
-    instagram: true,
-    voice_agent: true,
-    linkedin: true,
-    email_marketing: true,
-  };
+  companyServicesMap: Record<string, boolean> = {};
+
+  isPermissionsLoaded = false;
+
 
   ngOnInit(): void {
     this.route.params.subscribe((params) => {
@@ -94,6 +89,7 @@ export class ClientDetailComponent implements OnInit {
     }
     this.companyService.getCompanyPermissions(this.companyId, options).subscribe({
       next: (res) => {
+        this.isPermissionsLoaded = true;
         const items = res?.permissions || (res as any)?.services || [];
         if (items.length > 0) {
           const map: Record<string, boolean> = {};
@@ -101,14 +97,16 @@ export class ClientDetailComponent implements OnInit {
             map[s.key.toLowerCase()] = s.is_enabled;
           });
           this.companyServicesMap = { ...this.companyServicesMap, ...map };
-          this.buildServicesList();
         }
+        this.buildServicesList();
       },
       error: () => {
+        this.isPermissionsLoaded = true;
         this.buildServicesList();
       },
     });
   }
+
 
   toggleServiceEnabled(serviceKey: string, currentVal: boolean): void {
     const newStatus = !currentVal;
@@ -227,6 +225,15 @@ export class ClientDetailComponent implements OnInit {
     });
   }
 
+  isServiceEnabled(key: string, legacyKey?: string): boolean {
+    if (!this.isPermissionsLoaded) return true;
+    const keys = Object.keys(this.companyServicesMap);
+    if (keys.length === 0) return true; // Legacy fallback
+    const val = this.companyServicesMap[key] ?? (legacyKey ? this.companyServicesMap[legacyKey] : undefined);
+    return val === true;
+  }
+
+
   buildServicesList(): void {
     const whatsappCh = this.channels.find(
       (c) => c.channel?.toLowerCase() === 'whatsapp'
@@ -239,12 +246,13 @@ export class ClientDetailComponent implements OnInit {
     );
     const isLinkedInConnected = !!(this.linkedinStatus && this.linkedinStatus.connected);
 
-    const isVoiceEnabled = (this.companyServicesMap['voice_agent']) !== false;
-    const isWhatsappEnabled = (this.companyServicesMap['social.whatsapp'] ?? this.companyServicesMap['whatsapp']) !== false;
-    const isMessengerEnabled = (this.companyServicesMap['social.facebook'] ?? this.companyServicesMap['facebook'] ?? this.companyServicesMap['messenger']) !== false;
-    const isInstagramEnabled = (this.companyServicesMap['social.instagram'] ?? this.companyServicesMap['instagram']) !== false;
-    const isLinkedInEnabled = (this.companyServicesMap['social.linkedin'] ?? this.companyServicesMap['linkedin']) !== false;
-    const isEmailEnabled = (this.companyServicesMap['email_marketing'] ?? this.companyServicesMap['email']) !== false;
+    const isVoiceEnabled = this.isServiceEnabled('voice_agent');
+    const isWhatsappEnabled = this.isServiceEnabled('social.whatsapp', 'whatsapp');
+    const isMessengerEnabled = this.isServiceEnabled('social.facebook', 'facebook');
+    const isInstagramEnabled = this.isServiceEnabled('social.instagram', 'instagram');
+    const isLinkedInEnabled = this.isServiceEnabled('social.linkedin', 'linkedin');
+    const isEmailEnabled = this.isServiceEnabled('email_marketing', 'email');
+
 
     this.services = [
       {
