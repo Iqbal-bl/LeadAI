@@ -8,6 +8,20 @@ import { StepperModule } from 'primeng/stepper';
 import { ScriptService } from '../../../services/script.service';
 import { Script } from '../../../models/script.models';
 
+export interface ChannelPlatformOption {
+  key: string;
+  id: string;
+  name: string;
+  badge: string;
+  badgeClass: string;
+  description: string;
+  icon: string;
+  gradient: string;
+  actionLabel: string;
+  actionHandler: () => void;
+  loading: boolean;
+}
+
 @Component({
   selector: 'app-channel-wizard',
   standalone: true,
@@ -77,7 +91,95 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     private scriptService: ScriptService,
   ) {}
 
+  get availablePlatforms(): ChannelPlatformOption[] {
+    const user = this.authService.getCurrentUser();
+    const perms = user?.permissions || [];
+    const isPlatformAdmin = this.authService.isPlatformAdmin();
+
+    const hasPerm = (p: string) => isPlatformAdmin || perms.includes(p.toLowerCase());
+
+    const list: ChannelPlatformOption[] = [];
+
+    if (hasPerm('social.facebook')) {
+      list.push({
+        key: 'social.facebook',
+        id: 'facebook',
+        name: 'Facebook Messenger',
+        badge: 'OAuth 2.0',
+        badgeClass: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800',
+        description: 'Connect your Facebook Business Page for automated Messenger replies, lead capturing, and page inbox sync.',
+        icon: 'pi pi-facebook',
+        gradient: 'linear-gradient(135deg, #1877f2 0%, #0d5cb6 100%)',
+        actionLabel: 'Connect Facebook',
+        actionHandler: () => this.connectWithFacebook(),
+        loading: this.fbOauthLoading,
+      });
+    }
+
+    if (hasPerm('social.instagram')) {
+      list.push({
+        key: 'social.instagram',
+        id: 'instagram',
+        name: 'Instagram Direct',
+        badge: 'Meta Direct',
+        badgeClass: 'bg-pink-50 text-pink-700 border border-pink-200 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800',
+        description: 'Link your Instagram Professional account to manage DMs, story mentions, and customer inquiries with AI auto-replies.',
+        icon: 'pi pi-instagram',
+        gradient: 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)',
+        actionLabel: 'Connect Instagram',
+        actionHandler: () => this.connectWithInstagram(),
+        loading: this.oauthLoading,
+      });
+    }
+
+    if (hasPerm('social.linkedin')) {
+      list.push({
+        key: 'social.linkedin',
+        id: 'linkedin',
+        name: 'LinkedIn',
+        badge: 'OAuth 2.0',
+        badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800',
+        description: 'Link your company or personal LinkedIn profile to schedule and publish updates and engage with professional prospects.',
+        icon: 'pi pi-linkedin',
+        gradient: 'linear-gradient(135deg, #0A66C2 0%, #004182 100%)',
+        actionLabel: this.linkedinConnecting ? 'Waiting for Consent...' : 'Connect LinkedIn',
+        actionHandler: () => this.connectWithLinkedIn(),
+        loading: this.linkedinConnecting,
+      });
+    }
+
+    if (hasPerm('social.whatsapp')) {
+      list.push({
+        key: 'social.whatsapp',
+        id: 'whatsapp',
+        name: 'WhatsApp Business',
+        badge: 'Meta Cloud',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+        description: 'Connect your WhatsApp Business number via Meta to send automated template messages and interact with customers.',
+        icon: 'pi pi-whatsapp',
+        gradient: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
+        actionLabel: 'Connect WhatsApp',
+        actionHandler: () => this.connectWithFacebook(),
+        loading: this.fbOauthLoading,
+      });
+    }
+
+    return list;
+  }
+
+  onConnectPlatform(id: string): void {
+    if (id === 'facebook' || id === 'whatsapp') {
+      this.connectWithFacebook();
+    } else if (id === 'instagram') {
+      this.connectWithInstagram();
+    } else if (id === 'linkedin') {
+      this.connectWithLinkedIn();
+    }
+  }
+
+
   ngOnInit(): void {
+
     this.loadScripts();
     this.messageEventListener = (event: MessageEvent) => this.handleOAuthMessage(event);
     window.addEventListener('message', this.messageEventListener);
@@ -257,16 +359,20 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
   }
 
   connectWithInstagram(): void {
+    const popup = this.openOAuthPopup('about:blank', 'Instagram Connect');
     this.oauthLoading = true;
     this.authService.getInstagramAuthorizeUrl().subscribe({
       next: (res) => {
         this.oauthLoading = false;
-        if (res && res.authorize_url) {
-          this.openOAuthPopup(res.authorize_url, 'Instagram Connect');
+        if (res && res.authorize_url && popup) {
+          popup.location.href = res.authorize_url;
+        } else if (popup) {
+          popup.close();
         }
       },
       error: (err) => {
         this.oauthLoading = false;
+        if (popup && !popup.closed) popup.close();
         this.messageService.add({
           severity: 'error',
           summary: 'OAuth Error',
@@ -280,16 +386,20 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
   }
 
   connectWithFacebook(): void {
+    const popup = this.openOAuthPopup('about:blank', 'Facebook Connect');
     this.fbOauthLoading = true;
     this.authService.getFacebookAuthorizeUrl().subscribe({
       next: (res) => {
         this.fbOauthLoading = false;
-        if (res && res.authorize_url) {
-          window.location.href = res.authorize_url;
+        if (res && res.authorize_url && popup) {
+          popup.location.href = res.authorize_url;
+        } else if (popup) {
+          popup.close();
         }
       },
       error: (err) => {
         this.fbOauthLoading = false;
+        if (popup && !popup.closed) popup.close();
         this.messageService.add({
           severity: 'error',
           summary: 'OAuth Error',
@@ -303,19 +413,12 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
   }
 
   connectWithLinkedIn(): void {
+    const popup = this.openOAuthPopup('about:blank', 'LinkedIn Connect');
     this.linkedinConnecting = true;
     this.channelService.getLinkedInConnectUrl().subscribe({
       next: (res) => {
-        if (res && res.authorize_url) {
-          const width = 600;
-          const height = 650;
-          const left = window.screen.width / 2 - width / 2;
-          const top = window.screen.height / 2 - height / 2;
-          const popup = window.open(
-            res.authorize_url,
-            'LinkedIn Connect',
-            `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`,
-          );
+        if (res && res.authorize_url && popup) {
+          popup.location.href = res.authorize_url;
 
           if (this.linkedinPollingInterval) {
             clearInterval(this.linkedinPollingInterval);
@@ -342,10 +445,12 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
           }, 3000);
         } else {
           this.linkedinConnecting = false;
+          if (popup && !popup.closed) popup.close();
         }
       },
       error: (err) => {
         this.linkedinConnecting = false;
+        if (popup && !popup.closed) popup.close();
         this.messageService.add({
           severity: 'error',
           summary: 'OAuth Error',
@@ -358,7 +463,10 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     });
   }
 
+
+
   onClose(): void {
+
     if (this.linkedinPollingInterval) {
       clearInterval(this.linkedinPollingInterval);
     }
