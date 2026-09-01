@@ -147,7 +147,12 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "social.read",
         "social.post",
         "social.manage",
+        "social.facebook",
+        "social.instagram",
+        "social.whatsapp",
+        "social.linkedin",
     },
+
     ROLE_MANAGER: {
         "company.read",
         "role.read",

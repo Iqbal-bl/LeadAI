@@ -8,3 +8,5 @@ __pycache__/
 .venv
 .vnev
 .env
+prepaid_credit_demo.html
+prepaid_credit_demo.py
