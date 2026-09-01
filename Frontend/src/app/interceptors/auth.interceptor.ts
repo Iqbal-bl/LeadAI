@@ -87,13 +87,14 @@ export class AuthInterceptor implements HttpInterceptor {
     const accessToken =
       this.authService.getValue('accessToken') ||
       this.authService.getStaffToken();
+    const setHeaders: Record<string, string> = {
+      'ngrok-skip-browser-warning': 'true',
+    };
     if (accessToken) {
-      req = req.clone({
-        setHeaders: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      setHeaders['Authorization'] = `Bearer ${accessToken}`;
     }
+    req = req.clone({ setHeaders });
+
 
     return next.handle(req).pipe(
       catchError((err: HttpErrorResponse) => {

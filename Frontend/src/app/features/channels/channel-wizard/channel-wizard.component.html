@@ -8,128 +8,50 @@
     </p>
   </div> -->
 
-  <!-- OAuth Platforms List -->
-  <div class="flex flex-col gap-3.5 mt-4">
-    <!-- Facebook Messenger -->
-    <div class="platform-card facebook-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+  <!-- Dynamic OAuth Platforms List -->
+  <div class="flex flex-col gap-3.5 mt-4" *ngIf="availablePlatforms.length > 0">
+    <div *ngFor="let platform of availablePlatforms"
+         class="platform-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div class="flex items-start sm:items-center gap-3.5">
         <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-             style="background: linear-gradient(135deg, #1877f2 0%, #0d5cb6 100%);">
-          <i class="pi pi-facebook text-2xl"></i>
+             [style.background]="platform.gradient">
+          <i [class]="platform.icon" class="text-2xl"></i>
         </div>
         <div class="flex flex-col text-left">
           <div class="flex items-center gap-2 flex-wrap">
-            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">Facebook Messenger</h4>
-            <span class="platform-badge bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800">
-              OAuth 2.0
+            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">{{ platform.name }}</h4>
+            <span class="platform-badge" [ngClass]="platform.badgeClass">
+              {{ platform.badge }}
             </span>
           </div>
           <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
-            Connect your Facebook Business Page for automated Messenger replies, lead capturing, and page inbox sync.
+            {{ platform.description }}
           </p>
         </div>
       </div>
       <p-button
-        label="Connect Facebook"
+        [label]="platform.actionLabel"
         icon="pi pi-arrow-right"
         iconPos="right"
         [rounded]="true"
-        [loading]="fbOauthLoading"
-        (onClick)="connectWithFacebook()"
-        [style]="{ 'background': 'linear-gradient(135deg, #1877f2, #0d5cb6)', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
+        [loading]="platform.loading"
+        (onClick)="onConnectPlatform(platform.id)"
+        (click)="onConnectPlatform(platform.id)"
+        [style]="{ 'background': platform.gradient, 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
       ></p-button>
-    </div>
 
-    <!-- Instagram Direct -->
-    <div class="platform-card instagram-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-      <div class="flex items-start sm:items-center gap-3.5">
-        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-             style="background: linear-gradient(45deg, #f09433, #dc2743, #bc1888);">
-          <i class="pi pi-instagram text-2xl"></i>
-        </div>
-        <div class="flex flex-col text-left">
-          <div class="flex items-center gap-2 flex-wrap">
-            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">Instagram Direct</h4>
-            <span class="platform-badge bg-pink-50 text-pink-700 border border-pink-200 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800">
-              Meta Direct
-            </span>
-          </div>
-          <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
-            Link your Instagram Professional account to manage DMs, story mentions, and customer inquiries with AI auto-replies.
-          </p>
-        </div>
-      </div>
-      <p-button
-        label="Connect Instagram"
-        icon="pi pi-arrow-right"
-        iconPos="right"
-        [rounded]="true"
-        [loading]="oauthLoading"
-        (onClick)="connectWithInstagram()"
-        [style]="{ 'background': 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
-      ></p-button>
     </div>
-
-    <!-- LinkedIn Profile -->
-    <div class="platform-card linkedin-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-      <div class="flex items-start sm:items-center gap-3.5">
-        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-             style="background: linear-gradient(135deg, #0A66C2 0%, #004182 100%);">
-          <i class="pi pi-linkedin text-2xl"></i>
-        </div>
-        <div class="flex flex-col text-left">
-          <div class="flex items-center gap-2 flex-wrap">
-            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">LinkedIn</h4>
-            <span class="platform-badge bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800">
-              OAuth 2.0
-            </span>
-          </div>
-          <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
-            Link your company or personal LinkedIn profile to schedule and publish updates and engage with professional prospects.
-          </p>
-        </div>
-      </div>
-      <p-button
-        label="{{ linkedinConnecting ? 'Waiting for Consent...' : 'Connect LinkedIn' }}"
-        icon="{{ linkedinConnecting ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
-        iconPos="right"
-        [rounded]="true"
-        [loading]="linkedinConnecting"
-        (onClick)="connectWithLinkedIn()"
-        [style]="{ 'background': '#0A66C2', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
-      ></p-button>
-    </div>
-
-    <!-- WhatsApp Business -->
-    <!-- <div class="platform-card whatsapp-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-      <div class="flex items-start sm:items-center gap-3.5">
-        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-             style="background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);">
-          <i class="pi pi-whatsapp text-2xl"></i>
-        </div>
-        <div class="flex flex-col text-left">
-          <div class="flex items-center gap-2 flex-wrap">
-            <h4 class="text-base font-bold" style="color: var(--app-text, #0f172a);">WhatsApp Business</h4>
-            <span class="platform-badge bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
-              Meta Cloud
-            </span>
-          </div>
-          <p class="text-xs mt-1 leading-relaxed" style="color: var(--app-text-secondary, #64748b);">
-            Connect your WhatsApp Business number via Meta to send automated template messages and interact with customers.
-          </p>
-        </div>
-      </div>
-      <p-button
-        label="Connect WhatsApp"
-        icon="pi pi-arrow-right"
-        iconPos="right"
-        [rounded]="true"
-        [loading]="fbOauthLoading"
-        (onClick)="connectWithFacebook()"
-        [style]="{ 'background': 'linear-gradient(135deg, #25D366, #128C7E)', 'border': 'none', 'white-space': 'nowrap', 'color': '#ffffff' }"
-      ></p-button>
-    </div> -->
   </div>
+
+  <!-- Fallback if no platforms are provisioned -->
+  <div *ngIf="availablePlatforms.length === 0" class="p-8 text-center flex flex-col items-center gap-3">
+    <i class="pi pi-lock text-4xl text-amber-500"></i>
+    <h3 class="text-base font-bold" style="color: var(--app-text);">No Communication Channels Provisioned</h3>
+    <p class="text-xs text-muted max-w-md" style="color: var(--app-text-secondary);">
+      Your company workspace currently has no active social channel feature grants. Please contact your Super Admin to enable channel permissions (WhatsApp, Instagram, LinkedIn, or Facebook).
+    </p>
+  </div>
+
 
   <!-- Security / Info Footer -->
   <div class="info-banner mt-5 p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-left">
