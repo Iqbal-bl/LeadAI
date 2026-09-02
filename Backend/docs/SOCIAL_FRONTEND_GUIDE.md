@@ -71,6 +71,12 @@ GET /api/leadai/social/platforms
     "instagram": {
       "connected": false,
       "reason": "No active instagram account is connected for this company. Connect one first: POST /channels with channel='instagram'."
+    },
+    "linkedin": {
+      "connected": true,
+      "account_id": "9a1b…",
+      "account_name": "Acme Professional",
+      "target_id": "urn:li:person:CsjnS7Uz7f"
     }
   }
 }
@@ -96,7 +102,7 @@ POST /api/leadai/social/posts
   "media": [
     { "type": "image", "data": "<base64>", "mime_type": "image/jpeg" }
   ],
-  "platforms": ["facebook", "instagram"]
+  "platforms": ["facebook", "instagram", "linkedin"]
 }
 ```
 
@@ -162,6 +168,11 @@ AI tab rather than showing a scary error.
       "success": true,
       "id": "17895…",
       "account_name": "Acme Official"
+    },
+    "linkedin": {
+      "success": true,
+      "id": "urn:li:share:7198273641209387456",
+      "account_name": "Acme Professional"
     }
   }
 }

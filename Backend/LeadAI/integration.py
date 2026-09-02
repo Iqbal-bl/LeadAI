@@ -43,6 +43,7 @@ PUBLIC_LEADAI_PATHS = (
     f"{settings.api_prefix}/public",
     f"{settings.api_prefix}/voice/exotel/status",
     f"{settings.api_prefix}/health",
+    f"{settings.api_prefix}/linkedin/callback",
 )
 
 
@@ -140,6 +141,14 @@ def _register_worker(app: FastAPI) -> None:
             # the middle of a campaign resumes instead of stalling.
             jobs.reclaim_stale()
             jobs.start()
+
+            # Bootstrap the daily LinkedIn connection request checking job
+            from .db import session
+            db = session()
+            try:
+                jobs.bootstrap_linkedin_job(db)
+            finally:
+                db.close()
         except Exception as exc:  # noqa: BLE001
             logger.error("[LeadAI] worker failed to start: %s", exc)
 

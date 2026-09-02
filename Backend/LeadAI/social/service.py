@@ -62,6 +62,7 @@ def classify_media(uploaded: list[dict]) -> str:
 PLATFORM_CAPABILITIES = {
     "facebook": {"none", "single_image", "single_video", "multi_image"},
     "instagram": {"single_image", "single_video", "multi_image", "multi_video", "mixed_carousel"},
+    "linkedin": {"none", "single_image", "multi_image"},
 }
 
 
@@ -149,6 +150,48 @@ async def publish(
 
     for platform in platforms:
         platform = platform.strip().lower()
+        
+        if platform == "linkedin":
+            try:
+                from .linkedin import get_valid_access_token, post_to_linkedin
+                from ..models_ext import LeadChannelAccount
+                
+                # Retrieve credential and access token
+                access_token = await get_valid_access_token(db, client_id)
+                db_cred = db.query(LeadChannelAccount).filter(
+                    LeadChannelAccount.ClientId == client_id,
+                    LeadChannelAccount.Channel == "linkedin",
+                    LeadChannelAccount.IsDeleted == False
+                ).first()
+                person_urn = db_cred.ExternalId if db_cred else None
+                if not person_urn:
+                    raise ValueError("LinkedIn account is connected but missing Person URN. Please reconnect.")
+                
+                # Check capabilities
+                capabilities = PLATFORM_CAPABILITIES.get(platform)
+                if media_shape not in capabilities:
+                    results[platform] = {
+                        "success": False,
+                        "skipped": True,
+                        "error": f"{platform} does not support this media combination ({media_shape}).",
+                    }
+                    continue
+                
+                result = await post_to_linkedin(access_token, person_urn, caption, uploaded, media_shape)
+                results[platform] = {
+                    "success": True,
+                    "account_id": client_id,
+                    "account_name": "LinkedIn User",
+                    "result": result,
+                    "id": result.get("post_id"),
+                }
+            except Exception as exc:
+                logger.warning(
+                    "[social] %s publish failed for client %s: %s", platform, client_id, exc
+                )
+                results[platform] = {"success": False, "error": str(exc)}
+            continue
+
         capabilities = PLATFORM_CAPABILITIES.get(platform)
         poster = PLATFORM_POSTERS.get(platform)
 
@@ -213,8 +256,10 @@ async def publish(
             row.PublishedAt = utcnow()
         fb = results.get("facebook") or {}
         ig = results.get("instagram") or {}
+        li = results.get("linkedin") or {}
         row.FacebookPostId = fb.get("id")
         row.InstagramMediaId = ig.get("id")
+        row.LinkedInPostId = li.get("id")
         row.UpdatedAt = utcnow()
 
     return results, row

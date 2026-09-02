@@ -22,7 +22,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-Platform = Literal["facebook", "instagram"]
+Platform = Literal["facebook", "instagram", "linkedin"]
 
 
 class MediaItem(BaseModel):

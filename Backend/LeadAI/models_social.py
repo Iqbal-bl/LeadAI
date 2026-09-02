@@ -15,7 +15,7 @@ creates them on startup like the rest.
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, JSON, String, Text, Float, UniqueConstraint
 
 from .models import LeadAIBase
 
@@ -68,6 +68,7 @@ class LeadSocialPost(LeadAIBase):
     # post" link does not require parsing Results in the frontend.
     FacebookPostId = Column(String(120), nullable=True)
     InstagramMediaId = Column(String(120), nullable=True)
+    LinkedInPostId = Column(String(120), nullable=True)
 
     DurationMs = Column(Integer, nullable=True)
     Error = Column(Text, nullable=True)

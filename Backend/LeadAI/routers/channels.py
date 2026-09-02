@@ -160,7 +160,8 @@ def create_account(
     row = LeadChannelAccount(
         ClientId=client_id,
         Channel=payload.channel,
-        Provider="meta",
+        Provider="linkedin" if payload.channel == "linkedin" else "meta",
+        LoginType="linkedin" if payload.channel == "linkedin" else "facebook",
         Name=payload.name,
         ExternalId=payload.external_id,
         BusinessAccountId=payload.business_account_id,

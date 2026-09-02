@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 PLATFORM_CHANNELS: dict[str, tuple[str, ...]] = {
     "facebook": ("facebook", "messenger"),
     "instagram": ("instagram",),
+    "linkedin": ("linkedin",),
 }
 
 SUPPORTED_PLATFORMS = tuple(PLATFORM_CHANNELS)
@@ -151,11 +152,14 @@ def resolve(
 
     if platform == "facebook":
         page_id = account.ExternalId
-    else:
+    elif platform == "instagram":
         ig_user_id = account.ExternalId
         # BusinessAccountId is where the Channels UI records the linked Page for
         # an IG row when the operator supplies it; useful for insights calls.
         page_id = account.BusinessAccountId
+    elif platform == "linkedin":
+        page_id = account.ExternalId
+        ig_user_id = account.ExternalId
 
     # Instagram publishes with the linked Page's token — borrow it when the IG
     # row itself has none. See the module docstring.
@@ -208,6 +212,6 @@ def connected_platforms(db: Session, client_id: str) -> dict[str, dict]:
             "connected": True,
             "account_id": creds.account_id,
             "account_name": creds.account_name,
-            "target_id": creds.page_id if platform == "facebook" else creds.ig_user_id,
+            "target_id": creds.page_id if platform in ("facebook", "linkedin") else creds.ig_user_id,
         }
     return out

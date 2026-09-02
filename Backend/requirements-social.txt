@@ -29,3 +29,6 @@ pillow>=10.0
 # exposed over the API — every endpoint runs with use_browser=False — so leave
 # this commented unless you also run the standalone scheduler.
 # playwright>=1.45
+
+# Unofficial LinkedIn API client for search and connection requests.
+linkedin-api>=2.0.0

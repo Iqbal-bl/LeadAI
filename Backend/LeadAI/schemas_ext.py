@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_serializer
 
-ChannelName = Literal["web", "whatsapp", "messenger", "instagram", "sms", "email", "voice"]
+ChannelName = Literal["web", "whatsapp", "messenger", "instagram", "sms", "email", "voice", "linkedin"]
 CampaignKind = Literal["message", "call"]
 CampaignPurpose = Literal[
     "promotional", "festive", "cold_outreach", "follow_up", "reactivation", "transactional"
@@ -24,7 +24,7 @@ AudienceType = Literal["list", "leads", "customers"]
 # channels
 # =========================================================================== #
 class ChannelAccountCreate(BaseModel):
-    channel: Literal["whatsapp", "messenger", "instagram"]
+    channel: Literal["whatsapp", "messenger", "instagram", "linkedin"]
     name: str = Field(min_length=1, max_length=160)
     external_id: str = Field(
         min_length=1,

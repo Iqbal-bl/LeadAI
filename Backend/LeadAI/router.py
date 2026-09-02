@@ -24,6 +24,7 @@ from .routers import (
     files,
     inbox,
     knowledge,
+    linkedin,
     role_permissions,
     roles,
     scripts,
@@ -61,6 +62,7 @@ api_router.include_router(user_management.router)
 
 # Phase 2: social channels, campaigns, CRM, document store, lead threshold.
 api_router.include_router(channels.router)
+api_router.include_router(linkedin.router)
 api_router.include_router(campaigns.lists_router)
 api_router.include_router(campaigns.router)
 api_router.include_router(customers.router)

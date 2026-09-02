@@ -298,3 +298,81 @@ def stats(db) -> dict:
         .all()
     )
     return {"worker": worker_id(), "enabled": settings.worker_enabled, "queue": dict(rows)}
+
+
+@register("linkedin.process_invitations")
+def handle_linkedin_invitations(db, payload: dict) -> dict:
+    """Durable queue job handler for LinkedIn connection invitation sync."""
+    from ..social.linkedin_bot import process_pending_invitations
+    from ..models_ext import LeadChannelAccount
+
+    company_id = payload.get("company_id")
+    
+    # Query active accounts
+    query = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsActive == True,
+        LeadChannelAccount.IsDeleted == False
+    )
+    if company_id:
+        query = query.filter(LeadChannelAccount.ClientId == company_id)
+        
+    accounts = query.all()
+    processed_count = 0
+    accepted_count = 0
+    errors = []
+    
+    for account in accounts:
+        try:
+            p_cnt, a_cnt = process_pending_invitations(db, account)
+            processed_count += p_cnt
+            accepted_count += a_cnt
+        except Exception as exc:
+            logger.error("Error processing LinkedIn invitations for client %s: %s", account.ClientId, exc)
+            errors.append(f"{account.ClientId}: {exc}")
+            
+    # If this is the global daily scheduled run, schedule the next execution for tomorrow morning
+    if not company_id:
+        run_at = calculate_next_morning_run()
+        enqueue(db, "linkedin.process_invitations", run_at=run_at)
+        logger.info("[LeadAI jobs] Scheduled next daily linkedin.process_invitations at %s", run_at)
+        
+    return {
+        "processed_accounts": len(accounts),
+        "total_processed_invitations": processed_count,
+        "total_accepted_invitations": accepted_count,
+        "errors": errors
+    }
+
+
+def calculate_next_morning_run() -> datetime:
+    """Calculate the datetime (UTC, tz-naive) for the next 9:00 AM run in default_timezone."""
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(settings.default_timezone)
+    now_local = datetime.now(tz)
+    
+    # Target 9:00 AM local time
+    target_local = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
+    
+    # If it is already past 9:00 AM local time today, schedule for tomorrow morning 9:00 AM
+    if now_local >= target_local:
+        target_local += timedelta(days=1)
+        
+    return target_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def bootstrap_linkedin_job(db) -> None:
+    """Ensure that the daily scheduled LinkedIn connection request job exists."""
+    existing = (
+        db.query(LeadJob)
+        .filter(
+            LeadJob.Kind == "linkedin.process_invitations",
+            LeadJob.Status.in_(("queued", "claimed")),
+            LeadJob.IsDeleted == False
+        )
+        .first()
+    )
+    if not existing:
+        run_at = calculate_next_morning_run()
+        enqueue(db, "linkedin.process_invitations", run_at=run_at)
+        logger.info("[LeadAI jobs] Enqueued first run of linkedin.process_invitations at %s", run_at)

@@ -141,6 +141,10 @@ class LeadChannelAccount(LeadAIBase):
     TokenExpiresAt = Column(DateTime, nullable=True)
     TokenRefreshedAt = Column(DateTime, nullable=True)
 
+    LinkedinCookieEnc = Column(Text, nullable=True)
+    LinkedinUsernameEnc = Column(Text, nullable=True)
+    LinkedinPasswordEnc = Column(Text, nullable=True)
+
 
 class LeadChannelIdentity(LeadAIBase):
     """Maps an external social id to a LeadCustomer inside one company.

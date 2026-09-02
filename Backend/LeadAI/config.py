@@ -151,6 +151,12 @@ class LeadAISettings:
     social_channels_enabled: bool = _b("LEADAI_SOCIAL_CHANNELS_ENABLED", "true")
     web_chat_enabled: bool = _b("LEADAI_WEB_CHAT_ENABLED", "true")
 
+    # ---- LinkedIn configuration -------------------------------------------
+    linkedin_client_id: str | None = os.getenv("LINKEDIN_CLIENT_ID") or None
+    linkedin_client_secret: str | None = os.getenv("LINKEDIN_CLIENT_SECRET") or None
+    linkedin_redirect_uri: str | None = os.getenv("LINKEDIN_REDIRECT_URI") or None
+    linkedin_api_version: str = os.getenv("LINKEDIN_API_VERSION", "202410")
+
     # ---- SMS / email fallback for campaigns -------------------------------
     twilio_sms_from: str | None = os.getenv("TWILIO_SMS_FROM") or None
     smtp_host: str | None = os.getenv("SMTP_HOST") or None
