@@ -18,9 +18,63 @@ export interface ChannelPlatformOption {
   icon: string;
   gradient: string;
   actionLabel: string;
-  actionHandler: () => void;
   loading: boolean;
 }
+
+const ALL_PLATFORMS: readonly Omit<ChannelPlatformOption, 'loading'>[] = [
+  {
+    key: 'social.facebook',
+    id: 'facebook',
+    name: 'Facebook Messenger',
+    badge: 'OAuth 2.0',
+    badgeClass:
+      'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800',
+    description:
+      'Connect your Facebook Business Page for automated Messenger replies, lead capturing, and page inbox sync.',
+    icon: 'pi pi-facebook',
+    gradient: 'linear-gradient(135deg, #1877f2 0%, #0d5cb6 100%)',
+    actionLabel: 'Connect Facebook',
+  },
+  {
+    key: 'social.instagram',
+    id: 'instagram',
+    name: 'Instagram Direct',
+    badge: 'Meta Direct',
+    badgeClass:
+      'bg-pink-50 text-pink-700 border border-pink-200 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800',
+    description:
+      'Link your Instagram Professional account to manage DMs, story mentions, and customer inquiries with AI auto-replies.',
+    icon: 'pi pi-instagram',
+    gradient: 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)',
+    actionLabel: 'Connect Instagram',
+  },
+  {
+    key: 'social.linkedin',
+    id: 'linkedin',
+    name: 'LinkedIn',
+    badge: 'OAuth 2.0',
+    badgeClass:
+      'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800',
+    description:
+      'Link your company or personal LinkedIn profile to schedule and publish updates and engage with professional prospects.',
+    icon: 'pi pi-linkedin',
+    gradient: 'linear-gradient(135deg, #0A66C2 0%, #004182 100%)',
+    actionLabel: 'Connect LinkedIn',
+  },
+  {
+    key: 'social.whatsapp',
+    id: 'whatsapp',
+    name: 'WhatsApp Business',
+    badge: 'Meta Cloud',
+    badgeClass:
+      'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
+    description:
+      'Connect your WhatsApp Business number via Meta to send automated template messages and interact with customers.',
+    icon: 'pi pi-whatsapp',
+    gradient: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
+    actionLabel: 'Connect WhatsApp',
+  },
+];
 
 @Component({
   selector: 'app-channel-wizard',
@@ -30,7 +84,18 @@ export interface ChannelPlatformOption {
   styleUrl: './channel-wizard.component.scss',
 })
 export class ChannelWizardComponent implements OnInit, OnDestroy {
-  @Input() visible = false;
+  private _visible = false;
+  @Input()
+  get visible(): boolean {
+    return this._visible;
+  }
+  set visible(val: boolean) {
+    this._visible = val;
+    if (val) {
+      this.loadAvailablePlatforms();
+    }
+  }
+
   @Output() complete = new EventEmitter<void>();
   @Output() close = new EventEmitter<void>();
 
@@ -49,8 +114,24 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
   scriptId = '';
   verifyTokenInput = '';
   autoReply = true;
-  oauthLoading = false;
-  fbOauthLoading = false;
+
+  private _oauthLoading = false;
+  get oauthLoading(): boolean {
+    return this._oauthLoading;
+  }
+  set oauthLoading(val: boolean) {
+    this._oauthLoading = val;
+    this.updatePlatformStates();
+  }
+
+  private _fbOauthLoading = false;
+  get fbOauthLoading(): boolean {
+    return this._fbOauthLoading;
+  }
+  set fbOauthLoading(val: boolean) {
+    this._fbOauthLoading = val;
+    this.updatePlatformStates();
+  }
 
   private activeOAuthPopup: Window | null = null;
   private messageEventListener!: (event: MessageEvent) => void;
@@ -81,7 +162,14 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     { label: 'LinkedIn', value: 'linkedin', icon: 'pi pi-linkedin', color: '#0A66C2' },
   ];
 
-  linkedinConnecting = false;
+  private _linkedinConnecting = false;
+  get linkedinConnecting(): boolean {
+    return this._linkedinConnecting;
+  }
+  set linkedinConnecting(val: boolean) {
+    this._linkedinConnecting = val;
+    this.updatePlatformStates();
+  }
   private linkedinPollingInterval: any;
 
   constructor(
@@ -91,80 +179,40 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     private scriptService: ScriptService,
   ) {}
 
-  get availablePlatforms(): ChannelPlatformOption[] {
+  availablePlatforms: ChannelPlatformOption[] = [];
+
+  loadAvailablePlatforms(): void {
     const user = this.authService.getCurrentUser();
     const perms = user?.permissions || [];
     const isPlatformAdmin = this.authService.isPlatformAdmin();
 
     const hasPerm = (p: string) => isPlatformAdmin || perms.includes(p.toLowerCase());
 
-    const list: ChannelPlatformOption[] = [];
+    this.availablePlatforms = ALL_PLATFORMS
+      .filter((p) => hasPerm(p.key))
+      .map((p) => ({
+        ...p,
+        loading: false,
+      }));
 
-    if (hasPerm('social.facebook')) {
-      list.push({
-        key: 'social.facebook',
-        id: 'facebook',
-        name: 'Facebook Messenger',
-        badge: 'OAuth 2.0',
-        badgeClass: 'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800',
-        description: 'Connect your Facebook Business Page for automated Messenger replies, lead capturing, and page inbox sync.',
-        icon: 'pi pi-facebook',
-        gradient: 'linear-gradient(135deg, #1877f2 0%, #0d5cb6 100%)',
-        actionLabel: 'Connect Facebook',
-        actionHandler: () => this.connectWithFacebook(),
-        loading: this.fbOauthLoading,
-      });
+    this.updatePlatformStates();
+  }
+
+  private updatePlatformStates(): void {
+    for (const platform of this.availablePlatforms) {
+      if (platform.id === 'facebook' || platform.id === 'whatsapp') {
+        platform.loading = this._fbOauthLoading;
+      } else if (platform.id === 'instagram') {
+        platform.loading = this._oauthLoading;
+      } else if (platform.id === 'linkedin') {
+        platform.loading = this._linkedinConnecting;
+        platform.actionLabel = this._linkedinConnecting ? 'Waiting for Consent...' : 'Connect LinkedIn';
+      }
     }
+  }
 
-    if (hasPerm('social.instagram')) {
-      list.push({
-        key: 'social.instagram',
-        id: 'instagram',
-        name: 'Instagram Direct',
-        badge: 'Meta Direct',
-        badgeClass: 'bg-pink-50 text-pink-700 border border-pink-200 dark:bg-pink-950/60 dark:text-pink-300 dark:border-pink-800',
-        description: 'Link your Instagram Professional account to manage DMs, story mentions, and customer inquiries with AI auto-replies.',
-        icon: 'pi pi-instagram',
-        gradient: 'linear-gradient(45deg, #f09433, #dc2743, #bc1888)',
-        actionLabel: 'Connect Instagram',
-        actionHandler: () => this.connectWithInstagram(),
-        loading: this.oauthLoading,
-      });
-    }
-
-    if (hasPerm('social.linkedin')) {
-      list.push({
-        key: 'social.linkedin',
-        id: 'linkedin',
-        name: 'LinkedIn',
-        badge: 'OAuth 2.0',
-        badgeClass: 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800',
-        description: 'Link your company or personal LinkedIn profile to schedule and publish updates and engage with professional prospects.',
-        icon: 'pi pi-linkedin',
-        gradient: 'linear-gradient(135deg, #0A66C2 0%, #004182 100%)',
-        actionLabel: this.linkedinConnecting ? 'Waiting for Consent...' : 'Connect LinkedIn',
-        actionHandler: () => this.connectWithLinkedIn(),
-        loading: this.linkedinConnecting,
-      });
-    }
-
-    if (hasPerm('social.whatsapp')) {
-      list.push({
-        key: 'social.whatsapp',
-        id: 'whatsapp',
-        name: 'WhatsApp Business',
-        badge: 'Meta Cloud',
-        badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800',
-        description: 'Connect your WhatsApp Business number via Meta to send automated template messages and interact with customers.',
-        icon: 'pi pi-whatsapp',
-        gradient: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
-        actionLabel: 'Connect WhatsApp',
-        actionHandler: () => this.connectWithFacebook(),
-        loading: this.fbOauthLoading,
-      });
-    }
-
-    return list;
+  trackByPlatformId(_index: number, platform: ChannelPlatformOption): string {
+    return platform.id;
   }
 
   onConnectPlatform(id: string): void {
@@ -179,7 +227,7 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
 
 
   ngOnInit(): void {
-
+    this.loadAvailablePlatforms();
     this.loadScripts();
     this.messageEventListener = (event: MessageEvent) => this.handleOAuthMessage(event);
     window.addEventListener('message', this.messageEventListener);

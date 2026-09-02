@@ -1,45 +1,45 @@
-.platform-card {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid var(--app-border, #e2e8f0);
-  background-color: var(--card-bg, #ffffff);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
+// .platform-card {
+//   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+//   border: 1px solid var(--app-border, #e2e8f0);
+//   background-color: var(--card-bg, #ffffff);
+//   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.03);
 
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-  }
+//   &:hover {
+//     transform: translateY(-2px);
+//     box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+//   }
 
-  &.facebook-card:hover {
-    border-color: rgba(24, 119, 242, 0.5);
-  }
+//   &.facebook-card:hover {
+//     border-color: rgba(24, 119, 242, 0.5);
+//   }
 
-  &.instagram-card:hover {
-    border-color: rgba(228, 64, 95, 0.5);
-  }
+//   &.instagram-card:hover {
+//     border-color: rgba(228, 64, 95, 0.5);
+//   }
 
-  &.linkedin-card:hover {
-    border-color: rgba(10, 102, 194, 0.5);
-  }
+//   &.linkedin-card:hover {
+//     border-color: rgba(10, 102, 194, 0.5);
+//   }
 
-  &.whatsapp-card:hover {
-    border-color: rgba(37, 211, 102, 0.5);
-  }
-}
+//   &.whatsapp-card:hover {
+//     border-color: rgba(37, 211, 102, 0.5);
+//   }
+// }
 
-.platform-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 0.15rem 0.5rem;
-  border-radius: 9999px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-}
+// .platform-badge {
+//   font-size: 0.65rem;
+//   font-weight: 700;
+//   padding: 0.15rem 0.5rem;
+//   border-radius: 9999px;
+//   letter-spacing: 0.04em;
+//   text-transform: uppercase;
+//   display: inline-flex;
+//   align-items: center;
+//   line-height: 1;
+// }
 
-.info-banner {
-  background: var(--app-border-light, #f8fafc);
-  border: 1px solid var(--app-border, #e2e8f0);
-  color: var(--app-text-secondary, #475569);
-}
+// .info-banner {
+//   background: var(--app-border-light, #f8fafc);
+//   border: 1px solid var(--app-border, #e2e8f0);
+//   color: var(--app-text-secondary, #475569);
+// }
