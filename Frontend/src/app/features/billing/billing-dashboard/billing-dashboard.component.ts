@@ -89,10 +89,15 @@ export class BillingDashboardComponent implements OnInit {
         },
         error: (err) => {
           this.rechargeLoading = false;
+          const detailMsg = typeof err?.error?.detail === 'string'
+            ? err.error.detail
+            : Array.isArray(err?.error?.detail)
+            ? err.error.detail.map((e: any) => e.msg || e.detail).join(', ')
+            : (err?.message || 'Recharge processing failed.');
           this.messageService.add({
             severity: 'error',
             summary: 'Recharge Failed',
-            detail: err?.error?.detail || err?.message || 'Recharge processing failed.',
+            detail: detailMsg,
           });
         },
       });
