@@ -149,7 +149,7 @@ def list_available_plans(
 @router.post("/recharge", response_model=ClientRechargeOut, summary="Purchase / apply a recharge plan")
 def self_recharge(
     payload: ClientRechargeAllocate,
-    scope: tuple[Principal, str] = Depends(scoped("billing.recharge")),
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
     db: Session = Depends(get_leadai_db),
 ):
     principal, client_id = scope
