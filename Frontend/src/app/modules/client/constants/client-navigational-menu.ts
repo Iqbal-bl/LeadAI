@@ -106,7 +106,6 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         label: 'Billing & Recharges',
         icon: 'pi pi-credit-card',
         routerLink: '/client/billing',
-        permission: 'billing.read',
       },
       {
         label: 'Settings',
