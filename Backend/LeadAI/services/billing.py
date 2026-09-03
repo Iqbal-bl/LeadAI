@@ -86,6 +86,15 @@ def ensure_default_templates(db: Session) -> None:
         logger.warning(f"[Billing] Could not seed default templates: {exc}")
 
 
+def _is_expired(expires_at: Optional[datetime], now: datetime) -> bool:
+    """Safely compare DB datetime with current time without offset-naive/aware TypeError."""
+    if not expires_at:
+        return False
+    exp = expires_at.replace(tzinfo=timezone.utc) if expires_at.tzinfo is None else expires_at
+    n = now.replace(tzinfo=timezone.utc) if now.tzinfo is None else now
+    return exp <= n
+
+
 def get_active_recharge(db: Session, client_id: str) -> Optional[LeadClientRecharge]:
     """Retrieve current active recharge for a client.
     
@@ -106,7 +115,7 @@ def get_active_recharge(db: Session, client_id: str) -> Optional[LeadClientRecha
 
     if active:
         # Check expiration
-        is_expired = active.ExpiresAt and active.ExpiresAt <= now
+        is_expired = active.ExpiresAt and _is_expired(active.ExpiresAt, now)
         is_exhausted = active.RemainingMinutes <= 0.0001
 
         if is_expired or is_exhausted:
@@ -152,7 +161,7 @@ def check_call_quota(db: Session, client_id: str) -> Tuple[bool, str, float]:
         return False, "No active recharge plan. Please purchase a recharge plan to make calls.", 0.0
 
     now = utcnow()
-    if recharge.ExpiresAt and recharge.ExpiresAt <= now:
+    if recharge.ExpiresAt and _is_expired(recharge.ExpiresAt, now):
         return False, "Your recharge plan has expired. Please top up to continue calling.", 0.0
 
     if recharge.RemainingMinutes <= 0.0001:
@@ -299,7 +308,7 @@ def allocate_recharge(
     )
 
     # User Requirement: queue as pending if an active plan exists
-    if existing_active and existing_active.RemainingMinutes > 0.0001 and (not existing_active.ExpiresAt or existing_active.ExpiresAt > now):
+    if existing_active and existing_active.RemainingMinutes > 0.0001 and (not existing_active.ExpiresAt or not _is_expired(existing_active.ExpiresAt, now)):
         initial_status = RECHARGE_STATUS_PENDING
         recharged_at = None
         expires_at = None
