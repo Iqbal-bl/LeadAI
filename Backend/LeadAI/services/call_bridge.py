@@ -135,7 +135,7 @@ def prepare_agent_context(
     return sections, script, voice
 
 
-def register_call_context(call_sid: str, phone_number: str, sections: list[dict], voice: dict, conversation_id: str | None = None) -> None:
+def register_call_context(call_sid: str, phone_number: str, sections: list[dict], voice: dict, conversation_id: str | None = None, client_id: str | None = None) -> None:
     """Write the per-call agent config into the EXISTING active_calls registry.
 
     This is the single point of contact with the outbound app's mutable state,
@@ -157,6 +157,7 @@ def register_call_context(call_sid: str, phone_number: str, sections: list[dict]
         # LeadAI and which company/conversation it belongs to.
         "leadai": True,
         "conversation_id": conversation_id,
+        "client_id": client_id,
     }
 
 
@@ -212,6 +213,18 @@ def start_call_for_conversation(
         db.flush()
         return call
 
+    # Check client billing quota before initiating call
+    from . import billing
+    has_quota, quota_reason, _ = billing.check_call_quota(db, client_id)
+    if not has_quota:
+        call.Status = "failed"
+        call.Provider = "none"
+        call.FailureReason = quota_reason[:300]
+        db.add(call)
+        db.flush()
+        logger.warning(f"[LeadAI call] Quota rejected for client {client_id}: {quota_reason}")
+        return call
+
     # `conversation` is passed so the agent boots with the customer's chat and
     # earlier-call history in its system prompt instead of a blank slate.
     sections, script, voice = prepare_agent_context(
@@ -239,7 +252,7 @@ def start_call_for_conversation(
     # Register the agent config BEFORE the carrier can hit /outbound-twiml.
     # Placement returns as soon as the carrier accepts, and the TwiML webhook
     # arrives milliseconds later — so this must not be deferred.
-    register_call_context(call_sid, number, sections, voice, conversation_id=conversation.Id)
+    register_call_context(call_sid, number, sections, voice, conversation_id=conversation.Id, client_id=client_id)
 
     call.CallSid = call_sid
     call.Status = status
