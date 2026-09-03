@@ -1453,7 +1453,34 @@ async def outbound_twiml(request: Request):
     stream.parameter(name='token', value=token)
     response.append(connect)
     
-    return Response(content=str(response), media_type="application/xml")
+def _deduct_billing_usage_for_call(call_sid: str, call_data: dict):
+    client_id = call_data.get("client_id")
+    if not client_id:
+        return
+    try:
+        duration_sec = 0
+        if call_sid and twilio_client:
+            try:
+                tw_call = twilio_client.calls(call_sid).fetch()
+                if tw_call and tw_call.duration:
+                    duration_sec = int(tw_call.duration)
+            except Exception as e:
+                logger.warning(f"[Billing] Could not fetch Twilio call duration for {call_sid}: {e}")
+
+        if duration_sec > 0:
+            from LeadAI.db import get_leadai_db
+            from LeadAI.services.billing import deduct_call_usage
+
+            db = next(get_leadai_db())
+            deduct_call_usage(
+                db,
+                client_id=client_id,
+                call_sid=call_sid,
+                duration_seconds=duration_sec,
+                conversation_id=call_data.get("conversation_id"),
+            )
+    except Exception as exc:
+        logger.warning(f"[Billing] Failed to deduct usage for call {call_sid}: {exc}")
 
 
 @app.post("/call-status", include_in_schema=False)
@@ -1567,6 +1594,11 @@ async def call_status(request: Request):
 
         # Cleanup pre-warmed TTS if call never answered
         call_data = active_calls.pop(call_sid, {})
+        
+        # Deduct prepaid billing minutes based on exact call duration
+        if call_data.get("client_id"):
+            asyncio.create_task(asyncio.to_thread(_deduct_billing_usage_for_call, call_sid, call_data))
+
         pre_tts = call_data.get("tts_manager")
         if pre_tts:
             asyncio.create_task(pre_tts.cleanup())

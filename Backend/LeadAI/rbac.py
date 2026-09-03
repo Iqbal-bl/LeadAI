@@ -108,6 +108,10 @@ P = {
     "social.instagram": "Access Instagram publishing, webhooks, and media",
     "social.whatsapp": "Access WhatsApp channel and messaging",
     "social.linkedin": "Access LinkedIn publishing",
+    # billing & recharges
+    "billing.read": "View company recharge plans and usage history",
+    "billing.recharge": "Purchase or allocate company recharge plans",
+    "billing.manage_global": "Manage master billing templates and custom client plans",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -151,6 +155,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "social.instagram",
         "social.whatsapp",
         "social.linkedin",
+        "billing.read",
+        "billing.recharge",
     },
 
     ROLE_MANAGER: {

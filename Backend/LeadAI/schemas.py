@@ -881,8 +881,119 @@ class MemberListOut(BaseModel):
     items: list[MemberOut]
 
 
+# ===========================================================================
+# Billing & Recharge Schemas
+# ===========================================================================
+
+class RechargePlanTemplateCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    plan_type: str = Field(default="standard", description="standard or custom")
+    target_client_id: str | None = None
+    included_minutes: float = Field(gt=0)
+    validity_days: int = Field(gt=0)
+    price: float = Field(ge=0)
+    rate_per_minute: float = Field(default=4.0)
+    description: str | None = None
+
+
+class RechargePlanTemplateUpdate(BaseModel):
+    name: str | None = None
+    included_minutes: float | None = None
+    validity_days: int | None = None
+    price: float | None = None
+    rate_per_minute: float | None = None
+    is_active: bool | None = None
+    description: str | None = None
+
+
+class RechargePlanTemplateOut(BaseModel):
+    id: str
+    name: str
+    plan_type: str
+    target_client_id: str | None = None
+    included_minutes: float
+    validity_days: int
+    price: float
+    rate_per_minute: float
+    is_active: bool
+    description: str | None = None
+    created_at: datetime | None = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class ClientRechargeAllocate(BaseModel):
+    client_id: str
+    plan_template_id: str | None = None
+    custom_minutes: float | None = None
+    custom_validity_days: int | None = None
+    custom_price: float | None = None
+    custom_name: str | None = None
+    payment_reference: str | None = None
+
+
+class ClientRechargeOut(BaseModel):
+    id: str
+    client_id: str
+    plan_template_id: str | None = None
+    plan_name_snapshot: str
+    purchased_minutes: float
+    remaining_minutes: float
+    validity_days_snapshot: int
+    price_paid: float
+    recharged_at: datetime | None = None
+    expires_at: datetime | None = None
+    status: str
+    payment_reference: str | None = None
+    created_at: datetime | None = None
+
+    @field_serializer('recharged_at', 'expires_at', 'created_at')
+    def serialize_dates(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class UsageLogOut(BaseModel):
+    id: str
+    client_id: str
+    recharge_id: str
+    call_sid: str
+    conversation_id: str | None = None
+    call_duration_seconds: int
+    minutes_deducted: float
+    previous_balance: float
+    new_balance: float
+    deducted_at: datetime | None = None
+
+    @field_serializer('deducted_at')
+    def serialize_deducted_at(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class BillingSummaryOut(BaseModel):
+    client_id: str
+    active_recharge: ClientRechargeOut | None = None
+    pending_recharges: list[ClientRechargeOut] = []
+    total_remaining_minutes: float = 0.0
+    is_quota_active: bool = False
+
+
 ConversationDetail.model_rebuild()
 ChatConversationDetail.model_rebuild()
 CallConversationDetail.model_rebuild()
 CallWithTranscript.model_rebuild()
 CallTranscriptOut.model_rebuild()
+
