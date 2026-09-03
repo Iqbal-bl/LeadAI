@@ -929,7 +929,7 @@ class RechargePlanTemplateOut(BaseModel):
 
 
 class ClientRechargeAllocate(BaseModel):
-    client_id: str
+    client_id: str | None = None
     plan_template_id: str | None = None
     custom_minutes: float | None = None
     custom_validity_days: int | None = None

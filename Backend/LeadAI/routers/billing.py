@@ -152,11 +152,12 @@ def self_recharge(
     scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
     db: Session = Depends(get_leadai_db),
 ):
-    principal, client_id = scope
+    principal, scoped_client_id = scope
+    target_client_id = payload.client_id or scoped_client_id
     try:
         recharge = billing_svc.allocate_recharge(
             db=db,
-            client_id=client_id,
+            client_id=target_client_id,
             template_id=payload.plan_template_id,
             custom_minutes=payload.custom_minutes,
             custom_validity_days=payload.custom_validity_days,
