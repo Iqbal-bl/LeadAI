@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from .routers import (
     activity,
     analytics,
+    billing,
     campaigns,
     channels,
     chat,
@@ -59,6 +60,9 @@ api_router.include_router(inbox.router)
 api_router.include_router(activity.router)
 api_router.include_router(analytics.router)
 api_router.include_router(user_management.router)
+api_router.include_router(billing.router)
+api_router.include_router(billing.admin_router)
+
 
 # Phase 2: social channels, campaigns, CRM, document store, lead threshold.
 api_router.include_router(channels.router)
