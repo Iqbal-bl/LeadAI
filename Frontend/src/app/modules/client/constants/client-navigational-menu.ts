@@ -102,12 +102,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
   {
     title: 'Management',
     items: [
-      // {
-      //   label: 'Analytics',
-      //   icon: 'pi pi-chart-bar',
-      //   routerLink: '/client/analytics',
-      //   permission: 'analytics.read',
-      // },
+      {
+        label: 'Billing & Recharges',
+        icon: 'pi pi-credit-card',
+        routerLink: '/client/billing',
+        permission: 'billing.read',
+      },
       {
         label: 'Settings',
         icon: 'pi pi-cog',

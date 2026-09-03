@@ -132,4 +132,19 @@ export const ADMIN_ROUTES: Routes = [
       },
     ],
   },
+  {
+    path: 'billing',
+    loadComponent: () =>
+      import('../../features/billing/billing-dashboard/billing-dashboard.component').then(
+        (m) => m.BillingDashboardComponent,
+      ),
+  },
+  {
+    path: 'plan-management',
+    loadComponent: () =>
+      import('../../features/admin/plan-management/plan-management.component').then(
+        (m) => m.PlanManagementComponent,
+      ),
+  },
 ];
+
