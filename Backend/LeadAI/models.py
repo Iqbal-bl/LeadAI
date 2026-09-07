@@ -486,6 +486,83 @@ class LeadCall(LeadAIBase):
 # keep this file readable. Importing at the BOTTOM is deliberate: models_ext
 # imports LeadAIBase from here, so the import must happen after that class is
 # defined. The tables land on the same Base.metadata either way.
+# ---------------------------------------------------------------------------
+# Billing & Prepaid Recharge Tables
+# ---------------------------------------------------------------------------
+PLAN_TYPE_STANDARD = "standard"
+PLAN_TYPE_CUSTOM = "custom"
+
+RECHARGE_STATUS_ACTIVE = "active"
+RECHARGE_STATUS_PENDING = "pending"
+RECHARGE_STATUS_EXHAUSTED = "exhausted"
+RECHARGE_STATUS_EXPIRED = "expired"
+RECHARGE_STATUS_SUPERSEDED = "superseded"
+
+
+class LeadRechargePlanTemplate(LeadAIBase):
+    """Master recharge plan templates created by Super Admin.
+    
+    Can be a global standard plan (TargetClientId IS NULL) or a client-specific
+    custom plan (TargetClientId IS NOT NULL).
+    """
+
+    __tablename__ = "leadai_recharge_plan_templates"
+
+    Name = Column(String(100), nullable=False)
+    PlanType = Column(String(20), nullable=False, default=PLAN_TYPE_STANDARD, index=True)
+    TargetClientId = Column(String(36), nullable=True, index=True)  # NULL for global, or specific ClientId
+    IncludedMinutes = Column(Float, nullable=False)  # e.g. 500.0, 6000.0
+    ValidityDays = Column(Integer, nullable=False)  # e.g. 30, 365
+    Price = Column(Float, nullable=False, default=0.0)  # Total price in INR
+    RatePerMinute = Column(Float, nullable=False, default=4.0)  # Price benchmark per minute
+    IsActive = Column(Boolean, nullable=False, default=True, index=True)
+    Description = Column(Text, nullable=True)
+
+
+class LeadClientRecharge(LeadAIBase):
+    """Client recharge subscriptions.
+    
+    Contains frozen snapshots of plan details at activation time to ensure that
+    edits to master plan templates never alter existing active recharges.
+    """
+
+    __tablename__ = "leadai_client_recharges"
+
+    ClientId = Column(String(36), nullable=False, index=True)
+    PlanTemplateId = Column(String(36), nullable=True, index=True)
+    PlanNameSnapshot = Column(String(100), nullable=False)
+    PurchasedMinutes = Column(Float, nullable=False)
+    RemainingMinutes = Column(Float, nullable=False)
+    ValidityDaysSnapshot = Column(Integer, nullable=False)
+    PricePaid = Column(Float, nullable=False, default=0.0)
+    RechargedAt = Column(DateTime, nullable=True, index=True)  # Starts when activated
+    ExpiresAt = Column(DateTime, nullable=True, index=True)  # RechargedAt + ValidityDays
+    Status = Column(String(20), nullable=False, default=RECHARGE_STATUS_PENDING, index=True)  # active, pending, exhausted, expired, superseded
+    PaymentReference = Column(String(100), nullable=True)
+
+
+class LeadUsageLog(LeadAIBase):
+    """Itemized log of minute deductions per call."""
+
+    __tablename__ = "leadai_usage_logs"
+
+    ClientId = Column(String(36), nullable=False, index=True)
+    RechargeId = Column(String(36), nullable=False, index=True)
+    CallSid = Column(String(100), nullable=False, index=True)
+    ConversationId = Column(String(36), nullable=True, index=True)
+    CallDurationSeconds = Column(Integer, nullable=False, default=0)
+    MinutesDeducted = Column(Float, nullable=False, default=0.0)
+    PreviousBalance = Column(Float, nullable=False, default=0.0)
+    NewBalance = Column(Float, nullable=False, default=0.0)
+    DeductedAt = Column(DateTime, default=utcnow, index=True)
+
+
+ALL_BILLING_TABLES = (
+    LeadRechargePlanTemplate,
+    LeadClientRecharge,
+    LeadUsageLog,
+)
+
 from .models_ext import (  # noqa: E402
     ALL_LEADAI_EXT_TABLES,
     CHANNEL_EMAIL,
@@ -524,7 +601,7 @@ ALL_LEADAI_TABLES = (
     LeadMessage,
     Lead,
     LeadCall,
-) + ALL_LEADAI_EXT_TABLES
+) + ALL_LEADAI_EXT_TABLES + ALL_BILLING_TABLES
 
 # ---------------------------------------------------------------------------
 # Social publishing tables. Imported at the BOTTOM because models_social.py
@@ -540,3 +617,4 @@ from .models_social import (  # noqa: E402
 )
 
 ALL_LEADAI_TABLES = ALL_LEADAI_TABLES + ALL_LEADAI_SOCIAL_TABLES
+

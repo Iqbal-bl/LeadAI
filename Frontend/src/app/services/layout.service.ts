@@ -206,6 +206,9 @@ export class LayoutService {
       adminItems.push({ label: 'Lead Threshold', icon: 'pi pi-sliders-h', routerLink: '/client/lead-threshold', permission: 'settings.manage' });
     }
 
+    // Billing & Recharges (Visible in Client Dashboard for all roles)
+    adminItems.push({ label: 'Billing & Recharges', icon: 'pi pi-credit-card', routerLink: '/client/billing' });
+
     // Settings is visible for all, but routes or values can change
     adminItems.push({ label: 'Settings', icon: 'pi pi-cog', routerLink: '/client/settings' });
 
@@ -250,24 +253,20 @@ export class LayoutService {
       });
     }
 
-    if (normalized === 'admin') {
-      sections.push({
-        title: 'MANAGEMENT',
-        items: adminItems
-      });
+    sections.push({
+      title: 'MANAGEMENT',
+      items: adminItems
+    });
 
+    if (normalized === 'admin') {
       // Special administrative shell links
       sections.push({
         title: 'ADMIN CENTER',
         items: [
           { label: 'Admin Dashboard', icon: 'pi pi-sliders-h', routerLink: '/admin/dashboard' },
-          { label: 'Companies', icon: 'pi pi-building', routerLink: '/client/companies' }
+          { label: 'Companies', icon: 'pi pi-building', routerLink: '/client/companies' },
+          { label: 'Plan Management', icon: 'pi pi-key', routerLink: '/admin/plan-management' }
         ]
-      });
-    } else {
-      sections.push({
-        title: 'MANAGEMENT',
-        items: adminItems
       });
     }
 

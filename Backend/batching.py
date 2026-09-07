@@ -222,6 +222,18 @@ class BatchingService:
         if not questions:
             return JSONResponse(status_code=400, content={"errors":["Questions are empty after all fallbacks"]})
 
+        # Check billing call quota before placing call
+        try:
+            from LeadAI.db import get_leadai_db
+            from LeadAI.services.billing import check_call_quota
+            db_sess = next(get_leadai_db())
+            has_quota, quota_reason, _ = check_call_quota(db_sess, email)
+            if not has_quota:
+                logger.warning(f"[Batching] Quota check failed for client email {email}: {quota_reason}")
+                return JSONResponse(status_code=402, content={"errors": [quota_reason]})
+        except Exception as exc:
+            logger.warning(f"[Batching] Could not check quota for email {email}: {exc}")
+
         # place call
         print(f"☎️ DIAL: batch={batch_id} exec={batch_execution_id} call_number_id={call_number_id} to={to_number}")
         # Place call asynchronously (offload blocking I/O)
