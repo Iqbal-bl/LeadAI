@@ -41,7 +41,7 @@
         </span>
       </div>
       <div class="mt-4 flex items-baseline gap-2">
-        <span class="text-4xl font-extrabold tracking-tight">{{ summary?.total_remaining_minutes | number:'1.1-2' }}</span>
+        <span class="text-4xl font-extrabold tracking-tight">{{ summary?.total_remaining_minutes | number:'1.0-0' }}</span>
         <span class="text-indigo-200 text-sm">/ {{ summary?.active_recharge?.purchased_minutes || 0 }} Mins</span>
       </div>
       
@@ -55,7 +55,7 @@
         </div>
       </div>
       <p class="text-xs text-indigo-200 mt-2">
-        Exact floating point minute tracking (deducted in real-time seconds).
+        Standard 1-minute pulse billing with real-time minute reservation.
       </p>
     </div>
 
@@ -178,9 +178,9 @@
             <td class="text-xs text-slate-600 dark:text-slate-300">{{ log.deducted_at | date:'medium' }}</td>
             <td class="font-mono text-xs text-indigo-600 dark:text-indigo-400">{{ log.call_sid }}</td>
             <td>{{ log.call_duration_seconds }}s</td>
-            <td class="font-bold text-red-600 dark:text-red-400">-{{ log.minutes_deducted | number:'1.2-4' }} m</td>
-            <td class="text-xs text-slate-500">{{ log.previous_balance | number:'1.2-4' }} m</td>
-            <td class="font-bold text-slate-900 dark:text-white">{{ log.new_balance | number:'1.2-4' }} m</td>
+            <td class="font-bold text-red-600 dark:text-red-400">-{{ log.minutes_deducted | number:'1.0-2' }} m</td>
+            <td class="text-xs text-slate-500">{{ log.previous_balance | number:'1.0-2' }} m</td>
+            <td class="font-bold text-slate-900 dark:text-white">{{ log.new_balance | number:'1.0-2' }} m</td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">

@@ -135,8 +135,8 @@ export const ADMIN_ROUTES: Routes = [
   {
     path: 'billing',
     loadComponent: () =>
-      import('../../features/billing/billing-dashboard/billing-dashboard.component').then(
-        (m) => m.BillingDashboardComponent,
+      import('../../features/admin/client-billing-summaries/client-billing-summaries.component').then(
+        (m) => m.ClientBillingSummariesComponent,
       ),
   },
   {
