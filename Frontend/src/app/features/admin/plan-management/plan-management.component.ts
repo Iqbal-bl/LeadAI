@@ -176,6 +176,34 @@ export class PlanManagementComponent implements OnInit {
     }
   }
 
+  deletePlan(plan: RechargePlanTemplate): void {
+    if (
+      !confirm(
+        `Are you sure you want to retire "${plan.name}"?\n\nExisting clients who already purchased this plan will keep their remaining minutes and validity, but no new clients will be able to purchase it.`
+      )
+    ) {
+      return;
+    }
+
+    this.billingService.deleteAdminPlan(plan.id).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Plan Retired',
+          detail: `Plan "${plan.name}" has been retired and removed from available plans.`,
+        });
+        this.loadData();
+      },
+      error: (err) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Delete Failed',
+          detail: err?.error?.detail || 'Failed to retire plan template.',
+        });
+      },
+    });
+  }
+
   openGrantModal(clientId?: string): void {
     this.grantForm = {
       client_id: clientId || (this.companies[0]?.id || ''),

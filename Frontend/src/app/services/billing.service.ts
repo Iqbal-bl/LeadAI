@@ -60,6 +60,11 @@ export class BillingService {
     return this.apiService.put<RechargePlanTemplate>(`admin/billing/plans/${planId}`, payload);
   }
 
+  /** Admin: Soft-delete / retire master plan template */
+  public deleteAdminPlan(planId: string): Observable<{ ok: boolean; message: string }> {
+    return this.apiService.delete<{ ok: boolean; message: string }>(`admin/billing/plans/${planId}`);
+  }
+
   /** Admin: Direct recharge grant to a client account */
   public adminRechargeClient(payload: RechargeAllocatePayload): Observable<ClientRecharge> {
     return this.apiService.post<ClientRecharge>('admin/billing/recharge-client', payload);
