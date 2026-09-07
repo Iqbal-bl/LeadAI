@@ -7,10 +7,11 @@ deductions, pending plan queueing, and immediate call termination upon quota exh
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from ..models import (
@@ -63,7 +64,6 @@ def ensure_default_templates(db: Session) -> None:
                     LeadRechargePlanTemplate.Name == plan_def["name"],
                     LeadRechargePlanTemplate.PlanType == PLAN_TYPE_STANDARD,
                     LeadRechargePlanTemplate.TargetClientId == None,  # noqa: E711
-                    LeadRechargePlanTemplate.IsActive == True,  # noqa: E712
                 )
                 .first()
             )
@@ -152,7 +152,7 @@ def get_active_recharge(db: Session, client_id: str) -> Optional[LeadClientRecha
 
 
 def check_call_quota(db: Session, client_id: str) -> Tuple[bool, str, float]:
-    """Check if client has active quota to make calls.
+    """Check if client has active quota to make calls (minimum 1 minute required).
     
     Returns (has_quota, reason, remaining_minutes).
     """
@@ -164,10 +164,79 @@ def check_call_quota(db: Session, client_id: str) -> Tuple[bool, str, float]:
     if recharge.ExpiresAt and _is_expired(recharge.ExpiresAt, now):
         return False, "Your recharge plan has expired. Please top up to continue calling.", 0.0
 
-    if recharge.RemainingMinutes <= 0.0001:
-        return False, "Your recharge plan minutes are exhausted. Please top up to continue calling.", 0.0
+    if recharge.RemainingMinutes < 1.0:
+        return False, "Your recharge plan balance is less than 1 minute. Please top up to continue calling.", recharge.RemainingMinutes
 
     return True, "Active plan available", recharge.RemainingMinutes
+
+
+def reserve_minute_pulse(
+    db: Session,
+    client_id: str,
+    call_sid: str,
+    minute_number: int,
+    conversation_id: Optional[str] = None,
+) -> Tuple[bool, float, bool]:
+    """Atomically reserve/deduct 1 full minute for an active call pulse.
+    
+    Returns (success, remaining_balance, is_exhausted).
+    If success is False, client has no minutes left and call should be terminated.
+    """
+    # Ensure active recharge with balance >= 1.0 (auto-activating pending if needed)
+    recharge = get_active_recharge(db, client_id)
+    if not recharge or recharge.RemainingMinutes < 1.0:
+        logger.warning(
+            f"[Billing Pulse] Client {client_id} cannot reserve minute {minute_number} for call {call_sid}. "
+            f"Insufficient balance: {recharge.RemainingMinutes if recharge else 0.0} mins."
+        )
+        return False, (recharge.RemainingMinutes if recharge else 0.0), True
+
+    # Lock row with SELECT FOR UPDATE
+    recharge = (
+        db.query(LeadClientRecharge)
+        .filter(
+            LeadClientRecharge.Id == recharge.Id,
+            LeadClientRecharge.Status == RECHARGE_STATUS_ACTIVE,
+        )
+        .with_for_update()
+        .first()
+    )
+    if not recharge or recharge.RemainingMinutes < 1.0:
+        return False, (recharge.RemainingMinutes if recharge else 0.0), True
+
+    prev_balance = recharge.RemainingMinutes
+    new_balance = max(0.0, round(prev_balance - 1.0, 4))
+    recharge.RemainingMinutes = new_balance
+
+    is_exhausted = new_balance <= 0.0001
+    if is_exhausted:
+        recharge.Status = RECHARGE_STATUS_EXHAUSTED
+
+    log_entry = LeadUsageLog(
+        ClientId=client_id,
+        RechargeId=recharge.Id,
+        CallSid=call_sid,
+        ConversationId=conversation_id,
+        CallDurationSeconds=minute_number * 60,
+        MinutesDeducted=1.0,
+        PreviousBalance=prev_balance,
+        NewBalance=new_balance,
+        DeductedAt=utcnow(),
+    )
+    db.add(recharge)
+    db.add(log_entry)
+    db.commit()
+
+    logger.info(
+        f"[Billing Pulse] Reserved Minute #{minute_number} (1 min) for call {call_sid}. "
+        f"Client {client_id} balance: {prev_balance:.0f} -> {new_balance:.0f} mins."
+    )
+
+    if is_exhausted:
+        # Check if next pending plan can be auto-activated for subsequent pulses
+        get_active_recharge(db, client_id)
+
+    return True, new_balance, is_exhausted
 
 
 def deduct_call_usage(
@@ -177,18 +246,34 @@ def deduct_call_usage(
     duration_seconds: int,
     conversation_id: Optional[str] = None,
 ) -> Tuple[float, float, bool]:
-    """Deduct exact floating point minutes from active plan based on call duration.
+    """Reconcile 1-minute pulse deduction against final Twilio call duration.
     
+    1s-60s -> 1 min, 61s-120s -> 2 mins (math.ceil(duration / 60)).
+    If minutes were already reserved upfront by live pulse, only deducts any remaining difference.
     Returns (minutes_deducted, remaining_balance, is_exhausted).
-    If balance drops to 0, marks status exhausted, logs event, and triggers active call termination.
     """
     if duration_seconds <= 0:
         active = get_active_recharge(db, client_id)
         bal = active.RemainingMinutes if active else 0.0
         return 0.0, bal, False
 
-    # Exact floating point minutes (e.g. 75 seconds = 1.25 minutes)
-    minutes_deducted = round(duration_seconds / 60.0, 4)
+    required_minutes = float(math.ceil(duration_seconds / 60.0))
+
+    # Check how many minutes were already deducted upfront for this call_sid
+    already_deducted = (
+        db.query(func.sum(LeadUsageLog.MinutesDeducted))
+        .filter(
+            LeadUsageLog.ClientId == client_id,
+            LeadUsageLog.CallSid == call_sid,
+        )
+        .scalar()
+    ) or 0.0
+
+    needed_minutes = max(0.0, required_minutes - already_deducted)
+    if needed_minutes <= 0.0001:
+        active = get_active_recharge(db, client_id)
+        bal = active.RemainingMinutes if active else 0.0
+        return 0.0, bal, False
 
     # Use SELECT FOR UPDATE to prevent race conditions during concurrent call ends
     recharge = (
@@ -203,24 +288,23 @@ def deduct_call_usage(
 
     if not recharge:
         logger.warning(f"[Billing] No active recharge found during deduction for client {client_id}, call {call_sid}")
-        return minutes_deducted, 0.0, True
+        return needed_minutes, 0.0, True
 
     prev_balance = recharge.RemainingMinutes
-    new_balance = max(0.0, round(prev_balance - minutes_deducted, 4))
+    new_balance = max(0.0, round(prev_balance - needed_minutes, 4))
     recharge.RemainingMinutes = new_balance
 
     is_exhausted = new_balance <= 0.0001
     if is_exhausted:
         recharge.Status = RECHARGE_STATUS_EXHAUSTED
 
-    # Audit usage log
     log_entry = LeadUsageLog(
         ClientId=client_id,
         RechargeId=recharge.Id,
         CallSid=call_sid,
         ConversationId=conversation_id,
         CallDurationSeconds=duration_seconds,
-        MinutesDeducted=minutes_deducted,
+        MinutesDeducted=needed_minutes,
         PreviousBalance=prev_balance,
         NewBalance=new_balance,
         DeductedAt=utcnow(),
@@ -230,17 +314,15 @@ def deduct_call_usage(
     db.commit()
 
     logger.info(
-        f"[Billing] Deducted {minutes_deducted:.4f} mins ({duration_seconds}s) for call {call_sid}. "
-        f"Client {client_id} balance: {prev_balance:.4f} -> {new_balance:.4f} mins."
+        f"[Billing] Deducted {needed_minutes:.0f} pulse mins ({duration_seconds}s, total {required_minutes:.0f}m) for call {call_sid}. "
+        f"Client {client_id} balance: {prev_balance:.0f} -> {new_balance:.0f} mins."
     )
 
-    # User Requirement: "as soon as the balance ends no matter how many calls are going on end them all"
     if is_exhausted:
         _terminate_all_active_client_calls(client_id)
-        # Try activating next pending plan if available
         get_active_recharge(db, client_id)
 
-    return minutes_deducted, new_balance, is_exhausted
+    return needed_minutes, new_balance, is_exhausted
 
 
 def _terminate_all_active_client_calls(client_id: str) -> None:
@@ -283,8 +365,8 @@ def allocate_recharge(
 
     if template_id:
         template = db.get(LeadRechargePlanTemplate, template_id)
-        if not template:
-            raise ValueError(f"Plan template {template_id} not found")
+        if not template or template.IsDeleted or not template.IsActive:
+            raise ValueError(f"Plan template {template_id} is no longer available or has been retired.")
         plan_name = template.Name
         minutes = template.IncludedMinutes
         validity = template.ValidityDays

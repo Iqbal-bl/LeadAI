@@ -352,6 +352,8 @@ def _ensure_batch_call_context(call_sid: str):
         "speaker": None,
         "multi_stt": language == "multi",
         "xml_sections": sections,
+        "client_id": cfg.get("client_id"),
+        "leadai": bool(cfg.get("client_id")),
     }
     logger.info(f"[batch] hydrated active_calls for batch call {call_sid} "
                 f"(sections={len(sections)}, lang={language})")
@@ -1878,6 +1880,7 @@ async def media_stream(ws: WebSocket):
     silero_buffer = bytearray()
     ratecv_state = None
     tts_already_cleared = {"value": False}
+    pulse_watcher_task = None
 
     # Barge-in tuning. 0.60 prob / 64 ms was tripping on coughs, breath,
     # and ambient room noise. Raised to 0.75 prob / 160 ms so the trigger
@@ -2598,6 +2601,66 @@ async def media_stream(ws: WebSocket):
                     if agent:
                         asyncio.create_task(agent.pre_warm(greeting))
 
+                    # ── Live 1-Minute Pulse Telecom Billing ──────────────────────
+                    client_id = call_data.get("client_id")
+                    if client_id:
+                        try:
+                            from LeadAI.db import get_leadai_db
+                            from LeadAI.services.billing import reserve_minute_pulse
+
+                            p_db = next(get_leadai_db())
+                            # Reserve Minute #1 upfront upon answer/media stream start
+                            p_ok, p_bal, p_ex = reserve_minute_pulse(
+                                p_db,
+                                client_id=client_id,
+                                call_sid=call_sid,
+                                minute_number=1,
+                                conversation_id=call_data.get("conversation_id"),
+                            )
+                            if not p_ok:
+                                logger.warning(f"[Billing Pulse] Insufficient balance for initial minute for call {call_sid}. Terminating.")
+                                agent_initiated_hangup = True
+                                should_terminate = True
+                                try:
+                                    twilio_client.calls(call_sid).update(status="completed")
+                                except Exception as _h_err:
+                                    logger.error(f"[Billing Pulse] Hangup error on start: {_h_err}")
+                            else:
+                                async def _pulse_watcher():
+                                    current_min = 1
+                                    while not should_terminate:
+                                        try:
+                                            await asyncio.sleep(60.0)
+                                            if should_terminate or call_sid not in active_calls:
+                                                break
+                                            current_min += 1
+                                            w_db = next(get_leadai_db())
+                                            w_ok, w_bal, w_ex = reserve_minute_pulse(
+                                                w_db,
+                                                client_id=client_id,
+                                                call_sid=call_sid,
+                                                minute_number=current_min,
+                                                conversation_id=call_data.get("conversation_id"),
+                                            )
+                                            if not w_ok:
+                                                logger.info(
+                                                    f"[Billing Pulse] Client {client_id} exhausted balance entering minute {current_min}. "
+                                                    f"Terminating call {call_sid} immediately."
+                                                )
+                                                try:
+                                                    twilio_client.calls(call_sid).update(status="completed")
+                                                except Exception as _h_err:
+                                                    logger.error(f"[Billing Pulse] Hangup error on pulse exhaustion: {_h_err}")
+                                                break
+                                        except asyncio.CancelledError:
+                                            break
+                                        except Exception as _p_err:
+                                            logger.error(f"[Billing Pulse] Error in pulse loop: {_p_err}")
+
+                                pulse_watcher_task = asyncio.create_task(_pulse_watcher())
+                        except Exception as _init_pulse_err:
+                            logger.error(f"[Billing Pulse] Failed to initialize pulse reservation: {_init_pulse_err}")
+
                 logger.info(f"Stream started: {call_sid}")
             
             elif event == "media":
@@ -2658,6 +2721,8 @@ async def media_stream(ws: WebSocket):
     except Exception as e:
         logger.exception(f"Media stream error: {e}")
     finally:
+        if pulse_watcher_task and not pulse_watcher_task.done():
+            pulse_watcher_task.cancel()
         if stt_manager is not None:
             try:
                 await stt_manager.cleanup()

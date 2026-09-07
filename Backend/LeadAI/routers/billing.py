@@ -137,6 +137,7 @@ def list_available_plans(
         db.query(LeadRechargePlanTemplate)
         .filter(
             LeadRechargePlanTemplate.IsActive == True,  # noqa: E712
+            LeadRechargePlanTemplate.IsDeleted == False,  # noqa: E712
             (LeadRechargePlanTemplate.TargetClientId == None) | (LeadRechargePlanTemplate.TargetClientId == client_id),  # noqa: E711
         )
         .order_by(LeadRechargePlanTemplate.Price.asc())
@@ -194,11 +195,15 @@ def get_usage_history(
 
 @admin_router.get("/plans", response_model=list[RechargePlanTemplateOut], summary="Admin: List all master plan templates")
 def admin_list_plans(
+    include_deleted: bool = Query(False, description="Include soft-deleted plans"),
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
     billing_svc.ensure_default_templates(db)
-    rows = db.query(LeadRechargePlanTemplate).order_by(LeadRechargePlanTemplate.CreatedAt.desc()).all()
+    query = db.query(LeadRechargePlanTemplate)
+    if not include_deleted:
+        query = query.filter(LeadRechargePlanTemplate.IsDeleted == False)
+    rows = query.order_by(LeadRechargePlanTemplate.CreatedAt.desc()).all()
     return [_serialize_template(r) for r in rows]
 
 
@@ -260,6 +265,26 @@ def admin_update_plan(
     db.refresh(template)
     logger.info(f"[Admin Billing] Updated plan template {template.Id} ({template.Name}) by {principal.email}")
     return _serialize_template(template)
+
+
+@admin_router.delete("/plans/{plan_id}", response_model=Ok, summary="Admin: Soft-delete / retire plan template")
+def admin_delete_plan(
+    plan_id: str,
+    principal: Principal = Depends(require("billing.manage_global")),
+    db: Session = Depends(get_leadai_db),
+):
+    template = db.get(LeadRechargePlanTemplate, plan_id)
+    if not template or template.IsDeleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan template not found")
+
+    template.IsDeleted = True
+    template.IsActive = False
+    template.UpdatedBy = principal.email
+
+    db.add(template)
+    db.commit()
+    logger.info(f"[Admin Billing] Soft-deleted plan template {template.Id} ({template.Name}) by {principal.email}")
+    return Ok(message="Plan template retired successfully. Existing client recharges remain active.")
 
 
 @admin_router.post("/recharge-client", response_model=ClientRechargeOut, summary="Admin: Direct recharge grant to a client account")
