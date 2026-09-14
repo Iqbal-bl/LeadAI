@@ -106,7 +106,7 @@ def render_invoice_html(
         else (getattr(recharge, "Amount", 0.0) or 0.0)
     )
     currency = getattr(recharge, "Currency", "INR") or "INR"
-    curr_symbol = "₹" if currency.upper() == "INR" else "$"
+    curr_symbol = "Rs. " if currency.upper() == "INR" else "$"
 
     client_name = getattr(client, "CompanyName", None) or getattr(client, "Name", "Valued Client")
     contact_name = user_name or getattr(client, "ContactPerson", "") or ""
