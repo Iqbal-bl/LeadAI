@@ -156,6 +156,143 @@
     </div>
   </div>
 
+  <!-- Payment & Invoice History Section (Success, Failures, and Invoices) -->
+  <div class="mt-8">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="pi pi-history text-indigo-600"></i>
+          Payment & Recharge Transaction History
+        </h2>
+        <p class="text-xs text-slate-500 mt-1">
+          Complete ledger of all recharge transactions, success/failure attempts, and downloadable tax invoices.
+        </p>
+      </div>
+      <button
+        pButton
+        type="button"
+        icon="pi pi-refresh"
+        class="p-button-text p-button-sm text-slate-600 dark:text-slate-400"
+        (click)="loadPaymentHistory()"
+        pTooltip="Refresh history"
+      ></button>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+      <p-table [value]="paymentHistory" [rows]="10" [paginator]="true" [loading]="paymentHistoryLoading" styleClass="p-datatable-sm">
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Date & Time</th>
+            <th>Plan Name</th>
+            <th>Minutes</th>
+            <th>Amount Paid</th>
+            <th>Order / Payment ID</th>
+            <th>Status</th>
+            <th class="text-right">Invoice</th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-item>
+          <tr>
+            <td class="text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+              {{ item.created_at | date:'medium' }}
+            </td>
+            <td class="font-semibold text-slate-900 dark:text-white">
+              {{ item.plan_name_snapshot }}
+            </td>
+            <td>
+              <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                {{ item.purchased_minutes | number:'1.0-0' }} Mins
+              </span>
+            </td>
+            <td class="font-extrabold text-slate-900 dark:text-white">
+              ₹{{ item.price_paid | number:'1.0-2' }}
+            </td>
+            <td class="font-mono text-xs text-slate-500">
+              <span *ngIf="item.payment_reference" class="text-indigo-600 dark:text-indigo-400 font-medium">
+                {{ item.payment_reference }}
+              </span>
+              <span *ngIf="!item.payment_reference && item.razorpay_order_id">
+                {{ item.razorpay_order_id }}
+              </span>
+              <span *ngIf="!item.payment_reference && !item.razorpay_order_id" class="text-slate-400">
+                —
+              </span>
+            </td>
+            <td>
+              <!-- Active / Success -->
+              <span
+                *ngIf="item.status === 'active'"
+                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+              >
+                ● Success (Active)
+              </span>
+              <!-- Pending / Queued -->
+              <span
+                *ngIf="item.status === 'pending'"
+                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+              >
+                ● Queued / Pending
+              </span>
+              <!-- Failed -->
+              <span
+                *ngIf="item.status === 'failed'"
+                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800"
+                [pTooltip]="item.failure_reason || 'Payment failed'"
+              >
+                ● Failed
+              </span>
+              <!-- Cancelled -->
+              <span
+                *ngIf="item.status === 'cancelled'"
+                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800"
+              >
+                ● Cancelled
+              </span>
+              <!-- Exhausted -->
+              <span
+                *ngIf="item.status === 'exhausted'"
+                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+              >
+                Exhausted
+              </span>
+              <!-- Expired -->
+              <span
+                *ngIf="item.status === 'expired'"
+                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+              >
+                Expired
+              </span>
+              <!-- Failure reason snippet if failed -->
+              <div *ngIf="item.status === 'failed' && item.failure_reason" class="text-[10px] text-red-500 truncate max-w-xs mt-0.5">
+                {{ item.failure_reason }}
+              </div>
+            </td>
+            <td class="text-right">
+              <button
+                *ngIf="item.invoice_url"
+                pButton
+                type="button"
+                label="Invoice"
+                icon="pi pi-file-pdf"
+                class="p-button-outlined p-button-sm p-button-secondary text-xs"
+                (click)="openInvoice(item.invoice_url)"
+                pTooltip="Download / View Tax Invoice"
+              ></button>
+              <span *ngIf="!item.invoice_url" class="text-slate-400 text-xs">—</span>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="7" class="text-center py-6 text-slate-500">
+              No transactions recorded yet. Click "Recharge Now" to purchase talktime minutes.
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+  </div>
+
   <!-- Minute Usage History Table -->
   <div class="mt-8">
     <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">

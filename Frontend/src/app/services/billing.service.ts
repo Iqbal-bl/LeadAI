@@ -5,6 +5,9 @@ import {
   BillingSummary,
   ClientRecharge,
   PlanTemplateCreatePayload,
+  RazorpayOrderResponse,
+  RazorpayPaymentFailurePayload,
+  RazorpayPaymentVerifyPayload,
   RechargeAllocatePayload,
   RechargePlanTemplate,
   UsageLog,
@@ -30,7 +33,42 @@ export class BillingService {
     });
   }
 
-  /** Tenant: Purchase/apply a recharge */
+  /** Tenant: Create Razorpay Order */
+  public createRazorpayOrder(planTemplateId: string): Observable<RazorpayOrderResponse> {
+    return this.apiService.post<RazorpayOrderResponse>(
+      'billing/create-order',
+      { plan_template_id: planTemplateId },
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Verify Razorpay Payment Signature */
+  public verifyRazorpayPayment(payload: RazorpayPaymentVerifyPayload): Observable<ClientRecharge> {
+    return this.apiService.post<ClientRecharge>(
+      'billing/verify-payment',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Report Razorpay Payment Failure or Dismissal */
+  public recordPaymentFailure(payload: RazorpayPaymentFailurePayload): Observable<any> {
+    return this.apiService.post<any>(
+      'billing/record-failure',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Get comprehensive payment/recharge history */
+  public getPaymentHistory(limit: number = 100): Observable<ClientRecharge[]> {
+    return this.apiService.get<ClientRecharge[]>('billing/payment-history', {
+      params: { limit },
+      companyScoped: true,
+    });
+  }
+
+  /** Tenant: Purchase/apply a direct recharge (Super Admin / complimentary) */
   public recharge(payload: RechargeAllocatePayload): Observable<ClientRecharge> {
     return this.apiService.post<ClientRecharge>('billing/recharge', payload, {
       companyScoped: true,
