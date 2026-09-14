@@ -14,12 +14,17 @@ from typing import List, Optional, Tuple
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
+import razorpay
+
+from ..config import settings
 from ..models import (
     PLAN_TYPE_CUSTOM,
     PLAN_TYPE_STANDARD,
     RECHARGE_STATUS_ACTIVE,
+    RECHARGE_STATUS_CANCELLED,
     RECHARGE_STATUS_EXHAUSTED,
     RECHARGE_STATUS_EXPIRED,
+    RECHARGE_STATUS_FAILED,
     RECHARGE_STATUS_PENDING,
     RECHARGE_STATUS_SUPERSEDED,
     LeadClientRecharge,
@@ -421,3 +426,267 @@ def allocate_recharge(
         f"[Billing] Allocated recharge {recharge.Id} ({plan_name}) for client {client_id}. Status: {initial_status}"
     )
     return recharge
+
+
+# ===========================================================================
+# Razorpay Payment Gateway & Invoicing Integration
+# ===========================================================================
+
+def get_razorpay_client() -> razorpay.Client:
+    """Initialize authenticated Razorpay SDK client."""
+    if not settings.razorpay_key_id or not settings.razorpay_key_secret:
+        raise ValueError(
+            "Razorpay credentials are not configured in environment variables (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)"
+        )
+    return razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
+
+
+def create_razorpay_order(
+    db: Session,
+    client_id: str,
+    plan_template_id: str,
+    user_email: str,
+) -> dict:
+    """Creates a Razorpay Order and logs a pending recharge record."""
+    template = db.get(LeadRechargePlanTemplate, plan_template_id)
+    if not template or template.IsDeleted or not template.IsActive:
+        raise ValueError("Selected recharge plan template is invalid or inactive")
+
+    if template.Price <= 0:
+        raise ValueError("Zero-cost plans cannot be processed through payment gateway")
+
+    amount_paise = int(round(template.Price * 100))
+    now = utcnow()
+    rzp = get_razorpay_client()
+
+    order_payload = {
+        "amount": amount_paise,
+        "currency": "INR",
+        "receipt": f"rcpt_{client_id[:8]}_{int(now.timestamp())}",
+        "notes": {
+            "client_id": client_id,
+            "plan_template_id": plan_template_id,
+            "plan_name": template.Name,
+            "user_email": user_email,
+        },
+    }
+
+    try:
+        order = rzp.order.create(data=order_payload)
+    except Exception as exc:
+        logger.error(f"[Billing] Razorpay order creation failed: {exc}")
+        raise ValueError(f"Failed to initiate order with Razorpay: {exc}") from exc
+
+    order_id = order["id"]
+
+    # Pre-record pending recharge record for comprehensive history tracking
+    pending_recharge = LeadClientRecharge(
+        ClientId=client_id,
+        PlanTemplateId=template.Id,
+        PlanNameSnapshot=template.Name,
+        PurchasedMinutes=template.IncludedMinutes,
+        RemainingMinutes=template.IncludedMinutes,
+        ValidityDaysSnapshot=template.ValidityDays,
+        PricePaid=template.Price,
+        RechargedAt=None,
+        ExpiresAt=None,
+        Status=RECHARGE_STATUS_PENDING,
+        PaymentReference=None,
+        RazorpayOrderId=order_id,
+        CreatedBy=user_email,
+    )
+    db.add(pending_recharge)
+    db.commit()
+    db.refresh(pending_recharge)
+
+    logger.info(
+        f"[Billing] Created Razorpay order {order_id} for client {client_id}, plan {template.Name} (₹{template.Price})"
+    )
+
+    return {
+        "order_id": order_id,
+        "amount": amount_paise,
+        "currency": "INR",
+        "key_id": settings.razorpay_key_id,
+        "plan_id": template.Id,
+        "plan_name": template.Name,
+        "included_minutes": template.IncludedMinutes,
+    }
+
+
+def verify_razorpay_payment(
+    db: Session,
+    client_id: str,
+    payload: dict,
+    user_email: str,
+) -> LeadClientRecharge:
+    """Verifies cryptographic Razorpay payment signature and activates minutes."""
+    order_id = payload.get("razorpay_order_id")
+    payment_id = payload.get("razorpay_payment_id")
+    signature = payload.get("razorpay_signature")
+    plan_template_id = payload.get("plan_template_id")
+
+    if not order_id or not payment_id or not signature:
+        raise ValueError("Missing payment verification parameters (order_id, payment_id, or signature)")
+
+    # Find pending recharge
+    recharge = (
+        db.query(LeadClientRecharge)
+        .filter(
+            LeadClientRecharge.ClientId == client_id,
+            LeadClientRecharge.RazorpayOrderId == order_id,
+        )
+        .first()
+    )
+
+    rzp = get_razorpay_client()
+    try:
+        rzp.utility.verify_payment_signature(
+            {
+                "razorpay_order_id": order_id,
+                "razorpay_payment_id": payment_id,
+                "razorpay_signature": signature,
+            }
+        )
+    except Exception as sig_err:
+        logger.error(f"[Billing] Razorpay signature verification failed for order {order_id}: {sig_err}")
+        if recharge:
+            recharge.Status = RECHARGE_STATUS_FAILED
+            recharge.FailureReason = f"Signature verification failed: {sig_err}"
+            recharge.PaymentReference = payment_id
+            db.commit()
+        raise ValueError(f"Invalid payment signature: {sig_err}") from sig_err
+
+    now = utcnow()
+
+    # If no pending recharge row existed for this order, create one now
+    if not recharge:
+        template = db.get(LeadRechargePlanTemplate, plan_template_id)
+        if not template:
+            raise ValueError(f"Plan template {plan_template_id} not found")
+        recharge = LeadClientRecharge(
+            ClientId=client_id,
+            PlanTemplateId=template.Id,
+            PlanNameSnapshot=template.Name,
+            PurchasedMinutes=template.IncludedMinutes,
+            RemainingMinutes=template.IncludedMinutes,
+            ValidityDaysSnapshot=template.ValidityDays,
+            PricePaid=template.Price,
+            CreatedBy=user_email,
+            RazorpayOrderId=order_id,
+        )
+        db.add(recharge)
+
+    # Check if client has another ACTIVE plan
+    existing_active = (
+        db.query(LeadClientRecharge)
+        .filter(
+            LeadClientRecharge.ClientId == client_id,
+            LeadClientRecharge.Status == RECHARGE_STATUS_ACTIVE,
+            LeadClientRecharge.Id != recharge.Id,
+        )
+        .first()
+    )
+
+    if existing_active and existing_active.RemainingMinutes > 0.0001 and (
+        not existing_active.ExpiresAt or not _is_expired(existing_active.ExpiresAt, now)
+    ):
+        recharge.Status = RECHARGE_STATUS_PENDING
+        recharge.RechargedAt = None
+        recharge.ExpiresAt = None
+    else:
+        recharge.Status = RECHARGE_STATUS_ACTIVE
+        recharge.RechargedAt = now
+        recharge.ExpiresAt = now + timedelta(days=recharge.ValidityDaysSnapshot)
+
+    recharge.PaymentReference = payment_id
+    recharge.FailureReason = None
+
+    # Generate Custom Server-Side Invoice & Dispatch Dual Email (Body + Attachment)
+    invoice_url = f"/api/leadai/billing/invoices/{recharge.Id}/download"
+    invoice_id = None
+    try:
+        from Domain.models import Client
+        from ..services import invoice as invoice_svc
+
+        client_obj = db.get(Client, client_id)
+        company_name = client_obj.Name if client_obj else "Client Company"
+
+        invoice_id = invoice_svc.build_invoice_number(recharge.Id, now)
+        recharge.InvoiceId = invoice_id
+        recharge.InvoiceUrl = invoice_url
+
+        # Render custom HTML invoice matching Texas Space Tours design aesthetics
+        html_content = invoice_svc.render_invoice_html(
+            recharge=recharge,
+            client=client_obj,
+            user_email=user_email,
+        )
+
+        # Generate custom PDF in memory
+        pdf_bytes = invoice_svc.generate_invoice_pdf(html_content)
+        inv_filename = f"Invoice_{invoice_id}.pdf"
+
+        # Dispatch automated email with HTML body + PDF attachment directly to the customer
+        recipient_email = (
+            user_email
+            or getattr(client_obj, "Email", None)
+            or getattr(client_obj, "ContactEmail", None)
+        )
+        if recipient_email:
+            email_subject = f"LeadAI Billing - Invoice {invoice_id} ({company_name})"
+            invoice_svc.send_invoice_email(
+                to_email=recipient_email,
+                subject=email_subject,
+                html_content=html_content,
+                pdf_bytes=pdf_bytes,
+                filename=inv_filename,
+            )
+        logger.info(f"[Billing] Custom invoice generated: {invoice_id} -> {invoice_url}")
+    except Exception as inv_err:
+        logger.warning(
+            f"[Billing] Notice: Custom invoice generation/email skipped ({inv_err}).",
+            exc_info=True,
+        )
+
+    recharge.InvoiceId = invoice_id
+    recharge.InvoiceUrl = invoice_url
+
+    db.commit()
+    db.refresh(recharge)
+
+    logger.info(
+        f"[Billing] Successfully verified payment {payment_id} for order {order_id}. Plan {recharge.PlanNameSnapshot} activated."
+    )
+    return recharge
+
+
+def record_payment_failure(
+    db: Session,
+    client_id: str,
+    order_id: str,
+    error_code: str | None = None,
+    error_description: str | None = None,
+) -> LeadClientRecharge | None:
+    """Records user cancellation or gateway failure for complete history audit."""
+    recharge = (
+        db.query(LeadClientRecharge)
+        .filter(
+            LeadClientRecharge.ClientId == client_id,
+            LeadClientRecharge.RazorpayOrderId == order_id,
+        )
+        .first()
+    )
+    if not recharge:
+        return None
+
+    recharge.Status = RECHARGE_STATUS_FAILED
+    desc = error_description or "Payment was cancelled or dismissed before completion"
+    code = error_code or "DISMISSED"
+    recharge.FailureReason = f"[{code}] {desc}"
+
+    db.commit()
+    db.refresh(recharge)
+    logger.info(f"[Billing] Recorded payment failure for order {order_id}: {recharge.FailureReason}")
+    return recharge
+

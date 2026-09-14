@@ -951,6 +951,10 @@ class ClientRechargeOut(BaseModel):
     expires_at: datetime | None = None
     status: str
     payment_reference: str | None = None
+    razorpay_order_id: str | None = None
+    invoice_url: str | None = None
+    invoice_id: str | None = None
+    failure_reason: str | None = None
     created_at: datetime | None = None
 
     @field_serializer('recharged_at', 'expires_at', 'created_at')
@@ -960,6 +964,33 @@ class ClientRechargeOut(BaseModel):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
+
+
+class RazorpayOrderCreate(BaseModel):
+    plan_template_id: str
+
+
+class RazorpayOrderOut(BaseModel):
+    order_id: str
+    amount: int  # in paise
+    currency: str = "INR"
+    key_id: str
+    plan_id: str
+    plan_name: str
+    included_minutes: float
+
+
+class RazorpayPaymentVerifyIn(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    plan_template_id: str
+
+
+class RazorpayPaymentFailureIn(BaseModel):
+    razorpay_order_id: str
+    error_code: str | None = None
+    error_description: str | None = None
 
 
 class UsageLogOut(BaseModel):
