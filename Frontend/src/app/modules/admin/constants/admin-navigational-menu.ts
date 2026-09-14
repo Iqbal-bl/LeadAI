@@ -67,4 +67,19 @@ export const AdminNavigationalMenu: SidebarSection[] = [
       },
     ],
   },
+  {
+    title: 'Billing & Monetization',
+    items: [
+      {
+        label: 'Plan Management',
+        icon: 'pi pi-key',
+        routerLink: '/admin/plan-management',
+      },
+      {
+        label: 'Client Billing Summaries',
+        icon: 'pi pi-credit-card',
+        routerLink: '/admin/billing',
+      },
+    ],
+  },
 ];

@@ -108,6 +108,20 @@ P = {
     "social.instagram": "Access Instagram publishing, webhooks, and media",
     "social.whatsapp": "Access WhatsApp channel and messaging",
     "social.linkedin": "Access LinkedIn publishing",
+    # billing & recharges
+    "billing.read": "View company recharge plans and usage history",
+    "billing.recharge": "Purchase or allocate company recharge plans",
+    "billing.manage_global": "Manage master billing templates and custom client plans",
+}
+
+# Features and communication channels that can be individually enabled or disabled per company
+COMPANY_GATED_FEATURES: set[str] = {
+    "social.facebook",
+    "social.instagram",
+    "social.linkedin",
+    "social.whatsapp",
+    "voice_agent",
+    "email_marketing",
 }
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -151,6 +165,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "social.instagram",
         "social.whatsapp",
         "social.linkedin",
+        "billing.read",
+        "billing.recharge",
     },
 
     ROLE_MANAGER: {
@@ -374,9 +390,15 @@ def current_principal(
                 disabled_features = {
                     r.PermissionKey.strip().lower() for r in comp_rows if not r.IsEnabled
                 }
-                if disabled_features:
+                enabled_features = {
+                    r.PermissionKey.strip().lower() for r in comp_rows if r.IsEnabled
+                }
+                # For companies with custom permissions, ungranted channels are disabled
+                omitted_features = COMPANY_GATED_FEATURES - enabled_features
+                all_disabled = disabled_features | omitted_features
+                if all_disabled:
                     perms = {
-                        p for p in perms if p.strip().lower() not in disabled_features
+                        p for p in perms if p.strip().lower() not in all_disabled
                     }
 
         return Principal(
@@ -422,9 +444,15 @@ def current_principal(
             disabled_features = {
                 r.PermissionKey.strip().lower() for r in comp_rows if not r.IsEnabled
             }
-            if disabled_features:
+            enabled_features = {
+                r.PermissionKey.strip().lower() for r in comp_rows if r.IsEnabled
+            }
+            # For companies with custom permissions, ungranted channels are disabled
+            omitted_features = COMPANY_GATED_FEATURES - enabled_features
+            all_disabled = disabled_features | omitted_features
+            if all_disabled:
                 effective_perms = {
-                    p for p in effective_perms if p.strip().lower() not in disabled_features
+                    p for p in effective_perms if p.strip().lower() not in all_disabled
                 }
 
     return Principal(

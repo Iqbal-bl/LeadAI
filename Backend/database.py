@@ -56,11 +56,11 @@ def create_db_if_not_exists(engine_url: str, db_name: str):
         result = conn.execute(text(f"SHOW DATABASES LIKE '{db_name}'"))
         if result.fetchone() is None:
             conn.execute(text(f"CREATE DATABASE {db_name}"))
-            print(f"✅ Created database: {db_name}")
+            print(f"[DB] Created database: {db_name}")
             
             print(f"Database connection established successfully")
         else:
-            print(f"✅ Database already exists: {db_name}")
+            print(f"[DB] Database already exists: {db_name}")
             print(f"Database connection established successfully")
 
 create_db_if_not_exists(DB1_URL_WITHOUT_NAME, db_name1)

@@ -17,6 +17,9 @@ Nothing here mutates or overrides the outbound app's own settings.
 """
 import os
 from functools import lru_cache
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def _b(name: str, default: str = "false") -> bool:
@@ -218,6 +221,12 @@ class LeadAISettings:
     minio_presign_seconds: int = _i("MINIO_PRESIGN_SECONDS", 3600)
     # Where files go when MinIO is not configured, so dev still works.
     local_storage_dir: str = os.getenv("LEADAI_LOCAL_STORAGE_DIR", "./storage_local")
+
+    # =======================================================================
+    # Razorpay Payment Gateway
+    # =======================================================================
+    razorpay_key_id: str | None = os.getenv("RAZORPAY_KEY_ID") or None
+    razorpay_key_secret: str | None = os.getenv("RAZORPAY_KEY_SECRET") or None
 
     @property
     def minio_enabled(self) -> bool:

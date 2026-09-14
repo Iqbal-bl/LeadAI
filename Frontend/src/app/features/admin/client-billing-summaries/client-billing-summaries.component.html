@@ -1,0 +1,162 @@
+<div class="p-6 space-y-8">
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-1 bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 text-xs font-bold rounded-md uppercase tracking-wider">
+          Super Admin Control Panel
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-1">
+        <i class="pi pi-credit-card text-indigo-600"></i>
+        Client Companies Billing Overview
+      </h1>
+      <p class="text-slate-500 text-sm mt-1">
+        Live minute balance, active plans, expiration dates, and direct recharge grants across all company accounts.
+      </p>
+    </div>
+    <div>
+      <button
+        pButton
+        type="button"
+        label="Grant Direct Recharge"
+        icon="pi pi-gift"
+        class="p-button-primary shadow-md"
+        (click)="openGrantModal()"
+      ></button>
+    </div>
+  </div>
+
+  <!-- System-wide Client Billing Summaries Table -->
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white">All Company Billing Accounts</h2>
+        <p class="text-xs text-slate-500">Live active talktime balances and pending recharge queues.</p>
+      </div>
+    </div>
+
+    <p-table [value]="clientSummaries" [loading]="loading" styleClass="p-datatable-sm">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Company / Client ID</th>
+          <th>Active Plan</th>
+          <th>Remaining Minutes</th>
+          <th>Expiry Date</th>
+          <th>Queued Plans</th>
+          <th>Quota Status</th>
+          <th class="text-right">Grant Recharge</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-summary>
+        <tr>
+          <td class="font-bold text-slate-900 dark:text-white">
+            {{ getCompanyName(summary.client_id) }}
+            <div class="font-mono text-xs font-normal text-slate-400">{{ summary.client_id }}</div>
+          </td>
+          <td>{{ summary.active_recharge?.plan_name_snapshot || 'No Active Plan' }}</td>
+          <td class="font-extrabold text-indigo-600 dark:text-indigo-400">
+            {{ summary.total_remaining_minutes | number:'1.0-0' }} m
+          </td>
+          <td class="text-xs text-slate-600 dark:text-slate-300">
+            {{ summary.active_recharge?.expires_at ? (summary.active_recharge.expires_at | date:'shortDate') : '-' }}
+          </td>
+          <td>
+            <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              {{ summary.pending_recharges?.length || 0 }} Pending
+            </span>
+          </td>
+          <td>
+            <span
+              class="px-2.5 py-0.5 rounded-full text-xs font-semibold"
+              [ngClass]="summary.is_quota_active ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'"
+            >
+              {{ summary.is_quota_active ? 'Active' : 'Exhausted/Expired' }}
+            </span>
+          </td>
+          <td class="text-right">
+            <button
+              pButton
+              type="button"
+              label="Recharge"
+              icon="pi pi-bolt"
+              class="p-button-text p-button-sm p-button-indigo"
+              (click)="openGrantModal(summary.client_id)"
+            ></button>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>
+
+<!-- Modal: Grant Direct Recharge to Client -->
+<p-dialog
+  [(visible)]="showGrantDialog"
+  header="Grant Direct Recharge to Client Account"
+  [modal]="true"
+  [style]="{ width: '500px' }"
+>
+  <div class="space-y-4 pt-2">
+    <div>
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Target Client Company *</label>
+      <p-dropdown
+        [(ngModel)]="grantForm.client_id"
+        [options]="companies"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Choose Client Company"
+        styleClass="w-full"
+      ></p-dropdown>
+    </div>
+
+    <div>
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Recharge Mode</label>
+      <p-dropdown
+        [(ngModel)]="grantType"
+        [options]="[{label: 'Select Master Template', value: 'template'}, {label: 'Custom Immediate Parameters', value: 'custom'}]"
+        optionLabel="label"
+        optionValue="value"
+        styleClass="w-full"
+      ></p-dropdown>
+    </div>
+
+    <div *ngIf="grantType === 'template'">
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Master Plan Template *</label>
+      <p-dropdown
+        [(ngModel)]="grantForm.plan_template_id"
+        [options]="plans"
+        optionLabel="name"
+        optionValue="id"
+        styleClass="w-full"
+      ></p-dropdown>
+    </div>
+
+    <div *ngIf="grantType === 'custom'" class="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Custom Plan Name</label>
+        <input pInputText type="text" [(ngModel)]="grantForm.custom_name" class="w-full" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Custom Minutes</label>
+          <input pInputText type="number" [(ngModel)]="grantForm.custom_minutes" class="w-full" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Custom Validity (Days)</label>
+          <input pInputText type="number" [(ngModel)]="grantForm.custom_validity_days" class="w-full" />
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Reference / Note</label>
+      <input pInputText type="text" [(ngModel)]="grantForm.payment_reference" class="w-full" placeholder="e.g. Admin Approval #1092" />
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="Cancel" class="p-button-text" (click)="showGrantDialog = false"></button>
+    <button pButton type="button" label="Allocate Recharge" icon="pi pi-bolt" class="p-button-purple" [loading]="saving" (click)="submitGrant()"></button>
+  </ng-template>
+</p-dialog>

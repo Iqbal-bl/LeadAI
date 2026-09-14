@@ -196,6 +196,13 @@ export const CLIENT_ROUTES: Routes = [
           ),
       },
       {
+        path: 'billing',
+        loadComponent: () =>
+          import('../../features/billing/billing-dashboard/billing-dashboard.component').then(
+            (m) => m.BillingDashboardComponent,
+          ),
+      },
+      {
         path: '',
         redirectTo: 'dashboard',
         pathMatch: 'full',
