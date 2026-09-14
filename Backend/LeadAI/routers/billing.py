@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ..db import get_leadai_db
@@ -28,6 +28,10 @@ from ..schemas import (
     ClientRechargeAllocate,
     ClientRechargeOut,
     Ok,
+    RazorpayOrderCreate,
+    RazorpayOrderOut,
+    RazorpayPaymentFailureIn,
+    RazorpayPaymentVerifyIn,
     RechargePlanTemplateCreate,
     RechargePlanTemplateOut,
     RechargePlanTemplateUpdate,
@@ -71,6 +75,10 @@ def _serialize_recharge(r: LeadClientRecharge) -> ClientRechargeOut:
         expires_at=r.ExpiresAt,
         status=r.Status,
         payment_reference=r.PaymentReference,
+        razorpay_order_id=r.RazorpayOrderId,
+        invoice_url=r.InvoiceUrl,
+        invoice_id=r.InvoiceId,
+        failure_reason=r.FailureReason,
         created_at=r.CreatedAt,
     )
 
@@ -145,6 +153,109 @@ def list_available_plans(
     )
 
     return [_serialize_template(r) for r in rows]
+
+
+@router.post("/create-order", response_model=RazorpayOrderOut, summary="Create Razorpay Order for self-recharge")
+def create_order(
+    payload: RazorpayOrderCreate,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    try:
+        res = billing_svc.create_razorpay_order(
+            db=db,
+            client_id=client_id,
+            plan_template_id=payload.plan_template_id,
+            user_email=principal.email,
+        )
+        return RazorpayOrderOut(**res)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/verify-payment", response_model=ClientRechargeOut, summary="Verify Razorpay payment signature & activate plan")
+def verify_payment(
+    payload: RazorpayPaymentVerifyIn,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    try:
+        recharge = billing_svc.verify_razorpay_payment(
+            db=db,
+            client_id=client_id,
+            payload=payload.model_dump(),
+            user_email=principal.email,
+        )
+        return _serialize_recharge(recharge)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/record-failure", response_model=Ok, summary="Log failed or cancelled payment attempt")
+def record_failure(
+    payload: RazorpayPaymentFailureIn,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    billing_svc.record_payment_failure(
+        db=db,
+        client_id=client_id,
+        order_id=payload.razorpay_order_id,
+        error_code=payload.error_code,
+        error_description=payload.error_description,
+    )
+    return Ok(message="Failure recorded")
+
+
+@router.get("/payment-history", response_model=list[ClientRechargeOut], summary="List all transaction attempts and recharges with invoice links")
+def get_payment_history(
+    limit: int = Query(default=100, ge=1, le=500),
+    scope: tuple[Principal, str] = Depends(scoped("billing.read", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    rows = (
+        db.query(LeadClientRecharge)
+        .filter(LeadClientRecharge.ClientId == client_id)
+        .order_by(LeadClientRecharge.CreatedAt.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_serialize_recharge(r) for r in rows]
+
+
+@router.get("/invoices/{recharge_id}/download", summary="Download custom invoice PDF")
+def download_invoice(
+    recharge_id: str,
+    db: Session = Depends(get_leadai_db),
+):
+    """Serve the custom PDF invoice for any verified recharge transaction."""
+    from Domain.models import Client
+    from ..models import LeadClientRecharge
+    from ..services import invoice as invoice_svc
+
+    recharge = db.query(LeadClientRecharge).filter(LeadClientRecharge.Id == recharge_id).first()
+    if not recharge:
+        raise HTTPException(status_code=404, detail="Invoice / Recharge transaction not found.")
+
+    client = db.query(Client).filter(Client.Id == recharge.ClientId).first()
+    html_content = invoice_svc.render_invoice_html(recharge, client)
+    pdf_bytes = invoice_svc.generate_invoice_pdf(html_content)
+
+    inv_number = recharge.InvoiceId or invoice_svc.build_invoice_number(recharge.Id, recharge.CreatedAt)
+    inv_filename = f"LeadAI_{inv_number}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{inv_filename}"',
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
 
 
 @router.post("/recharge", response_model=ClientRechargeOut, summary="Purchase / apply a recharge plan")

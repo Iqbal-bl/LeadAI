@@ -497,6 +497,8 @@ RECHARGE_STATUS_PENDING = "pending"
 RECHARGE_STATUS_EXHAUSTED = "exhausted"
 RECHARGE_STATUS_EXPIRED = "expired"
 RECHARGE_STATUS_SUPERSEDED = "superseded"
+RECHARGE_STATUS_FAILED = "failed"
+RECHARGE_STATUS_CANCELLED = "cancelled"
 
 
 class LeadRechargePlanTemplate(LeadAIBase):
@@ -537,8 +539,12 @@ class LeadClientRecharge(LeadAIBase):
     PricePaid = Column(Float, nullable=False, default=0.0)
     RechargedAt = Column(DateTime, nullable=True, index=True)  # Starts when activated
     ExpiresAt = Column(DateTime, nullable=True, index=True)  # RechargedAt + ValidityDays
-    Status = Column(String(20), nullable=False, default=RECHARGE_STATUS_PENDING, index=True)  # active, pending, exhausted, expired, superseded
+    Status = Column(String(20), nullable=False, default=RECHARGE_STATUS_PENDING, index=True)  # active, pending, exhausted, expired, superseded, failed, cancelled
     PaymentReference = Column(String(100), nullable=True)
+    RazorpayOrderId = Column(String(100), nullable=True, index=True)
+    InvoiceUrl = Column(String(500), nullable=True)
+    InvoiceId = Column(String(100), nullable=True)
+    FailureReason = Column(String(255), nullable=True)
 
 
 class LeadUsageLog(LeadAIBase):

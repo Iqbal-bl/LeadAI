@@ -169,3 +169,9 @@ typing-inspection==0.4.1
 typing_extensions==4.15.0
 wrapt==1.17.3
 yarl==1.20.1
+
+# Payment Gateway
+razorpay
+
+# PDF Invoice Generation
+xhtml2pdf==0.2.18
