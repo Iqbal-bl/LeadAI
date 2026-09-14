@@ -23,9 +23,36 @@ export interface ClientRecharge {
   price_paid: number;
   recharged_at?: string | null;
   expires_at?: string | null;
-  status: 'active' | 'pending' | 'exhausted' | 'expired' | 'superseded';
+  status: 'active' | 'pending' | 'exhausted' | 'expired' | 'superseded' | 'failed' | 'cancelled';
   payment_reference?: string | null;
+  razorpay_order_id?: string | null;
+  invoice_url?: string | null;
+  invoice_id?: string | null;
+  failure_reason?: string | null;
   created_at?: string;
+}
+
+export interface RazorpayOrderResponse {
+  order_id: string;
+  amount: number;
+  currency: string;
+  key_id: string;
+  plan_id: string;
+  plan_name: string;
+  included_minutes: number;
+}
+
+export interface RazorpayPaymentVerifyPayload {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  plan_template_id: string;
+}
+
+export interface RazorpayPaymentFailurePayload {
+  razorpay_order_id: string;
+  error_code?: string;
+  error_description?: string;
 }
 
 export interface UsageLog {
