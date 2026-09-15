@@ -253,7 +253,9 @@ def download_invoice(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'inline; filename="{inv_filename}"',
-            "Cache-Control": "public, max-age=3600",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
         },
     )
 
