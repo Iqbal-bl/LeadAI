@@ -103,14 +103,22 @@
     </div>
   </div>
 
-  <!-- Available Plans Section -->
-  <div class="mt-8">
-    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">
-      Select a Recharge Plan
-    </h2>
+  <!-- Available Subscription Plans Section -->
+  <div *ngIf="subscriptionPlans.length" class="mt-8">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="pi pi-shield text-indigo-600"></i>
+          Subscription Plans
+        </h2>
+        <p class="text-xs text-slate-500">
+          Standard and custom monthly/yearly subscription plans with full validity periods.
+        </p>
+      </div>
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
-        *ngFor="let plan of availablePlans"
+        *ngFor="let plan of subscriptionPlans"
         class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all duration-200 shadow-sm flex flex-col justify-between relative group"
       >
         <span
@@ -151,6 +159,80 @@
           icon="pi pi-bolt"
           class="p-button-outlined p-button-indigo w-full mt-6"
           (click)="confirmRecharge(plan)"
+        ></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Minute Top-Up Booster Packs Section -->
+  <div *ngIf="topupPlans.length" class="mt-8">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="pi pi-bolt text-amber-500"></i>
+          Minute Top-Up Booster Packs
+        </h2>
+        <p class="text-xs text-slate-500">
+          Add-on minute packs that merge into your current active subscription and expire on your active plan's expiry date.
+        </p>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div
+        *ngFor="let plan of topupPlans"
+        class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-amber-200 dark:border-amber-900/60 hover:border-amber-500 transition-all duration-200 shadow-sm flex flex-col justify-between relative group"
+      >
+        <span class="absolute -top-3 right-6 px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full uppercase tracking-wider">
+          ⚡ Top-Up Pack
+        </span>
+        <div>
+          <h3 class="text-xl font-bold text-slate-900 dark:text-white">{{ plan.name }}</h3>
+          <p class="text-xs text-slate-500 mt-1">{{ plan.description || 'Instant add-on minute booster' }}</p>
+
+          <div class="my-6">
+            <span class="text-3xl font-extrabold text-slate-900 dark:text-white">₹{{ plan.price | number }}</span>
+            <span class="text-xs text-slate-500 ml-1">(~₹{{ plan.rate_per_minute }}/min)</span>
+          </div>
+
+          <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+            <li class="flex items-center gap-2">
+              <i class="pi pi-plus-circle text-amber-500 font-bold"></i>
+              <strong>+{{ plan.included_minutes | number }}</strong> Add-on Minutes
+            </li>
+            <li class="flex items-center gap-2">
+              <i class="pi pi-calendar text-indigo-500"></i>
+              <span *ngIf="hasActiveUnexpiredPlan()">
+                Valid until <strong>{{ summary?.active_recharge?.expires_at | date:'mediumDate' }}</strong>
+              </span>
+              <span *ngIf="!hasActiveUnexpiredPlan()" class="text-slate-400">
+                Inherits active subscription expiry
+              </span>
+            </li>
+            <li class="flex items-center gap-2">
+              <i class="pi pi-check-circle text-emerald-500"></i>
+              Zero setup & immediate activation
+            </li>
+          </ul>
+        </div>
+
+        <button
+          *ngIf="hasActiveUnexpiredPlan()"
+          pButton
+          type="button"
+          label="Buy Top-Up"
+          icon="pi pi-bolt"
+          class="p-button-outlined p-button-help w-full mt-6"
+          (click)="confirmRecharge(plan)"
+        ></button>
+        <button
+          *ngIf="!hasActiveUnexpiredPlan()"
+          pButton
+          type="button"
+          label="Requires Active Plan"
+          icon="pi pi-lock"
+          class="p-button-outlined p-button-secondary w-full mt-6 opacity-60 cursor-not-allowed"
+          [disabled]="true"
+          pTooltip="Top-up booster packs require an active subscription plan. Please purchase a monthly or yearly plan first."
         ></button>
       </div>
     </div>

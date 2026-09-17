@@ -16,11 +16,13 @@ from ..db import get_leadai_db
 from ..models import (
     PLAN_TYPE_CUSTOM,
     PLAN_TYPE_STANDARD,
+    PLAN_TYPE_TOPUP,
     RECHARGE_STATUS_ACTIVE,
     RECHARGE_STATUS_PENDING,
     LeadClientRecharge,
     LeadRechargePlanTemplate,
     LeadUsageLog,
+    utcnow,
 )
 from ..rbac import Principal, require, scoped
 from ..schemas import (
@@ -299,65 +301,86 @@ def get_usage_history(
         .limit(limit)
         .all()
     )
-    return [_serialize_usage(r) for r in rows]
+    return [
+        UsageLogOut(
+            id=r.Id,
+            client_id=r.ClientId,
+            recharge_id=r.RechargeId,
+            call_sid=r.CallSid,
+            conversation_id=r.ConversationId,
+            call_duration_seconds=r.CallDurationSeconds,
+            minutes_deducted=r.MinutesDeducted,
+            previous_balance=r.PreviousBalance,
+            new_balance=r.NewBalance,
+            deducted_at=r.DeductedAt,
+        )
+        for r in rows
+    ]
 
 
 # ===========================================================================
-# Super Admin Billing Endpoints
+# Super Admin Billing & Template Management Endpoints
 # ===========================================================================
 
-@admin_router.get("/plans", response_model=list[RechargePlanTemplateOut], summary="Admin: List all master plan templates")
-def admin_list_plans(
-    include_deleted: bool = Query(False, description="Include soft-deleted plans"),
+@admin_router.get("/plans", response_model=list[RechargePlanTemplateOut], summary="Admin: List all plan templates")
+def admin_list_plan_templates(
+    include_inactive: bool = Query(default=False),
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
     billing_svc.ensure_default_templates(db)
-    query = db.query(LeadRechargePlanTemplate)
-    if not include_deleted:
-        query = query.filter(LeadRechargePlanTemplate.IsDeleted == False)
-    rows = query.order_by(LeadRechargePlanTemplate.CreatedAt.desc()).all()
+    q = db.query(LeadRechargePlanTemplate).filter(LeadRechargePlanTemplate.IsDeleted == False)  # noqa: E712
+    if not include_inactive:
+        q = q.filter(LeadRechargePlanTemplate.IsActive == True)  # noqa: E712
+    rows = q.order_by(LeadRechargePlanTemplate.Price.asc()).all()
     return [_serialize_template(r) for r in rows]
 
 
-@admin_router.post("/plans", response_model=RechargePlanTemplateOut, summary="Admin: Create standard or client custom plan")
-def admin_create_plan(
+@admin_router.post("/plans", response_model=RechargePlanTemplateOut, summary="Admin: Create a new plan template")
+def admin_create_plan_template(
     payload: RechargePlanTemplateCreate,
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
+    billing_svc.ensure_default_templates(db)
     template = LeadRechargePlanTemplate(
-        Name=payload.name.strip(),
-        PlanType=payload.plan_type.strip(),
-        TargetClientId=payload.target_client_id.strip() if payload.target_client_id else None,
+        Name=payload.name,
+        PlanType=payload.plan_type,
+        PlanCategory=payload.plan_type or "standard",
+        TargetClientId=payload.target_client_id,
         IncludedMinutes=payload.included_minutes,
         ValidityDays=payload.validity_days,
         Price=payload.price,
         RatePerMinute=payload.rate_per_minute,
-        Description=payload.description.strip() if payload.description else None,
-        CreatedBy=principal.email,
+        Description=payload.description,
         IsActive=True,
+        CreatedBy=principal.email,
     )
     db.add(template)
     db.commit()
     db.refresh(template)
-    logger.info(f"[Admin Billing] Created plan template {template.Id} ({template.Name}) by {principal.email}")
+    logger.info(f"[Billing] Admin {principal.email} created plan template {template.Name} ({template.Id})")
     return _serialize_template(template)
 
 
-@admin_router.put("/plans/{plan_id}", response_model=RechargePlanTemplateOut, summary="Admin: Update plan template (Edits future recharges only)")
-def admin_update_plan(
-    plan_id: str,
+@admin_router.put("/plans/{template_id}", response_model=RechargePlanTemplateOut, summary="Admin: Update a plan template")
+@admin_router.patch("/plans/{template_id}", response_model=RechargePlanTemplateOut, summary="Admin: Patch a plan template")
+def admin_update_plan_template(
+    template_id: str,
     payload: RechargePlanTemplateUpdate,
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
-    template = db.get(LeadRechargePlanTemplate, plan_id)
-    if not template:
+    template = db.get(LeadRechargePlanTemplate, template_id)
+    if not template or template.IsDeleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan template not found")
 
     if payload.name is not None:
-        template.Name = payload.name.strip()
+        template.Name = payload.name
+    if payload.plan_type is not None:
+        template.PlanType = payload.plan_type
+    if payload.target_client_id is not None:
+        template.TargetClientId = payload.target_client_id
     if payload.included_minutes is not None:
         template.IncludedMinutes = payload.included_minutes
     if payload.validity_days is not None:
@@ -369,34 +392,30 @@ def admin_update_plan(
     if payload.is_active is not None:
         template.IsActive = payload.is_active
     if payload.description is not None:
-        template.Description = payload.description.strip()
+        template.Description = payload.description
 
     template.UpdatedBy = principal.email
-
-    db.add(template)
+    template.UpdatedAt = utcnow()
     db.commit()
     db.refresh(template)
-    logger.info(f"[Admin Billing] Updated plan template {template.Id} ({template.Name}) by {principal.email}")
     return _serialize_template(template)
 
 
-@admin_router.delete("/plans/{plan_id}", response_model=Ok, summary="Admin: Soft-delete / retire plan template")
-def admin_delete_plan(
-    plan_id: str,
+@admin_router.delete("/plans/{template_id}", response_model=Ok, summary="Admin: Retire a plan template")
+def admin_delete_plan_template(
+    template_id: str,
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
-    template = db.get(LeadRechargePlanTemplate, plan_id)
+    template = db.get(LeadRechargePlanTemplate, template_id)
     if not template or template.IsDeleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan template not found")
 
     template.IsDeleted = True
     template.IsActive = False
     template.UpdatedBy = principal.email
-
-    db.add(template)
+    template.UpdatedAt = utcnow()
     db.commit()
-    logger.info(f"[Admin Billing] Soft-deleted plan template {template.Id} ({template.Name}) by {principal.email}")
     return Ok(message="Plan template retired successfully. Existing client recharges remain active.")
 
 
@@ -417,6 +436,7 @@ def admin_recharge_client(
             custom_name=payload.custom_name,
             payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
             created_by=principal.email,
+            is_topup=payload.is_topup,
         )
         return _serialize_recharge(recharge)
     except ValueError as err:

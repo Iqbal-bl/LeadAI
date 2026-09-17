@@ -28,6 +28,18 @@ export class BillingDashboardComponent implements OnInit {
   selectedPlan: RechargePlanTemplate | null = null;
   showRechargeModal = false;
 
+  get subscriptionPlans(): RechargePlanTemplate[] {
+    return this.availablePlans.filter((p) => p.plan_type !== 'topup');
+  }
+
+  get topupPlans(): RechargePlanTemplate[] {
+    return this.availablePlans.filter((p) => p.plan_type === 'topup');
+  }
+
+  hasActiveUnexpiredPlan(): boolean {
+    return !!(this.summary?.active_recharge?.expires_at);
+  }
+
   constructor(
     private billingService: BillingService,
     private messageService: MessageService,

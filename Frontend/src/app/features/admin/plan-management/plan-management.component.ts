@@ -87,17 +87,21 @@ export class PlanManagementComponent implements OnInit {
     });
   }
 
-  openCreatePlanModal(type: 'standard' | 'custom' = 'standard'): void {
+  openCreatePlanModal(type: 'standard' | 'custom' | 'topup' = 'standard'): void {
     this.editingPlan = null;
+    let defaultName = 'New Standard Plan';
+    if (type === 'custom') defaultName = 'Custom Client Plan';
+    if (type === 'topup') defaultName = '100 Min Top-Up Booster';
+
     this.planForm = {
-      name: type === 'custom' ? 'Custom Client Plan' : 'New Standard Plan',
+      name: defaultName,
       plan_type: type,
       target_client_id: null,
-      included_minutes: 500,
-      validity_days: 30,
-      price: 2000,
+      included_minutes: type === 'topup' ? 100 : 500,
+      validity_days: type === 'topup' ? 0 : 30,
+      price: type === 'topup' ? 400 : 2000,
       rate_per_minute: 4.0,
-      description: '',
+      description: type === 'topup' ? 'Add-on minutes that inherit active plan expiry.' : '',
     };
     this.showPlanDialog = true;
   }
@@ -109,7 +113,7 @@ export class PlanManagementComponent implements OnInit {
       plan_type: plan.plan_type,
       target_client_id: plan.target_client_id || null,
       included_minutes: plan.included_minutes,
-      validity_days: plan.validity_days,
+      validity_days: plan.validity_days ?? 0,
       price: plan.price,
       rate_per_minute: plan.rate_per_minute,
       description: plan.description || '',
@@ -118,13 +122,18 @@ export class PlanManagementComponent implements OnInit {
   }
 
   savePlan(): void {
-    if (!this.planForm.name.trim() || !this.planForm.included_minutes || !this.planForm.validity_days) {
+    const isTopup = this.planForm.plan_type === 'topup';
+    if (!this.planForm.name.trim() || !this.planForm.included_minutes || (!isTopup && !this.planForm.validity_days)) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation Error',
         detail: 'Please fill in all required plan fields.',
       });
       return;
+    }
+
+    if (isTopup) {
+      this.planForm.validity_days = 0;
     }
 
     this.saving = true;

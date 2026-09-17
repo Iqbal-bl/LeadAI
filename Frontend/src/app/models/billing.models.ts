@@ -1,10 +1,10 @@
 export interface RechargePlanTemplate {
   id: string;
   name: string;
-  plan_type: 'standard' | 'custom';
+  plan_type: 'standard' | 'custom' | 'topup';
   target_client_id?: string | null;
   included_minutes: number;
-  validity_days: number;
+  validity_days?: number | null;
   price: number;
   rate_per_minute: number;
   is_active: boolean;
@@ -84,14 +84,15 @@ export interface RechargeAllocatePayload {
   custom_price?: number;
   custom_name?: string;
   payment_reference?: string;
+  is_topup?: boolean;
 }
 
 export interface PlanTemplateCreatePayload {
   name: string;
-  plan_type?: 'standard' | 'custom';
+  plan_type?: 'standard' | 'custom' | 'topup';
   target_client_id?: string | null;
   included_minutes: number;
-  validity_days: number;
+  validity_days?: number | null;
   price: number;
   rate_per_minute?: number;
   description?: string;

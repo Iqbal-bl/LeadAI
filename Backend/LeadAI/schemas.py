@@ -886,11 +886,11 @@ class MemberListOut(BaseModel):
 # ===========================================================================
 
 class RechargePlanTemplateCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    plan_type: str = Field(default="standard", description="standard or custom")
+    name: str
+    plan_type: str = Field(default="standard", description="standard, custom, or topup")
     target_client_id: str | None = None
     included_minutes: float = Field(gt=0)
-    validity_days: int = Field(gt=0)
+    validity_days: int | None = Field(default=0, ge=0)
     price: float = Field(ge=0)
     rate_per_minute: float = Field(default=4.0)
     description: str | None = None
@@ -898,6 +898,8 @@ class RechargePlanTemplateCreate(BaseModel):
 
 class RechargePlanTemplateUpdate(BaseModel):
     name: str | None = None
+    plan_type: str | None = None
+    target_client_id: str | None = None
     included_minutes: float | None = None
     validity_days: int | None = None
     price: float | None = None
@@ -912,7 +914,7 @@ class RechargePlanTemplateOut(BaseModel):
     plan_type: str
     target_client_id: str | None = None
     included_minutes: float
-    validity_days: int
+    validity_days: int | None = None
     price: float
     rate_per_minute: float
     is_active: bool
@@ -936,6 +938,7 @@ class ClientRechargeAllocate(BaseModel):
     custom_price: float | None = None
     custom_name: str | None = None
     payment_reference: str | None = None
+    is_topup: bool | None = False
 
 
 class ClientRechargeOut(BaseModel):

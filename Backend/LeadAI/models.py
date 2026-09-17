@@ -491,6 +491,7 @@ class LeadCall(LeadAIBase):
 # ---------------------------------------------------------------------------
 PLAN_TYPE_STANDARD = "standard"
 PLAN_TYPE_CUSTOM = "custom"
+PLAN_TYPE_TOPUP = "topup"
 
 RECHARGE_STATUS_ACTIVE = "active"
 RECHARGE_STATUS_PENDING = "pending"
@@ -504,21 +505,24 @@ RECHARGE_STATUS_CANCELLED = "cancelled"
 class LeadRechargePlanTemplate(LeadAIBase):
     """Master recharge plan templates created by Super Admin.
     
-    Can be a global standard plan (TargetClientId IS NULL) or a client-specific
-    custom plan (TargetClientId IS NOT NULL).
+    Can be a global standard plan (TargetClientId IS NULL), a client-specific
+    custom plan (TargetClientId IS NOT NULL), or a top-up booster pack (PlanType = "topup").
     """
 
     __tablename__ = "leadai_recharge_plan_templates"
 
     Name = Column(String(100), nullable=False)
     PlanType = Column(String(20), nullable=False, default=PLAN_TYPE_STANDARD, index=True)
+    PlanCategory = Column(String(50), nullable=True, default="standard")
     TargetClientId = Column(String(36), nullable=True, index=True)  # NULL for global, or specific ClientId
     IncludedMinutes = Column(Float, nullable=False)  # e.g. 500.0, 6000.0
-    ValidityDays = Column(Integer, nullable=False)  # e.g. 30, 365
+    ValidityDays = Column(Integer, nullable=True, default=0)  # e.g. 30, 365, or 0/NULL for top-ups
     Price = Column(Float, nullable=False, default=0.0)  # Total price in INR
     RatePerMinute = Column(Float, nullable=False, default=4.0)  # Price benchmark per minute
     IsActive = Column(Boolean, nullable=False, default=True, index=True)
     Description = Column(Text, nullable=True)
+    FeatureKey = Column(String(30), nullable=True)
+    RazorpayPlanId = Column(String(100), nullable=True)
 
 
 class LeadClientRecharge(LeadAIBase):
@@ -542,6 +546,8 @@ class LeadClientRecharge(LeadAIBase):
     Status = Column(String(20), nullable=False, default=RECHARGE_STATUS_PENDING, index=True)  # active, pending, exhausted, expired, superseded, failed, cancelled
     PaymentReference = Column(String(100), nullable=True)
     RazorpayOrderId = Column(String(100), nullable=True, index=True)
+    RazorpaySubscriptionId = Column(String(100), nullable=True)
+    IsAutoRenew = Column(Boolean, nullable=False, default=False)
     InvoiceUrl = Column(String(500), nullable=True)
     InvoiceId = Column(String(100), nullable=True)
     FailureReason = Column(String(255), nullable=True)
