@@ -100,13 +100,28 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     ],
   },
   {
-    title: 'Management',
+    title: 'Billing & Usage',
     items: [
       {
-        label: 'Billing & Recharges',
-        icon: 'pi pi-credit-card',
-        routerLink: '/client/billing',
+        label: 'Plans & Recharges',
+        icon: 'pi pi-bolt',
+        routerLink: '/client/billing/plans',
       },
+      {
+        label: 'Invoices & Payments',
+        icon: 'pi pi-file-pdf',
+        routerLink: '/client/billing/invoices',
+      },
+      {
+        label: 'Minute Usage Ledger',
+        icon: 'pi pi-history',
+        routerLink: '/client/billing/usage',
+      },
+    ],
+  },
+  {
+    title: 'Management',
+    items: [
       {
         label: 'Settings',
         icon: 'pi pi-cog',

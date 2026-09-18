@@ -1,0 +1,214 @@
+<div class="p-6 space-y-6">
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 text-xs font-semibold rounded-md uppercase tracking-wider">
+          Voice Call Audit
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-1">
+        <i class="pi pi-history text-indigo-600"></i>
+        Call Minute Usage Ledger
+      </h1>
+      <p class="text-slate-500 text-sm mt-1">
+        Granular call-by-call session logs, exact duration, talktime deductions, and live balance progression.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button
+        pButton
+        type="button"
+        label="Refresh Ledger"
+        icon="pi pi-refresh"
+        class="p-button-outlined p-button-secondary text-sm"
+        [loading]="loading"
+        (click)="loadUsageData()"
+      ></button>
+      <button
+        pButton
+        type="button"
+        label="Top-Up Minutes"
+        icon="pi pi-bolt"
+        class="p-button-primary shadow-md text-sm"
+        routerLink="/client/billing/plans"
+      ></button>
+    </div>
+  </div>
+
+  <!-- Consumption KPI Summary Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- Minutes Consumed -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Minutes Consumed</p>
+        <h3 class="text-2xl font-extrabold text-rose-600 dark:text-rose-400 mt-1">
+          {{ totalMinutesConsumed | number:'1.0-2' }} <span class="text-sm font-medium text-slate-400">mins</span>
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Deducted across phone calls</p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center text-rose-600 dark:text-rose-400">
+        <i class="pi pi-arrow-down-right text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Total Calls Processed -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Calls Logged</p>
+        <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+          {{ totalCallsCount }} <span class="text-sm font-medium text-slate-400">calls</span>
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Recorded voice sessions</p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+        <i class="pi pi-phone text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Average Call Duration -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Average Call Duration</p>
+        <h3 class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">
+          {{ formatDuration(averageDurationSeconds) }}
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">{{ averageDurationSeconds }}s avg per connected call</p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600 dark:text-amber-400">
+        <i class="pi pi-clock text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Current Available Balance -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Remaining Balance</p>
+        <h3 class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
+          {{ summary?.total_remaining_minutes || 0 | number:'1.0-0' }} <span class="text-sm font-medium text-slate-400">mins</span>
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">
+          {{ summary?.is_quota_active ? 'Quota Active & Ready' : 'Recharge Required' }}
+        </p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+        <i class="pi pi-check-circle text-xl"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Bar -->
+  <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div class="relative w-full flex items-center">
+      <i class="pi pi-search absolute left-3.5 text-slate-400 z-10 pointer-events-none text-sm"></i>
+      <input
+        pInputText
+        type="text"
+        [(ngModel)]="searchTerm"
+        (input)="onSearchChange()"
+        placeholder="Filter by Call SID, Conversation ID, or Recharge ID..."
+        style="padding-left: 2.5rem !important;"
+        class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white py-2 focus:ring-2 focus:ring-indigo-500"
+      />
+    </div>
+  </div>
+
+  <!-- Call Minute Usage Table with Fixed Layout & Uniform Row Heights -->
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+    <p-table
+      [value]="filteredLogs"
+      [rows]="10"
+      [paginator]="true"
+      [loading]="loading"
+      styleClass="p-datatable-sm"
+      [tableStyle]="{ 'min-width': '55rem' }"
+    >
+      <ng-template pTemplate="header">
+        <tr class="bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
+          <th style="width: 15%;" class="py-3.5 px-4">Date & Time</th>
+          <th style="width: 25%;" class="py-3.5 px-4">Call Session SID</th>
+          <th style="width: 16%;" class="py-3.5 px-4">Call Duration</th>
+          <th style="width: 15%;" class="py-3.5 px-4">Minutes Deducted</th>
+          <th style="width: 17%;" class="py-3.5 px-4">Balance Progression</th>
+          <th style="width: 12%;" class="py-3.5 px-4 text-right">Recharge Pool Ref</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-log>
+        <tr class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors h-[68px]">
+          <!-- Date & Time (Uniform 2 lines) -->
+          <td class="py-2.5 px-4 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap align-middle">
+            <div class="font-medium text-slate-900 dark:text-white leading-snug">{{ log.deducted_at | date:'mediumDate' }}</div>
+            <div class="text-[11px] text-slate-400 leading-snug">{{ log.deducted_at | date:'mediumTime' }}</div>
+          </td>
+
+          <!-- Call SID (Uniform 2 lines) -->
+          <td class="py-2.5 px-4 font-mono text-xs align-middle">
+            <div class="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium leading-snug">
+              <span class="truncate max-w-[150px]" [pTooltip]="log.call_sid">{{ log.call_sid }}</span>
+              <button
+                type="button"
+                class="text-slate-400 hover:text-indigo-600 transition-colors"
+                (click)="copyToClipboard(log.call_sid)"
+                pTooltip="Copy Call SID"
+              >
+                <i class="pi pi-copy text-[11px]"></i>
+              </button>
+            </div>
+            <div class="text-[11px] text-slate-400 truncate max-w-[180px] leading-snug">
+              {{ log.conversation_id ? 'Conv: ' + log.conversation_id : 'Voice AI Session' }}
+            </div>
+          </td>
+
+          <!-- Duration -->
+          <td class="py-2.5 px-4 text-sm whitespace-nowrap align-middle">
+            <span class="text-slate-800 dark:text-slate-200 font-semibold">{{ formatDuration(log.call_duration_seconds) }}</span>
+            <span class="text-xs text-slate-400 ml-1">({{ log.call_duration_seconds }}s)</span>
+          </td>
+
+          <!-- Minutes Deducted -->
+          <td class="py-2.5 px-4 whitespace-nowrap align-middle">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60">
+              <i class="pi pi-minus mr-1 text-[9px]"></i>
+              {{ log.minutes_deducted | number:'1.0-2' }} mins
+            </span>
+          </td>
+
+          <!-- Balance Progression -->
+          <td class="py-2.5 px-4 text-xs whitespace-nowrap align-middle">
+            <div class="flex items-center gap-2">
+              <span class="text-slate-500 font-mono">{{ log.previous_balance | number:'1.0-2' }}m</span>
+              <i class="pi pi-arrow-right text-[10px] text-slate-400"></i>
+              <span class="font-bold font-mono text-slate-900 dark:text-white">
+                {{ log.new_balance | number:'1.0-2' }}m
+              </span>
+            </div>
+          </td>
+
+          <!-- Recharge ID -->
+          <td class="py-2.5 px-4 text-right font-mono text-xs text-slate-400 align-middle">
+            <span *ngIf="log.recharge_id" class="truncate max-w-[100px] inline-block" [pTooltip]="'Recharge Batch: ' + log.recharge_id">
+              {{ log.recharge_id | slice:0:8 }}...
+            </span>
+            <span *ngIf="!log.recharge_id">—</span>
+          </td>
+        </tr>
+      </ng-template>
+
+      <!-- Empty State -->
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6" class="text-center py-12">
+            <div class="flex flex-col items-center justify-center text-slate-400 space-y-2">
+              <i class="pi pi-phone-slash text-4xl text-slate-300 dark:text-slate-600"></i>
+              <p class="font-medium text-slate-600 dark:text-slate-300 text-sm">No call deduction logs recorded</p>
+              <p class="text-xs text-slate-400 max-w-sm">
+                When outbound or inbound voice AI calls are placed, call sessions, duration, and minute deductions will be logged here.
+              </p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>

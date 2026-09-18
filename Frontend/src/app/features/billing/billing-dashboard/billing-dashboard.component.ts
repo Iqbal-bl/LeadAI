@@ -20,13 +20,11 @@ import { environment } from '../../../../environments/environment';
 export class BillingDashboardComponent implements OnInit {
   summary: BillingSummary | null = null;
   availablePlans: RechargePlanTemplate[] = [];
-  usageLogs: UsageLog[] = [];
-  paymentHistory: ClientRecharge[] = [];
   loading = true;
   rechargeLoading = false;
-  paymentHistoryLoading = false;
   selectedPlan: RechargePlanTemplate | null = null;
   showRechargeModal = false;
+  activePlanTab: 'subscriptions' | 'topups' = 'subscriptions';
 
   get subscriptionPlans(): RechargePlanTemplate[] {
     return this.availablePlans.filter((p) => p.plan_type !== 'topup');
@@ -69,27 +67,6 @@ export class BillingDashboardComponent implements OnInit {
     this.billingService.getAvailablePlans().subscribe({
       next: (plans) => {
         this.availablePlans = plans;
-      },
-    });
-
-    this.billingService.getUsageHistory(30).subscribe({
-      next: (logs) => {
-        this.usageLogs = logs;
-      },
-    });
-
-    this.loadPaymentHistory();
-  }
-
-  loadPaymentHistory(): void {
-    this.paymentHistoryLoading = true;
-    this.billingService.getPaymentHistory(100).subscribe({
-      next: (history) => {
-        this.paymentHistory = history;
-        this.paymentHistoryLoading = false;
-      },
-      error: () => {
-        this.paymentHistoryLoading = false;
       },
     });
   }
@@ -181,7 +158,7 @@ export class BillingDashboardComponent implements OnInit {
               error_description: 'Payment popup was closed without completing the transaction',
             })
             .subscribe(() => {
-              this.loadPaymentHistory();
+              this.loadData();
             });
         },
       },
@@ -200,7 +177,7 @@ export class BillingDashboardComponent implements OnInit {
           error_description: failRes?.error?.description || 'Payment failed at gateway or bank',
         })
         .subscribe(() => {
-          this.loadPaymentHistory();
+          this.loadData();
         });
       this.messageService.add({
         severity: 'error',

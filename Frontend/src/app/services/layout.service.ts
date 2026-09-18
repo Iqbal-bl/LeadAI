@@ -206,9 +206,6 @@ export class LayoutService {
       adminItems.push({ label: 'Lead Threshold', icon: 'pi pi-sliders-h', routerLink: '/client/lead-threshold', permission: 'settings.manage' });
     }
 
-    // Billing & Recharges (Visible in Client Dashboard for all roles)
-    adminItems.push({ label: 'Billing & Recharges', icon: 'pi pi-credit-card', routerLink: '/client/billing' });
-
     // Settings is visible for all, but routes or values can change
     adminItems.push({ label: 'Settings', icon: 'pi pi-cog', routerLink: '/client/settings' });
 
@@ -252,6 +249,16 @@ export class LayoutService {
         ]
       });
     }
+
+    // Billing & Usage Section
+    sections.push({
+      title: 'BILLING & USAGE',
+      items: [
+        { label: 'Plans & Recharges', icon: 'pi pi-bolt', routerLink: '/client/billing/plans' },
+        { label: 'Invoices & Payments', icon: 'pi pi-file-pdf', routerLink: '/client/billing/invoices' },
+        { label: 'Minute Usage Ledger', icon: 'pi pi-history', routerLink: '/client/billing/usage' }
+      ]
+    });
 
     sections.push({
       title: 'MANAGEMENT',

@@ -1,0 +1,315 @@
+<div class="p-6 space-y-6">
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 text-xs font-semibold rounded-md uppercase tracking-wider">
+          Financial Ledger
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-1">
+        <i class="pi pi-file-pdf text-indigo-600"></i>
+        Invoices & Payment Transactions
+      </h1>
+      <p class="text-slate-500 text-sm mt-1">
+        Complete history of all recharge orders, payment gateway verification statuses, and downloadable GST tax invoices.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button
+        pButton
+        type="button"
+        label="Refresh Ledger"
+        icon="pi pi-refresh"
+        class="p-button-outlined p-button-secondary text-sm"
+        [loading]="loading"
+        (click)="loadInvoices()"
+      ></button>
+      <button
+        pButton
+        type="button"
+        label="Recharge Talktime"
+        icon="pi pi-bolt"
+        class="p-button-primary shadow-md text-sm"
+        routerLink="/client/billing/plans"
+      ></button>
+    </div>
+  </div>
+
+  <!-- Financial KPI Summary Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- Total Spent -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Spent (All-Time)</p>
+        <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+          ₹{{ totalAmountSpent | number:'1.0-2' }}
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Across all completed orders</p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+        <i class="pi pi-wallet text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Minutes Purchased -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Minutes Purchased</p>
+        <h3 class="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1">
+          {{ totalMinutesPurchased | number:'1.0-0' }} <span class="text-sm font-medium text-slate-400">mins</span>
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Added to your calling quota</p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+        <i class="pi pi-phone text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Successful Recharges -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Completed Recharges</p>
+        <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+          {{ successfulRechargesCount }} <span class="text-sm font-medium text-slate-400">orders</span>
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Active & archived plans</p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/60 flex items-center justify-center text-purple-600 dark:text-purple-400">
+        <i class="pi pi-check-circle text-xl"></i>
+      </div>
+    </div>
+
+    <!-- Failed / Cancelled -->
+    <div class="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Failed / Dropped</p>
+        <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
+          {{ failedAttemptsCount }} <span class="text-sm font-medium text-slate-400">attempts</span>
+        </h3>
+        <p class="text-[11px] text-slate-500 mt-0.5">Unbilled or dismissed</p>
+      </div>
+      <div class="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center text-rose-600 dark:text-rose-400">
+        <i class="pi pi-exclamation-triangle text-xl"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter & Search Bar -->
+  <div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+    <div class="flex-1 w-full md:w-auto relative">
+      <div class="relative w-full flex items-center">
+        <i class="pi pi-search absolute left-3.5 text-slate-400 z-10 pointer-events-none text-sm"></i>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="searchTerm"
+          (input)="onSearchChange()"
+          placeholder="Search by plan name, order ID, or payment reference..."
+          style="padding-left: 2.5rem !important;"
+          class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white py-2 focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+      <label class="text-xs font-semibold text-slate-500 whitespace-nowrap">Filter Status:</label>
+      <p-dropdown
+        [options]="statusOptions"
+        [(ngModel)]="selectedStatus"
+        (onChange)="onStatusChange()"
+        optionLabel="label"
+        optionValue="value"
+        styleClass="p-inputtext-sm w-48"
+      ></p-dropdown>
+    </div>
+  </div>
+
+  <!-- Transactions Table with Fixed Layout & Uniform Row Heights -->
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+    <p-table
+      [value]="filteredHistory"
+      [rows]="10"
+      [paginator]="true"
+      [loading]="loading"
+      styleClass="p-datatable-sm"
+      [tableStyle]="{ 'min-width': '55rem' }"
+    >
+      <ng-template pTemplate="header">
+        <tr class="bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
+          <th style="width: 14%;" class="py-3.5 px-4">Date & Time</th>
+          <th style="width: 22%;" class="py-3.5 px-4">Plan Snapshot</th>
+          <th style="width: 13%;" class="py-3.5 px-4">Minutes</th>
+          <th style="width: 13%;" class="py-3.5 px-4">Amount Paid</th>
+          <th style="width: 15%;" class="py-3.5 px-4">Order / Payment ID</th>
+          <th style="width: 13%;" class="py-3.5 px-4">Status</th>
+          <th style="width: 10%;" class="py-3.5 px-4 text-right">Tax Invoice</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-item>
+        <tr class="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors h-[68px]">
+          <!-- Date & Time (Uniform 2 lines) -->
+          <td class="py-2.5 px-4 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap align-middle">
+            <div class="font-medium text-slate-900 dark:text-white leading-snug">{{ item.created_at | date:'mediumDate' }}</div>
+            <div class="text-[11px] text-slate-400 leading-snug">{{ item.created_at | date:'shortTime' }}</div>
+          </td>
+
+          <!-- Plan Name (Uniform 2 lines) -->
+          <td class="py-2.5 px-4 align-middle">
+            <div class="font-semibold text-sm text-slate-900 dark:text-white truncate max-w-[200px] leading-snug" [pTooltip]="item.plan_name_snapshot">
+              {{ item.plan_name_snapshot }}
+            </div>
+            <div *ngIf="item.expires_at" class="text-[11px] text-slate-400 leading-snug">
+              Valid until {{ item.expires_at | date:'mediumDate' }}
+            </div>
+            <div *ngIf="!item.expires_at && item.status === 'pending'" class="text-[11px] text-amber-600 dark:text-amber-400 leading-snug">
+              Queued: Activates on queue turn
+            </div>
+            <div *ngIf="!item.expires_at && item.status === 'failed'" class="text-[11px] text-rose-500 leading-snug">
+              Uncompleted order attempt
+            </div>
+            <div *ngIf="!item.expires_at && item.status !== 'pending' && item.status !== 'failed'" class="text-[11px] text-slate-400 leading-snug">
+              Standard Talktime Recharge
+            </div>
+          </td>
+
+          <!-- Minutes -->
+          <td class="py-2.5 px-4 align-middle">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 whitespace-nowrap">
+              <i class="pi pi-phone mr-1 text-[10px]"></i>
+              {{ item.purchased_minutes | number:'1.0-0' }} mins
+            </span>
+          </td>
+
+          <!-- Amount Paid -->
+          <td class="py-2.5 px-4 font-bold text-sm text-slate-900 dark:text-white whitespace-nowrap align-middle">
+            ₹{{ item.price_paid | number:'1.0-2' }}
+          </td>
+
+          <!-- Order / Reference ID -->
+          <td class="py-2.5 px-4 font-mono text-xs text-slate-600 dark:text-slate-400 align-middle">
+            <div *ngIf="item.payment_reference" class="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium">
+              <span class="truncate max-w-[110px]" [pTooltip]="item.payment_reference">{{ item.payment_reference }}</span>
+              <button
+                type="button"
+                class="text-slate-400 hover:text-indigo-600 transition-colors shrink-0"
+                (click)="copyToClipboard(item.payment_reference)"
+                pTooltip="Copy Reference"
+              >
+                <i class="pi pi-copy text-[11px]"></i>
+              </button>
+            </div>
+            <div *ngIf="!item.payment_reference && item.razorpay_order_id" class="flex items-center gap-1.5 text-slate-500">
+              <span class="truncate max-w-[110px]" [pTooltip]="item.razorpay_order_id">{{ item.razorpay_order_id }}</span>
+              <button
+                type="button"
+                class="text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                (click)="copyToClipboard(item.razorpay_order_id)"
+                pTooltip="Copy Order ID"
+              >
+                <i class="pi pi-copy text-[11px]"></i>
+              </button>
+            </div>
+            <span *ngIf="!item.payment_reference && !item.razorpay_order_id" class="text-slate-400">—</span>
+          </td>
+
+          <!-- Status Badge (Single-line badge with tooltip for error details) -->
+          <td class="py-2.5 px-4 align-middle">
+            <!-- Active / Success -->
+            <span
+              *ngIf="item.status === 'active'"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 whitespace-nowrap"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+              Active (Success)
+            </span>
+
+            <!-- Top-Up Booster Merged (Superseded) -->
+            <span
+              *ngIf="item.status === 'superseded'"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 whitespace-nowrap"
+            >
+              <i class="pi pi-bolt text-emerald-500 mr-1.5 text-[10px]"></i>
+              Top-Up Added (Success)
+            </span>
+
+            <!-- Pending / Queued -->
+            <span
+              *ngIf="item.status === 'pending'"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 whitespace-nowrap"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5"></span>
+              Queued / Pending
+            </span>
+
+            <!-- Failed -->
+            <span
+              *ngIf="item.status === 'failed'"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 cursor-help whitespace-nowrap"
+              [pTooltip]="item.failure_reason || 'Payment was unsuccessful or declined by provider'"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1.5"></span>
+              Failed
+            </span>
+
+            <!-- Cancelled -->
+            <span
+              *ngIf="item.status === 'cancelled'"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300 border border-orange-200 dark:border-orange-800 whitespace-nowrap"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-orange-500 mr-1.5"></span>
+              Cancelled
+            </span>
+
+            <!-- Exhausted -->
+            <span
+              *ngIf="item.status === 'exhausted'"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 whitespace-nowrap"
+            >
+              Exhausted
+            </span>
+
+            <!-- Expired -->
+            <span
+              *ngIf="item.status === 'expired'"
+              class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 whitespace-nowrap"
+            >
+              Expired
+            </span>
+          </td>
+
+          <!-- Invoice Download Action -->
+          <td class="py-2.5 px-4 text-right align-middle">
+            <button
+              *ngIf="item.invoice_url"
+              pButton
+              type="button"
+              label="Download"
+              icon="pi pi-download"
+              class="p-button-outlined p-button-sm p-button-indigo text-xs whitespace-nowrap"
+              (click)="openInvoice(item.invoice_url)"
+              pTooltip="View & Download Official GST Tax Invoice"
+            ></button>
+            <span *ngIf="!item.invoice_url" class="text-slate-400 text-xs font-mono">—</span>
+          </td>
+        </tr>
+      </ng-template>
+
+      <!-- Empty State -->
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7" class="text-center py-12">
+            <div class="flex flex-col items-center justify-center text-slate-400 space-y-2">
+              <i class="pi pi-file text-4xl text-slate-300 dark:text-slate-600"></i>
+              <p class="font-medium text-slate-600 dark:text-slate-300 text-sm">No transaction records found</p>
+              <p class="text-xs text-slate-400 max-w-sm">
+                No billing invoices match your current search or filter criteria. Recharges made through Razorpay or admin allocations will appear here.
+              </p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>

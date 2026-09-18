@@ -1,76 +1,97 @@
-<div class="p-6 space-y-6">
+<div class="p-6 space-y-8">
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-        <i class="pi pi-credit-card text-indigo-600"></i>
-        Billing & Prepaid Recharges
+      <div class="flex items-center gap-2">
+        <span class="px-2.5 py-0.5 bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 text-xs font-semibold rounded-md uppercase tracking-wider">
+          Calling Quota & Storefront
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-1">
+        <i class="pi pi-bolt text-indigo-600"></i>
+        Plans & Talktime Recharges
       </h1>
       <p class="text-slate-500 text-sm mt-1">
-        Manage your calling minute balance, validity period, and recharge plans.
+        Manage active call minutes, review expiration dates, and purchase subscription or top-up booster plans.
       </p>
     </div>
-    <button
-      pButton
-      type="button"
-      label="Recharge Now"
-      icon="pi pi-bolt"
-      class="p-button-primary shadow-md"
-      (click)="openRechargeModal()"
-    ></button>
+    <div class="flex items-center gap-3">
+      <button
+        pButton
+        type="button"
+        label="View Invoices"
+        icon="pi pi-file-pdf"
+        class="p-button-outlined p-button-secondary text-sm"
+        routerLink="/client/billing/invoices"
+      ></button>
+      <button
+        pButton
+        type="button"
+        label="Usage Ledger"
+        icon="pi pi-history"
+        class="p-button-outlined p-button-secondary text-sm"
+        routerLink="/client/billing/usage"
+      ></button>
+    </div>
   </div>
 
   <!-- Loading Skeleton -->
   <div *ngIf="loading" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="p-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse h-40"></div>
-    <div class="p-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse h-40"></div>
-    <div class="p-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 animate-pulse h-40"></div>
+    <div class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 animate-pulse h-44"></div>
+    <div class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 animate-pulse h-44"></div>
+    <div class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 animate-pulse h-44"></div>
   </div>
 
-  <!-- Active Plan Cards -->
+  <!-- Active Balance & Quota Hero Cards -->
   <div *ngIf="!loading" class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <!-- Active Minutes Card -->
-    <div class="p-6 bg-gradient-to-br from-indigo-900 to-indigo-700 text-white rounded-2xl shadow-xl relative overflow-hidden">
-      <div class="flex items-center justify-between">
-        <span class="text-xs uppercase tracking-wider font-semibold text-indigo-200">Active Call Minutes</span>
-        <span
-          class="px-2.5 py-1 rounded-full text-xs font-semibold"
-          [ngClass]="summary?.is_quota_active ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30' : 'bg-red-400/20 text-red-300 border border-red-400/30'"
-        >
-          {{ summary?.is_quota_active ? 'Active' : 'No Quota' }}
-        </span>
-      </div>
-      <div class="mt-4 flex items-baseline gap-2">
-        <span class="text-4xl font-extrabold tracking-tight">{{ summary?.total_remaining_minutes | number:'1.0-0' }}</span>
-        <span class="text-indigo-200 text-sm">/ {{ summary?.active_recharge?.purchased_minutes || 0 }} Mins</span>
+    <!-- Active Minutes Card (Indigo Gradient) -->
+    <div class="p-6 bg-gradient-to-br from-indigo-900 via-indigo-800 to-indigo-700 text-white rounded-2xl shadow-xl relative overflow-hidden flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider font-semibold text-indigo-200">Active Call Balance</span>
+          <span
+            class="px-2.5 py-0.5 rounded-full text-xs font-semibold"
+            [ngClass]="summary?.is_quota_active ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30' : 'bg-red-400/20 text-red-300 border border-red-400/30'"
+          >
+            {{ summary?.is_quota_active ? 'Active Quota' : 'No Active Quota' }}
+          </span>
+        </div>
+        <div class="mt-4 flex items-baseline gap-2">
+          <span class="text-4xl font-extrabold tracking-tight">{{ summary?.total_remaining_minutes | number:'1.0-0' }}</span>
+          <span class="text-indigo-200 text-sm">/ {{ summary?.active_recharge?.purchased_minutes || 0 }} Mins</span>
+        </div>
       </div>
       
-      <!-- Progress Bar -->
+      <!-- Progress Bar & Pulse Note -->
       <div class="mt-4">
-        <div class="w-full bg-indigo-950/50 rounded-full h-2 overflow-hidden">
+        <div class="w-full bg-indigo-950/60 rounded-full h-2 overflow-hidden">
           <div
-            class="bg-indigo-300 h-2 rounded-full transition-all duration-500"
+            class="bg-emerald-400 h-2 rounded-full transition-all duration-500"
             [style.width.%]="summary?.active_recharge ? (100 - calculateUsagePercent(summary!.active_recharge!)) : 0"
           ></div>
         </div>
+        <div class="flex items-center justify-between text-[11px] text-indigo-200 mt-2">
+          <span>Standard 1-minute pulse billing</span>
+          <span *ngIf="summary?.active_recharge">{{ 100 - calculateUsagePercent(summary!.active_recharge!) }}% remaining</span>
+        </div>
       </div>
-      <p class="text-xs text-indigo-200 mt-2">
-        Standard 1-minute pulse billing with real-time minute reservation.
-      </p>
     </div>
 
     <!-- Active Plan & Validity Card -->
     <div class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
       <div>
         <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
-          <span>Current Active Plan</span>
+          <span>Current Subscription Plan</span>
           <i class="pi pi-calendar text-indigo-500"></i>
         </div>
         <h3 class="text-xl font-bold text-slate-900 dark:text-white mt-2">
           {{ summary?.active_recharge?.plan_name_snapshot || 'No Active Plan' }}
         </h3>
         <p *ngIf="summary?.active_recharge?.expires_at" class="text-sm text-slate-600 dark:text-slate-300 mt-1">
-          Valid until <strong class="text-slate-900 dark:text-white">{{ summary?.active_recharge?.expires_at | date:'medium' }}</strong>
+          Valid until <strong class="text-slate-900 dark:text-white">{{ summary?.active_recharge?.expires_at | date:'mediumDate' }}</strong>
+        </p>
+        <p *ngIf="!summary?.active_recharge?.expires_at" class="text-xs text-slate-400 mt-1">
+          Choose a subscription or top-up plan below to enable outbound calling.
         </p>
       </div>
       <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
@@ -91,323 +112,201 @@
         <h3 class="text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
           {{ summary?.pending_recharges?.length || 0 }}
         </h3>
-        <p class="text-sm text-slate-500 mt-1">
-          Recharges queued as pending activate automatically when the current plan expires.
-        </p>
-      </div>
-      <div *ngIf="summary?.pending_recharges?.length" class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
-        <span class="text-xs font-medium text-amber-600 dark:text-amber-400">
-          Next queued: {{ summary?.pending_recharges?.[0]?.plan_name_snapshot }}
-        </span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Available Subscription Plans Section -->
-  <div *ngIf="subscriptionPlans.length" class="mt-8">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <i class="pi pi-shield text-indigo-600"></i>
-          Subscription Plans
-        </h2>
-        <p class="text-xs text-slate-500">
-          Standard and custom monthly/yearly subscription plans with full validity periods.
-        </p>
-      </div>
-    </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div
-        *ngFor="let plan of subscriptionPlans"
-        class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all duration-200 shadow-sm flex flex-col justify-between relative group"
-      >
-        <span
-          *ngIf="plan.plan_type === 'custom'"
-          class="absolute -top-3 right-6 px-3 py-1 bg-purple-600 text-white text-xs font-bold rounded-full uppercase tracking-wider"
-        >
-          Custom Plan
-        </span>
-        <div>
-          <h3 class="text-xl font-bold text-slate-900 dark:text-white">{{ plan.name }}</h3>
-          <p class="text-xs text-slate-500 mt-1">{{ plan.description || 'Prepaid talktime recharge' }}</p>
-
-          <div class="my-6">
-            <span class="text-3xl font-extrabold text-slate-900 dark:text-white">₹{{ plan.price | number }}</span>
-            <span class="text-xs text-slate-500 ml-1">(~₹{{ plan.rate_per_minute }}/min)</span>
-          </div>
-
-          <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-            <li class="flex items-center gap-2">
-              <i class="pi pi-check-circle text-emerald-500"></i>
-              <strong>{{ plan.included_minutes | number }}</strong> Minutes Included
-            </li>
-            <li class="flex items-center gap-2">
-              <i class="pi pi-check-circle text-emerald-500"></i>
-              <strong>{{ plan.validity_days }}</strong> Days Validity
-            </li>
-            <li class="flex items-center gap-2">
-              <i class="pi pi-check-circle text-emerald-500"></i>
-              Exact float second deduction
-            </li>
-          </ul>
-        </div>
-
-        <button
-          pButton
-          type="button"
-          label="Recharge Now"
-          icon="pi pi-bolt"
-          class="p-button-outlined p-button-indigo w-full mt-6"
-          (click)="confirmRecharge(plan)"
-        ></button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Minute Top-Up Booster Packs Section -->
-  <div *ngIf="topupPlans.length" class="mt-8">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <i class="pi pi-bolt text-amber-500"></i>
-          Minute Top-Up Booster Packs
-        </h2>
-        <p class="text-xs text-slate-500">
-          Add-on minute packs that merge into your current active subscription and expire on your active plan's expiry date.
-        </p>
-      </div>
-    </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <div
-        *ngFor="let plan of topupPlans"
-        class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-amber-200 dark:border-amber-900/60 hover:border-amber-500 transition-all duration-200 shadow-sm flex flex-col justify-between relative group"
-      >
-        <span class="absolute -top-3 right-6 px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-full uppercase tracking-wider">
-          ⚡ Top-Up Pack
-        </span>
-        <div>
-          <h3 class="text-xl font-bold text-slate-900 dark:text-white">{{ plan.name }}</h3>
-          <p class="text-xs text-slate-500 mt-1">{{ plan.description || 'Instant add-on minute booster' }}</p>
-
-          <div class="my-6">
-            <span class="text-3xl font-extrabold text-slate-900 dark:text-white">₹{{ plan.price | number }}</span>
-            <span class="text-xs text-slate-500 ml-1">(~₹{{ plan.rate_per_minute }}/min)</span>
-          </div>
-
-          <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-            <li class="flex items-center gap-2">
-              <i class="pi pi-plus-circle text-amber-500 font-bold"></i>
-              <strong>+{{ plan.included_minutes | number }}</strong> Add-on Minutes
-            </li>
-            <li class="flex items-center gap-2">
-              <i class="pi pi-calendar text-indigo-500"></i>
-              <span *ngIf="hasActiveUnexpiredPlan()">
-                Valid until <strong>{{ summary?.active_recharge?.expires_at | date:'mediumDate' }}</strong>
-              </span>
-              <span *ngIf="!hasActiveUnexpiredPlan()" class="text-slate-400">
-                Inherits active subscription expiry
-              </span>
-            </li>
-            <li class="flex items-center gap-2">
-              <i class="pi pi-check-circle text-emerald-500"></i>
-              Zero setup & immediate activation
-            </li>
-          </ul>
-        </div>
-
-        <button
-          *ngIf="hasActiveUnexpiredPlan()"
-          pButton
-          type="button"
-          label="Buy Top-Up"
-          icon="pi pi-bolt"
-          class="p-button-outlined p-button-help w-full mt-6"
-          (click)="confirmRecharge(plan)"
-        ></button>
-        <button
-          *ngIf="!hasActiveUnexpiredPlan()"
-          pButton
-          type="button"
-          label="Requires Active Plan"
-          icon="pi pi-lock"
-          class="p-button-outlined p-button-secondary w-full mt-6 opacity-60 cursor-not-allowed"
-          [disabled]="true"
-          pTooltip="Top-up booster packs require an active subscription plan. Please purchase a monthly or yearly plan first."
-        ></button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Payment & Invoice History Section (Success, Failures, and Invoices) -->
-  <div class="mt-8">
-    <div class="flex items-center justify-between mb-4">
-      <div>
-        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <i class="pi pi-history text-indigo-600"></i>
-          Payment & Recharge Transaction History
-        </h2>
         <p class="text-xs text-slate-500 mt-1">
-          Complete ledger of all recharge transactions, success/failure attempts, and downloadable tax invoices.
+          Pending recharges activate automatically upon expiry of your current plan.
         </p>
       </div>
-      <button
-        pButton
-        type="button"
-        icon="pi pi-refresh"
-        class="p-button-text p-button-sm text-slate-600 dark:text-slate-400"
-        (click)="loadPaymentHistory()"
-        pTooltip="Refresh history"
-      ></button>
-    </div>
-
-    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
-      <p-table [value]="paymentHistory" [rows]="10" [paginator]="true" [loading]="paymentHistoryLoading" styleClass="p-datatable-sm">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Date & Time</th>
-            <th>Plan Name</th>
-            <th>Minutes</th>
-            <th>Amount Paid</th>
-            <th>Order / Payment ID</th>
-            <th>Status</th>
-            <th class="text-right">Invoice</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-item>
-          <tr>
-            <td class="text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
-              {{ item.created_at | date:'medium' }}
-            </td>
-            <td class="font-semibold text-slate-900 dark:text-white">
-              {{ item.plan_name_snapshot }}
-            </td>
-            <td>
-              <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                {{ item.purchased_minutes | number:'1.0-0' }} Mins
-              </span>
-            </td>
-            <td class="font-extrabold text-slate-900 dark:text-white">
-              ₹{{ item.price_paid | number:'1.0-2' }}
-            </td>
-            <td class="font-mono text-xs text-slate-500">
-              <span *ngIf="item.payment_reference" class="text-indigo-600 dark:text-indigo-400 font-medium">
-                {{ item.payment_reference }}
-              </span>
-              <span *ngIf="!item.payment_reference && item.razorpay_order_id">
-                {{ item.razorpay_order_id }}
-              </span>
-              <span *ngIf="!item.payment_reference && !item.razorpay_order_id" class="text-slate-400">
-                —
-              </span>
-            </td>
-            <td>
-              <!-- Active / Success -->
-              <span
-                *ngIf="item.status === 'active'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-              >
-                ● Success (Active)
-              </span>
-              <!-- Pending / Queued -->
-              <span
-                *ngIf="item.status === 'pending'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-              >
-                ● Queued / Pending
-              </span>
-              <!-- Failed -->
-              <span
-                *ngIf="item.status === 'failed'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800"
-                [pTooltip]="item.failure_reason || 'Payment failed'"
-              >
-                ● Failed
-              </span>
-              <!-- Cancelled -->
-              <span
-                *ngIf="item.status === 'cancelled'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800"
-              >
-                ● Cancelled
-              </span>
-              <!-- Exhausted -->
-              <span
-                *ngIf="item.status === 'exhausted'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-              >
-                Exhausted
-              </span>
-              <!-- Expired -->
-              <span
-                *ngIf="item.status === 'expired'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-              >
-                Expired
-              </span>
-              <!-- Failure reason snippet if failed -->
-              <div *ngIf="item.status === 'failed' && item.failure_reason" class="text-[10px] text-red-500 truncate max-w-xs mt-0.5">
-                {{ item.failure_reason }}
-              </div>
-            </td>
-            <td class="text-right">
-              <button
-                *ngIf="item.invoice_url"
-                pButton
-                type="button"
-                label="Invoice"
-                icon="pi pi-file-pdf"
-                class="p-button-outlined p-button-sm p-button-secondary text-xs"
-                (click)="openInvoice(item.invoice_url)"
-                pTooltip="Download / View Tax Invoice"
-              ></button>
-              <span *ngIf="!item.invoice_url" class="text-slate-400 text-xs">—</span>
-            </td>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="emptymessage">
-          <tr>
-            <td colspan="7" class="text-center py-6 text-slate-500">
-              No transactions recorded yet. Click "Recharge Now" to purchase talktime minutes.
-            </td>
-          </tr>
-        </ng-template>
-      </p-table>
+      <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+        <span *ngIf="summary?.pending_recharges?.length" class="text-xs font-medium text-amber-600 dark:text-amber-400">
+          Next up: {{ summary?.pending_recharges?.[0]?.plan_name_snapshot }}
+        </span>
+        <span *ngIf="!summary?.pending_recharges?.length" class="text-xs text-slate-400">
+          No queue. Extra recharges will auto-queue.
+        </span>
+      </div>
     </div>
   </div>
 
-  <!-- Minute Usage History Table -->
+  <!-- Segmented Plan Switcher -->
   <div class="mt-8">
-    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">
-      Recent Call Minute Usage Ledger
-    </h2>
-    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
-      <p-table [value]="usageLogs" [rows]="10" [paginator]="true" styleClass="p-datatable-sm">
-        <ng-template pTemplate="header">
-          <tr>
-            <th>Date & Time</th>
-            <th>Call SID</th>
-            <th>Duration (Sec)</th>
-            <th>Mins Deducted</th>
-            <th>Prev Balance</th>
-            <th>New Balance</th>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-log>
-          <tr>
-            <td class="text-xs text-slate-600 dark:text-slate-300">{{ log.deducted_at | date:'medium' }}</td>
-            <td class="font-mono text-xs text-indigo-600 dark:text-indigo-400">{{ log.call_sid }}</td>
-            <td>{{ log.call_duration_seconds }}s</td>
-            <td class="font-bold text-red-600 dark:text-red-400">-{{ log.minutes_deducted | number:'1.0-2' }} m</td>
-            <td class="text-xs text-slate-500">{{ log.previous_balance | number:'1.0-2' }} m</td>
-            <td class="font-bold text-slate-900 dark:text-white">{{ log.new_balance | number:'1.0-2' }} m</td>
-          </tr>
-        </ng-template>
-        <ng-template pTemplate="emptymessage">
-          <tr>
-            <td colspan="6" class="text-center py-6 text-slate-500">No call minute deductions recorded yet.</td>
-          </tr>
-        </ng-template>
-      </p-table>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-700 pb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="pi pi-shopping-cart text-indigo-600"></i>
+          Choose a Recharge Package
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Select standard monthly plans or purchase instant add-on minute top-ups.
+        </p>
+      </div>
+
+      <!-- Segmented Buttons -->
+      <div class="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+        <button
+          type="button"
+          (click)="activePlanTab = 'subscriptions'"
+          class="px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2"
+          [ngClass]="activePlanTab === 'subscriptions' ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'"
+        >
+          <i class="pi pi-shield"></i>
+          Subscription Plans ({{ subscriptionPlans.length }})
+        </button>
+        <button
+          type="button"
+          (click)="activePlanTab = 'topups'"
+          class="px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2"
+          [ngClass]="activePlanTab === 'topups' ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-300 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'"
+        >
+          <i class="pi pi-bolt"></i>
+          Top-Up Boosters ({{ topupPlans.length }})
+        </button>
+      </div>
+    </div>
+
+    <!-- TAB 1: Subscription Plans -->
+    <div *ngIf="activePlanTab === 'subscriptions'" class="mt-6">
+      <div *ngIf="!subscriptionPlans.length" class="p-8 text-center bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-500 text-sm">
+        No subscription plans currently published. Contact your administrator.
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          *ngFor="let plan of subscriptionPlans"
+          class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 transition-all duration-200 shadow-sm flex flex-col justify-between relative group"
+        >
+          <span
+            *ngIf="plan.plan_type === 'custom'"
+            class="absolute -top-3 right-6 px-3 py-1 bg-purple-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wider shadow-sm"
+          >
+            Custom Plan
+          </span>
+
+          <div>
+            <h3 class="text-xl font-bold text-slate-900 dark:text-white">{{ plan.name }}</h3>
+            <p class="text-xs text-slate-500 mt-1 min-h-[32px]">{{ plan.description || 'Prepaid monthly talktime package' }}</p>
+
+            <div class="my-6">
+              <span class="text-3xl font-extrabold text-slate-900 dark:text-white">₹{{ plan.price | number }}</span>
+              <span class="text-xs text-slate-500 ml-1.5">(~₹{{ plan.rate_per_minute }}/min)</span>
+            </div>
+
+            <ul class="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
+              <li class="flex items-center gap-2">
+                <i class="pi pi-check-circle text-emerald-500"></i>
+                <span><strong>{{ plan.included_minutes | number }}</strong> Minutes Included</span>
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="pi pi-check-circle text-emerald-500"></i>
+                <span><strong>{{ plan.validity_days }}</strong> Days Validity</span>
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="pi pi-check-circle text-emerald-500"></i>
+                <span>1-minute pulse deduction</span>
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="pi pi-check-circle text-emerald-500"></i>
+                <span>Auto-generated GST Tax Invoice</span>
+              </li>
+            </ul>
+          </div>
+
+          <button
+            pButton
+            type="button"
+            label="Recharge Now"
+            icon="pi pi-bolt"
+            class="p-button-primary w-full mt-6"
+            (click)="confirmRecharge(plan)"
+          ></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Minute Top-Up Booster Packs -->
+    <div *ngIf="activePlanTab === 'topups'" class="mt-6">
+      <div *ngIf="!topupPlans.length" class="p-8 text-center bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-500 text-sm">
+        No booster top-up packs available at this time.
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          *ngFor="let plan of topupPlans"
+          class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-amber-200 dark:border-amber-900/60 hover:border-amber-500 transition-all duration-200 shadow-sm flex flex-col justify-between relative group"
+        >
+          <span class="absolute -top-3 right-6 px-3 py-1 bg-amber-500 text-white text-[10px] font-bold rounded-full uppercase tracking-wider shadow-sm">
+            ⚡ Top-Up Booster
+          </span>
+
+          <div>
+            <h3 class="text-xl font-bold text-slate-900 dark:text-white">{{ plan.name }}</h3>
+            <p class="text-xs text-slate-500 mt-1 min-h-[32px]">{{ plan.description || 'Instant add-on minute booster' }}</p>
+
+            <div class="my-6">
+              <span class="text-3xl font-extrabold text-slate-900 dark:text-white">₹{{ plan.price | number }}</span>
+              <span class="text-xs text-slate-500 ml-1.5">(~₹{{ plan.rate_per_minute }}/min)</span>
+            </div>
+
+            <ul class="space-y-2.5 text-sm text-slate-600 dark:text-slate-300">
+              <li class="flex items-center gap-2">
+                <i class="pi pi-plus-circle text-amber-500 font-bold"></i>
+                <span><strong>+{{ plan.included_minutes | number }}</strong> Add-on Minutes</span>
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="pi pi-calendar text-indigo-500"></i>
+                <span *ngIf="hasActiveUnexpiredPlan()">
+                  Valid until <strong>{{ summary?.active_recharge?.expires_at | date:'mediumDate' }}</strong>
+                </span>
+                <span *ngIf="!hasActiveUnexpiredPlan()" class="text-slate-400">
+                  Inherits active subscription expiry
+                </span>
+              </li>
+              <li class="flex items-center gap-2">
+                <i class="pi pi-check-circle text-emerald-500"></i>
+                <span>Instant balance credit</span>
+              </li>
+            </ul>
+          </div>
+
+          <button
+            *ngIf="hasActiveUnexpiredPlan()"
+            pButton
+            type="button"
+            label="Buy Booster Top-Up"
+            icon="pi pi-bolt"
+            class="p-button-warning w-full mt-6"
+            (click)="confirmRecharge(plan)"
+          ></button>
+          <button
+            *ngIf="!hasActiveUnexpiredPlan()"
+            pButton
+            type="button"
+            label="Requires Active Plan"
+            icon="pi pi-lock"
+            class="p-button-outlined p-button-secondary w-full mt-6 opacity-60 cursor-not-allowed"
+            [disabled]="true"
+            pTooltip="Top-up booster packs require an active subscription plan. Please purchase a monthly plan first."
+          ></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Information & Billing Policies Banner -->
+  <div class="mt-8 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+    <div class="flex items-start gap-4">
+      <div class="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+        <i class="pi pi-info-circle text-lg"></i>
+      </div>
+      <div class="space-y-1">
+        <h4 class="text-sm font-bold text-slate-900 dark:text-white">How Prepaid Calling Billing Works</h4>
+        <p class="text-xs text-slate-500 leading-relaxed">
+          • Minutes are deducted in real-time with 1-minute standard pulse reservation during live AI phone calls.<br>
+          • Add-on Top-Up booster packs immediately add minutes to your current quota and retain your active subscription expiration date.<br>
+          • Invoices and detailed call deduction records are available in the 
+          <a routerLink="/client/billing/invoices" class="text-indigo-600 font-semibold hover:underline">Invoices & Payments</a> and 
+          <a routerLink="/client/billing/usage" class="text-indigo-600 font-semibold hover:underline">Minute Usage Ledger</a> sections.
+        </p>
+      </div>
     </div>
   </div>
 </div>
