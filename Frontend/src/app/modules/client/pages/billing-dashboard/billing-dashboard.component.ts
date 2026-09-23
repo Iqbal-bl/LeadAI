@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
-import { SharedModule } from '../../../shared/shared.module';
-import { BillingService } from '../../../services/billing.service';
+import { SharedModule } from '../../../../shared/shared.module';
+import { BillingService } from '../../../../services/billing.service';
 import {
   BillingSummary,
   ChannelAddonOrderResponse,
@@ -8,10 +8,10 @@ import {
   ClientRecharge,
   RechargePlanTemplate,
   UsageLog,
-} from '../../../models/billing.models';
+} from '../../../../models/billing.models';
 import { MessageService } from 'primeng/api';
-import { environment } from '../../../../environments/environment';
-import { AuthService } from '../../../services/auth.service';
+import { environment } from '../../../../../environments/environment';
+import { AuthService } from '../../../../services/auth.service';
 
 @Component({
   selector: 'app-billing-dashboard',
