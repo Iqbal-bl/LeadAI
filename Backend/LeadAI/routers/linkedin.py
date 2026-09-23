@@ -347,6 +347,11 @@ async def linkedin_send_invitations(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     # Retrieve credentials from database
@@ -423,9 +428,13 @@ async def trigger_linkedin_sync(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
-    from ..services import jobs
+    from ..services import jobs, billing as billing_svc
     _, company_id = scope
     
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     # Enqueue a job to run immediately for this company
     jobs.enqueue(
         db, 

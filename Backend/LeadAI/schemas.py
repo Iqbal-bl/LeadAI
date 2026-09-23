@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer
+from pydantic import BaseModel, EmailStr, Field, field_serializer, model_validator
 
 # ===========================================================================
 # generic
@@ -887,21 +887,33 @@ class MemberListOut(BaseModel):
 
 class RechargePlanTemplateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    plan_type: str = Field(default="standard", description="standard or custom")
+    plan_type: str = Field(default="standard", description="standard, custom, or topup")
+    plan_category: str = Field(default="voice_standard", description="voice_standard, voice_topup, channel_addon")
+    feature_key: str | None = None
     target_client_id: str | None = None
+    target_client_ids: list[str] | None = None
+    addon_channels: list[str] | None = None
     included_minutes: float = Field(gt=0)
-    validity_days: int = Field(gt=0)
+    validity_days: int | None = Field(default=30, ge=0)
     price: float = Field(ge=0)
     rate_per_minute: float = Field(default=4.0)
+    auto_pay_by_default: bool = True
     description: str | None = None
 
 
 class RechargePlanTemplateUpdate(BaseModel):
     name: str | None = None
+    plan_type: str | None = None
+    plan_category: str | None = None
+    feature_key: str | None = None
+    target_client_id: str | None = None
+    target_client_ids: list[str] | None = None
+    addon_channels: list[str] | None = None
     included_minutes: float | None = None
     validity_days: int | None = None
     price: float | None = None
     rate_per_minute: float | None = None
+    auto_pay_by_default: bool | None = None
     is_active: bool | None = None
     description: str | None = None
 
@@ -910,11 +922,17 @@ class RechargePlanTemplateOut(BaseModel):
     id: str
     name: str
     plan_type: str
+    plan_category: str = "voice_standard"
+    feature_key: str | None = None
     target_client_id: str | None = None
+    target_client_ids: list[str] | None = None
+    addon_channels: list[str] | None = None
     included_minutes: float
-    validity_days: int
+    validity_days: int | None = None
     price: float
     rate_per_minute: float
+    razorpay_plan_id: str | None = None
+    auto_pay_by_default: bool = True
     is_active: bool
     description: str | None = None
     created_at: datetime | None = None
@@ -945,6 +963,7 @@ class ClientRechargeOut(BaseModel):
     plan_name_snapshot: str
     purchased_minutes: float
     remaining_minutes: float
+    rollover_minutes_carried: float = 0.0
     validity_days_snapshot: int
     price_paid: float
     recharged_at: datetime | None = None
@@ -952,6 +971,11 @@ class ClientRechargeOut(BaseModel):
     status: str
     payment_reference: str | None = None
     razorpay_order_id: str | None = None
+    razorpay_subscription_id: str | None = None
+    is_auto_renew: bool = False
+    cancel_at_period_end: bool = False
+    active_channels: list[str] | None = None
+    next_cycle_channels: list[str] | None = None
     invoice_url: str | None = None
     invoice_id: str | None = None
     failure_reason: str | None = None
@@ -964,6 +988,66 @@ class ClientRechargeOut(BaseModel):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
+
+
+class SubscriptionCancelOut(BaseModel):
+    subscription_id: str
+    status: str
+    cancel_at_cycle_end: bool = True
+    expires_at: str | None = None
+    message: str
+
+
+class CustomBundleSubscriptionCreate(BaseModel):
+    include_voice: bool = True
+    voice_minutes: float = Field(default=500.0, ge=0)
+    channels: list[str] = Field(default_factory=list, description="whatsapp, instagram, facebook, linkedin")
+    billing_cycle: str = Field(default="monthly", description="monthly or yearly")
+
+
+class ChannelAddonQuoteOut(BaseModel):
+    channel: str
+    channel_name: str
+    monthly_price: float
+    total_cycle_days: int
+    remaining_days: int
+    prorated_price: float
+    active_plan_expires_at: datetime | None = None
+    next_cycle_bundle_price: float
+    auto_pay_synced: bool = True
+
+    @field_serializer('active_plan_expires_at')
+    def serialize_dates(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class ChannelAddonOrderCreate(BaseModel):
+    channel: str = Field(description="whatsapp, instagram, facebook, linkedin")
+
+
+class ChannelAddonVerifyIn(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    channel: str
+
+
+class ChannelCancelIn(BaseModel):
+    channel: str = Field(description="whatsapp, instagram, facebook, linkedin")
+
+
+class ChannelCancelOut(BaseModel):
+    channel: str
+    status: str
+    active_until: str | None = None
+    active_channels: list[str] = Field(default_factory=list)
+    next_cycle_channels: list[str] = Field(default_factory=list)
+    next_cycle_bundle_price: float
+    message: str
 
 
 class RazorpayOrderCreate(BaseModel):
@@ -980,6 +1064,20 @@ class RazorpayOrderOut(BaseModel):
     included_minutes: float
 
 
+class RazorpaySubscriptionCreate(BaseModel):
+    plan_template_id: str
+
+
+class RazorpaySubscriptionOut(BaseModel):
+    subscription_id: str
+    key_id: str
+    plan_id: str
+    plan_name: str
+    amount: int
+    currency: str = "INR"
+    included_minutes: float
+
+
 class RazorpayPaymentVerifyIn(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
@@ -987,10 +1085,30 @@ class RazorpayPaymentVerifyIn(BaseModel):
     plan_template_id: str
 
 
+class RazorpaySubscriptionVerifyIn(BaseModel):
+    razorpay_payment_id: str
+    razorpay_subscription_id: str
+    razorpay_signature: str
+    plan_template_id: str
+
+
 class RazorpayPaymentFailureIn(BaseModel):
-    razorpay_order_id: str
+    order_id: str | None = None
+    razorpay_order_id: str | None = None
+    subscription_id: str | None = None
+    razorpay_subscription_id: str | None = None
     error_code: str | None = None
     error_description: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def unify_failure_ids(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("razorpay_order_id") and data.get("order_id"):
+                data["razorpay_order_id"] = data["order_id"]
+            if not data.get("razorpay_subscription_id") and data.get("subscription_id"):
+                data["razorpay_subscription_id"] = data["subscription_id"]
+        return data
 
 
 class UsageLogOut(BaseModel):
@@ -1003,6 +1121,7 @@ class UsageLogOut(BaseModel):
     minutes_deducted: float
     previous_balance: float
     new_balance: float
+    recording_url: str | None = None
     deducted_at: datetime | None = None
 
     @field_serializer('deducted_at')

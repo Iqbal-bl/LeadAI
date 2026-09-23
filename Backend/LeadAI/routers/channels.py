@@ -45,7 +45,7 @@ from ..schemas_ext import (
 from ..schemas import Ok
 from ..security import encrypt_pii
 from ..serializers_ext import channel_account_out
-from ..services import cache, channels as ch
+from ..services import cache, channels as ch, billing as billing_svc
 from ..services import instagram_login as ig_login
 from ..services import facebook_login as fb_login
 
@@ -274,6 +274,11 @@ def test_send(
     """
     principal, client_id = scope
     row = _get(db, account_id, client_id)
+
+    allowed, reason = billing_svc.check_channel_access(db, client_id, row.Channel)
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     try:
         if payload.template_name:
             message_id = ch.send_template(

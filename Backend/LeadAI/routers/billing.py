@@ -18,6 +18,8 @@ from ..models import (
     PLAN_TYPE_STANDARD,
     RECHARGE_STATUS_ACTIVE,
     RECHARGE_STATUS_PENDING,
+    RECHARGE_STATUS_FAILED,
+    RECHARGE_STATUS_CANCELLED,
     LeadClientRecharge,
     LeadRechargePlanTemplate,
     LeadUsageLog,
@@ -25,16 +27,26 @@ from ..models import (
 from ..rbac import Principal, require, scoped
 from ..schemas import (
     BillingSummaryOut,
+    ChannelAddonOrderCreate,
+    ChannelAddonQuoteOut,
+    ChannelAddonVerifyIn,
+    ChannelCancelIn,
+    ChannelCancelOut,
     ClientRechargeAllocate,
     ClientRechargeOut,
+    CustomBundleSubscriptionCreate,
     Ok,
     RazorpayOrderCreate,
     RazorpayOrderOut,
     RazorpayPaymentFailureIn,
     RazorpayPaymentVerifyIn,
+    RazorpaySubscriptionCreate,
+    RazorpaySubscriptionOut,
+    RazorpaySubscriptionVerifyIn,
     RechargePlanTemplateCreate,
     RechargePlanTemplateOut,
     RechargePlanTemplateUpdate,
+    SubscriptionCancelOut,
     UsageLogOut,
 )
 from ..services import billing as billing_svc
@@ -50,11 +62,17 @@ def _serialize_template(t: LeadRechargePlanTemplate) -> RechargePlanTemplateOut:
         id=t.Id,
         name=t.Name,
         plan_type=t.PlanType,
+        plan_category=getattr(t, "PlanCategory", "voice_standard") or "voice_standard",
+        feature_key=getattr(t, "FeatureKey", None),
         target_client_id=t.TargetClientId,
+        target_client_ids=getattr(t, "TargetClientIds", None),
+        addon_channels=getattr(t, "AddonChannels", None),
         included_minutes=t.IncludedMinutes,
         validity_days=t.ValidityDays,
         price=t.Price,
         rate_per_minute=t.RatePerMinute,
+        razorpay_plan_id=getattr(t, "RazorpayPlanId", None),
+        auto_pay_by_default=bool(getattr(t, "AutoPayByDefault", True)),
         is_active=t.IsActive,
         description=t.Description,
         created_at=t.CreatedAt,
@@ -69,6 +87,7 @@ def _serialize_recharge(r: LeadClientRecharge) -> ClientRechargeOut:
         plan_name_snapshot=r.PlanNameSnapshot,
         purchased_minutes=r.PurchasedMinutes,
         remaining_minutes=r.RemainingMinutes,
+        rollover_minutes_carried=float(getattr(r, "RolloverMinutesCarried", 0.0) or 0.0),
         validity_days_snapshot=r.ValidityDaysSnapshot,
         price_paid=r.PricePaid,
         recharged_at=r.RechargedAt,
@@ -76,11 +95,17 @@ def _serialize_recharge(r: LeadClientRecharge) -> ClientRechargeOut:
         status=r.Status,
         payment_reference=r.PaymentReference,
         razorpay_order_id=r.RazorpayOrderId,
+        razorpay_subscription_id=getattr(r, "RazorpaySubscriptionId", None),
+        is_auto_renew=bool(getattr(r, "IsAutoRenew", False)),
+        cancel_at_period_end=bool(getattr(r, "CancelAtPeriodEnd", False)),
+        active_channels=getattr(r, "ActiveChannels", None) or [c for c in ("whatsapp", "instagram", "facebook", "linkedin") if c in (getattr(r, "PlanNameSnapshot", "") or "").lower()],
+        next_cycle_channels=getattr(r, "NextCycleChannels", None) or getattr(r, "ActiveChannels", None) or [c for c in ("whatsapp", "instagram", "facebook", "linkedin") if c in (getattr(r, "PlanNameSnapshot", "") or "").lower()],
         invoice_url=r.InvoiceUrl,
         invoice_id=r.InvoiceId,
         failure_reason=r.FailureReason,
         created_at=r.CreatedAt,
     )
+
 
 
 def _serialize_usage(u: LeadUsageLog) -> UsageLogOut:
@@ -110,23 +135,13 @@ def get_current_plan(
     _, client_id = scope
     active = billing_svc.get_active_recharge(db, client_id)
 
-    pending_rows = (
-        db.query(LeadClientRecharge)
-        .filter(
-            LeadClientRecharge.ClientId == client_id,
-            LeadClientRecharge.Status == RECHARGE_STATUS_PENDING,
-        )
-        .order_by(LeadClientRecharge.CreatedAt.asc())
-        .all()
-    )
-
     has_quota, _, _ = billing_svc.check_call_quota(db, client_id)
     rem_mins = active.RemainingMinutes if active else 0.0
 
     return BillingSummaryOut(
         client_id=client_id,
         active_recharge=_serialize_recharge(active) if active else None,
-        pending_recharges=[_serialize_recharge(p) for p in pending_rows],
+        pending_recharges=[],
         total_remaining_minutes=rem_mins,
         is_quota_active=has_quota,
     )
@@ -140,19 +155,30 @@ def list_available_plans(
     _, client_id = scope
     billing_svc.ensure_default_templates(db)
 
-    # Standard global plans OR custom plans targeted to this client_id
+    # Standard global plans OR custom plans targeted to this client_id (excluding on-the-fly client bundles)
     rows = (
         db.query(LeadRechargePlanTemplate)
         .filter(
             LeadRechargePlanTemplate.IsActive == True,  # noqa: E712
             LeadRechargePlanTemplate.IsDeleted == False,  # noqa: E712
-            (LeadRechargePlanTemplate.TargetClientId == None) | (LeadRechargePlanTemplate.TargetClientId == client_id),  # noqa: E711
+            LeadRechargePlanTemplate.PlanCategory != "client_self_bundle",
+            ~LeadRechargePlanTemplate.Name.like("Custom Bundle (%"),
         )
         .order_by(LeadRechargePlanTemplate.Price.asc())
         .all()
     )
 
-    return [_serialize_template(r) for r in rows]
+    matched = []
+    for t in rows:
+        if not t.TargetClientId and not t.TargetClientIds:
+            matched.append(t)
+        elif t.TargetClientId == client_id:
+            matched.append(t)
+        elif t.TargetClientIds and isinstance(t.TargetClientIds, list) and client_id in t.TargetClientIds:
+            matched.append(t)
+
+    return [_serialize_template(r) for r in matched]
+
 
 
 @router.post("/create-order", response_model=RazorpayOrderOut, summary="Create Razorpay Order for self-recharge")
@@ -200,14 +226,182 @@ def record_failure(
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
+    sub_id = payload.razorpay_subscription_id or payload.subscription_id
+    ord_id = payload.razorpay_order_id or payload.order_id
     billing_svc.record_payment_failure(
         db=db,
         client_id=client_id,
-        order_id=payload.razorpay_order_id,
+        order_id=ord_id,
+        subscription_id=sub_id,
         error_code=payload.error_code,
         error_description=payload.error_description,
     )
     return Ok(message="Failure recorded")
+
+
+@router.post("/create-subscription", response_model=RazorpaySubscriptionOut, summary="Create Razorpay Subscription for auto-renewing recharge")
+def create_subscription(
+    payload: RazorpaySubscriptionCreate,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    try:
+        res = billing_svc.create_razorpay_subscription(
+            db=db,
+            client_id=client_id,
+            plan_template_id=payload.plan_template_id,
+            user_email=principal.email,
+        )
+        return RazorpaySubscriptionOut(**res)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/verify-subscription", response_model=ClientRechargeOut, summary="Verify subscription payment & activate plan")
+def verify_subscription(
+    payload: RazorpaySubscriptionVerifyIn,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    try:
+        recharge = billing_svc.verify_razorpay_subscription_payment(
+            db=db,
+            client_id=client_id,
+            payload=payload.model_dump(),
+            user_email=principal.email,
+        )
+        return _serialize_recharge(recharge)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/cancel-subscription", response_model=SubscriptionCancelOut, summary="Cancel AutoPay mandate at cycle end")
+def cancel_subscription(
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    try:
+        res = billing_svc.cancel_razorpay_subscription(db, client_id)
+        return SubscriptionCancelOut(**res)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/custom-bundle/create-subscription", response_model=RazorpaySubscriptionOut, summary="Build your own custom plan subscription")
+def create_custom_bundle_subscription(
+    payload: CustomBundleSubscriptionCreate,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    try:
+        res = billing_svc.create_custom_bundle_subscription(
+            db=db,
+            client_id=client_id,
+            payload=payload.model_dump(),
+            user_email=principal.email,
+        )
+        return RazorpaySubscriptionOut(**res)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.get("/channel-addon/quote", response_model=ChannelAddonQuoteOut, summary="Get mid-cycle prorated quote for adding a channel")
+def get_channel_addon_quote(
+    channel: str = Query(..., description="whatsapp, instagram, facebook, linkedin"),
+    scope: tuple[Principal, str] = Depends(scoped("billing.read", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    try:
+        quote = billing_svc.get_channel_addon_quote(db=db, client_id=client_id, channel=channel)
+        return ChannelAddonQuoteOut(**quote)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/channel-addon/create-order", summary="Initiate mid-cycle prorated channel add-on payment")
+def create_channel_addon_order(
+    payload: ChannelAddonOrderCreate,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    try:
+        res = billing_svc.create_channel_addon_order(
+            db=db,
+            client_id=client_id,
+            channel=payload.channel,
+            user_email=principal.email,
+        )
+        return res
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/channel-addon/verify-payment", response_model=ClientRechargeOut, summary="Verify payment and activate channel on active plan")
+def verify_channel_addon_payment(
+    payload: ChannelAddonVerifyIn,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    try:
+        recharge = billing_svc.verify_channel_addon_payment(
+            db=db,
+            client_id=client_id,
+            payload=payload.model_dump(),
+            user_email=principal.email,
+        )
+        return _serialize_recharge(recharge)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/cancel-channel", response_model=ChannelCancelOut, summary="Cancel an individual channel add-on at cycle end")
+def cancel_channel_addon(
+    payload: ChannelCancelIn,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    try:
+        res = billing_svc.cancel_channel_for_next_cycle(
+            db=db,
+            client_id=client_id,
+            channel=payload.channel,
+        )
+        return ChannelCancelOut(**res)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
+
+@router.post("/webhook", summary="Razorpay Webhook for subscription auto-renewal events")
+async def razorpay_webhook(
+    request: Request,
+    db: Session = Depends(get_leadai_db),
+):
+    try:
+        raw_body = await request.body()
+        import json
+        event_payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    except Exception:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid JSON payload")
+
+    signature = request.headers.get("X-Razorpay-Signature")
+    try:
+        result = billing_svc.handle_razorpay_webhook(
+            db=db,
+            event_payload=event_payload,
+            signature=signature,
+            raw_body=raw_body,
+        )
+        return result
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
 
 
 @router.get("/payment-history", response_model=list[ClientRechargeOut], summary="List all transaction attempts and recharges with invoice links")
@@ -224,22 +418,64 @@ def get_payment_history(
         .limit(limit)
         .all()
     )
+
+    # Pure read-only query: do not mutate in-flight PENDING or CANCELLED records (Bug #11 fix)
     return [_serialize_recharge(r) for r in rows]
 
 
 @router.get("/invoices/{recharge_id}/download", summary="Download custom invoice PDF")
-def download_invoice(
+async def download_invoice(
     recharge_id: str,
+    request: Request,
+    token: str | None = Query(default=None),
     db: Session = Depends(get_leadai_db),
 ):
-    """Serve the custom PDF invoice for any verified recharge transaction."""
+    """Serve the custom PDF invoice with authentication and tenancy validation."""
     from Domain.models import Client
-    from ..models import LeadClientRecharge
+    from ..models import LeadClientRecharge, LeadUserRole, ROLE_ADMIN
     from ..services import invoice as invoice_svc
+    from token_validation import validate_token_async
 
+    # 1. Resolve auth token from header or query param (for browser tab downloads)
+    auth_header = request.headers.get("Authorization")
+    raw_token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        raw_token = auth_header.replace("Bearer ", "").strip()
+    elif token:
+        raw_token = token.strip()
+
+    if not raw_token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication token required to download invoice")
+
+    # 2. Validate token against identity server
+    claims = await validate_token_async(raw_token)
+    if not claims:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired authentication token")
+
+    caller_email = str(claims.get("sub") or claims.get("email") or claims.get("preferred_username") or "").lower()
+
+    # 3. Locate recharge
     recharge = db.query(LeadClientRecharge).filter(LeadClientRecharge.Id == recharge_id).first()
     if not recharge:
         raise HTTPException(status_code=404, detail="Invoice / Recharge transaction not found.")
+
+    # 4. Enforce tenant ownership / Super Admin access
+    is_admin = db.query(LeadUserRole).filter(
+        LeadUserRole.UserEmail == caller_email,
+        LeadUserRole.Role == ROLE_ADMIN,
+        LeadUserRole.IsActive == True,
+        LeadUserRole.IsDeleted == False,
+    ).first() is not None
+
+    if not is_admin:
+        has_client_access = db.query(LeadUserRole).filter(
+            LeadUserRole.UserEmail == caller_email,
+            LeadUserRole.ClientId == recharge.ClientId,
+            LeadUserRole.IsActive == True,
+            LeadUserRole.IsDeleted == False,
+        ).first() is not None
+        if not has_client_access:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not have permission to access this invoice.")
 
     client = db.query(Client).filter(Client.Id == recharge.ClientId).first()
     html_content = invoice_svc.render_invoice_html(recharge, client)
@@ -253,29 +489,29 @@ def download_invoice(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'inline; filename="{inv_filename}"',
-            "Cache-Control": "public, max-age=3600",
+            "Cache-Control": "private, max-age=3600",
         },
     )
 
 
-@router.post("/recharge", response_model=ClientRechargeOut, summary="Purchase / apply a recharge plan")
+@router.post("/recharge", response_model=ClientRechargeOut, summary="Super Admin: Direct recharge grant to a client")
 def self_recharge(
     payload: ClientRechargeAllocate,
-    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
-    principal, scoped_client_id = scope
-    target_client_id = payload.client_id or scoped_client_id
+    if not payload.client_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "client_id is required for direct recharge allocation")
     try:
         recharge = billing_svc.allocate_recharge(
             db=db,
-            client_id=target_client_id,
+            client_id=payload.client_id,
             template_id=payload.plan_template_id,
             custom_minutes=payload.custom_minutes,
             custom_validity_days=payload.custom_validity_days,
             custom_price=payload.custom_price,
             custom_name=payload.custom_name,
-            payment_ref=payload.payment_reference,
+            payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
             created_by=principal.email,
         )
         return _serialize_recharge(recharge)
@@ -314,6 +550,9 @@ def admin_list_plans(
     query = db.query(LeadRechargePlanTemplate)
     if not include_deleted:
         query = query.filter(LeadRechargePlanTemplate.IsDeleted == False)
+    # Filter out client self-serve dynamic custom bundles from master plan templates
+    query = query.filter(LeadRechargePlanTemplate.PlanCategory != "client_self_bundle")
+    query = query.filter(~LeadRechargePlanTemplate.Name.like("Custom Bundle (%"))
     rows = query.order_by(LeadRechargePlanTemplate.CreatedAt.desc()).all()
     return [_serialize_template(r) for r in rows]
 
@@ -324,10 +563,19 @@ def admin_create_plan(
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
+    target_single = payload.target_client_id.strip() if payload.target_client_id else None
+    if not target_single and payload.target_client_ids:
+        target_single = payload.target_client_ids[0]
+
     template = LeadRechargePlanTemplate(
         Name=payload.name.strip(),
         PlanType=payload.plan_type.strip(),
-        TargetClientId=payload.target_client_id.strip() if payload.target_client_id else None,
+        PlanCategory=getattr(payload, "plan_category", "voice_standard") or "voice_standard",
+        FeatureKey=payload.feature_key.strip() if getattr(payload, "feature_key", None) else None,
+        TargetClientId=target_single,
+        TargetClientIds=payload.target_client_ids,
+        AddonChannels=payload.addon_channels,
+        AutoPayByDefault=getattr(payload, "auto_pay_by_default", True),
         IncludedMinutes=payload.included_minutes,
         ValidityDays=payload.validity_days,
         Price=payload.price,
@@ -364,12 +612,21 @@ def admin_update_plan(
         template.Price = payload.price
     if payload.rate_per_minute is not None:
         template.RatePerMinute = payload.rate_per_minute
+    if payload.target_client_id is not None:
+        template.TargetClientId = payload.target_client_id.strip() if payload.target_client_id else None
+    if payload.target_client_ids is not None:
+        template.TargetClientIds = payload.target_client_ids
+    if payload.addon_channels is not None:
+        template.AddonChannels = payload.addon_channels
+    if payload.auto_pay_by_default is not None:
+        template.AutoPayByDefault = payload.auto_pay_by_default
     if payload.is_active is not None:
         template.IsActive = payload.is_active
     if payload.description is not None:
         template.Description = payload.description.strip()
 
     template.UpdatedBy = principal.email
+
 
     db.add(template)
     db.commit()
@@ -432,14 +689,6 @@ def admin_clients_summary(
     summaries = []
     for client in clients:
         active = billing_svc.get_active_recharge(db, client.Id)
-        pending_rows = (
-            db.query(LeadClientRecharge)
-            .filter(
-                LeadClientRecharge.ClientId == client.Id,
-                LeadClientRecharge.Status == RECHARGE_STATUS_PENDING,
-            )
-            .all()
-        )
         has_quota, _, _ = billing_svc.check_call_quota(db, client.Id)
         rem_mins = active.RemainingMinutes if active else 0.0
 
@@ -447,7 +696,7 @@ def admin_clients_summary(
             BillingSummaryOut(
                 client_id=client.Id,
                 active_recharge=_serialize_recharge(active) if active else None,
-                pending_recharges=[_serialize_recharge(p) for p in pending_rows],
+                pending_recharges=[],
                 total_remaining_minutes=rem_mins,
                 is_quota_active=has_quota,
             )

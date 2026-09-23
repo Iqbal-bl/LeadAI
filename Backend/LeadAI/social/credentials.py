@@ -201,8 +201,14 @@ def resolve(
 
 def connected_platforms(db: Session, client_id: str) -> dict[str, dict]:
     """What this company can currently publish to — powers the UI's platform picker."""
+    from ..services import billing as billing_svc
     out: dict[str, dict] = {}
     for platform in SUPPORTED_PLATFORMS:
+        allowed, reason = billing_svc.check_channel_access(db, client_id, platform)
+        if not allowed:
+            out[platform] = {"connected": False, "reason": reason}
+            continue
+
         try:
             creds = resolve(db, client_id, platform)
         except ChannelNotConnected as exc:

@@ -457,6 +457,17 @@ def deliver(
             detail=f"Channel '{conversation.Channel}' does not require push delivery",
         )
 
+    from . import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, conversation.ClientId, conversation.Channel)
+    if not allowed:
+        return _record(
+            DeliveryResult(
+                "failed",
+                error="Channel subscription required",
+                detail=reason,
+            )
+        )
+
     if not conversation.ChannelAccountId or not conversation.ExternalThreadId:
         # This conversation is tagged with a social channel but has no route back
         # to the customer. Almost always a conversation created manually or by an
