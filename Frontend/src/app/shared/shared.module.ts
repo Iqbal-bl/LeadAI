@@ -36,7 +36,7 @@ import { StepperModule } from 'primeng/stepper';
 // import { AutoCompleteModule } from 'primeng/autocomplete';
 import { CalendarModule } from 'primeng/calendar';
 import { DropdownModule } from 'primeng/dropdown';
-// import { MultiSelectModule } from 'primeng/multiselect';
+import { MultiSelectModule } from 'primeng/multiselect';
 // import { SelectButtonModule } from 'primeng/selectbutton';
 // import { ToggleButtonModule } from 'primeng/togglebutton';
 import { SliderModule } from 'primeng/slider';
@@ -112,7 +112,7 @@ const PRIMENG_MODULES = [
   // AutoCompleteModule,
   CalendarModule,
   DropdownModule,
-  // MultiSelectModule,
+  MultiSelectModule,
   // SelectButtonModule,
   // ToggleButtonModule,
   SliderModule,

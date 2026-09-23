@@ -3,13 +3,20 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 import {
   BillingSummary,
+  ChannelAddonOrderResponse,
+  ChannelAddonQuote,
+  ChannelAddonVerifyPayload,
   ClientRecharge,
+  CustomBundlePayload,
   PlanTemplateCreatePayload,
   RazorpayOrderResponse,
   RazorpayPaymentFailurePayload,
   RazorpayPaymentVerifyPayload,
+  RazorpaySubscriptionResponse,
+  RazorpaySubscriptionVerifyPayload,
   RechargeAllocatePayload,
   RechargePlanTemplate,
+  SubscriptionCancelResponse,
   UsageLog,
 } from '../models/billing.models';
 
@@ -46,6 +53,77 @@ export class BillingService {
   public verifyRazorpayPayment(payload: RazorpayPaymentVerifyPayload): Observable<ClientRecharge> {
     return this.apiService.post<ClientRecharge>(
       'billing/verify-payment',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Create Razorpay Recurring Subscription */
+  public createRazorpaySubscription(planTemplateId: string): Observable<RazorpaySubscriptionResponse> {
+    return this.apiService.post<RazorpaySubscriptionResponse>(
+      'billing/create-subscription',
+      { plan_template_id: planTemplateId },
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Verify Razorpay Subscription Payment Signature */
+  public verifyRazorpaySubscription(payload: RazorpaySubscriptionVerifyPayload): Observable<ClientRecharge> {
+    return this.apiService.post<ClientRecharge>(
+      'billing/verify-subscription',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Cancel AutoPay mandate at cycle end */
+  public cancelSubscription(): Observable<SubscriptionCancelResponse> {
+    return this.apiService.post<SubscriptionCancelResponse>(
+      'billing/cancel-subscription',
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Cancel a specific channel add-on from renewing next cycle */
+  public cancelChannel(channel: string): Observable<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }> {
+    return this.apiService.post<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }>(
+      'billing/cancel-channel',
+      { channel },
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Create custom bundle recurring subscription */
+  public createCustomBundle(payload: CustomBundlePayload): Observable<RazorpaySubscriptionResponse> {
+    return this.apiService.post<RazorpaySubscriptionResponse>(
+      'billing/custom-bundle/create-subscription',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Get mid-cycle prorated quote for adding a channel to active plan */
+  public getChannelAddonQuote(channel: string): Observable<ChannelAddonQuote> {
+    return this.apiService.get<ChannelAddonQuote>('billing/channel-addon/quote', {
+      params: { channel },
+      companyScoped: true,
+    });
+  }
+
+  /** Tenant: Create Razorpay order for mid-cycle prorated channel add-on */
+  public createChannelAddonOrder(channel: string): Observable<ChannelAddonOrderResponse> {
+    return this.apiService.post<ChannelAddonOrderResponse>(
+      'billing/channel-addon/create-order',
+      { channel },
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Verify payment and immediately activate channel add-on on active plan */
+  public verifyChannelAddonPayment(payload: ChannelAddonVerifyPayload): Observable<ClientRecharge> {
+    return this.apiService.post<ClientRecharge>(
+      'billing/channel-addon/verify-payment',
       payload,
       { companyScoped: true }
     );
