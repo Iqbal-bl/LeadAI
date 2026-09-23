@@ -463,9 +463,35 @@
         </div>
 
         <div class="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
-          <div *ngIf="isChannelActive(key)" class="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-            <i class="pi pi-sync text-[10px]"></i> Renewing with AutoPay
+          <div *ngIf="isChannelActive(key)">
+            <!-- If renewing on upcoming AutoPay cycle -->
+            <div *ngIf="isChannelInNextCycle(key)" class="flex items-center justify-between gap-1">
+              <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                <i class="pi pi-sync text-[10px]"></i> Renewing with AutoPay
+              </span>
+              <button
+                pButton
+                type="button"
+                label="Cancel"
+                icon="pi pi-times"
+                class="p-button-text p-button-danger p-button-xs text-xs font-semibold py-1 px-2 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                [loading]="cancellingChannel[key]"
+                (click)="promptCancelChannel(key)"
+                pTooltip="Keep active until current cycle ends, but remove from upcoming AutoPay renewals"
+              ></button>
+            </div>
+
+            <!-- If already scheduled to cancel at cycle end -->
+            <div *ngIf="!isChannelInNextCycle(key)" class="flex items-center justify-between gap-1 p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40">
+              <span class="text-xs text-amber-700 dark:text-amber-300 font-medium flex items-center gap-1" pTooltip="Channel remains active until the end of your current cycle">
+                <i class="pi pi-clock text-[10px]"></i> Cancels at cycle end
+              </span>
+              <span class="text-[10px] text-slate-500 dark:text-slate-400">
+                Ends {{ summary?.active_recharge?.expires_at | date:'mediumDate' }}
+              </span>
+            </div>
           </div>
+
           <button
             *ngIf="!isChannelActive(key)"
             pButton
@@ -815,6 +841,48 @@
           class="p-button-primary bg-indigo-600"
           [loading]="addonPurchaseLoading"
           (click)="confirmAddonPurchase()"
+        ></button>
+      </div>
+    </div>
+  </p-dialog>
+
+  <!-- Channel Renewal Cancellation Modal -->
+  <p-dialog
+    [(visible)]="showCancelChannelModal"
+    header="Cancel Channel Renewal"
+    [modal]="true"
+    [style]="{ width: '460px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div *ngIf="channelToCancel" class="space-y-4 pt-1">
+      <div class="flex items-start gap-3 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+        <i class="pi pi-exclamation-triangle text-amber-600 dark:text-amber-400 text-xl mt-0.5"></i>
+        <div>
+          <strong class="block text-sm mb-1 text-amber-800 dark:text-amber-100">
+            Stop Auto-Renewing {{ CHANNEL_PRICING[channelToCancel]?.name }}?
+          </strong>
+          This channel will remain <strong>fully functional</strong> until your current billing period ends on <strong>{{ summary?.active_recharge?.expires_at | date:'mediumDate' }}</strong>.
+          After this date, it will not be billed or renewed in upcoming AutoPay cycles.
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+        <button
+          pButton
+          type="button"
+          label="Keep Channel"
+          class="p-button-text p-button-secondary"
+          (click)="showCancelChannelModal = false"
+        ></button>
+        <button
+          pButton
+          type="button"
+          label="Confirm & Stop Renewal"
+          icon="pi pi-check"
+          class="p-button-danger bg-rose-600"
+          [loading]="cancellingChannel[channelToCancel]"
+          (click)="confirmCancelChannel()"
         ></button>
       </div>
     </div>
