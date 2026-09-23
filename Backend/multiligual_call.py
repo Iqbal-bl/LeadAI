@@ -1372,6 +1372,41 @@ async def make_call(call_data: CallRequest, request: Request, current_user: str 
     # Check if XML is available (either from client or session memory)
     if session_id not in session_xml_sections or not session_xml_sections[session_id]:
         raise HTTPException(status_code=400, detail="Please upload an XML template first")
+
+    # Resolve client_id for multi-tenant billing (Bug #5 fix)
+    client_id = (
+        request.headers.get("X-Client-Id")
+        or request.query_params.get("client_id")
+    )
+    if not client_id and current_user:
+        try:
+            from LeadAI.db import get_leadai_db
+            from LeadAI.models import LeadUserRole
+            leadai_db = next(get_leadai_db())
+            user_role = leadai_db.query(LeadUserRole).filter(
+                LeadUserRole.UserEmail == current_user.strip().lower(),
+                LeadUserRole.IsActive == True,
+                LeadUserRole.IsDeleted == False,
+            ).first()
+            if user_role and user_role.ClientId:
+                client_id = user_role.ClientId
+        except Exception as e:
+            logger.warning(f"[make-call] Could not resolve ClientId for user {current_user}: {e}")
+
+    # Enforce billing quota check before dialing Twilio
+    if client_id:
+        try:
+            from LeadAI.db import get_leadai_db
+            from LeadAI.services.billing import check_call_quota
+            leadai_db = next(get_leadai_db())
+            has_quota, quota_reason, _ = check_call_quota(leadai_db, client_id)
+            if not has_quota:
+                logger.warning(f"[make-call] Quota check failed for client {client_id}: {quota_reason}")
+                raise HTTPException(status_code=402, detail=quota_reason)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning(f"[make-call] Could not check quota for client {client_id}: {exc}")
     
     base_url = SERVER_URL.replace("https://", "").replace("http://", "")
     
@@ -1387,7 +1422,7 @@ async def make_call(call_data: CallRequest, request: Request, current_user: str 
             recording_status_callback_event=["completed", "absent"],
         )
         
-        # Store call settings including XML sections and language
+        # Store call settings including XML sections, language, and tenant client_id
         active_calls[call.sid] = {
             "phone_number": phone_number,
             "status": "initiated",
@@ -1396,7 +1431,9 @@ async def make_call(call_data: CallRequest, request: Request, current_user: str 
             "gender": gender,
             "speaker": speaker,
             "multi_stt": multi_stt,
-            "xml_sections": session_xml_sections.get(session_id, [])
+            "xml_sections": session_xml_sections.get(session_id, []),
+            "client_id": client_id,
+            "leadai": bool(client_id),
         }
         
         return JSONResponse({
@@ -1404,6 +1441,8 @@ async def make_call(call_data: CallRequest, request: Request, current_user: str 
             "call_sid": call.sid,
             "phone_number": phone_number
         })
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Call failed: {e}")
         raise HTTPException(status_code=400, detail=str(e))

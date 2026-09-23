@@ -737,6 +737,11 @@ def start_campaign(
     if row.Status in campaign_runner.TERMINAL_STATUSES:
         raise HTTPException(status.HTTP_409_CONFLICT, f"Campaign is {row.Status}.")
 
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, client_id, row.Channel)
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, f"Cannot start campaign: {reason}")
+
     built = (
         db.query(func.count(LeadCampaignRecipient.Id))
         .filter(LeadCampaignRecipient.CampaignId == row.Id)

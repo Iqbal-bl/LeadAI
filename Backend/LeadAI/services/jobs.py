@@ -322,7 +322,14 @@ def handle_linkedin_invitations(db, payload: dict) -> dict:
     accepted_count = 0
     errors = []
     
+    from . import billing as billing_svc
+
     for account in accounts:
+        allowed, reason = billing_svc.check_channel_access(db, account.ClientId, "linkedin")
+        if not allowed:
+            logger.info("[LeadAI jobs] Skipping LinkedIn sync for client %s: %s", account.ClientId, reason)
+            continue
+
         try:
             p_cnt, a_cnt = process_pending_invitations(db, account)
             processed_count += p_cnt

@@ -193,49 +193,64 @@ class BatchingService:
         # legacy NGROK_URL if SERVER_URL is unset.
         base_url = (os.getenv("SERVER_URL") or os.getenv("NGROK_URL") or "").rstrip("/")
 
-        # resolve questions path
+        # resolve questions path and batch details
+        batch_client_id = None
+        batch_script_path = None
+        try:
+            row = db.query(models.Batch.ClientId, models.Batch.ScriptPath).filter(
+                models.Batch.Id == batch_id
+            ).first()
+            if row:
+                batch_client_id, batch_script_path = row[0], row[1]
+        except Exception as e:
+            logger.warning(f"[Batching] Error querying batch {batch_id}: {e}")
+
         resolved_path = questions_file_path if self._file_exists(questions_file_path) else None
-        if not resolved_path:
-            try:
-                batch_row = db.query(models.Batch).filter(
-                    models.Batch.Id == batch_id,
-                    models.Batch.IsDeleted == False
-                ).first()
-                if batch_row and self._file_exists(batch_row.ScriptPath):
-                    resolved_path = batch_row.ScriptPath
-            except Exception:
-                pass
+        if not resolved_path and batch_script_path and self._file_exists(batch_script_path):
+            resolved_path = batch_script_path
         if not resolved_path:
             env_path = os.getenv("INPUT_FILE")
             if self._file_exists(env_path):
                 resolved_path = env_path
 
         questions: List[str] = []
-        # if resolved_path:
-        #     try:
-        #         with open(resolved_path, "r", encoding="utf-8") as f:
-        #             questions = [line.strip() for line in f if line.strip()]
-        #     except Exception:
-        #         pass
         if not questions:
             questions = list(DEFAULT_QUESTIONS)
         if not questions:
             return JSONResponse(status_code=400, content={"errors":["Questions are empty after all fallbacks"]})
 
+        # Resolve tenant ClientId (Bug #10 fix)
+        client_id = batch_client_id
+        if not client_id and email:
+            try:
+                from LeadAI.models import LeadUserRole
+                user_role = db.query(LeadUserRole.ClientId).filter(
+                    LeadUserRole.UserEmail == email.strip().lower(),
+                    LeadUserRole.IsActive == True,
+                    LeadUserRole.IsDeleted == False,
+                ).first()
+                if user_role and user_role[0]:
+                    client_id = user_role[0]
+            except Exception as e:
+                logger.warning(f"[Batching] Could not resolve ClientId for user {email}: {e}")
+
         # Check billing call quota before placing call
-        try:
-            from LeadAI.db import get_leadai_db
-            from LeadAI.services.billing import check_call_quota
-            db_sess = next(get_leadai_db())
-            has_quota, quota_reason, _ = check_call_quota(db_sess, email)
-            if not has_quota:
-                logger.warning(f"[Batching] Quota check failed for client email {email}: {quota_reason}")
-                return JSONResponse(status_code=402, content={"errors": [quota_reason]})
-        except Exception as exc:
-            logger.warning(f"[Batching] Could not check quota for email {email}: {exc}")
+        if client_id:
+            try:
+                from LeadAI.db import get_leadai_db
+                from LeadAI.services.billing import check_call_quota
+                db_sess = next(get_leadai_db())
+                has_quota, quota_reason, _ = check_call_quota(db_sess, client_id)
+                if not has_quota:
+                    logger.warning(f"[Batching] Quota check failed for client {client_id} (email {email}): {quota_reason}")
+                    return JSONResponse(status_code=402, content={"errors": [quota_reason]})
+            except Exception as exc:
+                logger.warning(f"[Batching] Could not check quota for client {client_id}: {exc}")
+        else:
+            logger.warning(f"[Batching] No client_id could be resolved for batch {batch_id} (email {email})")
 
         # place call
-        print(f"☎️ DIAL: batch={batch_id} exec={batch_execution_id} call_number_id={call_number_id} to={to_number}")
+        logger.info(f"[Batching] DIAL: batch={batch_id} exec={batch_execution_id} call_number_id={call_number_id} to={to_number}")
         # Place call asynchronously (offload blocking I/O)
         def _managed_dial():
             return self.twilio_client.calls.create(
@@ -252,7 +267,7 @@ class BatchingService:
             )
         
         call = await asyncio.to_thread(_managed_dial)
-        print(f"✅ DIAL-OK: sid={call.sid}")
+        logger.info(f"[Batching] DIAL-OK: sid={call.sid}")
 
         # Register the Sarvam agent config for this batch call so the unified
         # /outbound-twiml + /media-stream can build the right SimpleAgent
@@ -264,6 +279,9 @@ class BatchingService:
                 "language": os.getenv("BATCH_DEFAULT_LANGUAGE", "multi"),
                 "gender": os.getenv("BATCH_DEFAULT_GENDER", "female"),
                 "phone_number": to_number,
+                "client_id": client_id,
+                "batch_id": batch_id,
+                "batch_execution_id": batch_execution_id,
             }
         except Exception:
             pass

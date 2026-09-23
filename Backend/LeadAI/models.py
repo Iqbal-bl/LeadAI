@@ -501,22 +501,34 @@ RECHARGE_STATUS_FAILED = "failed"
 RECHARGE_STATUS_CANCELLED = "cancelled"
 
 
+PLAN_CATEGORY_VOICE_STANDARD = "voice_standard"
+PLAN_CATEGORY_VOICE_TOPUP = "voice_topup"
+PLAN_CATEGORY_CHANNEL_ADDON = "channel_addon"
+PLAN_TYPE_TOPUP = "topup"
+
+
 class LeadRechargePlanTemplate(LeadAIBase):
     """Master recharge plan templates created by Super Admin.
     
-    Can be a global standard plan (TargetClientId IS NULL) or a client-specific
-    custom plan (TargetClientId IS NOT NULL).
+    Can be a global standard plan (TargetClientId IS NULL), a client-specific
+    custom plan (TargetClientId / TargetClientIds), or a top-up booster pack.
     """
 
     __tablename__ = "leadai_recharge_plan_templates"
 
     Name = Column(String(100), nullable=False)
     PlanType = Column(String(20), nullable=False, default=PLAN_TYPE_STANDARD, index=True)
-    TargetClientId = Column(String(36), nullable=True, index=True)  # NULL for global, or specific ClientId
+    PlanCategory = Column(String(30), nullable=False, default=PLAN_CATEGORY_VOICE_STANDARD, index=True)
+    FeatureKey = Column(String(30), nullable=True, index=True)  # e.g., "calling", "whatsapp", "instagram"
+    TargetClientId = Column(String(36), nullable=True, index=True)  # Legacy single client ID
+    TargetClientIds = Column(JSON, nullable=True)  # Multi-company assignment list: ["uuid-1", "uuid-2"]
+    AddonChannels = Column(JSON, nullable=True)  # Bundled channels: ["voice", "whatsapp", "instagram"]
     IncludedMinutes = Column(Float, nullable=False)  # e.g. 500.0, 6000.0
-    ValidityDays = Column(Integer, nullable=False)  # e.g. 30, 365
+    ValidityDays = Column(Integer, nullable=True, default=30)  # e.g. 30, 365, or 0 for top-ups
     Price = Column(Float, nullable=False, default=0.0)  # Total price in INR
     RatePerMinute = Column(Float, nullable=False, default=4.0)  # Price benchmark per minute
+    RazorpayPlanId = Column(String(100), nullable=True, index=True)  # Cached Razorpay Subscriptions Plan ID
+    AutoPayByDefault = Column(Boolean, nullable=False, default=True)
     IsActive = Column(Boolean, nullable=False, default=True, index=True)
     Description = Column(Text, nullable=True)
 
@@ -535,6 +547,7 @@ class LeadClientRecharge(LeadAIBase):
     PlanNameSnapshot = Column(String(100), nullable=False)
     PurchasedMinutes = Column(Float, nullable=False)
     RemainingMinutes = Column(Float, nullable=False)
+    RolloverMinutesCarried = Column(Float, nullable=False, default=0.0)
     ValidityDaysSnapshot = Column(Integer, nullable=False)
     PricePaid = Column(Float, nullable=False, default=0.0)
     RechargedAt = Column(DateTime, nullable=True, index=True)  # Starts when activated
@@ -542,6 +555,11 @@ class LeadClientRecharge(LeadAIBase):
     Status = Column(String(20), nullable=False, default=RECHARGE_STATUS_PENDING, index=True)  # active, pending, exhausted, expired, superseded, failed, cancelled
     PaymentReference = Column(String(100), nullable=True)
     RazorpayOrderId = Column(String(100), nullable=True, index=True)
+    RazorpaySubscriptionId = Column(String(100), nullable=True, index=True)
+    IsAutoRenew = Column(Boolean, nullable=False, default=False)
+    CancelAtPeriodEnd = Column(Boolean, nullable=False, default=False)
+    ActiveChannels = Column(JSON, nullable=True, default=list)  # Currently active channels: ["whatsapp", "instagram"]
+    NextCycleChannels = Column(JSON, nullable=True, default=list)  # Channels bundled into upcoming AutoPay renewal
     InvoiceUrl = Column(String(500), nullable=True)
     InvoiceId = Column(String(100), nullable=True)
     FailureReason = Column(String(255), nullable=True)
