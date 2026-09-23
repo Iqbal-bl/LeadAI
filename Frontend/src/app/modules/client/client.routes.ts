@@ -198,7 +198,7 @@ export const CLIENT_ROUTES: Routes = [
       {
         path: 'billing',
         loadComponent: () =>
-          import('../../features/billing/billing-dashboard/billing-dashboard.component').then(
+          import('./pages/billing-dashboard/billing-dashboard.component').then(
             (m) => m.BillingDashboardComponent,
           ),
       },
