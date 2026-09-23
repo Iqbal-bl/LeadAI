@@ -140,4 +140,21 @@ export class ClientBillingSummariesComponent implements OnInit {
     const comp = this.companies.find((c) => c.id === clientId);
     return comp ? comp.name : clientId;
   }
+
+  cleanPlanName(name: string | null | undefined): string {
+    if (!name) return 'No Active Plan';
+    return name.replace(/\s*\+\s*.*?(?=\s*-\s*|\s*\()/i, '').trim();
+  }
+
+  readonly CHANNEL_CONFIG: { [key: string]: { name: string; icon: string } } = {
+    whatsapp: { name: 'WhatsApp', icon: 'pi pi-whatsapp' },
+    instagram: { name: 'Instagram', icon: 'pi pi-instagram' },
+    facebook: { name: 'Facebook', icon: 'pi pi-facebook' },
+    linkedin: { name: 'LinkedIn', icon: 'pi pi-linkedin' },
+  };
+
+  getChannelInfo(ch: string): { name: string; icon: string } {
+    const key = (ch || '').toLowerCase().trim();
+    return this.CHANNEL_CONFIG[key] || { name: ch, icon: 'pi pi-globe' };
+  }
 }
