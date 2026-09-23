@@ -382,8 +382,16 @@ def _process_one(db: Session, item: dict) -> None:
     )
     db.commit()
 
-    if not account.AutoReply:
-        # Human-only channel: persist the customer's message and notify the
+    from ..services import billing as billing_svc
+    has_channel_access, access_reason = billing_svc.check_channel_access(db, client.Id, account.Channel)
+
+    if not account.AutoReply or not has_channel_access:
+        if not has_channel_access:
+            logger.info(
+                "[LeadAI webhook] AI auto-reply suppressed for client %s on %s: %s",
+                client.Id, account.Channel, access_reason,
+            )
+        # Human-only channel or unsubscribed channel: persist the customer's message and notify the
         # inbox, but do not let the AI answer.
         db.add(
             LeadMessage(

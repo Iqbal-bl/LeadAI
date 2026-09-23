@@ -418,6 +418,14 @@ def _send_one(
     try:
         if campaign.Kind == "call":
             return _place_call(db, campaign, recipient, client, phone, context)
+
+        from . import billing
+        allowed, reason = billing.check_channel_access(db, campaign.ClientId, campaign.Channel)
+        if not allowed:
+            recipient.Status = "failed"
+            recipient.FailureReason = f"Subscription required: {reason}"[:400]
+            return "failed"
+
         return _send_message(db, campaign, recipient, phone, context)
     except channels.ChannelError as exc:
         recipient.Status = "failed"

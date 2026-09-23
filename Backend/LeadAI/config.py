@@ -227,6 +227,7 @@ class LeadAISettings:
     # =======================================================================
     razorpay_key_id: str | None = os.getenv("RAZORPAY_KEY_ID") or None
     razorpay_key_secret: str | None = os.getenv("RAZORPAY_KEY_SECRET") or None
+    razorpay_webhook_secret: str | None = os.getenv("RAZORPAY_WEBHOOK_SECRET") or None
 
     @property
     def minio_enabled(self) -> bool:

@@ -134,6 +134,11 @@ async def _run_single_platform(
     Every per-platform endpoint below funnels through this so the mapping from
     "not connected" to 409 and "Meta rejected it" to 502 is written once.
     """
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, client_id, platform)
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     try:
         creds = resolve(db, client_id, platform, account_id=account_id)
     except ChannelNotConnected as exc:
@@ -220,6 +225,12 @@ async def create_direct_post(
     at that future time. If `schedule_time` is null, the post publishes immediately.
     """
     principal, client_id = scope
+    from ..services import billing as billing_svc
+    for platform in body.platforms:
+        allowed, reason = billing_svc.check_channel_access(db, client_id, platform)
+        if not allowed:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     st = _validate_schedule_time(body.schedule_time)
 
     try:
@@ -312,6 +323,12 @@ async def create_direct_post_from_urls(
     fail on Meta's side rather than here.
     """
     principal, client_id = scope
+    from ..services import billing as billing_svc
+    for platform in body.platforms:
+        allowed, reason = billing_svc.check_channel_access(db, client_id, platform)
+        if not allowed:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     st = _validate_schedule_time(body.schedule_time)
     uploaded = [{"url": m.url, "is_video": m.is_video} for m in body.media]
 
@@ -381,6 +398,11 @@ async def create_ai_post(
     each platform publishes with a different connected account.
     """
     principal, client_id = scope
+    from ..services import billing as billing_svc
+    for platform in body.platforms:
+        allowed, reason = billing_svc.check_channel_access(db, client_id, platform)
+        if not allowed:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
 
     row = LeadSocialPost(
         ClientId=client_id,
