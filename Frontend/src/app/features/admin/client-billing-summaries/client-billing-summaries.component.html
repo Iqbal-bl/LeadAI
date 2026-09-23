@@ -41,11 +41,11 @@
         <tr>
           <th>Company / Client ID</th>
           <th>Active Plan</th>
+          <th>Active Channels</th>
           <th>Remaining Minutes</th>
-          <th>Expiry Date</th>
-          <th>Queued Plans</th>
+          <th>Expiry / Renewal</th>
           <th>Quota Status</th>
-          <th class="text-right">Grant Recharge</th>
+          <th class="text-right">Actions</th>
         </tr>
       </ng-template>
       <ng-template pTemplate="body" let-summary>
@@ -54,17 +54,41 @@
             {{ getCompanyName(summary.client_id) }}
             <div class="font-mono text-xs font-normal text-slate-400">{{ summary.client_id }}</div>
           </td>
-          <td>{{ summary.active_recharge?.plan_name_snapshot || 'No Active Plan' }}</td>
-          <td class="font-extrabold text-indigo-600 dark:text-indigo-400">
-            {{ summary.total_remaining_minutes | number:'1.0-0' }} m
-          </td>
-          <td class="text-xs text-slate-600 dark:text-slate-300">
-            {{ summary.active_recharge?.expires_at ? (summary.active_recharge.expires_at | date:'shortDate') : '-' }}
+          <td>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="font-medium text-slate-800 dark:text-slate-200 text-xs">
+                {{ cleanPlanName(summary.active_recharge?.plan_name_snapshot) }}
+              </span>
+              <span
+                *ngIf="summary.active_recharge?.is_auto_renew"
+                class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+              >
+                AutoPay
+              </span>
+            </div>
           </td>
           <td>
-            <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-              {{ summary.pending_recharges?.length || 0 }} Pending
+            <div *ngIf="summary.active_recharge?.active_channels?.length" class="flex items-center gap-1 flex-wrap">
+              <span
+                *ngFor="let ch of summary.active_recharge.active_channels"
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+              >
+                <i [class]="getChannelInfo(ch).icon" class="text-[9px]"></i>
+                {{ getChannelInfo(ch).name }}
+              </span>
+            </div>
+            <span *ngIf="!summary.active_recharge?.active_channels?.length" class="text-slate-400 text-xs">—</span>
+          </td>
+          <td>
+            <span class="font-extrabold text-indigo-600 dark:text-indigo-400 text-xs">
+              {{ summary.total_remaining_minutes | number:'1.0-0' }} m
             </span>
+            <span *ngIf="summary.active_recharge?.purchased_minutes" class="text-slate-400 text-[11px] ml-1">
+              / {{ summary.active_recharge.purchased_minutes }} m
+            </span>
+          </td>
+          <td class="text-xs text-slate-600 dark:text-slate-300">
+            {{ summary.active_recharge?.expires_at ? (summary.active_recharge.expires_at | date:'mediumDate') : '—' }}
           </td>
           <td>
             <span
@@ -78,12 +102,17 @@
             <button
               pButton
               type="button"
-              label="Recharge"
+              label="Grant Recharge"
               icon="pi pi-bolt"
-              class="p-button-text p-button-sm p-button-indigo"
+              class="p-button-text p-button-sm p-button-indigo text-xs"
               (click)="openGrantModal(summary.client_id)"
             ></button>
           </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7" class="text-center py-6 text-slate-500">No client company billing accounts found.</td>
         </tr>
       </ng-template>
     </p-table>

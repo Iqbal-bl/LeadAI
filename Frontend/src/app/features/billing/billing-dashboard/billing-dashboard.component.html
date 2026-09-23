@@ -66,12 +66,39 @@
           <span>Current Active Plan</span>
           <i class="pi pi-calendar text-indigo-500"></i>
         </div>
-        <h3 class="text-xl font-bold text-slate-900 dark:text-white mt-2">
-          {{ summary?.active_recharge?.plan_name_snapshot || 'No Active Plan' }}
-        </h3>
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
+          <h3 class="text-xl font-bold text-slate-900 dark:text-white">
+            {{ cleanPlanName(summary?.active_recharge?.plan_name_snapshot) }}
+          </h3>
+          <span
+            *ngIf="summary?.active_recharge?.is_auto_renew"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+            pTooltip="AutoPay mandate active via UPI/Card e-Mandate. Auto-debit occurs only on validity expiration."
+          >
+            <i class="pi pi-sync text-[10px]"></i> AutoPay
+          </span>
+          <span
+            *ngIf="summary?.active_recharge?.rollover_minutes_carried && summary?.active_recharge?.rollover_minutes_carried! > 0"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+            pTooltip="Unspent minutes rolled over from previous billing cycle."
+          >
+            <i class="pi pi-replay text-[10px]"></i> +{{ summary?.active_recharge?.rollover_minutes_carried | number:'1.0-0' }} Rollover Mins
+          </span>
+        </div>
         <p *ngIf="summary?.active_recharge?.expires_at" class="text-sm text-slate-600 dark:text-slate-300 mt-1">
           Valid until <strong class="text-slate-900 dark:text-white">{{ summary?.active_recharge?.expires_at | date:'medium' }}</strong>
         </p>
+        <!-- Active Channels Badges -->
+        <div *ngIf="summary?.active_recharge?.active_channels?.length" class="mt-3 flex items-center gap-1.5 flex-wrap">
+          <span class="text-[11px] text-slate-500 font-medium">Channels:</span>
+          <span
+            *ngFor="let ch of summary?.active_recharge?.active_channels"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+          >
+            <i [class]="getChannelInfo(ch).icon" class="text-[10px]"></i>
+            {{ getChannelInfo(ch).name }}
+          </span>
+        </div>
       </div>
       <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
         <span class="text-xs text-slate-500">Validity Remaining:</span>
@@ -81,43 +108,97 @@
       </div>
     </div>
 
-    <!-- Queued Recharges Card -->
+    <!-- AutoPay & Billing Cycle Card (Replaces Queued Plans) -->
     <div class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between">
       <div>
         <div class="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase tracking-wider">
-          <span>Queued Pending Plans</span>
-          <i class="pi pi-clock text-amber-500"></i>
+          <span>Billing Cycle & AutoPay</span>
+          <i class="pi pi-sync" [ngClass]="summary?.active_recharge?.is_auto_renew ? 'text-indigo-600' : 'text-slate-400'"></i>
         </div>
-        <h3 class="text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
-          {{ summary?.pending_recharges?.length || 0 }}
-        </h3>
-        <p class="text-sm text-slate-500 mt-1">
-          Recharges queued as pending activate automatically when the current plan expires.
+        
+        <div class="mt-2">
+          <div *ngIf="summary?.active_recharge?.is_auto_renew && !summary?.active_recharge?.cancel_at_period_end" class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200">
+              <i class="pi pi-check-circle text-[10px]"></i> AutoPay Active
+            </span>
+          </div>
+
+          <div *ngIf="summary?.active_recharge?.cancel_at_period_end" class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+              <i class="pi pi-exclamation-triangle text-[10px]"></i> Cancellation Scheduled
+            </span>
+          </div>
+
+          <div *ngIf="!summary?.active_recharge?.is_auto_renew && !summary?.active_recharge?.cancel_at_period_end" class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+              Manual Plan / No AutoPay
+            </span>
+          </div>
+        </div>
+
+        <p class="text-xs text-slate-500 mt-2">
+          Monthly billing cycles calculate through day 16 at 23:59:59. Unused call minutes automatically roll over into your next cycle.
         </p>
       </div>
-      <div *ngIf="summary?.pending_recharges?.length" class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/60">
-        <span class="text-xs font-medium text-amber-600 dark:text-amber-400">
-          Next queued: {{ summary?.pending_recharges?.[0]?.plan_name_snapshot }}
+
+      <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+        <button
+          *ngIf="summary?.active_recharge?.is_auto_renew && !summary?.active_recharge?.cancel_at_period_end"
+          pButton
+          type="button"
+          label="Cancel AutoPay Mandate"
+          icon="pi pi-times-circle"
+          class="p-button-outlined p-button-danger p-button-sm w-full"
+          (click)="openCancelModal()"
+        ></button>
+        <span *ngIf="summary?.active_recharge?.cancel_at_period_end" class="text-xs font-medium text-amber-600 dark:text-amber-400">
+          AutoPay stops at period end. Calling minutes remain active until expiry.
+        </span>
+        <span *ngIf="!summary?.active_recharge?.is_auto_renew && !summary?.active_recharge?.cancel_at_period_end" class="text-xs text-slate-400">
+          Subscribe below to automate renewals and minute rollovers.
         </span>
       </div>
     </div>
   </div>
 
   <!-- Available Plans Section -->
-  <div class="mt-8">
-    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">
-      Select a Recharge Plan
-    </h2>
+  <div id="plans-section" class="mt-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white">
+          Pre-Configured Plans & Minute Boosters
+        </h2>
+        <p class="text-xs text-slate-500">
+          Base plans feature automated e-Mandate AutoPay. Active plans cannot be duplicated mid-cycle; minute top-ups are available anytime.
+        </p>
+      </div>
+      <span *ngIf="hasActivePlan()" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+        <i class="pi pi-check-circle text-xs"></i> Active Cycle in Progress
+      </span>
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
         *ngFor="let plan of availablePlans"
         class="p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-indigo-500 transition-all duration-200 shadow-sm flex flex-col justify-between relative group"
+        [class.opacity-75]="isBasePlanDisabled(plan)"
       >
         <span
           *ngIf="plan.plan_type === 'custom'"
           class="absolute -top-3 right-6 px-3 py-1 bg-purple-600 text-white text-xs font-bold rounded-full uppercase tracking-wider"
         >
           Custom Plan
+        </span>
+        <span
+          *ngIf="plan.plan_type === 'topup' || plan.plan_category === 'voice_topup'"
+          class="absolute -top-3 right-6 px-3 py-1 bg-emerald-600 text-white text-xs font-bold rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm"
+        >
+          <i class="pi pi-bolt text-[10px]"></i> Minute Booster
+        </span>
+        <span
+          *ngIf="plan.plan_type === 'standard' && (!plan.plan_category || plan.plan_category === 'voice_standard')"
+          class="absolute -top-3 right-6 px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm"
+        >
+          <i class="pi pi-sync text-[10px]"></i> AutoPay
         </span>
         <div>
           <h3 class="text-xl font-bold text-slate-900 dark:text-white">{{ plan.name }}</h3>
@@ -135,11 +216,15 @@
             </li>
             <li class="flex items-center gap-2">
               <i class="pi pi-check-circle text-emerald-500"></i>
-              <strong>{{ plan.validity_days }}</strong> Days Validity
+              <strong>{{ plan.validity_days || 30 }}</strong> Days Validity
             </li>
             <li class="flex items-center gap-2">
               <i class="pi pi-check-circle text-emerald-500"></i>
-              Exact float second deduction
+              Minute rollover on recurring renewal
+            </li>
+            <li *ngIf="plan.plan_type === 'standard' && (!plan.plan_category || plan.plan_category === 'voice_standard')" class="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 font-medium pt-1">
+              <i class="pi pi-sync text-xs"></i>
+              Renews on anniversary (17th - 16th cycle)
             </li>
           </ul>
         </div>
@@ -147,11 +232,253 @@
         <button
           pButton
           type="button"
-          label="Recharge Now"
-          icon="pi pi-bolt"
-          class="p-button-outlined p-button-indigo w-full mt-6"
+          [label]="isBasePlanDisabled(plan) ? 'Current Plan Active' : ((plan.plan_type === 'topup' || plan.plan_category === 'voice_topup') ? 'Add Booster Minutes' : 'Subscribe with AutoPay')"
+          [icon]="isBasePlanDisabled(plan) ? 'pi pi-lock' : ((plan.plan_type === 'topup' || plan.plan_category === 'voice_topup') ? 'pi pi-bolt' : 'pi pi-sync')"
+          [class]="isBasePlanDisabled(plan) ? 'p-button-outlined p-button-secondary w-full mt-6 opacity-60 cursor-not-allowed' : 'p-button-outlined p-button-indigo w-full mt-6'"
+          [disabled]="isBasePlanDisabled(plan)"
+          [pTooltip]="isBasePlanDisabled(plan) ? 'You already have an active subscription. Additional base plans cannot be queued. Use minute top-ups or channel add-ons.' : ''"
+          [loading]="rechargeLoading"
           (click)="confirmRecharge(plan)"
         ></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Build Your Own Custom Bundle Section -->
+  <div class="mt-10 p-8 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl shadow-xl border border-indigo-800/40 relative overflow-hidden">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+      <div>
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 mb-2">
+          <i class="pi pi-sliders-h"></i> Interactive Plan Builder
+        </div>
+        <h2 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+          Build Your Custom Plan
+        </h2>
+        <p class="text-indigo-200 text-sm mt-1">
+          Combine AI Voice minutes with modular social media channel add-ons tailored to your business needs.
+        </p>
+      </div>
+
+      <!-- Billing Cycle Toggle -->
+      <div class="inline-flex p-1 bg-slate-800/80 rounded-xl border border-indigo-500/30">
+        <button
+          type="button"
+          class="px-4 py-2 text-xs font-bold rounded-lg transition-all"
+          [ngClass]="customBillingCycle === 'monthly' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:text-white'"
+          (click)="customBillingCycle = 'monthly'"
+        >
+          Monthly
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5"
+          [ngClass]="customBillingCycle === 'yearly' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:text-white'"
+          (click)="customBillingCycle = 'yearly'"
+        >
+          Yearly
+          <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-400 text-emerald-950 font-extrabold">Save 15%</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <!-- Voice Calling Configuration -->
+      <div class="lg:col-span-5 bg-slate-800/50 p-6 rounded-2xl border border-indigo-700/30">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <i class="pi pi-phone text-indigo-400 text-lg"></i>
+            <span class="font-bold text-white">AI Voice Calling</span>
+          </div>
+          <p-inputSwitch [(ngModel)]="customIncludeVoice"></p-inputSwitch>
+        </div>
+
+        <div *ngIf="customIncludeVoice" class="space-y-4">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-indigo-200">Included Minutes:</span>
+            <span class="text-lg font-extrabold text-white">{{ customVoiceMinutes }} Mins</span>
+          </div>
+
+          <p-slider
+            [(ngModel)]="customVoiceMinutes"
+            [min]="100"
+            [max]="5000"
+            [step]="100"
+            styleClass="w-full"
+          ></p-slider>
+
+          <div class="flex justify-between text-[11px] text-slate-400 pt-1">
+            <span>100 Mins (₹400)</span>
+            <span>2,500 Mins</span>
+            <span>5,000 Mins (₹20,000)</span>
+          </div>
+
+          <p class="text-xs text-indigo-300/80 bg-indigo-900/30 p-2.5 rounded-lg border border-indigo-700/20">
+            Voice standard benchmark: ₹4.00/min with exact second pulse termination and full rollover on renewal.
+          </p>
+        </div>
+
+        <div *ngIf="!customIncludeVoice" class="text-center py-6 text-slate-400 text-sm">
+          Voice minutes disabled. This bundle will only include social media channel automation.
+        </div>
+      </div>
+
+      <!-- Modular Channel Add-Ons Grid -->
+      <div class="lg:col-span-7 space-y-3">
+        <span class="text-xs uppercase tracking-wider font-semibold text-indigo-200 block mb-2">
+          Select Channel Add-Ons
+        </span>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div
+            *ngFor="let key of ['whatsapp', 'instagram', 'facebook', 'linkedin']"
+            class="p-4 rounded-xl border transition-all cursor-pointer flex items-start justify-between"
+            [ngClass]="customChannels[key] ? 'bg-indigo-900/60 border-indigo-400 shadow-md' : 'bg-slate-800/40 border-slate-700/60 hover:border-slate-600'"
+            (click)="customChannels[key] = !customChannels[key]"
+          >
+            <div class="flex items-start gap-3">
+              <p-checkbox
+                [binary]="true"
+                [(ngModel)]="customChannels[key]"
+                (click)="$event.stopPropagation()"
+              ></p-checkbox>
+              <div>
+                <div class="font-bold text-sm text-white flex items-center gap-1.5">
+                  <i [class]="CHANNEL_PRICING[key].icon" class="text-indigo-400 text-sm"></i>
+                  {{ CHANNEL_PRICING[key].name }}
+                </div>
+                <p class="text-xs text-slate-300 mt-1 leading-relaxed">{{ CHANNEL_PRICING[key].desc }}</p>
+              </div>
+            </div>
+            <div class="text-right whitespace-nowrap pl-2">
+              <span class="text-sm font-extrabold text-white">₹{{ CHANNEL_PRICING[key].price | number }}</span>
+              <span class="text-[10px] text-slate-400 block">/month</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Total & Checkout Summary Bar -->
+    <div class="mt-8 pt-6 border-t border-indigo-700/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <div class="text-xs text-indigo-200">
+          Selected:
+          <span class="font-bold text-white">
+            {{ customIncludeVoice ? (customVoiceMinutes + ' Voice Mins') : 'No Voice' }}
+          </span>
+          <span *ngIf="selectedChannelsList.length">
+            + {{ selectedChannelsList.length }} Channel Add-On(s)
+          </span>
+        </div>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span class="text-3xl font-extrabold text-white">₹{{ customBundleTotal | number }}</span>
+          <span class="text-sm text-indigo-300">/ {{ customBillingCycle }}</span>
+          <span *ngIf="customBillingCycle === 'yearly'" class="text-xs text-emerald-400 font-semibold ml-2">
+            (Includes 15% Annual Savings)
+          </span>
+        </div>
+      </div>
+
+      <button
+        pButton
+        type="button"
+        label="Subscribe Custom Bundle"
+        icon="pi pi-bolt"
+        class="p-button-primary bg-indigo-500 hover:bg-indigo-400 border-none px-6 py-3 font-bold shadow-lg"
+        [loading]="customBundleLoading"
+        [disabled]="hasActivePlan() || customMonthlyTotal <= 0"
+        (click)="subscribeCustomBundle()"
+        [pTooltip]="hasActivePlan() ? 'You already have an active plan. Custom bundle subscriptions can be started at the end of your billing cycle.' : ''"
+      ></button>
+    </div>
+  </div>
+
+  <!-- Mid-Cycle Modular Channel Add-Ons Section -->
+  <div class="mt-8 p-6 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
+      <div>
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 mb-2">
+          <i class="pi pi-plus-circle text-xs"></i> Mid-Cycle Add-Ons
+        </div>
+        <h2 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          Add-On Channels to Current Plan
+        </h2>
+        <p class="text-xs text-slate-500 mt-1 max-w-2xl">
+          Expand your omni-channel automation mid-cycle. You are only charged a prorated amount for the remaining days of your active cycle. On your next anniversary, the channel syncs into your recurring AutoPay bundle.
+        </p>
+      </div>
+      <div *ngIf="hasActivePlan()" class="text-left sm:text-right">
+        <span class="text-xs text-slate-500 block">Current Cycle Ends:</span>
+        <span class="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+          {{ summary?.active_recharge?.expires_at | date:'mediumDate' }} ({{ getDaysRemaining(summary?.active_recharge?.expires_at) }} Days Left)
+        </span>
+      </div>
+    </div>
+
+    <!-- Notice when no plan is active -->
+    <div *ngIf="!hasActivePlan()" class="mb-5 p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-start gap-3">
+      <i class="pi pi-info-circle text-amber-600 text-lg mt-0.5"></i>
+      <div class="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+        <strong class="font-bold block text-sm mb-0.5 text-amber-800 dark:text-amber-100">Active Subscription Required for Mid-Cycle Add-Ons</strong>
+        Modular channel add-ons attach to an ongoing active cycle with prorated daily billing. You currently do not have an active subscription (or your payment has not been completed). Once you subscribe to a base plan or custom bundle above, any unadded channels will unlock here for mid-cycle additions.
+      </div>
+    </div>
+
+    <!-- Add-On Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div
+        *ngFor="let key of ['whatsapp', 'instagram', 'facebook', 'linkedin']"
+        class="p-5 rounded-xl border flex flex-col justify-between transition-all"
+        [ngClass]="isChannelActive(key)
+          ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800'
+          : 'bg-slate-50/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 hover:border-indigo-400'"
+      >
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <span class="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
+              [ngClass]="isChannelActive(key) ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-600' : 'bg-indigo-100 dark:bg-indigo-900 text-indigo-600'"
+            >
+              <i [class]="CHANNEL_PRICING[key].icon"></i>
+            </span>
+            <span
+              *ngIf="isChannelActive(key)"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+            >
+              <i class="pi pi-check text-[9px]"></i> Active
+            </span>
+            <span
+              *ngIf="!isChannelActive(key)"
+              class="text-xs font-semibold text-slate-500"
+            >
+              ₹{{ CHANNEL_PRICING[key].price | number }}/mo
+            </span>
+          </div>
+
+          <h3 class="font-bold text-slate-900 dark:text-white text-base">
+            {{ CHANNEL_PRICING[key].name }}
+          </h3>
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+            {{ CHANNEL_PRICING[key].desc }}
+          </p>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
+          <div *ngIf="isChannelActive(key)" class="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+            <i class="pi pi-sync text-[10px]"></i> Renewing with AutoPay
+          </div>
+          <button
+            *ngIf="!isChannelActive(key)"
+            pButton
+            type="button"
+            [label]="hasActivePlan() ? 'Add Channel (Prorated)' : 'Requires Active Plan'"
+            [icon]="hasActivePlan() ? 'pi pi-plus' : 'pi pi-lock'"
+            class="p-button-outlined p-button-sm w-full"
+            [ngClass]="hasActivePlan() ? 'p-button-indigo' : 'p-button-secondary opacity-60 cursor-not-allowed'"
+            [disabled]="!hasActivePlan()"
+            [pTooltip]="!hasActivePlan() ? 'An active plan is required. Subscribe to a base plan or custom bundle above first.' : 'Pay only for the remaining ' + getDaysRemaining(summary?.active_recharge?.expires_at) + ' days of current cycle'"
+            (click)="openAddonModal(key)"
+          ></button>
+        </div>
       </div>
     </div>
   </div>
@@ -189,7 +516,7 @@
             <th>Plan Name</th>
             <th>Minutes</th>
             <th>Amount Paid</th>
-            <th>Order / Payment ID</th>
+            <th>Mandate / Order ID</th>
             <th>Status</th>
             <th class="text-right">Invoice</th>
           </tr>
@@ -200,7 +527,25 @@
               {{ item.created_at | date:'medium' }}
             </td>
             <td class="font-semibold text-slate-900 dark:text-white">
-              {{ item.plan_name_snapshot }}
+              <div class="flex items-center gap-1.5">
+                <span>{{ cleanPlanName(item.plan_name_snapshot) }}</span>
+                <span
+                  *ngIf="item.is_auto_renew"
+                  class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                  pTooltip="Recurring AutoPay Mandate"
+                >
+                  AutoPay
+                </span>
+              </div>
+              <div *ngIf="item.active_channels?.length" class="flex items-center gap-1 mt-1 flex-wrap">
+                <span
+                  *ngFor="let ch of item.active_channels"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                >
+                  <i [class]="getChannelInfo(ch).icon" class="text-[9px]"></i>
+                  {{ getChannelInfo(ch).name }}
+                </span>
+              </div>
             </td>
             <td>
               <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
@@ -211,62 +556,39 @@
               ₹{{ item.price_paid | number:'1.0-2' }}
             </td>
             <td class="font-mono text-xs text-slate-500">
-              <span *ngIf="item.payment_reference" class="text-indigo-600 dark:text-indigo-400 font-medium">
+              <div *ngIf="item.razorpay_subscription_id" class="text-indigo-600 dark:text-indigo-400 font-medium">
+                {{ item.razorpay_subscription_id }}
+              </div>
+              <div *ngIf="item.payment_reference" class="text-slate-600 dark:text-slate-300">
                 {{ item.payment_reference }}
-              </span>
-              <span *ngIf="!item.payment_reference && item.razorpay_order_id">
+              </div>
+              <div *ngIf="!item.razorpay_subscription_id && !item.payment_reference && item.razorpay_order_id">
                 {{ item.razorpay_order_id }}
-              </span>
-              <span *ngIf="!item.payment_reference && !item.razorpay_order_id" class="text-slate-400">
+              </div>
+              <div *ngIf="!item.razorpay_subscription_id && !item.payment_reference && !item.razorpay_order_id" class="text-slate-400">
                 —
-              </span>
+              </div>
             </td>
             <td>
-              <!-- Active / Success -->
+              <!-- Only Success or Failed -->
               <span
-                *ngIf="item.status === 'active'"
+                *ngIf="isSuccessStatus(item.status)"
                 class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
               >
-                ● Success (Active)
+                ● Success{{ item.status === 'active' ? ' (Active)' : '' }}
               </span>
-              <!-- Pending / Queued -->
               <span
-                *ngIf="item.status === 'pending'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-              >
-                ● Queued / Pending
-              </span>
-              <!-- Failed -->
-              <span
-                *ngIf="item.status === 'failed'"
+                *ngIf="!isSuccessStatus(item.status)"
                 class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800"
-                [pTooltip]="item.failure_reason || 'Payment failed'"
+                [pTooltip]="item.failure_reason || 'Payment was not completed'"
               >
                 ● Failed
               </span>
-              <!-- Cancelled -->
-              <span
-                *ngIf="item.status === 'cancelled'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800"
+              <div
+                *ngIf="!isSuccessStatus(item.status) && item.failure_reason"
+                class="text-[10px] text-slate-400 truncate max-w-xs mt-0.5"
+                [pTooltip]="item.failure_reason"
               >
-                ● Cancelled
-              </span>
-              <!-- Exhausted -->
-              <span
-                *ngIf="item.status === 'exhausted'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
-              >
-                Exhausted
-              </span>
-              <!-- Expired -->
-              <span
-                *ngIf="item.status === 'expired'"
-                class="px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-              >
-                Expired
-              </span>
-              <!-- Failure reason snippet if failed -->
-              <div *ngIf="item.status === 'failed' && item.failure_reason" class="text-[10px] text-red-500 truncate max-w-xs mt-0.5">
                 {{ item.failure_reason }}
               </div>
             </td>
@@ -296,19 +618,27 @@
     </div>
   </div>
 
-  <!-- Minute Usage History Table -->
+  <!-- Minute Usage & Credit History Table -->
   <div class="mt-8">
-    <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">
-      Recent Call Minute Usage Ledger
-    </h2>
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i class="pi pi-history text-indigo-600"></i>
+          Minute Balance Ledger (Calls & Credits)
+        </h2>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Real-time ledger tracking every minute deduction from calls and every top-up/rollover credit.
+        </p>
+      </div>
+    </div>
     <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
       <p-table [value]="usageLogs" [rows]="10" [paginator]="true" styleClass="p-datatable-sm">
         <ng-template pTemplate="header">
           <tr>
             <th>Date & Time</th>
-            <th>Call SID</th>
-            <th>Duration (Sec)</th>
-            <th>Mins Deducted</th>
+            <th>Activity / Call SID</th>
+            <th>Duration</th>
+            <th>Minutes Impact</th>
             <th>Prev Balance</th>
             <th>New Balance</th>
           </tr>
@@ -316,19 +646,178 @@
         <ng-template pTemplate="body" let-log>
           <tr>
             <td class="text-xs text-slate-600 dark:text-slate-300">{{ log.deducted_at | date:'medium' }}</td>
-            <td class="font-mono text-xs text-indigo-600 dark:text-indigo-400">{{ log.call_sid }}</td>
-            <td>{{ log.call_duration_seconds }}s</td>
-            <td class="font-bold text-red-600 dark:text-red-400">-{{ log.minutes_deducted | number:'1.0-2' }} m</td>
+            <td>
+              <span
+                *ngIf="log.call_sid === 'BOOSTER_TOPUP'"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+              >
+                <i class="pi pi-bolt text-[10px]"></i> Minute Booster Top-Up
+              </span>
+              <span
+                *ngIf="log.call_sid === 'SYSTEM_ROLLOVER'"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+              >
+                <i class="pi pi-replay text-[10px]"></i> Monthly Minute Rollover
+              </span>
+              <span
+                *ngIf="log.call_sid !== 'BOOSTER_TOPUP' && log.call_sid !== 'SYSTEM_ROLLOVER'"
+                class="font-mono text-xs text-indigo-600 dark:text-indigo-400"
+              >
+                {{ log.call_sid }}
+              </span>
+            </td>
+            <td class="text-xs text-slate-500">
+              {{ (log.call_sid === 'BOOSTER_TOPUP' || log.call_sid === 'SYSTEM_ROLLOVER') ? '—' : (log.call_duration_seconds + 's') }}
+            </td>
+            <td>
+              <!-- Credit (Negative deduction means balance increase) -->
+              <span *ngIf="log.minutes_deducted < 0" class="font-bold text-emerald-600 dark:text-emerald-400">
+                +{{ (-log.minutes_deducted) | number:'1.0-2' }} m
+              </span>
+              <!-- Normal Call Deduction -->
+              <span *ngIf="log.minutes_deducted >= 0" class="font-bold text-red-600 dark:text-red-400">
+                -{{ log.minutes_deducted | number:'1.0-2' }} m
+              </span>
+            </td>
             <td class="text-xs text-slate-500">{{ log.previous_balance | number:'1.0-2' }} m</td>
             <td class="font-bold text-slate-900 dark:text-white">{{ log.new_balance | number:'1.0-2' }} m</td>
           </tr>
         </ng-template>
         <ng-template pTemplate="emptymessage">
           <tr>
-            <td colspan="6" class="text-center py-6 text-slate-500">No call minute deductions recorded yet.</td>
+            <td colspan="6" class="text-center py-6 text-slate-500">No balance movements recorded yet.</td>
           </tr>
         </ng-template>
       </p-table>
     </div>
   </div>
+
+
+  <!-- AutoPay Cancellation Modal -->
+  <p-dialog
+    [(visible)]="showCancelModal"
+    header="Cancel AutoPay Mandate"
+    [modal]="true"
+    [style]="{ width: '460px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div class="space-y-4">
+      <div class="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-amber-800 dark:text-amber-200 text-sm flex items-start gap-3">
+        <i class="pi pi-info-circle text-amber-600 text-lg mt-0.5"></i>
+        <div>
+          <strong class="font-semibold block">Cycle End Grace Policy:</strong>
+          Cancelling stops recurring debit on your next anniversary. Your current subscription and all remaining talktime minutes remain active until
+          <strong>{{ summary?.active_recharge?.expires_at | date:'mediumDate' }}</strong>.
+        </div>
+      </div>
+
+      <p class="text-sm text-slate-600 dark:text-slate-300">
+        Are you sure you want to cancel the AutoPay mandate for <strong>{{ summary?.active_recharge?.plan_name_snapshot }}</strong>?
+      </p>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+        <button
+          pButton
+          type="button"
+          label="Keep Subscription"
+          class="p-button-text p-button-secondary"
+          (click)="showCancelModal = false"
+        ></button>
+        <button
+          pButton
+          type="button"
+          label="Confirm Cancellation"
+          icon="pi pi-check"
+          class="p-button-danger"
+          [loading]="cancelLoading"
+          (click)="confirmCancelSubscription()"
+        ></button>
+      </div>
+    </div>
+  </p-dialog>
+
+  <!-- Mid-Cycle Add-on Prorated Modal -->
+  <p-dialog
+    [(visible)]="showAddonModal"
+    header="Add Channel to Active Plan"
+    [modal]="true"
+    [style]="{ width: '490px' }"
+    [draggable]="false"
+    [resizable]="false"
+  >
+    <div *ngIf="addonQuoteLoading" class="py-12 text-center text-slate-500">
+      <i class="pi pi-spin pi-spinner text-3xl text-indigo-600 mb-3"></i>
+      <p class="text-sm">Calculating prorated pricing for remaining cycle days...</p>
+    </div>
+
+    <div *ngIf="!addonQuoteLoading && addonQuote" class="space-y-4">
+      <div class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700">
+        <span class="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 flex items-center justify-center text-2xl">
+          <i [class]="getChannelInfo(addonQuote.channel).icon"></i>
+        </span>
+        <div>
+          <h4 class="font-bold text-slate-900 dark:text-white text-base">
+            {{ addonQuote.channel_name }}
+          </h4>
+          <span class="text-xs text-slate-500">
+            Standard: ₹{{ addonQuote.monthly_price | number }} / month
+          </span>
+        </div>
+      </div>
+
+      <!-- Proration Explanation Notice -->
+      <div class="p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs text-indigo-900 dark:text-indigo-200 leading-relaxed">
+        <strong class="font-bold block mb-1">Fair Prorated Billing:</strong>
+        Your active cycle has <strong>{{ addonQuote.remaining_days }} days remaining</strong> out of {{ addonQuote.total_cycle_days }} days (until {{ addonQuote.active_plan_expires_at | date:'mediumDate' }}). You are only billed for these remaining days today.
+      </div>
+
+      <!-- Price Breakdown Table -->
+      <div class="bg-slate-50 dark:bg-slate-900/40 rounded-xl p-3 border border-slate-200 dark:border-slate-700 text-sm space-y-2">
+        <div class="flex justify-between text-slate-600 dark:text-slate-400 text-xs">
+          <span>Monthly Standard Rate:</span>
+          <span>₹{{ addonQuote.monthly_price | number:'1.0-2' }}</span>
+        </div>
+        <div class="flex justify-between text-slate-600 dark:text-slate-400 text-xs">
+          <span>Remaining Cycle Days:</span>
+          <span>{{ addonQuote.remaining_days }} / {{ addonQuote.total_cycle_days }} Days</span>
+        </div>
+        <div class="flex justify-between text-slate-900 dark:text-white font-extrabold text-base pt-2 border-t border-slate-200 dark:border-slate-700">
+          <span>Amount Due Today (Prorated):</span>
+          <span class="text-indigo-600 dark:text-indigo-400 font-extrabold">₹{{ addonQuote.prorated_price | number:'1.0-2' }}</span>
+        </div>
+      </div>
+
+      <!-- AutoPay Sync Notice -->
+      <div class="flex items-start gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 p-3 rounded-xl">
+        <i class="pi pi-sync text-indigo-500 text-sm mt-0.5"></i>
+        <div>
+          <strong class="text-slate-700 dark:text-slate-200">AutoPay Synchronization:</strong>
+          On your next renewal ({{ addonQuote.active_plan_expires_at | date:'mediumDate' }}), this channel will be automatically bundled into your recurring mandate at
+          <strong>₹{{ addonQuote.next_cycle_bundle_price | number:'1.0-2' }} / month</strong>.
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+        <button
+          pButton
+          type="button"
+          label="Cancel"
+          class="p-button-text p-button-secondary"
+          (click)="showAddonModal = false"
+        ></button>
+        <button
+          pButton
+          type="button"
+          [label]="'Pay ₹' + (addonQuote.prorated_price | number:'1.0-2') + ' & Activate'"
+          icon="pi pi-bolt"
+          class="p-button-primary bg-indigo-600"
+          [loading]="addonPurchaseLoading"
+          (click)="confirmAddonPurchase()"
+        ></button>
+      </div>
+    </div>
+  </p-dialog>
 </div>
+
