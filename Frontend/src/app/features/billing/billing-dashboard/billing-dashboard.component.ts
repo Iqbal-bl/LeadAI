@@ -698,6 +698,45 @@ export class BillingDashboardComponent implements OnInit {
     rzp.open();
   }
 
+  cancellingChannel: { [key: string]: boolean } = {};
+  showCancelChannelModal = false;
+  channelToCancel: string | null = null;
+
+  promptCancelChannel(channelKey: string): void {
+    this.channelToCancel = channelKey;
+    this.showCancelChannelModal = true;
+  }
+
+  confirmCancelChannel(): void {
+    if (!this.channelToCancel) return;
+    const channelKey = this.channelToCancel;
+    const channelName = this.CHANNEL_PRICING[channelKey]?.name || channelKey;
+
+    this.cancellingChannel[channelKey] = true;
+    this.billingService.cancelChannel(channelKey).subscribe({
+      next: (res) => {
+        this.cancellingChannel[channelKey] = false;
+        this.showCancelChannelModal = false;
+        this.channelToCancel = null;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Renewal Cancelled',
+          detail: res.message || `${channelName} will remain active until your cycle ends and will not renew.`,
+          life: 8000,
+        });
+        this.loadData();
+      },
+      error: (err) => {
+        this.cancellingChannel[channelKey] = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Cancellation Failed',
+          detail: err?.error?.detail || `Failed to cancel ${channelName} renewal.`,
+        });
+      },
+    });
+  }
+
   isSuccessStatus(status: string | null | undefined): boolean {
     const s = (status || '').toLowerCase().trim();
     return ['active', 'success', 'superseded', 'exhausted', 'expired'].includes(s);
