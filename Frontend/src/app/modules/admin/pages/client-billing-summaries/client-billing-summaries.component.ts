@@ -1,13 +1,13 @@
 import { Component, OnInit } from '@angular/core';
-import { SharedModule } from '../../../shared/shared.module';
-import { BillingService } from '../../../services/billing.service';
-import { CompanyService } from '../../../services/company.service';
+import { SharedModule } from '../../../../shared/shared.module';
+import { BillingService } from '../../../../services/billing.service';
+import { CompanyService } from '../../../../services/company.service';
 import {
   BillingSummary,
   RechargeAllocatePayload,
   RechargePlanTemplate,
-} from '../../../models/billing.models';
-import { Company } from '../../../models/company.models';
+} from '../../../../models/billing.models';
+import { Company } from '../../../../models/company.models';
 import { MessageService } from 'primeng/api';
 
 @Component({
