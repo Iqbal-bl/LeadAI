@@ -147,7 +147,7 @@ This is **slow** — an LLM call plus image generation plus publishing, commonly
 can't leave. Either give it a dedicated progress state, or queue it (§5).
 
 If the deployment hasn't installed the AI extras you get a **503** naming
-`requirements-social.txt`. Treat it as "feature not enabled here" and hide the
+`requirements.txt`. Treat it as "feature not enabled here" and hide the
 AI tab rather than showing a scary error.
 
 ---

@@ -47,7 +47,6 @@ answering; no Exotel → Twilio; no Redis → in-process cache.
 
 ```bash
 pip install -r requirements.txt
-pip install -r LeadAI/requirements-leadai.txt
 
 # append LeadAI/.env.leadai.example to your .env, then set at minimum:
 #   LEADAI_BOOTSTRAP_ADMINS=you@yourcompany.com

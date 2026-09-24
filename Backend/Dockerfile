@@ -34,15 +34,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /wheels
-COPY requirements.txt LeadAI/requirements-leadai.txt* ./
+COPY requirements.txt ./
 
 # Build every dependency into a wheelhouse. Doing this as its own layer means a
 # code change does not re-compile mysqlclient — that alone is several minutes
 # back on every deploy.
-RUN pip wheel --wheel-dir /wheels/dist -r requirements.txt \
-    && if [ -f requirements-leadai.txt ]; then \
-         pip wheel --wheel-dir /wheels/dist -r requirements-leadai.txt; \
-       fi
+RUN pip wheel --wheel-dir /wheels/dist -r requirements.txt
 
 
 # ----------------------------------------------------------------------------
@@ -72,11 +69,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /wheels/dist /wheels/dist
-COPY requirements.txt LeadAI/requirements-leadai.txt* ./
+COPY requirements.txt ./
 RUN pip install --no-index --find-links=/wheels/dist -r requirements.txt \
-    && if [ -f requirements-leadai.txt ]; then \
-         pip install --no-index --find-links=/wheels/dist -r requirements-leadai.txt; \
-       fi \
     && rm -rf /wheels
 
 # Run as a non-root user. The app writes only to ./scripts (mounted) and to the

@@ -8,7 +8,6 @@ the original AI outbound-calling app. One process serves both, and one MySQL dat
 ```bash
 python -m venv .venv && .venv/Scripts/activate      # source .venv/bin/activate on Linux/macOS
 pip install -r requirements.txt
-pip install -r LeadAI/requirements-leadai.txt
 cp .env.example .env                                # then fill it in
 python main.py                                      # or: uvicorn main:app --port 6789
 ```
