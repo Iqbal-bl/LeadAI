@@ -149,6 +149,15 @@ def validate(strict: bool | None = None) -> None:
 
     `strict` defaults to True when ENVIRONMENT is production or staging.
     """
+    # Read .env first. This runs before anything else imports, so without this the
+    # check would report every value in .env as "unset". Variables already set in
+    # the real environment (e.g. docker env_file) still win: load_dotenv never overrides.
+    from dotenv import load_dotenv
+
+    from core.paths import ENV_FILE
+
+    load_dotenv(ENV_FILE)
+
     env = (os.getenv("ENVIRONMENT") or "development").strip().lower()
     if strict is None:
         strict = env in ("production", "staging", "prod")
