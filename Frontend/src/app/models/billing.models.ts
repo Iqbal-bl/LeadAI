@@ -180,3 +180,13 @@ export interface PlanTemplateCreatePayload {
   description?: string;
 }
 
+export interface ChannelActionResponse {
+  ok?: boolean;
+  channel?: string;
+  status?: string;
+  active_until?: string | null;
+  active_channels: string[];
+  next_cycle_channels: string[];
+  next_cycle_bundle_price?: number;
+  message: string;
+}

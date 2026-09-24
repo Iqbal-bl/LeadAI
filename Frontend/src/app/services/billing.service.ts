@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 import {
   BillingSummary,
+  ChannelActionResponse,
   ChannelAddonOrderResponse,
   ChannelAddonQuote,
   ChannelAddonVerifyPayload,
@@ -86,8 +87,8 @@ export class BillingService {
   }
 
   /** Tenant: Cancel a specific channel add-on from renewing next cycle */
-  public cancelChannel(channel: string): Observable<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }> {
-    return this.apiService.post<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }>(
+  public cancelChannel(channel: string): Observable<ChannelActionResponse> {
+    return this.apiService.post<ChannelActionResponse>(
       'billing/cancel-channel',
       { channel },
       { companyScoped: true }
@@ -95,8 +96,8 @@ export class BillingService {
   }
 
   /** Tenant: Resume / undo cancellation of a channel add-on for next cycle (₹0 charge) */
-  public resumeChannel(channel: string): Observable<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }> {
-    return this.apiService.post<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }>(
+  public resumeChannel(channel: string): Observable<ChannelActionResponse> {
+    return this.apiService.post<ChannelActionResponse>(
       'billing/resume-channel',
       { channel },
       { companyScoped: true }
