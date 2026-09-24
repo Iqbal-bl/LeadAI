@@ -431,10 +431,10 @@ async def download_invoice(
     db: Session = Depends(get_leadai_db),
 ):
     """Serve the custom PDF invoice with authentication and tenancy validation."""
-    from Domain.models import Client
+    from domain.models import Client
     from ..models import LeadClientRecharge, LeadUserRole, ROLE_ADMIN
     from ..services import invoice as invoice_svc
-    from token_validation import validate_token_async
+    from core.token_validation import validate_token_async
 
     # 1. Resolve auth token from header or query param (for browser tab downloads)
     auth_header = request.headers.get("Authorization")
@@ -683,7 +683,7 @@ def admin_clients_summary(
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
-    from Domain.models import Client
+    from domain.models import Client
 
     clients = db.query(Client).all()
     summaries = []

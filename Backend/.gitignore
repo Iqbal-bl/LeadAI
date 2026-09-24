@@ -3,11 +3,9 @@ venv
 vscode/
 temp_scipts/
 temp/
-dockerfile
 __pycache__/
 .venv
 .vnev
 .env
 prepaid_credit_demo.html
 prepaid_credit_demo.py
-scratch/

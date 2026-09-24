@@ -30,7 +30,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from Domain.models import Client
+from domain.models import Client
 
 from .. import activity
 from ..activity import A
@@ -233,7 +233,7 @@ def get_call_transcript_by_sid(
 
     # Fallback: fetch directly from legacy conversations table if leadai_messages is empty
     if not messages:
-        from db import fetch_conversation
+        from outbound.call_store import fetch_conversation
         _RESPONSE_TYPE_TO_SENDER = {"question": "ai", "answer": "customer", "hangup": "system"}
         turns = fetch_conversation(call_sid) or []
         for turn in turns:

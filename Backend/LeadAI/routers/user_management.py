@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from Domain.models import Client
+from domain.models import Client
 
 from .. import activity
 from ..activity import A

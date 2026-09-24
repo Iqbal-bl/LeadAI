@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from Domain.models import Client
+from domain.models import Client
 
 from .. import activity
 from ..activity import A
@@ -54,7 +54,7 @@ from ..security import decrypt_pii, encrypt_pii, phone_fingerprint
 from . import ai_engine, memory, script_engine
 
 try:
-    from Websockets.connection import _fire_and_forget, manager as ws_manager
+    from core.websocket_manager import _fire_and_forget, manager as ws_manager
 except Exception:  # noqa: BLE001
     ws_manager = None  # type: ignore[assignment]
 

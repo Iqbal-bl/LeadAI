@@ -1,191 +1,71 @@
-# Backend Deployment
+# LeadAI Backend
 
-## 1. Install System Dependencies for Python
+FastAPI backend for LeadAI, a multi-tenant AI lead-generation platform. It sits on top of
+the original AI outbound-calling app. One process serves both, and one MySQL database holds both.
 
-### Update package list and install required tools
+## Run it
+
 ```bash
-sudo apt update 
-sudo apt install -y python3 python3-pip python3-venv
-```
-
-## 2. Clone the Project Repository
-
-### Create Directory
-```bash
-mkdir -p app/backend
-cd app/backend
-```
-
-### Clone the project from your Git repository
-```bash
-git clone https://<YOUR_GITHUB_TOKEN>@github.com/BharatLogic-com/AI-outbound-Agent-Backend.git
-cd AI-outbound-Agent-Backend
-```
-
-## 3. Set Up the Python Backend
-
-### 3.1 Create and Activate a Virtual Environment
-Navigate to backend directory and set up virtual environment
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3.2 Install Backend Dependencies
-Install Python dependencies
-```bash
-pip install --upgrade pip
+python -m venv .venv && .venv/Scripts/activate      # source .venv/bin/activate on Linux/macOS
 pip install -r requirements.txt
+pip install -r LeadAI/requirements-leadai.txt
+cp .env.example .env                                # then fill it in
+python main.py                                      # or: uvicorn main:app --port 6789
 ```
 
-### 3.3 Changes in .env file
-Open .env file 
-```bash
-nano .env
+Docker: `docker compose up -d` (API, background worker, MinIO). Health check: `GET /api/leadai/health`.
+Swagger UI: `/docs`. Server setup notes: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), [docs/DOCKER.md](docs/DOCKER.md).
+
+## Where things are
+
+```
+Backend/
+├── main.py            Entry point. Builds the app, adds batch routes, registers LeadAI.
+│
+├── core/              Shared infrastructure: config check, DB engine, auth, storage, paths, websockets
+├── domain/            Shared DB tables (Clients = a company/tenant, users, batches, call logs) + schemas
+│
+├── outbound/          The original outbound-calling app
+│   ├── app.py           voice calls, Twilio webhooks, live audio <-> speech <-> LLM
+│   ├── batching.py      batch-calling engine and /api/batches
+│   ├── speech/          Sarvam speech-to-text / text-to-speech
+│   ├── repositories/    data access for batch tables
+│   └── bot/             insurance-claim bot toolkit (only its CSV export is used)
+│
+├── LeadAI/            The lead-generation platform (everything under /api/leadai)
+│   ├── routers/         HTTP endpoints, one file per feature (inbox, campaigns, billing, ...)
+│   ├── services/        business logic (AI engine, RAG, campaigns, billing, jobs, telephony)
+│   ├── social/          LinkedIn and social publishing helpers
+│   ├── models*.py       its database tables (all prefixed leadai_)
+│   ├── schemas*.py      request / response models
+│   ├── rbac.py          roles and permissions
+│   └── integration.py   the single hook main.py calls to attach LeadAI to the app
+│
+├── social_agent/      Facebook / Instagram Graph API client and the AI posting agent
+│
+├── scripts/           XML agent scripts (runtime data, mounted as a docker volume)
+├── tools/             One-off maintenance scripts
+├── tests/             Tests and test stubs
+├── demo/              Demo company ("Nexa Finserv") seed data and runbook
+├── data/              Old sample data and binaries that no code reads
+└── docs/              Guides and design notes (see docs/README.md)
 ```
 
-Save env file after doing changes by:
-```bash
-ctrl + o 
-enter
-ctrl + x
-```
+## How a request flows
 
-## 4. Install MySQL Database
+`main.py` imports the voice app from `outbound/app.py`, mounts the batch router, then calls
+`LeadAI.integration.register(app)`. If LeadAI fails to load, the voice and batch APIs still work.
 
-### Install required system packages (Ubuntu 24.04)
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  build-essential \
-  pkg-config \
-  python3-dev \
-  default-libmysqlclient-dev
-```
+LeadAI routes live under `/api/leadai`. Each one checks a permission (`LeadAI/rbac.py`) and
+resolves which company the caller may touch. Background work (campaigns, LinkedIn) runs in a
+separate worker container from the same image (`LEADAI_WORKER_ENABLED=true`).
 
-### Install MySQL Server
-```bash
-sudo apt-get update
-sudo apt-get install -y mysql-server
+## Working in this codebase
 
-sudo systemctl enable --now mysql
-```
-
-### Configure Database
-```bash
-sudo mysql
-```
-
-Run the following SQL commands:
-```sql
--- Create DB (if not exists)
-CREATE DATABASE IF NOT EXISTS aichat_db
-  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- Create user with remote access
-CREATE USER IF NOT EXISTS 'chatuser'@'%' IDENTIFIED BY 'SecurePass123!';
-
-GRANT ALL PRIVILEGES ON aichat_db.* TO 'chatuser'@'%';
-FLUSH PRIVILEGES;
-```
-
-### Configure MySQL for remote access
-```bash
-sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
-```
-
-Change the bind-address to:
-```
-bind-address = 0.0.0.0
-```
-
-Restart MySQL:
-```bash
-sudo systemctl restart mysql
-```
-
-## 5. Set Up Ngrok
-
-### 5.1 Install Ngrok via Apt
-Add Ngrok repository and install Ngrok
-```bash
-curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-sudo apt update
-sudo apt install -y ngrok
-```
-
-### 5.2 Configure Ngrok Authtoken
-Add your Ngrok authtoken (replace `<your-ngrok-authtoken>` with your token from ngrok.com)
-```bash
-ngrok config add-authtoken <your-ngrok-authtoken>
-```
-
-### To run ngrok in background with PM2:
-
-Create a script called ngrok-start.sh:
-```bash
-nano ngrok-start.sh
-```
-
-Paste this inside:
-```bash
-ngrok http 5050
-```
-
-Save & exit (Ctrl + O, Enter, then Ctrl + X)
-
-Make it executable:
-```bash
-chmod +x ngrok-start.sh
-```
-
-## 6. Install PM2
-
-Install PM2 globally
-```bash
-sudo npm install -g pm2
-```
-
-## 7. Start Services
-
-### Start Ngrok with PM2:
-```bash
-pm2 start ./ngrok-start.sh --name ngrok-tunnel
-```
-
-### Check if it worked:
-```bash
-curl http://127.0.0.1:4040/api/tunnels
-```
-
-You should now see a JSON output, copy the public url and paste it into the .env file NGROKURL and NGURL 
-
-### Run the Backend with PM2
-Start the backend (replace app.py with your entry point file)
-```bash
-pm2 start app.py --name backend --interpreter ./venv/bin/python
-```
-
-## 8. Useful PM2 Commands
-
-```bash
-# View all processes
-pm2 list
-
-# View logs
-pm2 logs backend
-pm2 logs ngrok-tunnel
-
-# Restart services
-pm2 restart backend
-pm2 restart ngrok-tunnel
-
-# Stop services
-pm2 stop backend
-pm2 stop ngrok-tunnel
-
-# Save PM2 configuration
-pm2 save
-pm2 startup
-```
+- **Adding an endpoint:** router in `LeadAI/routers/`, logic in `LeadAI/services/`, request/response
+  models in `LeadAI/schemas*.py`, then include the router in `LeadAI/router.py`.
+- **Adding a table:** model in `LeadAI/models*.py` (tables are created on startup; new columns are
+  added automatically, nothing is ever dropped).
+- **File paths:** use `core/paths.py` instead of relative paths, so the app works from any folder.
+- **Imports:** always absolute from the package roots: `core`, `domain`, `outbound`, `LeadAI`.
+- **Known limits:** run one uvicorn worker (live call state is in process memory).

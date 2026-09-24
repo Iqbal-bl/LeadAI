@@ -1,7 +1,7 @@
 """
 Unified entrypoint — ONE FastAPI app that exposes every API.
 
-Base    : the multilingual (Sarvam) voice-agent app from `multiligual_call.py`
+Base    : the multilingual (Sarvam) voice-agent app from `outbound/app.py`
           (all /api/* control endpoints, /outbound-twiml, /call-status,
           /media-stream, /ws/transcript, auth, script management, CORS, /docs).
 Added   : the batch-calling control plane (`batching.router`) plus the batch /
@@ -17,12 +17,12 @@ import asyncio
 import os
 import logging
 
-# Validate the environment BEFORE importing anything that reads it. multiligual_
-# call.py builds its SessionMiddleware with `os.getenv("SESSION_SECRET",
+# Validate the environment BEFORE importing anything that reads it.
+# outbound/app.py builds its SessionMiddleware with `os.getenv("SESSION_SECRET",
 # "demo-secret-key")` at import time, so a check placed after that import would
 # be reporting on a secret that has already been baked into the middleware.
 # In production a critical issue exits 78 here; in development it warns.
-from config_guard import validate as _validate_config
+from core.config_guard import validate as _validate_config
 
 _validate_config()
 
@@ -31,11 +31,11 @@ from fastapi import WebSocket, WebSocketDisconnect  # noqa: E402
 # Import the complete, already-built Sarvam app. This pulls in db.py (users +
 # transcripts) and, transitively via batching below, the Domain/ ORM used for
 # batches — both ride on the single MySQL engine in database.py.
-from multiligual_call import app
+from outbound.app import app
 
 # Batch calling control plane + the shared websocket broadcast manager.
-from batching import router as batch_router, service  # noqa: F401  (service kept for parity)
-from Websockets.connection import manager, set_event_loop
+from outbound.batching import router as batch_router, service  # noqa: F401  (service kept for parity)
+from core.websocket_manager import manager, set_event_loop
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ app.include_router(batch_router, prefix="/api", tags=["Batches"])
 # ---------------------------------------------------------------------------
 # Full WebSocket surface (parity with voice_agent.py), all driven by the shared
 # Websockets.connection.manager:
-#   /ws/transcript/{call_sid}  -> live transcript      (defined in multiligual_call.py)
+#   /ws/transcript/{call_sid}  -> live transcript      (defined in outbound/app.py)
 #   /ws/batch/{batch_id}       -> batch status
 #   /ws/activecalls            -> active call count
 #   /ws/runningbatch           -> running batch ids
@@ -134,7 +134,7 @@ async def ws_general(websocket: WebSocket, callsid: str):
 #   • the customer chat widget + lead generation/qualification pipeline
 #   • the staff inbox with RBAC, PII masking and activity logging
 #   • outbound lead calls, which REUSE the existing Twilio/Exotel + Sarvam
-#     pipeline in multiligual_call.py rather than duplicating it
+#     pipeline in outbound/app.py rather than duplicating it
 #
 # Registration is wrapped: if LeadAI fails to load for any reason, the existing
 # voice-agent and batch-calling APIs continue to serve normally.

@@ -19,12 +19,7 @@ exclude = [
     "venv",
     ".venv",
     "__pycache__",
-    "dll_file",
-    "data_files",
-    # Vendored third-party agents. Formatting them creates merge conflicts
-    # against upstream for no benefit — de-duplicate them first (see
-    # scripts/cleanup_repo.sh step 3), then remove this exclusion.
-    "browser_agent_v2-main",
+    "data",
 ]
 
 [tool.ruff.lint]
@@ -50,19 +45,19 @@ ignore = [
 # them module by module and delete entries from this list. Suppressing them now
 # keeps `ruff check` green on new code, so the signal is usable today rather
 # than drowning in 400 pre-existing findings.
-"multiligual_call.py" = ["T20", "B904", "E722", "F841"]
-"batching.py"         = ["T20", "B904", "E722", "F841"]
-"bot/*.py"            = ["T20", "B904", "E722", "F841"]
+"outbound/app.py"      = ["T20", "B904", "E722", "F841"]
+"outbound/batching.py" = ["T20", "B904", "E722", "F841"]
+"outbound/bot/*.py"    = ["T20", "B904", "E722", "F841"]
 "social_agent/**"     = ["T20", "B904", "E722"]
 
 # Scripts and tests legitimately print.
 "demo/*.py"           = ["T20"]
-"config_guard.py"     = ["T20"]
-"test_*.py"           = ["T20"]
-"**/functional_test.py" = ["T20"]
+"core/config_guard.py" = ["T20"]
+"tools/*.py"          = ["T20"]
+"tests/**"            = ["T20"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["LeadAI", "Domain", "Repositories", "Websockets", "bot"]
+known-first-party = ["LeadAI", "core", "domain", "outbound", "social_agent"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -72,7 +67,8 @@ skip-magic-trailing-comma = false
 
 # =============================================================================
 [tool.pytest.ini_options]
-testpaths = ["tests", "."]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
 python_files = ["test_*.py", "*_test.py"]
 addopts = "-q --strict-markers"
 markers = [

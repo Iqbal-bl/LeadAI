@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from Domain.models import Client
+from domain.models import Client
 
 from .models import (
     Lead,

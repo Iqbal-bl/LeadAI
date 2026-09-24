@@ -142,7 +142,7 @@ def register_call_context(call_sid: str, phone_number: str, sections: list[dict]
     and it only ADDS a key for a brand-new CallSid — it never reads or mutates
     another call's entry.
     """
-    from multiligual_call import active_calls
+    from outbound.app import active_calls
 
     active_calls[call_sid] = {
         "phone_number": phone_number,
@@ -202,7 +202,7 @@ def start_call_for_conversation(
     # rejected before any carrier API call (and with the same rules as
     # /api/make-call).
     try:
-        from validate_number import validate_phone_number
+        from outbound.phone import validate_phone_number
 
         number = validate_phone_number(number)
     except Exception as exc:  # noqa: BLE001
@@ -283,7 +283,7 @@ def hangup_call(db: Session, call: LeadCall) -> bool:
     # Record the reason in the outbound app's own hangup registry so its existing
     # transcript annotation ("who ended the call") stays accurate.
     try:
-        from globals import call_hangup_reasons
+        from outbound.call_state import call_hangup_reasons
 
         call_hangup_reasons[call.CallSid] = "Ended via LeadAI dashboard"
     except Exception:  # noqa: BLE001
@@ -330,7 +330,7 @@ def sync_call_transcript(
         return {"imported": 0, "reason": "conversation missing"}
 
     # Read the authoritative transcript from the EXISTING conversations table.
-    from db import fetch_conversation
+    from outbound.call_store import fetch_conversation
 
     turns = fetch_conversation(call.CallSid) or []
     if not turns:

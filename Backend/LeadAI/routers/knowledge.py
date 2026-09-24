@@ -21,7 +21,7 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from Domain.models import Client
+from domain.models import Client
 
 from .. import activity
 from ..activity import A

@@ -25,7 +25,7 @@ from typing import Callable, Iterable
 from fastapi import Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from auth import get_current_user
+from core.auth import get_current_user
 
 from .db import get_leadai_db
 from .models import (

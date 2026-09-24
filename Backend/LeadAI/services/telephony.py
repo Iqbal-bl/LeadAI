@@ -154,7 +154,7 @@ def place_twilio_call(to_number: str, server_url: str) -> tuple[str, str]:
     is indistinguishable downstream from a normal outbound call and lands in
     `calllogs`, `conversations` and `recordings` exactly as before.
     """
-    from multiligual_call import TWILIO_PHONE_NUMBER, twilio_client
+    from outbound.app import TWILIO_PHONE_NUMBER, twilio_client
 
     try:
         call = twilio_client.calls.create(
@@ -174,7 +174,7 @@ def place_twilio_call(to_number: str, server_url: str) -> tuple[str, str]:
 
 def hangup_twilio_call(call_sid: str) -> bool:
     try:
-        from multiligual_call import twilio_client
+        from outbound.app import twilio_client
 
         twilio_client.calls(call_sid).update(status="completed")
         return True

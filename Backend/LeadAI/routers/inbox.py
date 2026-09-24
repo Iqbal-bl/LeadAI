@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from Domain.models import Client
+from domain.models import Client
 
 from .. import activity
 from ..activity import A
@@ -66,7 +66,7 @@ from ..serializers import (
 from ..services import ai_engine, conversation_flow
 
 try:
-    from Websockets.connection import manager as ws_manager, _fire_and_forget
+    from core.websocket_manager import manager as ws_manager, _fire_and_forget
 except Exception:  # noqa: BLE001
     ws_manager = None  # type: ignore[assignment]
     def _fire_and_forget(coro):  # type: ignore[misc]
