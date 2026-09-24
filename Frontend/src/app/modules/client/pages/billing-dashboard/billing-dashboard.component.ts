@@ -163,7 +163,7 @@ export class BillingDashboardComponent implements OnInit {
       key: subRes.key_id,
       subscription_id: subRes.subscription_id,
       name: 'LeadAI',
-      description: `AutoPay Mandate: ${subRes.plan_name} (${subRes.included_minutes} mins/mo)`,
+      description: `AutoPay Mandate: ${subRes.plan_name} (Max authorized limit: ₹${subRes.mandate_max_amount ? Math.round(subRes.mandate_max_amount / 100).toLocaleString('en-IN') : '15,000'}/mo per RBI guidelines)`,
       handler: (response: any) => {
         this.rechargeLoading = true;
         this.billingService
