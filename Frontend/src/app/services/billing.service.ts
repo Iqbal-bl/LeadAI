@@ -24,7 +24,7 @@ import {
   providedIn: 'root',
 })
 export class BillingService {
-  constructor(private apiService: ApiService) {}
+  constructor(private apiService: ApiService) { }
 
   /** Tenant: Get current active plan & balance summary */
   public getCurrentPlan(): Observable<BillingSummary> {
@@ -89,6 +89,15 @@ export class BillingService {
   public cancelChannel(channel: string): Observable<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }> {
     return this.apiService.post<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }>(
       'billing/cancel-channel',
+      { channel },
+      { companyScoped: true }
+    );
+  }
+
+  /** Tenant: Resume / undo cancellation of a channel add-on for next cycle (₹0 charge) */
+  public resumeChannel(channel: string): Observable<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }> {
+    return this.apiService.post<{ ok: boolean; message: string; active_channels: string[]; next_cycle_channels: string[] }>(
+      'billing/resume-channel',
       { channel },
       { companyScoped: true }
     );
