@@ -378,6 +378,23 @@ def cancel_channel_addon(
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
 
+@router.post("/resume-channel", response_model=ChannelCancelOut, summary="Resume an individual channel add-on renewal (Undo cancellation)")
+def resume_channel_addon(
+    payload: ChannelCancelIn,
+    scope: tuple[Principal, str] = Depends(scoped("billing.recharge", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    try:
+        res = billing_svc.resume_channel_for_next_cycle(
+            db=db,
+            client_id=client_id,
+            channel=payload.channel,
+        )
+        return ChannelCancelOut(**res)
+    except ValueError as err:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
+
 
 @router.post("/webhook", summary="Razorpay Webhook for subscription auto-renewal events")
 async def razorpay_webhook(
@@ -452,29 +469,41 @@ async def download_invoice(
     if not claims:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired authentication token")
 
-    caller_email = str(claims.get("sub") or claims.get("email") or claims.get("preferred_username") or "").lower()
+    caller_email = str(
+        claims.get("user_email")
+        or claims.get("user_name")
+        or claims.get("email")
+        or claims.get("preferred_username")
+        or claims.get("sub")
+        or ""
+    ).lower()
 
     # 3. Locate recharge
     recharge = db.query(LeadClientRecharge).filter(LeadClientRecharge.Id == recharge_id).first()
     if not recharge:
         raise HTTPException(status_code=404, detail="Invoice / Recharge transaction not found.")
 
-    # 4. Enforce tenant ownership / Super Admin access
-    is_admin = db.query(LeadUserRole).filter(
-        LeadUserRole.UserEmail == caller_email,
-        LeadUserRole.Role == ROLE_ADMIN,
-        LeadUserRole.IsActive == True,
-        LeadUserRole.IsDeleted == False,
-    ).first() is not None
+    # 4. Enforce tenant ownership / Super Admin access / Owner access
+    is_admin = (
+        str(claims.get("role", "")).lower() in ("admin", "superadmin")
+        or db.query(LeadUserRole).filter(
+            LeadUserRole.UserEmail == caller_email,
+            LeadUserRole.Role.in_([ROLE_ADMIN, "admin"]),
+            LeadUserRole.IsActive == True,
+            LeadUserRole.IsDeleted == False,
+        ).first() is not None
+    )
 
     if not is_admin:
+        is_creator = bool(recharge.CreatedBy and recharge.CreatedBy.lower() == caller_email)
         has_client_access = db.query(LeadUserRole).filter(
             LeadUserRole.UserEmail == caller_email,
             LeadUserRole.ClientId == recharge.ClientId,
             LeadUserRole.IsActive == True,
             LeadUserRole.IsDeleted == False,
         ).first() is not None
-        if not has_client_access:
+
+        if not is_creator and not has_client_access:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not have permission to access this invoice.")
 
     client = db.query(Client).filter(Client.Id == recharge.ClientId).first()
