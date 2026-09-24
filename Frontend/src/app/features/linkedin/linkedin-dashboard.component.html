@@ -21,6 +21,8 @@
   </div>
 
   <div class="flex items-center gap-2">
+    <p-button label="Channels" icon="pi pi-link" [text]="true" severity="secondary" routerLink="/client/channels"></p-button>
+    <p-button label="Campaigns" icon="pi pi-megaphone" [text]="true" severity="secondary" routerLink="/client/campaigns"></p-button>
     <p-tag *ngIf="status?.connected" value="Connected" severity="success" [rounded]="true" icon="pi pi-check-circle"></p-tag>
     <p-tag *ngIf="status && !status.connected" value="Not Connected" severity="secondary" [rounded]="true" icon="pi pi-exclamation-circle"></p-tag>
     <p-button icon="pi pi-refresh" [rounded]="true" [text]="true" severity="secondary" pTooltip="Refresh Status" (onClick)="loadStatus()"></p-button>

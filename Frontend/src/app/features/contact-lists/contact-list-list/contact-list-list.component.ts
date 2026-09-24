@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { ContactListService } from '../../../services/contact-list.service';
 import { ContactList, ContactListPreview } from '../../../models/contact-list.models';
@@ -34,7 +35,14 @@ export class ContactListListComponent implements OnInit {
     private contactListService: ContactListService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
+    private router: Router,
   ) {}
+
+  launchCampaign(list: ContactList): void {
+    this.router.navigate(['/client/campaigns'], {
+      queryParams: { audienceId: list.id, create: 'true' },
+    });
+  }
 
   ngOnInit(): void {
     this.loadLists();

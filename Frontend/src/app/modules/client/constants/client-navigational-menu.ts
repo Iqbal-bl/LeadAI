@@ -37,24 +37,7 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     ],
   },
   {
-    title: 'Social Media',
-    items: [
-      {
-        label: 'Social Media Analytics',
-        icon: 'pi pi-chart-pie',
-        routerLink: '/client/social-analytics',
-        permission: 'analytics.read',
-      },
-      {
-        label: 'Create a Post',
-        icon: 'pi pi-send',
-        routerLink: '/client/create-post',
-        permission: 'campaign.manage',
-      },
-    ],
-  },
-  {
-    title: 'Outreach',
+    title: 'Channels & Integrations',
     items: [
       {
         label: 'Channels',
@@ -62,24 +45,51 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         routerLink: '/client/channels',
         permission: 'channel.read',
       },
-      {
-        label: 'LinkedIn Automation',
-        icon: 'pi pi-linkedin',
-        routerLink: '/client/linkedin',
-        permission: 'channel.read',
-      },
+    ],
+  },
+  {
+    title: 'Audiences',
+    items: [
       {
         label: 'Contact Lists',
         icon: 'pi pi-list',
         routerLink: '/client/contact-lists',
         permission: 'campaign.manage',
       },
+    ],
+  },
+  {
+    title: 'Outreach & Campaigns',
+    items: [
       {
         label: 'Campaigns',
         icon: 'pi pi-megaphone',
         routerLink: '/client/campaigns',
         permission: 'campaign.read',
       },
+      {
+        label: 'LinkedIn Automation',
+        icon: 'pi pi-linkedin',
+        routerLink: '/client/linkedin',
+        permission: 'channel.read',
+      },
+    ],
+  },
+  {
+    title: 'Social Publishing',
+    items: [
+      {
+        label: 'Create a Post',
+        icon: 'pi pi-send',
+        routerLink: '/client/create-post',
+        permission: 'campaign.manage',
+      },
+      // {
+      //   label: 'Social Media Analytics',
+      //   icon: 'pi pi-chart-pie',
+      //   routerLink: '/client/social-analytics',
+      //   permission: 'analytics.read',
+      // },
     ],
   },
   {

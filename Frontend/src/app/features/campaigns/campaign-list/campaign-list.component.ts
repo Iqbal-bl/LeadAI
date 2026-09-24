@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
 import {
@@ -25,6 +25,7 @@ export class CampaignListComponent implements OnInit {
   campaigns: Campaign[] = [];
   loading = true;
   showCreate = false;
+  selectedAudienceId = '';
 
   canSend = false;
 
@@ -45,12 +46,22 @@ export class CampaignListComponent implements OnInit {
     private messageService: MessageService,
     private authService: AuthService,
     private router: Router,
+    private route: ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
     this.loadCampaigns();
     const user = this.authService.getCurrentUser();
     this.canSend = user?.permissions?.includes('campaign.send') ?? false;
+
+    this.route.queryParams.subscribe((params) => {
+      if (params['audienceId']) {
+        this.selectedAudienceId = params['audienceId'];
+      }
+      if (params['create'] === 'true' || params['audienceId']) {
+        this.openCreate();
+      }
+    });
   }
 
   loadCampaigns(): void {

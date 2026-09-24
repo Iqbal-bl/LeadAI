@@ -5,6 +5,7 @@ import {
 } from '@angular/core';
 
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 
 import { AccountSelector } from '../../composer/account-selector/account-selector';
 import { AiTools } from '../../composer/ai-tools/ai-tools';
@@ -31,6 +32,7 @@ import { MessageService } from 'primeng/api';
 
   imports: [
     CommonModule,
+    RouterModule,
     AccountSelector,
     ToastModule,
     AiTools,
