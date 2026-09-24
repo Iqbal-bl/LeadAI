@@ -1585,6 +1585,57 @@ def cancel_channel_for_next_cycle(
         "next_cycle_bundle_price": next_cycle_price,
         "message": f"Your {ch_key.title()} add-on will remain active until {exp_str}. You will not be charged for it in upcoming renewals.",
     }
+def resume_channel_for_next_cycle(
+    db: Session,
+    client_id: str,
+    channel: str,
+) -> dict:
+    """Resumes an individual channel add-on for upcoming renewal (Undo mid-cycle cancellation).
+    
+    Charges ₹0 today because the channel is already active and paid through ExpiresAt.
+    Re-adds the channel into NextCycleChannels and updates the Razorpay AutoPay schedule.
+    """
+    ch_key = channel.lower().strip()
+    active_plan = get_active_recharge(db, client_id)
+    if not active_plan:
+        raise ValueError("No active plan found for this company.")
+
+    curr_active = list(active_plan.ActiveChannels or [])
+    curr_next = list(active_plan.NextCycleChannels or [])
+
+    if ch_key not in curr_active:
+        raise ValueError(f"Channel '{channel}' is not currently active. Please use the Add Channel button.")
+
+    if ch_key in curr_next:
+        return {
+            "channel": ch_key,
+            "status": "already_active",
+            "message": f"Your {ch_key.title()} add-on is already set to auto-renew on your next cycle.",
+            "next_cycle_channels": curr_next,
+        }
+
+    # 1. Add back into upcoming cycle channels
+    curr_next.append(ch_key)
+    active_plan.NextCycleChannels = curr_next
+
+    # 2. Recompute next cycle bundle price
+    template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
+    base_voice_price = template.Price if template else active_plan.PricePaid
+    addon_sum = sum(ADDON_BENCHMARKS.get(c, 0.0) for c in curr_next)
+    next_cycle_price = round(base_voice_price + addon_sum, 2)
+    db.add(active_plan)
+    db.commit()
+    db.refresh(active_plan)
+
+    logger.info(f"[Billing] Channel {ch_key} resumed for next renewal cycle for client {client_id}. Next cycle channels: {curr_next}")
+    return {
+        "channel": ch_key,
+        "status": "renewal_resumed",
+        "active_channels": active_plan.ActiveChannels,
+        "next_cycle_channels": active_plan.NextCycleChannels,
+        "next_cycle_bundle_price": next_cycle_price,
+        "message": f"Your {ch_key.title()} add-on renewal has been restored. It will continue renewing seamlessly on your next cycle.",
+    }
 
 
 def create_channel_addon_order(
