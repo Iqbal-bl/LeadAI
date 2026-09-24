@@ -16,6 +16,8 @@ from fastapi import APIRouter
 from .routers import (
     activity,
     analytics,
+    articles,
+    blog,
     billing,
     campaigns,
     channels,
@@ -73,12 +75,12 @@ api_router.include_router(customers.router)
 api_router.include_router(files.router)
 api_router.include_router(files.threshold_router)
 
-# Phase 3: social publishing. Registered after channels because it is the same
-# connected accounts being used for a different purpose — a company connects a
-# Page once under /channels and can then both converse through it and publish
-# to it. Nothing here works until an account exists there.
+# Phase 3: social publishing & blog automation
 api_router.include_router(social.router)
 api_router.include_router(social_drafts.router)
+api_router.include_router(articles.router)
+api_router.include_router(blog.router)
+
 
 # Voice last - see the note at the top of this file.
 from .routers import voice  # noqa: E402

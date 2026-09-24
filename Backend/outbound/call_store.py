@@ -28,7 +28,10 @@ from sqlalchemy import func
 # Reuse the already-configured MySQL engine + session factory (database.py).
 from core.database import engine_admin, SessionLocalAdmin
 from core.base import Base
-from domain import models  # noqa: F401  (registers all tables on Base.metadata)
+try:
+    from Domain import models  # noqa: F401
+except ImportError:
+    from domain import models  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

@@ -52,6 +52,13 @@ export const routes: Routes = [
       import('./modules/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },
   {
+    path: 'review/:articleId',
+    loadComponent: () =>
+      import('./features/blog/review-portal/review-portal.component').then(
+        (m) => m.ReviewPortalComponent,
+      ),
+  },
+  {
     path: 'chat',
     loadComponent: () =>
       import('./modules/lead-generation/lead-generation.component').then(
@@ -63,3 +70,4 @@ export const routes: Routes = [
     redirectTo: 'admin/dashboard',
   },
 ];
+

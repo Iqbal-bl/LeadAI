@@ -37,7 +37,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from core.base import Base
+try:
+    from core.base import Base
+except ImportError:
+    from base import Base
 
 
 def _uuid() -> str:
@@ -640,5 +643,13 @@ from .models_social import (  # noqa: E402
     LeadSocialTopic,
 )
 
-ALL_LEADAI_TABLES = ALL_LEADAI_TABLES + ALL_LEADAI_SOCIAL_TABLES
+from .models_blog import (  # noqa: E402
+    ALL_LEADAI_BLOG_TABLES,
+    LeadBlogSettings,
+    LeadArticle,
+    LeadArticleVersion,
+    LeadBlogReviewNote,
+)
+
+ALL_LEADAI_TABLES = ALL_LEADAI_TABLES + ALL_LEADAI_SOCIAL_TABLES + ALL_LEADAI_BLOG_TABLES
 

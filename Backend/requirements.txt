@@ -190,3 +190,15 @@ linkedin-api>=2.0.0
 # Production vector store for the knowledge base (enable with QDRANT_URL=http://host:6333).
 # Without it, embeddings are stored in MySQL and scored in-process with numpy.
 # qdrant-client==1.12.1
+
+# ---------------------------------------------------------------------------
+# AI Blog & Content Creator
+# ---------------------------------------------------------------------------
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langgraph>=0.2.0
+langchain-tavily>=0.1.0
+tavily-python>=0.5.0
+markdown>=3.6
+minio>=7.2.0

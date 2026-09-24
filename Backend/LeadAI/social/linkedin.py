@@ -242,13 +242,53 @@ async def get_valid_access_token(db, client_id: str) -> str:
 
 
 async def _download_url_bytes(url: str) -> bytes:
-    # If the URL points to the public MinIO endpoint, rewrite it to download
-    # from the local MinIO IP/port to avoid local DNS or NAT loopback timeouts.
+    if not url:
+        return b""
+
+    # 1. If it's a data URI
+    if url.startswith("data:"):
+        import base64
+        _, b64_data = url.split(",", 1)
+        return base64.b64decode(b64_data)
+
+    # 2. If it's a MinIO URL, try direct MinIO SDK fetch with credentials
+    minio_endpoint = (os.getenv("MINIO_ENDPOINT") or "").replace("http://", "").replace("https://", "").strip()
+    access_key = os.getenv("MINIO_ACCESS_KEY")
+    secret_key = os.getenv("MINIO_SECRET_KEY")
+    bucket = os.getenv("MINIO_BUCKET_DOCUMENTS") or os.getenv("MINIO_BUCKET") or "leadai-documents"
+
+    if access_key and secret_key and (f"/{bucket}/" in url or "blog-media/" in url or minio_endpoint in url):
+        try:
+            from minio import Minio
+            import urllib3
+
+            verify_ssl = os.getenv("MINIO_VERIFY_SSL", "false").lower() == "true"
+            http_client = urllib3.PoolManager(cert_reqs="CERT_REQUIRED" if verify_ssl else "CERT_NONE")
+            minio_client = Minio(
+                endpoint=minio_endpoint,
+                access_key=access_key,
+                secret_key=secret_key,
+                secure=True,
+                http_client=http_client,
+            )
+
+            if f"/{bucket}/" in url:
+                obj_path = url.split(f"/{bucket}/", 1)[1].split("?")[0]
+            elif "blog-media/" in url:
+                obj_path = f"blog-media/{url.split('blog-media/', 1)[1].split('?')[0]}"
+            else:
+                obj_path = url.split("/")[-1].split("?")[0]
+
+            resp = minio_client.get_object(bucket, obj_path)
+            return resp.read()
+        except Exception as exc:
+            logger.warning("[LinkedIn] Direct MinIO fetch failed for %s: %s", url, exc)
+
+    # 3. HTTP GET fallback
     public_endpoint = os.getenv("MINIO_PUBLIC_ENDPOINT", "").strip().rstrip("/")
     local_endpoint = os.getenv("MINIO_ENDPOINT", "").strip().rstrip("/")
     if public_endpoint and local_endpoint and url.startswith(public_endpoint):
         url = url.replace(public_endpoint, local_endpoint, 1)
-        logger.info("LinkedIn media download routed internally to: %s", url)
 
     async with httpx.AsyncClient(verify=False) as client:
         resp = await client.get(url, timeout=60.0)
@@ -425,14 +465,25 @@ async def post_to_linkedin(
         return await create_text_post(access_token, person_urn, caption)
 
     if media_shape == "single_image":
-        image_bytes = await _download_url_bytes(uploaded[0]["url"])
-        return await post_text_and_image(access_token, person_urn, caption, image_bytes)
+        try:
+            image_bytes = await _download_url_bytes(uploaded[0]["url"])
+            if image_bytes:
+                return await post_text_and_image(access_token, person_urn, caption, image_bytes)
+        except Exception as exc:
+            logger.warning("[LinkedIn] Single image download failed (%s), falling back to text post", exc)
+        return await create_text_post(access_token, person_urn, caption)
 
     if media_shape == "multi_image":
-        image_bytes_list = []
-        for m in uploaded:
-            b = await _download_url_bytes(m["url"])
-            image_bytes_list.append(b)
-        return await post_multiple_images(access_token, person_urn, caption, image_bytes_list)
+        try:
+            image_bytes_list = []
+            for m in uploaded:
+                b = await _download_url_bytes(m["url"])
+                if b:
+                    image_bytes_list.append(b)
+            if image_bytes_list:
+                return await post_multiple_images(access_token, person_urn, caption, image_bytes_list)
+        except Exception as exc:
+            logger.warning("[LinkedIn] Multi-image download failed (%s), falling back to text post", exc)
+        return await create_text_post(access_token, person_urn, caption)
 
     raise ValueError(f"LinkedIn does not support media shape: {media_shape}")

@@ -74,14 +74,18 @@ async def linkedin_status(
 
     meta = cred.MetaJson or {}
 
+    has_credentials = bool(cred.LinkedinCookieEnc or (cred.LinkedinUsernameEnc and cred.LinkedinPasswordEnc))
+
     return {
         "connected": True,
         "person_urn": cred.ExternalId,
         "access_token_valid": access_token_valid,
         "has_refresh_token": bool(cred.AppSecretEnc),
+        "has_cookie_credentials": has_credentials,
         "auto_accept": meta.get("linkedin_auto_accept", False),
         "welcome_message": meta.get("linkedin_welcome_message")
     }
+
 
 
 @router.post(
@@ -443,3 +447,109 @@ async def trigger_linkedin_sync(
         commit=True
     )
     return {"ok": True, "message": "LinkedIn connection request sync queued successfully"}
+
+
+class LinkedInReplyInvitationInput(BaseModel):
+    invitation_urn: str
+    shared_secret: str
+    action: str = "accept"  # "accept" or "reject"
+    sender_name: str | None = None
+    sender_urn: str | None = None
+    public_id: str | None = None
+
+
+@router.get(
+    "/invitations",
+    summary="Get list of pending received LinkedIn invitations",
+)
+async def get_linkedin_invitations(
+    limit: int = 50,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        invitations = await linkedin_bot.fetch_received_invitations_api(row, limit=limit)
+        return {"invitations": invitations}
+    except Exception as exc:
+        logger.error("Failed to fetch received LinkedIn invitations: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to retrieve invitations: {str(exc)}")
+
+
+@router.post(
+    "/invitations/reply",
+    summary="Accept or reject a received LinkedIn connection request",
+)
+async def reply_linkedin_invitation(
+    payload: LinkedInReplyInvitationInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        result = linkedin_bot.reply_invitation_api(
+            db=db,
+            account=row,
+            invitation_urn=payload.invitation_urn,
+            shared_secret=payload.shared_secret,
+            action=payload.action,
+            sender_name=payload.sender_name,
+            sender_urn=payload.sender_urn,
+            public_id=payload.public_id,
+        )
+        if not result.get("success"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, result.get("message", "Failed to process invitation"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to reply to LinkedIn invitation: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LinkedIn reply failed: {str(exc)}")
+
+
+@router.post(
+    "/invitations/accept-all",
+    summary="Accept all pending received LinkedIn connection requests",
+)
+async def accept_all_linkedin_invitations(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        result = await linkedin_bot.accept_all_invitations_api(db, row)
+        return result
+    except Exception as exc:
+        logger.error("Failed to accept all LinkedIn invitations: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Batch accept failed: {str(exc)}")
+

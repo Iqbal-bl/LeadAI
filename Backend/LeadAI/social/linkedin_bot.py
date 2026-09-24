@@ -187,6 +187,154 @@ async def send_connection_invitations_api(account, profiles: List[dict], message
     return results
 
 
+def parse_invitation(invite: dict) -> dict | None:
+    """Safely parse LinkedIn invitation data object into a standardized dictionary."""
+    entity_urn = invite.get("entityUrn")
+    shared_secret = invite.get("sharedSecret")
+    if not entity_urn or not shared_secret:
+        return None
+
+    # Extract sender details
+    from_member = invite.get("fromMember", {}) or invite.get("sender", {}) or invite.get("miniProfile", {})
+    first_name = from_member.get("firstName") or from_member.get("miniProfile", {}).get("firstName") or invite.get("sender", {}).get("firstName", "")
+    if isinstance(first_name, dict):
+        first_name = first_name.get("text", "") or ""
+    last_name = from_member.get("lastName") or from_member.get("miniProfile", {}).get("lastName") or invite.get("sender", {}).get("lastName", "")
+    if isinstance(last_name, dict):
+        last_name = last_name.get("text", "") or ""
+    display_name = f"{first_name} {last_name}".strip() or "LinkedIn Member"
+    
+    sender_urn = (
+        from_member.get("entityUrn") 
+        or from_member.get("miniProfile", {}).get("entityUrn") 
+        or invite.get("sender", {}).get("entityUrn") 
+        or invite.get("fromMemberUrn")
+    )
+    public_id = (
+        from_member.get("publicIdentifier") 
+        or from_member.get("miniProfile", {}).get("publicIdentifier") 
+        or invite.get("sender", {}).get("publicIdentifier")
+    )
+    headline = (
+        from_member.get("occupation")
+        or from_member.get("headline")
+        or from_member.get("miniProfile", {}).get("occupation")
+        or ""
+    )
+    if isinstance(headline, dict):
+        headline = headline.get("text", "") or ""
+
+    message_text = invite.get("message") or invite.get("customMessage") or ""
+    sent_time = invite.get("sentTime")
+
+    return {
+        "invitation_urn": entity_urn,
+        "shared_secret": shared_secret,
+        "sender_urn": str(sender_urn) if sender_urn else None,
+        "public_id": public_id,
+        "name": display_name,
+        "headline": headline,
+        "message": message_text,
+        "sent_time": sent_time,
+    }
+
+
+async def fetch_received_invitations_api(account, limit: int = 50) -> list[dict]:
+    """Fetch pending received invitations from LinkedIn."""
+    api = get_linkedin_client(account)
+    def _fetch():
+        invites = api.get_invitations(start=0, limit=limit)
+        results = []
+        for inv in invites:
+            parsed = parse_invitation(inv)
+            if parsed:
+                results.append(parsed)
+        return results
+    return await asyncio.to_thread(_fetch)
+
+
+def reply_invitation_api(
+    db, 
+    account, 
+    invitation_urn: str, 
+    shared_secret: str, 
+    action: str = "accept",
+    sender_name: Optional[str] = None,
+    sender_urn: Optional[str] = None,
+    public_id: Optional[str] = None
+) -> dict:
+    """Respond to a single invitation and sync customer record if accepted."""
+    import random
+    from ..models import LeadCustomer, LeadChannelIdentity
+    from ..security import encrypt_pii
+
+    api = get_linkedin_client(account)
+    
+    # Reply to invitation (action: 'accept' or 'reject')
+    success = api.reply_invitation(
+        invitation_entity_urn=invitation_urn,
+        invitation_shared_secret=shared_secret,
+        action=action
+    )
+    if not success:
+        return {"success": False, "message": f"Failed to {action} LinkedIn invitation"}
+        
+    if action == "accept" and sender_urn:
+        display_name = sender_name or "LinkedIn Member"
+        identity = db.query(LeadChannelIdentity).filter(
+            LeadChannelIdentity.ChannelAccountId == account.Id,
+            LeadChannelIdentity.ExternalUserId == str(sender_urn),
+            LeadChannelIdentity.IsDeleted == False
+        ).first()
+
+        if not identity:
+            customer = LeadCustomer(
+                ClientId=account.ClientId,
+                PublicRef=f"Customer #{random.randint(10000, 99999)}",
+                DisplayName=display_name,
+                PhoneEnc=encrypt_pii(None),
+                CreatedBy="linkedin",
+            )
+            db.add(customer)
+            db.flush()
+
+            identity = LeadChannelIdentity(
+                ClientId=account.ClientId,
+                ChannelAccountId=account.Id,
+                Channel="linkedin",
+                ExternalUserId=str(sender_urn),
+                CustomerId=customer.Id,
+                ProfileName=display_name,
+                CreatedBy="linkedin",
+            )
+            db.add(identity)
+            db.flush()
+            db.commit()
+
+        # Send welcome message if configured
+        meta = account.MetaJson or {}
+        welcome_message = meta.get("linkedin_welcome_message")
+        if welcome_message:
+            recipient_id = public_id or str(sender_urn).split(":")[-1]
+            try:
+                api.send_message(recipients=[recipient_id], message_body=welcome_message)
+            except Exception as e:
+                try:
+                    api.send_message(conversation_urn_id=recipient_id, message_body=welcome_message)
+                except Exception as e2:
+                    logger.warning("Failed to send welcome message to %s: %s / %s", display_name, e, e2)
+
+    return {"success": True, "action": action, "message": f"Successfully {action}ed invitation"}
+
+
+async def accept_all_invitations_api(db, account) -> dict:
+    """Accept all received invitations in batch and sync leads."""
+    def _accept_all():
+        processed_count, accepted_count = process_pending_invitations(db, account)
+        return {"processed": processed_count, "accepted": accepted_count}
+    return await asyncio.to_thread(_accept_all)
+
+
 def process_pending_invitations(db, account) -> tuple[int, int]:
     """Poll for pending connection requests, accept them, and send welcome messages."""
     import random
@@ -197,7 +345,7 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
     
     # 1. Fetch invitations
     try:
-        invitations = api.get_invitations()
+        invitations = api.get_invitations(start=0, limit=50)
     except Exception as exc:
         logger.error("Failed to fetch LinkedIn invitations for client %s: %s", account.ClientId, exc)
         raise exc
@@ -211,31 +359,18 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
     welcome_message = meta.get("linkedin_welcome_message")
 
     for invite in invitations:
-        entity_urn = invite.get("entityUrn")
-        shared_secret = invite.get("sharedSecret")
-        if not entity_urn or not shared_secret:
+        parsed = parse_invitation(invite)
+        if not parsed:
             continue
 
-        # Extract sender details
-        from_member = invite.get("fromMember", {}) or invite.get("sender", {}) or invite.get("miniProfile", {})
-        first_name = from_member.get("firstName") or from_member.get("miniProfile", {}).get("firstName") or invite.get("sender", {}).get("firstName", "")
-        last_name = from_member.get("lastName") or from_member.get("miniProfile", {}).get("lastName") or invite.get("sender", {}).get("lastName", "")
-        display_name = f"{first_name} {last_name}".strip() or "LinkedIn Member"
-        
-        sender_urn = (
-            from_member.get("entityUrn") 
-            or from_member.get("miniProfile", {}).get("entityUrn") 
-            or invite.get("sender", {}).get("entityUrn") 
-            or invite.get("fromMemberUrn")
-        )
+        entity_urn = parsed["invitation_urn"]
+        shared_secret = parsed["shared_secret"]
+        display_name = parsed["name"]
+        sender_urn = parsed["sender_urn"]
+        public_id = parsed["public_id"]
+
         if not sender_urn:
             continue
-
-        public_id = (
-            from_member.get("publicIdentifier") 
-            or from_member.get("miniProfile", {}).get("publicIdentifier") 
-            or invite.get("sender", {}).get("publicIdentifier")
-        )
 
         # Check if they already exist in database
         identity = db.query(LeadChannelIdentity).filter(
@@ -291,14 +426,11 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
                 
                 # Send welcome message if configured
                 if welcome_message:
-                    # recipient_id can be public_id or the URN ID part
                     recipient_id = public_id or sender_urn.split(":")[-1]
                     try:
-                        # Attempt to send message
                         api.send_message(recipients=[recipient_id], message_body=welcome_message)
                         logger.info("Sent welcome message to connected member: %s", display_name)
                     except Exception as msg_exc:
-                        # Fallback try conversation URN id
                         try:
                             api.send_message(conversation_urn_id=recipient_id, message_body=welcome_message)
                             logger.info("Sent welcome message using conversation URN id to connected member: %s", display_name)
@@ -308,3 +440,4 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
                 logger.error("Failed to accept invitation from %s: %s", display_name, accept_exc)
 
     return processed_count, accepted_count
+

@@ -14,7 +14,7 @@
           LinkedIn Automation & Outreach
         </h1>
         <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
-          Manage OAuth profile connection, bot session authentication, AI candidate discovery, and automated network outreach
+          Manage OAuth profile connection, auto-accept incoming requests, AI candidate discovery, and automated network outreach
         </p>
       </div>
     </div>
@@ -32,6 +32,12 @@
   <p-tablist>
     <p-tab value="connection">
       <i class="pi pi-shield mr-2"></i> Connection & Bot Auth
+    </p-tab>
+    <p-tab value="received">
+      <i class="pi pi-inbox mr-2"></i> Received Requests
+      <span *ngIf="invitations.length > 0" class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-white">
+        {{ invitations.length }}
+      </span>
     </p-tab>
     <p-tab value="search">
       <i class="pi pi-search mr-2"></i> AI Candidate Discovery
@@ -110,18 +116,23 @@
             </div>
           </div>
 
-          <!-- Bot Automation Credentials Card (Email & Password Only) -->
+          <!-- Bot Automation Credentials Card -->
           <div class="card-base p-6 border" style="border-color: var(--app-border)">
-            <div class="flex items-start gap-4 mb-5">
-              <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                   style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
-                <i class="pi pi-shield text-xl"></i>
-              </div>
-              <div>
-                <h3 class="text-base font-semibold" style="color: var(--app-text)">Bot Automation Credentials</h3>
-                <p class="text-xs mt-1" style="color: var(--app-text-muted)">
-                  Provide your LinkedIn login credentials to enable automated candidate profile searches and batch connection invitations.
-                </p>
+            <div class="flex items-start justify-between gap-4 mb-5">
+              <div class="flex items-start gap-4">
+                <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                     style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
+                  <i class="pi pi-shield text-xl"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-base font-semibold" style="color: var(--app-text)">Bot Automation Credentials</h3>
+                    <p-tag *ngIf="status?.['has_cookie_credentials']" value="Configured" severity="success" [rounded]="true"></p-tag>
+                  </div>
+                  <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+                    Provide your LinkedIn login credentials to enable automated candidate searches, incoming connection processing, and batch invitations.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -164,19 +175,105 @@
               ></p-button>
             </div>
           </div>
+
+          <!-- Auto-Accept & Automation Rules Card -->
+          <div class="card-base p-6 border" style="border-color: var(--app-border)">
+            <div class="flex items-start justify-between gap-4 mb-4">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                     style="background: linear-gradient(135deg, #10b981, #059669);">
+                  <i class="pi pi-user-plus text-lg"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-semibold" style="color: var(--app-text)">Auto-Accept & Welcome Automation</h3>
+                  <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+                    Automatically accept incoming LinkedIn connection requests, convert them to CRM leads, and send a personalized welcome message.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <!-- Toggle Auto Accept -->
+              <div class="flex items-center justify-between p-3.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10">
+                <div>
+                  <span class="text-sm font-semibold block" style="color: var(--app-text)">
+                    Auto-Accept Incoming Connection Requests
+                  </span>
+                  <span class="text-xs" style="color: var(--app-text-muted)">
+                    Automatically accept pending connection invitations received on your LinkedIn account during periodic syncs.
+                  </span>
+                </div>
+                <p-inputSwitch [(ngModel)]="autoAcceptEnabled"></p-inputSwitch>
+              </div>
+
+              <!-- Automated Welcome Message -->
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="text-xs font-medium block" style="color: var(--app-text-muted)">
+                    Automated Welcome Message (Sent after accepting)
+                  </label>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      (click)="insertTag('name', 'welcome')"
+                      class="px-2 py-0.5 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-emerald-500 hover:text-white transition-colors"
+                    >
+                      + {{ '{name}' }}
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  pInputText
+                  rows="3"
+                  [(ngModel)]="welcomeMessage"
+                  class="w-full text-sm font-sans"
+                  placeholder="Hi {name}, thanks for connecting! Looking forward to staying in touch."
+                ></textarea>
+                <div class="flex justify-between items-center text-xs mt-1" style="color: var(--app-text-muted)">
+                  <span>Leave blank if you prefer not to send a message automatically.</span>
+                  <span>{{ welcomeMessage.length }} chars</span>
+                </div>
+              </div>
+
+              <div class="pt-3 border-t flex items-center justify-between" style="border-color: var(--app-border)">
+                <p-button
+                  label="{{ syncingInvitations ? 'Syncing...' : 'Sync Connection Requests Now' }}"
+                  icon="{{ syncingInvitations ? 'pi pi-spin pi-spinner' : 'pi pi-sync' }}"
+                  [outlined]="true"
+                  [loading]="syncingInvitations"
+                  [disabled]="!status?.connected || !status?.['has_cookie_credentials']"
+                  (onClick)="triggerSync()"
+                  size="small"
+                  [rounded]="true"
+                ></p-button>
+
+                <p-button
+                  label="{{ savingSettings ? 'Saving...' : 'Save Automation Rules' }}"
+                  icon="{{ savingSettings ? 'pi pi-spin pi-spinner' : 'pi pi-check' }}"
+                  [loading]="savingSettings"
+                  (onClick)="saveAutomationSettings()"
+                  [rounded]="true"
+                  [style]="{ background: '#10b981', border: 'none' }"
+                  size="small"
+                ></p-button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Right: Helper Guidelines -->
         <div class="lg:col-span-5 space-y-6">
           <div class="card-base p-6">
             <h3 class="text-base font-semibold mb-3 flex items-center gap-2" style="color: var(--app-text)">
-              <i class="pi pi-lightbulb text-amber-400"></i> Best Practice Tips
+              <i class="pi pi-bolt text-amber-400"></i> How Auto-Accept Works
             </h3>
             <ul class="text-xs space-y-2.5 list-disc list-inside" style="color: var(--app-text-secondary)">
-              <li><strong>Personal Profile:</strong> Ensure you connect an active personal LinkedIn account with standard search permissions.</li>
-              <li><strong>Safe Automation Limits:</strong> LeadAI rate-limits batch requests to keep your account safe from LinkedIn restrictions.</li>
-              <li><strong>Personalized Notes:</strong> Custom invitation notes significantly increase candidate acceptance rates.</li>
-              <li><strong>Search Queries:</strong> Use specific job titles and locations in the AI Discovery tab to get higher quality results.</li>
+              <li><strong>Lead Creation:</strong> When a connection request is accepted, LeadAI automatically logs the contact as a Lead/Customer in your CRM.</li>
+              <li><strong>Instant Welcome Notes:</strong> Engage your new connection immediately with custom personalized introductory notes.</li>
+              <li><strong>Scheduled Automation:</strong> The system automatically runs background sync every ~2 hours throughout the day with natural jitter.</li>
+              <li><strong>On-Demand Control:</strong> View, manually accept, or ignore pending invitations anytime in the <strong>Received Requests</strong> tab.</li>
             </ul>
           </div>
 
@@ -185,14 +282,167 @@
               <i class="pi pi-shield text-brand-500"></i> Security & Tenancy
             </h3>
             <p class="text-xs leading-relaxed" style="color: var(--app-text-muted)">
-              All credentials and access tokens are strictly company-scoped and encrypted using industry-standard cryptography. Credentials are only used to execute scheduled candidate discovery and authorized outreach actions.
+              All credentials and access tokens are strictly company-scoped and encrypted using industry-standard cryptography. Credentials are only used to execute scheduled candidate discovery, invitation management, and authorized outreach actions.
             </p>
           </div>
         </div>
       </div>
     </p-tabpanel>
 
-    <!-- TAB 2: AI CANDIDATE DISCOVERY & SEARCH -->
+    <!-- TAB 2: RECEIVED REQUESTS (ACCEPTING) -->
+    <p-tabpanel value="received">
+      <div class="mt-4 space-y-6">
+        <!-- Banner / Quick Actions Card -->
+        <div class="card-base p-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                   style="background: linear-gradient(135deg, #10b981, #059669);">
+                <i class="pi pi-inbox text-lg"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-base font-semibold" style="color: var(--app-text)">Received Connection Requests</h3>
+                  <p-tag [value]="invitations.length + ' Pending'" severity="info" [rounded]="true"></p-tag>
+                  <p-tag *ngIf="autoAcceptEnabled" value="Auto-Accept Active" severity="success" [rounded]="true"></p-tag>
+                </div>
+                <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+                  Review and accept incoming connection requests. Accepted connections are automatically captured in your CRM pipeline.
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+              <p-button
+                label="Refresh"
+                icon="pi pi-refresh"
+                [outlined]="true"
+                [loading]="loadingInvitations"
+                size="small"
+                [rounded]="true"
+                (onClick)="loadInvitations()"
+              ></p-button>
+
+              <p-button
+                label="Accept All ({{ invitations.length }})"
+                icon="{{ acceptingAll ? 'pi pi-spin pi-spinner' : 'pi pi-check-circle' }}"
+                [loading]="acceptingAll"
+                [disabled]="invitations.length === 0"
+                size="small"
+                [rounded]="true"
+                [style]="{ background: '#10b981', border: 'none' }"
+                (onClick)="acceptAllInvitations()"
+              ></p-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connection Requests Table / List -->
+        <div class="card-base overflow-hidden">
+          <!-- Empty State -->
+          <div *ngIf="!loadingInvitations && invitations.length === 0" class="p-12 text-center">
+            <div class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-emerald-500 mb-3 bg-emerald-500/10">
+              <i class="pi pi-check-circle text-3xl"></i>
+            </div>
+            <h4 class="text-base font-semibold" style="color: var(--app-text)">No Pending Connection Requests</h4>
+            <p class="text-xs mt-1 max-w-md mx-auto" style="color: var(--app-text-muted)">
+              You're all caught up! When professionals send you connection requests on LinkedIn, they will appear here.
+            </p>
+            <div class="mt-4">
+              <p-button
+                label="Refresh Requests"
+                icon="pi pi-refresh"
+                size="small"
+                [rounded]="true"
+                [outlined]="true"
+                (onClick)="loadInvitations()"
+              ></p-button>
+            </div>
+          </div>
+
+          <!-- Table of Invitations -->
+          <p-table
+            *ngIf="invitations.length > 0"
+            [value]="invitations"
+            [loading]="loadingInvitations"
+            [rowHover]="true"
+            dataKey="invitation_urn"
+          >
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Member</th>
+                <th>Headline</th>
+                <th>Note / Message</th>
+                <th class="text-right">Action</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-invitation>
+              <tr>
+                <td>
+                  <div class="flex items-center gap-3">
+                    <p-avatar
+                      [label]="invitation.name ? invitation.name.charAt(0) : 'L'"
+                      shape="circle"
+                      size="normal"
+                      [style]="{
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        color: 'white'
+                      }"
+                    ></p-avatar>
+                    <div>
+                      <span class="font-semibold block text-sm" style="color: var(--app-text)">
+                        {{ invitation.name }}
+                      </span>
+                      <span *ngIf="invitation.public_id" class="text-xs font-mono text-muted">
+                        {{ invitation.public_id }}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span class="text-xs block max-w-md line-clamp-2" style="color: var(--app-text-secondary)">
+                    {{ invitation.headline || '—' }}
+                  </span>
+                </td>
+                <td>
+                  <span *ngIf="invitation.message" class="text-xs block max-w-xs line-clamp-2 p-1.5 rounded bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 italic text-brand-400">
+                    "{{ invitation.message }}"
+                  </span>
+                  <span *ngIf="!invitation.message" class="text-xs text-muted">
+                    No note attached
+                  </span>
+                </td>
+                <td class="text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <p-button
+                      label="Ignore"
+                      severity="secondary"
+                      [outlined]="true"
+                      size="small"
+                      [rounded]="true"
+                      [disabled]="invitation.processing"
+                      (onClick)="rejectInvitation(invitation)"
+                    ></p-button>
+
+                    <p-button
+                      label="{{ invitation.processing ? 'Accepting...' : 'Accept' }}"
+                      icon="{{ invitation.processing ? 'pi pi-spin pi-spinner' : 'pi pi-check' }}"
+                      size="small"
+                      [rounded]="true"
+                      [loading]="invitation.processing"
+                      [style]="{ background: '#10b981', border: 'none' }"
+                      (onClick)="acceptInvitation(invitation)"
+                    ></p-button>
+                  </div>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+      </div>
+    </p-tabpanel>
+
+    <!-- TAB 3: AI CANDIDATE DISCOVERY & SEARCH -->
     <p-tabpanel value="search">
       <div class="mt-4 space-y-6">
         <!-- Search Controls -->
@@ -401,7 +651,7 @@
       </div>
     </p-tabpanel>
 
-    <!-- TAB 3: OUTREACH & INVITATIONS -->
+    <!-- TAB 4: OUTREACH & INVITATIONS -->
     <p-tabpanel value="invitations">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
         <!-- Message Editor -->
@@ -422,14 +672,14 @@
               <div class="flex items-center gap-1.5">
                 <button
                   type="button"
-                  (click)="insertTag('name')"
+                  (click)="insertTag('name', 'outreach')"
                   class="px-2 py-1 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-brand-500 hover:text-white transition-colors"
                 >
                   + {{ '{name}' }}
                 </button>
                 <button
                   type="button"
-                  (click)="insertTag('headline')"
+                  (click)="insertTag('headline', 'outreach')"
                   class="px-2 py-1 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-brand-500 hover:text-white transition-colors"
                 >
                   + {{ '{headline}' }}

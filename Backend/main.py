@@ -28,6 +28,8 @@ _validate_config()
 
 from fastapi import WebSocket, WebSocketDisconnect  # noqa: E402
 
+import Domain  # noqa: F401  (registers domain module aliases)
+
 # Import the complete, already-built Sarvam app. This pulls in db.py (users +
 # transcripts) and, transitively via batching below, the Domain/ ORM used for
 # batches — both ride on the single MySQL engine in database.py.

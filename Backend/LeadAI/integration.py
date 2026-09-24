@@ -147,11 +147,12 @@ def _register_worker(app: FastAPI) -> None:
             jobs.reclaim_stale()
             jobs.start()
 
-            # Bootstrap the daily LinkedIn connection request checking job
+            # Bootstrap the daily LinkedIn connection request checking job and automated blog scheduler
             from .db import session
             db = session()
             try:
                 jobs.bootstrap_linkedin_job(db)
+                jobs.bootstrap_blog_job(db)
             finally:
                 db.close()
         except Exception as exc:  # noqa: BLE001

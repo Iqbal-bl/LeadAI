@@ -17,12 +17,20 @@ export const ADMIN_ROUTES: Routes = [
       ),
   },
   {
+    path: 'blog',
+    loadComponent: () =>
+      import('../../features/blog/blog-dashboard/blog-dashboard.component').then(
+        (m) => m.BlogDashboardComponent,
+      ),
+  },
+  {
     path: 'prompts',
     loadComponent: () =>
       import('../../features/prompts/prompt-editor/prompt-editor.component').then(
         (m) => m.PromptEditorComponent,
       ),
   },
+
   {
     path: 'leads',
     children: [

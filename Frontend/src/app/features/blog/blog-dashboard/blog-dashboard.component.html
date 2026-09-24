@@ -1,0 +1,984 @@
+<div class="blog-dashboard-container">
+  <!-- Toast Notification -->
+  <p-toast></p-toast>
+
+  <!-- Top Header -->
+  <div class="header-section">
+    <div class="title-area">
+      <h1 class="page-title">
+        <span class="gradient-text">Blog & Content Studio</span>
+      </h1>
+      <p class="page-subtitle">
+        Automated multi-channel blog creation, daily trending topic scheduler, and editorial approval workflow.
+      </p>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <button
+        class="btn btn-secondary"
+        (click)="mainTab = 'settings'"
+        [class.active]="mainTab === 'settings'"
+      >
+        <i class="pi pi-cog"></i>
+        <span>Auto-Blog Settings</span>
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        (click)="mainTab = 'generator'"
+        [class.active]="mainTab === 'generator'"
+      >
+        <i class="pi pi-pencil"></i>
+        <span>Custom Draft</span>
+      </button>
+
+      <button
+        class="btn btn-primary glow-btn"
+        (click)="triggerDailyRun()"
+        [disabled]="isGeneratingDaily"
+      >
+        <i class="pi" [ngClass]="isGeneratingDaily ? 'pi-spin pi-spinner' : 'pi-sparkles'"></i>
+        <span>{{ isGeneratingDaily ? 'Generating Today\'s Post...' : 'Generate Today\'s Topic' }}</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs -->
+  <div class="main-tabs-nav">
+    <button
+      class="tab-btn"
+      [class.active]="mainTab === 'articles'"
+      (click)="mainTab = 'articles'"
+    >
+      <i class="pi pi-book"></i>
+      <span>Articles & Posts ({{ stats.total }})</span>
+    </button>
+    <button
+      class="tab-btn"
+      [class.active]="mainTab === 'generator'"
+      (click)="mainTab = 'generator'"
+    >
+      <i class="pi pi-bolt"></i>
+      <span>AI Generator Studio</span>
+    </button>
+    <button
+      class="tab-btn"
+      [class.active]="mainTab === 'settings'"
+      (click)="mainTab = 'settings'"
+    >
+      <i class="pi pi-sliders-h"></i>
+      <span>Company Auto-Blog Settings</span>
+      <span class="status-indicator" [class.enabled]="settings.is_auto_blog_enabled"></span>
+    </button>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- TAB 1: ARTICLES DASHBOARD                                               -->
+  <!-- ======================================================================= -->
+  <div *ngIf="mainTab === 'articles'" class="tab-content">
+    <!-- Active Daily Automation Schedule Strip -->
+    <div class="active-schedule-strip" (click)="mainTab = 'settings'">
+      <div class="strip-left">
+        <span class="pulse-dot" [class.paused]="!settings.is_auto_blog_enabled"></span>
+        <span class="strip-status">
+          <strong>Daily Auto-Blog:</strong>
+          {{ settings.is_auto_blog_enabled ? 'Active & Scheduled' : 'Paused' }}
+        </span>
+        <span class="strip-divider" *ngIf="settings.is_auto_blog_enabled">•</span>
+        <span class="strip-time" *ngIf="settings.is_auto_blog_enabled">
+          <i class="pi pi-clock"></i>
+          Runs daily at <strong>{{ settings.schedule_time || '09:00' }} UTC</strong> ({{ getLocalTimeFromUtc(settings.schedule_time || '09:00') }} Local)
+        </span>
+        <span class="strip-divider">•</span>
+        <span class="strip-mode">
+          <i class="pi" [ngClass]="settings.mode === 'automatic' ? 'pi-bolt' : 'pi-envelope'"></i>
+          {{ settings.mode === 'automatic' ? 'Direct Auto-Publish' : 'Manual Approval Required' }}
+        </span>
+      </div>
+      <div class="strip-right">
+        <span class="strip-link">Manage Schedule &rarr;</span>
+      </div>
+    </div>
+
+    <!-- Stat Counter Cards -->
+    <div class="stats-grid">
+      <div class="stat-card" (click)="filterByStatus('all')" [class.selected]="activeStatusFilter === 'all'">
+        <div class="stat-icon total-icon"><i class="pi pi-list"></i></div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.total }}</div>
+          <div class="stat-label">Total Articles</div>
+        </div>
+      </div>
+
+      <div class="stat-card" (click)="filterByStatus('pending_approval')" [class.selected]="activeStatusFilter === 'pending_approval'">
+        <div class="stat-icon pending-icon"><i class="pi pi-clock"></i></div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.pending_approval }}</div>
+          <div class="stat-label">Pending Review</div>
+        </div>
+      </div>
+
+      <div class="stat-card" (click)="filterByStatus('approved')" [class.selected]="activeStatusFilter === 'approved'">
+        <div class="stat-icon approved-icon"><i class="pi pi-check-circle"></i></div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.approved }}</div>
+          <div class="stat-label">Approved</div>
+        </div>
+      </div>
+
+      <div class="stat-card" (click)="filterByStatus('published')" [class.selected]="activeStatusFilter === 'published'">
+        <div class="stat-icon published-icon"><i class="pi pi-send"></i></div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.published }}</div>
+          <div class="stat-label">Published Live</div>
+        </div>
+      </div>
+
+      <div class="stat-card" (click)="filterByStatus('changes_requested')" [class.selected]="activeStatusFilter === 'changes_requested'">
+        <div class="stat-icon changes-icon"><i class="pi pi-replay"></i></div>
+        <div class="stat-info">
+          <div class="stat-value">{{ stats.changes_requested }}</div>
+          <div class="stat-label">Changes / Revision</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter & Search Toolbar -->
+    <div class="toolbar-section">
+      <div class="status-filters">
+        <button
+          class="filter-chip"
+          [class.active]="activeStatusFilter === 'all'"
+          (click)="filterByStatus('all')"
+        >
+          All ({{ stats.total }})
+        </button>
+        <button
+          class="filter-chip"
+          [class.active]="activeStatusFilter === 'pending_approval'"
+          (click)="filterByStatus('pending_approval')"
+        >
+          Pending Review ({{ stats.pending_approval }})
+        </button>
+        <button
+          class="filter-chip"
+          [class.active]="activeStatusFilter === 'approved'"
+          (click)="filterByStatus('approved')"
+        >
+          Approved ({{ stats.approved }})
+        </button>
+        <button
+          class="filter-chip"
+          [class.active]="activeStatusFilter === 'published'"
+          (click)="filterByStatus('published')"
+        >
+          Published ({{ stats.published }})
+        </button>
+        <button
+          class="filter-chip"
+          [class.active]="activeStatusFilter === 'draft'"
+          (click)="filterByStatus('draft')"
+        >
+          Drafts ({{ stats.draft }})
+        </button>
+      </div>
+
+      <div class="search-box">
+        <i class="pi pi-search search-icon"></i>
+        <input
+          type="text"
+          placeholder="Search by title, topic, or keyword..."
+          [(ngModel)]="searchQuery"
+          (keyup.enter)="onSearch()"
+        />
+      </div>
+    </div>
+
+    <!-- Articles List / Grid -->
+    <div *ngIf="loadingArticles" class="loading-state">
+      <i class="pi pi-spin pi-spinner loading-spinner"></i>
+      <p>Loading articles and editorial queue...</p>
+    </div>
+
+    <div *ngIf="!loadingArticles && articles.length === 0" class="empty-state">
+      <div class="empty-icon"><i class="pi pi-book"></i></div>
+      <h3>No articles found</h3>
+      <p>Generate your first AI blog post or configure daily automatic creation in settings.</p>
+      <button class="btn btn-primary" (click)="triggerDailyRun()">
+        <i class="pi pi-sparkles"></i>
+        <span>Generate Daily Topic Now</span>
+      </button>
+    </div>
+
+    <div *ngIf="!loadingArticles && articles.length > 0" class="articles-grid">
+      <div *ngFor="let article of articles" class="article-card" (click)="openArticleModal(article)">
+        <!-- Card Header Image / Placeholder -->
+        <div class="card-cover" [style.background-image]="article.cover_image ? 'url(' + article.cover_image + ')' : ''">
+          <div class="cover-overlay">
+            <span class="status-badge" [ngClass]="getStatusClass(article.status)">
+              {{ getStatusLabel(article.status) }}
+            </span>
+            <span class="version-badge">v{{ article.current_version }}</span>
+          </div>
+        </div>
+
+        <!-- Card Body -->
+        <div class="card-content">
+          <h3 class="article-title">{{ article.title }}</h3>
+          <p class="article-summary">{{ article.summary || 'Click to review content and inspect version outline...' }}</p>
+
+          <!-- Tags -->
+          <div class="article-tags" *ngIf="article.tags && article.tags.length > 0">
+            <span *ngFor="let tag of article.tags | slice:0:3" class="tag-chip">#{{ tag }}</span>
+          </div>
+
+          <!-- Channel Indicators -->
+          <div class="channels-row">
+            <div class="channels-list">
+              <span class="channel-icon wp" title="WordPress / Website"><i class="pi pi-globe"></i></span>
+              <span class="channel-icon li" title="LinkedIn"><i class="pi pi-linkedin"></i></span>
+              <span class="channel-icon fb" title="Facebook"><i class="pi pi-facebook"></i></span>
+              <span class="channel-icon ig" title="Instagram"><i class="pi pi-instagram"></i></span>
+            </div>
+            <span class="article-date">{{ article.created_at | date:'mediumDate' }}</span>
+          </div>
+
+          <!-- Card Actions Footer -->
+          <div class="card-footer" (click)="$event.stopPropagation()">
+            <button
+              *ngIf="article.status === 'pending_approval' || article.status === 'changes_requested'"
+              class="btn-action review-btn"
+              (click)="openReviewModal(article, 'approved')"
+            >
+              <i class="pi pi-check"></i>
+              <span>Review / Approve</span>
+            </button>
+
+            <button
+              *ngIf="article.status === 'approved' || article.status === 'draft'"
+              class="btn-action publish-btn"
+              (click)="openPublishModal(article)"
+            >
+              <i class="pi pi-send"></i>
+              <span>Publish Now</span>
+            </button>
+
+            <a
+              *ngIf="article.status === 'published' && article.wordpress_post_url"
+              [href]="article.wordpress_post_url"
+              target="_blank"
+              class="btn-action view-btn"
+            >
+              <i class="pi pi-external-link"></i>
+              <span>View Live</span>
+            </a>
+
+            <button class="btn-icon delete-btn" (click)="deleteArticle(article, $event)" title="Delete Article">
+              <i class="pi pi-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- TAB 2: AI GENERATOR STUDIO                                              -->
+  <!-- ======================================================================= -->
+  <div *ngIf="mainTab === 'generator'" class="tab-content">
+    <div class="custom-generator-card">
+      <div class="card-header">
+        <h2>✨ AI Blog Generator Studio</h2>
+        <p>Craft bespoke, research-backed blogs with automated image generation and multi-channel publishing.</p>
+      </div>
+
+      <div class="generator-form">
+        <div class="form-row">
+          <div class="form-group full-width">
+            <label>Article Topic / Title Idea <span class="required">*</span></label>
+            <input
+              type="text"
+              class="input-field"
+              placeholder="e.g. 5 AI Breakthroughs Transforming B2B Lead Qualification in 2026"
+              [(ngModel)]="customGenForm.topic"
+            />
+          </div>
+        </div>
+
+        <div class="form-row two-cols">
+          <div class="form-group">
+            <label>Tone of Voice</label>
+            <select class="input-field select-field" [(ngModel)]="customGenForm.tone">
+              <option value="thought_leadership">Thought Leadership & Strategic</option>
+              <option value="professional">Professional & Technical</option>
+              <option value="conversational">Conversational & Engaging</option>
+              <option value="persuasive">Persuasive & Growth-Focused</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Target Audience</label>
+            <input
+              type="text"
+              class="input-field"
+              placeholder="e.g. Sales Directors, Founders, Tech Leaders"
+              [(ngModel)]="customGenForm.target_audience"
+            />
+          </div>
+        </div>
+
+        <div class="form-row two-cols">
+          <div class="form-group">
+            <label>Target Word Count</label>
+            <select class="input-field select-field" [(ngModel)]="customGenForm.target_words">
+              <option [ngValue]="600">Short & Punchy (~600 words)</option>
+              <option [ngValue]="1000">Standard Article (~1000 words)</option>
+              <option [ngValue]="1500">In-Depth Strategic Guide (~1500 words)</option>
+              <option [ngValue]="2200">Comprehensive Deep Dive (~2200 words)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Focus Keywords / Hashtags (Comma separated)</label>
+            <input
+              type="text"
+              class="input-field"
+              placeholder="e.g. AI Agents, Cold Calling, Pipeline Velocity"
+              [(ngModel)]="customKeywordsInput"
+            />
+          </div>
+        </div>
+
+        <div class="form-row two-cols">
+          <div class="form-group">
+            <label>Call To Action (CTA) Button Text</label>
+            <input
+              type="text"
+              class="input-field"
+              placeholder="e.g. Book Free Strategy Session Today"
+              [(ngModel)]="customGenForm.cta_text"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>CTA Button URL / Anchor</label>
+            <input
+              type="text"
+              class="input-field"
+              placeholder="e.g. #strategy-session or https://yourcompany.com/book"
+              [(ngModel)]="customGenForm.cta_url"
+            />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group checkbox-group">
+            <label class="toggle-container">
+              <input type="checkbox" [(ngModel)]="customGenForm.include_images" />
+              <span class="toggle-slider"></span>
+              <span class="toggle-text">Generate AI Visual Illustrations / Diagrams</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button
+            class="btn btn-primary lg glow-btn"
+            (click)="generateCustomArticle()"
+            [disabled]="isGeneratingCustom"
+          >
+            <i class="pi" [ngClass]="isGeneratingCustom ? 'pi-spin pi-spinner' : 'pi-sparkles'"></i>
+            <span>{{ isGeneratingCustom ? 'Researching, Writing & Generating Graphics...' : 'Generate & Save Blog Post' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- TAB 3: COMPANY AUTO-BLOG SETTINGS                                       -->
+  <!-- ======================================================================= -->
+  <div *ngIf="mainTab === 'settings'" class="tab-content">
+    <div class="settings-card">
+      <div class="card-header">
+        <h2>⚙️ Company Automated Daily Blog Configuration</h2>
+        <p>Automate your brand's content pipeline with daily trending topic selection, AI generation, and multi-channel publishing.</p>
+      </div>
+
+      <div *ngIf="loadingSettings" class="loading-state">
+        <i class="pi pi-spin pi-spinner loading-spinner"></i>
+        <p>Loading company settings...</p>
+      </div>
+
+      <div *ngIf="!loadingSettings" class="settings-form">
+        <!-- Currently Active Configuration Overview Banner -->
+        <div class="active-config-banner" [class.enabled]="settings.is_auto_blog_enabled">
+          <div class="config-banner-header">
+            <div class="banner-status-tag" [class.active]="settings.is_auto_blog_enabled">
+              <span class="pulse-dot"></span>
+              {{ settings.is_auto_blog_enabled ? 'Auto-Blogging Active' : 'Auto-Blogging Paused' }}
+            </div>
+            <div class="banner-last-run" *ngIf="settings.last_run_at">
+              <i class="pi pi-history"></i> Last Generated: {{ settings.last_run_at | date:'medium' }}
+            </div>
+          </div>
+
+          <div class="config-banner-grid">
+            <div class="config-item">
+              <span class="item-label"><i class="pi pi-clock"></i> Daily Trigger Time</span>
+              <span class="item-val">
+                <strong>{{ settings.schedule_time || '09:00' }} UTC</strong>
+                <small class="local-time-tag">({{ getLocalTimeFromUtc(settings.schedule_time || '09:00') }} Local)</small>
+              </span>
+            </div>
+
+            <div class="config-item">
+              <span class="item-label"><i class="pi pi-sliders-v"></i> Workflow Mode</span>
+              <span class="item-val">
+                {{ settings.mode === 'automatic' ? '⚡ Direct Auto-Publish' : '📝 Manual Confirmation Required' }}
+              </span>
+            </div>
+
+            <div class="config-item">
+              <span class="item-label"><i class="pi pi-envelope"></i> Reviewer Email</span>
+              <span class="item-val">{{ settings.admin_notification_email || 'Not configured' }}</span>
+            </div>
+
+            <div class="config-item">
+              <span class="item-label"><i class="pi pi-share-alt"></i> Publishing Channels</span>
+              <div class="banner-channels-list">
+                <span *ngFor="let ch of settings.target_channels" class="channel-pill">
+                  <i class="pi" [ngClass]="ch === 'linkedin' ? 'pi-linkedin' : (ch === 'wordpress' ? 'pi-globe' : (ch === 'facebook' ? 'pi-facebook' : 'pi-instagram'))"></i>
+                  {{ ch | uppercase }}
+                </span>
+                <span *ngIf="!settings.target_channels || settings.target_channels.length === 0" class="muted-text">None selected</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Enable Auto-Blog Master Toggle -->
+        <div class="setting-toggle-box">
+          <div class="toggle-info">
+            <h3>Daily Automated Blog Creation</h3>
+            <p>When enabled, LeadAI's daily background worker will pick a trending topic every day and execute content generation.</p>
+          </div>
+          <label class="toggle-container">
+            <input type="checkbox" [(ngModel)]="settings.is_auto_blog_enabled" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Publishing Mode Selector: Automatic vs Manual Confirmation -->
+        <div class="form-section">
+          <h3 class="section-title">Workflow Mode</h3>
+          <div class="mode-cards-grid">
+            <div
+              class="mode-card"
+              [class.active]="settings.mode === 'manual_confirmation'"
+              (click)="settings.mode = 'manual_confirmation'"
+            >
+              <div class="mode-icon"><i class="pi pi-envelope"></i></div>
+              <div class="mode-info">
+                <h4>Manual Admin Confirmation (Recommended)</h4>
+                <p>Generates draft and emails the Admin with a one-click review link. Publishes to channels only upon confirmation.</p>
+              </div>
+              <i *ngIf="settings.mode === 'manual_confirmation'" class="pi pi-check-circle check-active"></i>
+            </div>
+
+            <div
+              class="mode-card"
+              [class.active]="settings.mode === 'automatic'"
+              (click)="settings.mode = 'automatic'"
+            >
+              <div class="mode-icon auto-icon"><i class="pi pi-bolt"></i></div>
+              <div class="mode-info">
+                <h4>Fully Automatic Publishing</h4>
+                <p>Generates the daily article and immediately publishes to all configured connected channels (LinkedIn, Facebook, WordPress).</p>
+              </div>
+              <i *ngIf="settings.mode === 'automatic'" class="pi pi-check-circle check-active"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Notification Email -->
+        <div class="form-section" *ngIf="settings.mode === 'manual_confirmation'">
+          <h3 class="section-title">Admin Review Email</h3>
+          <div class="form-group">
+            <label>Organization Admin / Editor Email Recipient</label>
+            <input
+              type="email"
+              class="input-field"
+              placeholder="e.g. admin@yourcompany.com"
+              [(ngModel)]="settings.admin_notification_email"
+            />
+            <span class="helper-text">Draft preview and 1-click approval/regeneration buttons will be sent to this email address.</span>
+          </div>
+        </div>
+
+        <!-- Target Channels Multi-Select -->
+        <div class="form-section">
+          <h3 class="section-title">Target Publishing Channels</h3>
+          <p class="section-subtitle">Select which platforms should receive the blog post upon approval or auto-publish:</p>
+          <div class="channels-checkboxes">
+            <label class="channel-check-box" [class.checked]="settingsChannels['linkedin']">
+              <input type="checkbox" [(ngModel)]="settingsChannels['linkedin']" />
+              <i class="pi pi-linkedin"></i>
+              <span>LinkedIn</span>
+            </label>
+
+            <label class="channel-check-box" [class.checked]="settingsChannels['wordpress']">
+              <input type="checkbox" [(ngModel)]="settingsChannels['wordpress']" />
+              <i class="pi pi-globe"></i>
+              <span>WordPress / Website</span>
+            </label>
+
+            <label class="channel-check-box" [class.checked]="settingsChannels['facebook']">
+              <input type="checkbox" [(ngModel)]="settingsChannels['facebook']" />
+              <i class="pi pi-facebook"></i>
+              <span>Facebook Pages</span>
+            </label>
+
+            <label class="channel-check-box" [class.checked]="settingsChannels['instagram']">
+              <input type="checkbox" [(ngModel)]="settingsChannels['instagram']" />
+              <i class="pi pi-instagram"></i>
+              <span>Instagram</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Content & Topic Niche Preferences -->
+        <div class="form-section">
+          <h3 class="section-title">Content & Niche Preferences</h3>
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label>Company Industry & Topic Niche</label>
+              <input
+                type="text"
+                class="input-field"
+                placeholder="e.g. B2B SaaS, AI Voice Agents, CRM Workflow Automation"
+                [(ngModel)]="settings.topic_niche"
+              />
+              <span class="helper-text">The automated trending topic picker will find timely angles inside this niche.</span>
+            </div>
+          </div>
+
+          <div class="form-row two-cols">
+            <div class="form-group">
+              <label>Focus Keywords & Hashtags</label>
+              <input
+                type="text"
+                class="input-field"
+                placeholder="e.g. AI Automation, Lead Gen, Tech Strategy"
+                [(ngModel)]="settingsKeywordsInput"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Target Audience</label>
+              <input
+                type="text"
+                class="input-field"
+                placeholder="e.g. B2B Executives, Sales Leaders, Tech Founders"
+                [(ngModel)]="settings.target_audience"
+              />
+            </div>
+          </div>
+
+          <div class="form-row two-cols">
+            <div class="form-group">
+              <label>Tone of Voice</label>
+              <select class="input-field select-field" [(ngModel)]="settings.tone">
+                <option value="thought_leadership">Thought Leadership & Strategic</option>
+                <option value="professional">Professional & Technical</option>
+                <option value="conversational">Conversational</option>
+                <option value="persuasive">Persuasive</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Daily Schedule Time (UTC)</label>
+              <input
+                type="text"
+                class="input-field"
+                placeholder="09:00"
+                [(ngModel)]="settings.schedule_time"
+              />
+              <span class="schedule-converted-preview" *ngIf="settings.schedule_time">
+                <i class="pi pi-clock"></i>
+                Equal to <strong>{{ getLocalTimeFromUtc(settings.schedule_time) }}</strong> (Your Local Browser Time)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- WordPress Connection (Optional) -->
+        <div class="form-section" *ngIf="settingsChannels['wordpress']">
+          <h3 class="section-title">WordPress REST API Credentials (Optional)</h3>
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label>Website / WordPress URL</label>
+              <input
+                type="url"
+                class="input-field"
+                placeholder="https://yourwebsite.com"
+                [(ngModel)]="settings.wordpress_url"
+              />
+            </div>
+          </div>
+
+          <div class="form-row two-cols">
+            <div class="form-group">
+              <label>WordPress Username</label>
+              <input
+                type="text"
+                class="input-field"
+                placeholder="admin"
+                [(ngModel)]="settings.wordpress_username"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Application Password {{ settings.has_wordpress_password ? '(Configured - leave blank to keep)' : '' }}</label>
+              <input
+                type="password"
+                class="input-field"
+                placeholder="xxxx xxxx xxxx xxxx"
+                [(ngModel)]="wordpressPasswordInput"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Save Button -->
+        <div class="form-actions">
+          <button
+            class="btn btn-primary lg glow-btn"
+            (click)="saveSettings()"
+            [disabled]="savingSettings"
+          >
+            <i class="pi" [ngClass]="savingSettings ? 'pi-spin pi-spinner' : 'pi-check'"></i>
+            <span>{{ savingSettings ? 'Saving Settings...' : 'Save Auto-Blog Settings' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- MODAL: ARTICLE READER / EDITOR & VERSION COMPARISON                     -->
+  <!-- ======================================================================= -->
+  <div *ngIf="showArticleModal && selectedArticle" class="modal-backdrop" (click)="showArticleModal = false">
+    <div class="modal-dialog article-detail-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title-area">
+          <span class="status-badge" [ngClass]="getStatusClass(selectedArticle.status)">
+            {{ getStatusLabel(selectedArticle.status) }}
+          </span>
+          <h2>{{ selectedArticle.title }}</h2>
+          <div class="meta-row">
+            <span>Version: <strong>v{{ selectedArticle.current_version }}</strong></span>
+            <span>Created: {{ selectedArticle.created_at | date:'medium' }}</span>
+            <span *ngIf="selectedArticle.author_name">Author: {{ selectedArticle.author_name }}</span>
+          </div>
+        </div>
+
+        <button class="close-btn" (click)="showArticleModal = false"><i class="pi pi-times"></i></button>
+      </div>
+
+      <!-- Modal Tabs -->
+      <div class="modal-tabs-nav">
+        <button
+          class="modal-tab-btn"
+          [class.active]="activeArticleTab === 'preview'"
+          (click)="activeArticleTab = 'preview'"
+        >
+          <i class="pi pi-eye"></i> Formatted Preview
+        </button>
+
+        <button
+          class="modal-tab-btn"
+          [class.active]="activeArticleTab === 'versions'"
+          (click)="activeArticleTab = 'versions'"
+        >
+          <i class="pi pi-history"></i> Version History ({{ selectedArticle.versions?.length || 1 }})
+        </button>
+
+        <button
+          class="modal-tab-btn"
+          [class.active]="activeArticleTab === 'history'"
+          (click)="activeArticleTab = 'history'"
+        >
+          <i class="pi pi-comments"></i> Review Notes ({{ selectedArticle.review_notes?.length || 0 }})
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body">
+        <!-- 1. Formatted Preview -->
+        <div *ngIf="activeArticleTab === 'preview'" class="preview-container">
+          <div *ngIf="selectedArticle.cover_image" class="article-banner-img">
+            <img [src]="selectedArticle.cover_image" alt="Cover Image" />
+          </div>
+
+          <div class="rendered-article-html" [innerHTML]="selectedArticle.content"></div>
+        </div>
+
+        <!-- 2. Version Comparison -->
+        <div *ngIf="activeArticleTab === 'versions'" class="versions-container">
+          <div class="version-select-bar">
+            <div class="version-select">
+              <label>Compare Left:</label>
+              <select [(ngModel)]="compareVersion1">
+                <option *ngFor="let v of selectedArticle.versions" [ngValue]="v">
+                  Version {{ v.version_number }} ({{ v.created_at | date:'short' }})
+                </option>
+              </select>
+            </div>
+
+            <div class="version-select">
+              <label>Compare Right:</label>
+              <select [(ngModel)]="compareVersion2">
+                <option *ngFor="let v of selectedArticle.versions" [ngValue]="v">
+                  Version {{ v.version_number }} ({{ v.created_at | date:'short' }})
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="side-by-side-grid">
+            <div class="version-column" *ngIf="compareVersion1">
+              <div class="version-col-header">
+                <h3>Version {{ compareVersion1.version_number }}</h3>
+                <span class="prompt-hint">{{ compareVersion1.regeneration_prompt || 'Initial Generation' }}</span>
+              </div>
+              <div class="version-content-box" [innerHTML]="compareVersion1.content"></div>
+            </div>
+
+            <div class="version-column" *ngIf="compareVersion2">
+              <div class="version-col-header">
+                <h3>Version {{ compareVersion2.version_number }}</h3>
+                <span class="prompt-hint">{{ compareVersion2.regeneration_prompt || 'Initial Generation' }}</span>
+              </div>
+              <div class="version-content-box" [innerHTML]="compareVersion2.content"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Review Notes History -->
+        <div *ngIf="activeArticleTab === 'history'" class="history-container">
+          <div *ngIf="!selectedArticle.review_notes || selectedArticle.review_notes.length === 0" class="empty-notes">
+            <p>No editorial review notes recorded yet.</p>
+          </div>
+
+          <div *ngFor="let note of selectedArticle.review_notes" class="note-card">
+            <div class="note-header">
+              <span class="note-author"><strong>{{ note.author_name }}</strong> ({{ note.author_role }})</span>
+              <span class="note-action-tag">{{ note.action_taken }}</span>
+              <span class="note-time">{{ note.created_at | date:'medium' }}</span>
+            </div>
+            <div class="note-body">{{ note.content }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer Action Buttons -->
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="showArticleModal = false">Close</button>
+
+        <button
+          *ngIf="selectedArticle.status === 'pending_approval' || selectedArticle.status === 'changes_requested'"
+          class="btn btn-warning"
+          (click)="openReviewModal(selectedArticle, 'regenerate')"
+        >
+          <i class="pi pi-refresh"></i>
+          <span>Regenerate with AI</span>
+        </button>
+
+        <button
+          *ngIf="selectedArticle.status === 'pending_approval' || selectedArticle.status === 'changes_requested'"
+          class="btn btn-primary glow-btn"
+          (click)="openReviewModal(selectedArticle, 'approved')"
+        >
+          <i class="pi pi-check"></i>
+          <span>Approve & Publish</span>
+        </button>
+
+        <button
+          *ngIf="selectedArticle.status === 'approved' || selectedArticle.status === 'draft'"
+          class="btn btn-primary"
+          (click)="openPublishModal(selectedArticle)"
+        >
+          <i class="pi pi-send"></i>
+          <span>Publish Now</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- MODAL: REVIEW & ACTION (APPROVE / REGENERATE / REQUEST CHANGES)          -->
+  <!-- ======================================================================= -->
+  <div *ngIf="showReviewModal && selectedArticle" class="modal-backdrop" (click)="showReviewModal = false">
+    <div class="modal-dialog review-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Editorial Review Action</h2>
+        <button class="close-btn" (click)="showReviewModal = false"><i class="pi pi-times"></i></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Select Review Decision</label>
+          <div class="action-selector-grid">
+            <button
+              class="decision-card approve-card"
+              [class.active]="reviewAction === 'approved'"
+              (click)="reviewAction = 'approved'"
+            >
+              <i class="pi pi-check-circle"></i>
+              <h4>Approve</h4>
+              <p>Approve article for release</p>
+            </button>
+
+            <button
+              class="decision-card regen-card"
+              [class.active]="reviewAction === 'regenerate'"
+              (click)="reviewAction = 'regenerate'"
+            >
+              <i class="pi pi-refresh"></i>
+              <h4>Regenerate (AI)</h4>
+              <p>Re-write with new prompt</p>
+            </button>
+
+            <button
+              class="decision-card changes-card"
+              [class.active]="reviewAction === 'changes_requested'"
+              (click)="reviewAction = 'changes_requested'"
+            >
+              <i class="pi pi-pencil"></i>
+              <h4>Request Changes</h4>
+              <p>Provide feedback note</p>
+            </button>
+
+            <button
+              class="decision-card reject-card"
+              [class.active]="reviewAction === 'rejected'"
+              (click)="reviewAction = 'rejected'"
+            >
+              <i class="pi pi-times-circle"></i>
+              <h4>Reject</h4>
+              <p>Discard draft</p>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group" *ngIf="reviewAction === 'regenerate'">
+          <label>AI Regeneration Guidance / Prompt (Optional)</label>
+          <textarea
+            class="input-field textarea-field"
+            rows="3"
+            placeholder="e.g. Focus more on ROI metrics, reduce introduction length, and add case study examples..."
+            [(ngModel)]="regenerationPrompt"
+          ></textarea>
+        </div>
+
+        <div class="form-group" *ngIf="reviewAction !== 'regenerate'">
+          <label>Review Notes / Comments</label>
+          <textarea
+            class="input-field textarea-field"
+            rows="3"
+            placeholder="Add internal feedback note for the author or audit log..."
+            [(ngModel)]="reviewNotes"
+          ></textarea>
+        </div>
+
+        <div class="form-group" *ngIf="reviewAction === 'approved'">
+          <label class="toggle-container">
+            <input type="checkbox" [(ngModel)]="publishNowOnApprove" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-text">Publish immediately to connected channels upon approval</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="showReviewModal = false">Cancel</button>
+        <button
+          class="btn btn-primary"
+          (click)="submitReview()"
+          [disabled]="submittingReview"
+        >
+          <i class="pi" [ngClass]="submittingReview ? 'pi-spin pi-spinner' : 'pi-check'"></i>
+          <span>{{ submittingReview ? 'Submitting...' : 'Confirm Action' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- MODAL: DIRECT PUBLISH CHANNELS DIALOG                                   -->
+  <!-- ======================================================================= -->
+  <div *ngIf="showPublishModal && publishingArticle" class="modal-backdrop" (click)="showPublishModal = false">
+    <div class="modal-dialog publish-dialog" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Publish Article to Live Channels</h2>
+        <button class="close-btn" (click)="showPublishModal = false"><i class="pi pi-times"></i></button>
+      </div>
+
+      <div class="modal-body">
+        <p>Select the connected platforms to publish <strong>"{{ publishingArticle.title }}"</strong>:</p>
+
+        <div class="publish-channels-list">
+          <label class="channel-publish-item" [class.checked]="publishChannels['linkedin']">
+            <input type="checkbox" [(ngModel)]="publishChannels['linkedin']" />
+            <i class="pi pi-linkedin"></i>
+            <div>
+              <strong>LinkedIn</strong>
+              <span>Publishes executive summary & link</span>
+            </div>
+          </label>
+
+          <label class="channel-publish-item" [class.checked]="publishChannels['wordpress']">
+            <input type="checkbox" [(ngModel)]="publishChannels['wordpress']" />
+            <i class="pi pi-globe"></i>
+            <div>
+              <strong>WordPress / Website</strong>
+              <span>Publishes full styled HTML article & images</span>
+            </div>
+          </label>
+
+          <label class="channel-publish-item" [class.checked]="publishChannels['facebook']">
+            <input type="checkbox" [(ngModel)]="publishChannels['facebook']" />
+            <i class="pi pi-facebook"></i>
+            <div>
+              <strong>Facebook Pages</strong>
+              <span>Publishes photo post with summary</span>
+            </div>
+          </label>
+
+          <label class="channel-publish-item" [class.checked]="publishChannels['instagram']">
+            <input type="checkbox" [(ngModel)]="publishChannels['instagram']" />
+            <i class="pi pi-instagram"></i>
+            <div>
+              <strong>Instagram</strong>
+              <span>Publishes carousel/photo post</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="showPublishModal = false">Cancel</button>
+        <button
+          class="btn btn-primary glow-btn"
+          (click)="confirmPublish()"
+          [disabled]="isPublishing"
+        >
+          <i class="pi" [ngClass]="isPublishing ? 'pi-spin pi-spinner' : 'pi-send'"></i>
+          <span>{{ isPublishing ? 'Publishing across channels...' : 'Publish to Selected Channels' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

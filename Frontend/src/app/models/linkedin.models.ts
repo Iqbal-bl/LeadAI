@@ -60,3 +60,40 @@ export interface InvitationResultItem {
 export interface SendInvitationsResponse {
   results: Record<string, InvitationResultItem>;
 }
+
+export interface LinkedInInvitationItem {
+  invitation_urn: string;
+  shared_secret: string;
+  sender_urn?: string;
+  public_id?: string;
+  name: string;
+  headline?: string;
+  message?: string;
+  sent_time?: number | string;
+  avatar_url?: string;
+  processing?: boolean;
+}
+
+export interface GetInvitationsResponse {
+  invitations: LinkedInInvitationItem[];
+}
+
+export interface LinkedInReplyInvitationPayload {
+  invitation_urn: string;
+  shared_secret: string;
+  action: 'accept' | 'reject';
+  sender_name?: string;
+  sender_urn?: string;
+  public_id?: string;
+}
+
+export interface LinkedInSettingsPayload {
+  auto_accept: boolean;
+  welcome_message?: string | null;
+}
+
+export interface BatchAcceptResponse {
+  processed: number;
+  accepted: number;
+}
+

@@ -37,8 +37,14 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     ],
   },
   {
-    title: 'Social Media',
+    title: 'Social Media & Content',
     items: [
+      {
+        label: 'Blog & Content Studio',
+        icon: 'pi pi-book',
+        routerLink: '/client/blog',
+        permission: 'campaign.read',
+      },
       {
         label: 'Social Media Analytics',
         icon: 'pi pi-chart-pie',
@@ -52,6 +58,7 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'campaign.manage',
       },
     ],
+
   },
   {
     title: 'Outreach',

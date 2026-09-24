@@ -177,6 +177,13 @@ export const CLIENT_ROUTES: Routes = [
         ],
       },
       {
+        path: 'blog',
+        loadComponent: () =>
+          import('../../features/blog/blog-dashboard/blog-dashboard.component').then(
+            (m) => m.BlogDashboardComponent,
+          ),
+      },
+      {
         path: 'create-post',
         loadComponent: () =>
           import('../../features/campaigns/pages/composer/composer').then(
@@ -210,3 +217,4 @@ export const CLIENT_ROUTES: Routes = [
     ],
   },
 ];
+

@@ -5,6 +5,7 @@ import {
   LinkedInStatus,
   LinkedInProfile,
   LinkedInCredentialsPayload,
+  LinkedInInvitationItem,
 } from '../../models/linkedin.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../shared/services/confirmation.service';
@@ -34,6 +35,18 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   };
   savingCredentials = false;
   showCredentialsSuccess = false;
+
+  // Auto-Accept & Automation Settings
+  autoAcceptEnabled = false;
+  welcomeMessage =
+    'Hi {name},\n\nThanks for connecting! Looking forward to staying in touch and exploring potential collaborations.';
+  savingSettings = false;
+  syncingInvitations = false;
+
+  // Received Invitations (Accepting)
+  invitations: LinkedInInvitationItem[] = [];
+  loadingInvitations = false;
+  acceptingAll = false;
 
   // AI Boolean Keyword Search
   aiPrompt = 'Senior React & Node.js Developers in Bengaluru';
@@ -76,6 +89,15 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.status = res;
         this.statusLoading = false;
+        if (res) {
+          this.autoAcceptEnabled = !!res['auto_accept'];
+          if (res['welcome_message']) {
+            this.welcomeMessage = res['welcome_message'];
+          }
+          if (res.connected && res['has_cookie_credentials']) {
+            this.loadInvitations();
+          }
+        }
       },
       error: () => {
         this.status = null;
@@ -93,7 +115,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'LinkedIn Connected',
-          detail: 'OAuth authorization completed. Proceed to Step 2 for Bot Automation.',
+          detail: 'OAuth authorization completed. Configure Bot Credentials for Automation.',
         });
       }
     };
@@ -131,6 +153,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
                     summary: 'Connected to LinkedIn',
                     detail: `Account linked successfully (${status.person_urn || 'Profile'}).`,
                   });
+                  this.loadStatus();
                 }
               },
             });
@@ -166,6 +189,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             });
             this.status = { connected: false };
             this.profiles = [];
+            this.invitations = [];
             this.invitationResults = null;
           },
           error: (err) => {
@@ -222,6 +246,188 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           severity: 'error',
           summary: 'Failed to Save Credentials',
           detail: err?.error?.detail || 'Error saving LinkedIn credentials.',
+        });
+      },
+    });
+  }
+
+  // --- Auto-Accept & Automation Settings ---
+  saveAutomationSettings(): void {
+    this.savingSettings = true;
+    this.linkedinService
+      .saveSettings({
+        auto_accept: this.autoAcceptEnabled,
+        welcome_message: this.welcomeMessage.trim() || null,
+      })
+      .subscribe({
+        next: () => {
+          this.savingSettings = false;
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Settings Saved',
+            detail: 'LinkedIn auto-accept and welcome messaging rules updated.',
+          });
+          this.loadStatus();
+        },
+        error: (err) => {
+          this.savingSettings = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Save Failed',
+            detail: err?.error?.detail || 'Failed to save automation settings.',
+          });
+        },
+      });
+  }
+
+  triggerSync(): void {
+    this.syncingInvitations = true;
+    this.linkedinService.syncInvitations().subscribe({
+      next: (res) => {
+        this.syncingInvitations = false;
+        this.messageService.add({
+          severity: 'info',
+          summary: 'Sync Queued',
+          detail: res.message || 'Background sync of connection requests started.',
+        });
+        setTimeout(() => this.loadInvitations(), 3000);
+      },
+      error: (err) => {
+        this.syncingInvitations = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Sync Failed',
+          detail: err?.error?.detail || 'Could not queue background sync.',
+        });
+      },
+    });
+  }
+
+  // --- Received Invitations Management ---
+  loadInvitations(): void {
+    if (!this.status?.connected || !this.status?.['has_cookie_credentials']) {
+      return;
+    }
+    this.loadingInvitations = true;
+    this.linkedinService.getInvitations(50).subscribe({
+      next: (res) => {
+        this.loadingInvitations = false;
+        this.invitations = res.invitations || [];
+      },
+      error: (err) => {
+        this.loadingInvitations = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Could Not Load Invitations',
+          detail:
+            err?.error?.detail ||
+            'Unable to fetch pending invitations. Please check your bot credentials.',
+        });
+      },
+    });
+  }
+
+  acceptInvitation(item: LinkedInInvitationItem): void {
+    item.processing = true;
+    this.linkedinService
+      .replyInvitation({
+        invitation_urn: item.invitation_urn,
+        shared_secret: item.shared_secret,
+        action: 'accept',
+        sender_name: item.name,
+        sender_urn: item.sender_urn,
+        public_id: item.public_id,
+      })
+      .subscribe({
+        next: () => {
+          item.processing = false;
+          this.invitations = this.invitations.filter(
+            (i) => i.invitation_urn !== item.invitation_urn
+          );
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Invitation Accepted',
+            detail: `Accepted connection request from ${item.name}. Lead created in CRM.`,
+          });
+        },
+        error: (err) => {
+          item.processing = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Accept Failed',
+            detail: err?.error?.detail || 'Failed to accept LinkedIn invitation.',
+          });
+        },
+      });
+  }
+
+  rejectInvitation(item: LinkedInInvitationItem): void {
+    this.confirmationService.confirm({
+      message: `Are you sure you want to decline the connection request from ${item.name}?`,
+      header: 'Decline Invitation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        item.processing = true;
+        this.linkedinService
+          .replyInvitation({
+            invitation_urn: item.invitation_urn,
+            shared_secret: item.shared_secret,
+            action: 'reject',
+          })
+          .subscribe({
+            next: () => {
+              item.processing = false;
+              this.invitations = this.invitations.filter(
+                (i) => i.invitation_urn !== item.invitation_urn
+              );
+              this.messageService.add({
+                severity: 'info',
+                summary: 'Invitation Declined',
+                detail: `Declined connection request from ${item.name}.`,
+              });
+            },
+            error: (err) => {
+              item.processing = false;
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Decline Failed',
+                detail: err?.error?.detail || 'Failed to decline invitation.',
+              });
+            },
+          });
+      },
+    });
+  }
+
+  acceptAllInvitations(): void {
+    if (this.invitations.length === 0) return;
+
+    this.confirmationService.confirm({
+      message: `Accept all ${this.invitations.length} pending received connection requests and add them as leads?`,
+      header: 'Accept All Invitations',
+      icon: 'pi pi-check-circle',
+      acceptButtonStyleClass: 'p-button-success',
+      accept: () => {
+        this.acceptingAll = true;
+        this.linkedinService.acceptAllInvitations().subscribe({
+          next: (res) => {
+            this.acceptingAll = false;
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Batch Acceptance Completed',
+              detail: `Processed ${res.processed || 0} invitations, accepted ${res.accepted || 0}.`,
+            });
+            this.loadInvitations();
+          },
+          error: (err) => {
+            this.acceptingAll = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Batch Accept Failed',
+              detail: err?.error?.detail || 'Failed to process batch invitations.',
+            });
+          },
         });
       },
     });
@@ -285,7 +491,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'error',
           summary: 'Search Failed',
-          detail: err?.error?.detail || 'Failed to search candidate profiles. Verify bot session cookie.',
+          detail:
+            err?.error?.detail ||
+            'Failed to search candidate profiles. Verify bot session credentials.',
         });
       },
     });
@@ -355,7 +563,11 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  insertTag(tag: string): void {
-    this.invitationMessage = (this.invitationMessage || '') + ` {${tag}}`;
+  insertTag(tag: string, target: 'outreach' | 'welcome' = 'outreach'): void {
+    if (target === 'welcome') {
+      this.welcomeMessage = (this.welcomeMessage || '') + ` {${tag}}`;
+    } else {
+      this.invitationMessage = (this.invitationMessage || '') + ` {${tag}}`;
+    }
   }
 }

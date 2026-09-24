@@ -10,7 +10,12 @@ import {
   SearchProfilesResponse,
   SendInvitationsRequest,
   SendInvitationsResponse,
+  GetInvitationsResponse,
+  LinkedInReplyInvitationPayload,
+  BatchAcceptResponse,
+  LinkedInSettingsPayload,
 } from '../models/linkedin.models';
+
 
 @Injectable({
   providedIn: 'root',
@@ -99,4 +104,63 @@ export class LinkedinService {
       { companyScoped: true }
     );
   }
+
+  /**
+   * Fetch received pending LinkedIn invitations
+   */
+  public getInvitations(limit: number = 50): Observable<GetInvitationsResponse> {
+    return this.apiService.get<GetInvitationsResponse>('linkedin/invitations', {
+      params: { limit: limit.toString() },
+      companyScoped: true,
+    });
+  }
+
+  /**
+   * Accept or reject a received LinkedIn connection request
+   */
+  public replyInvitation(
+    payload: LinkedInReplyInvitationPayload
+  ): Observable<{ success: boolean; action: string; message?: string }> {
+    return this.apiService.post<{ success: boolean; action: string; message?: string }>(
+      'linkedin/invitations/reply',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Accept all pending received invitations in batch
+   */
+  public acceptAllInvitations(): Observable<BatchAcceptResponse> {
+    return this.apiService.post<BatchAcceptResponse>(
+      'linkedin/invitations/accept-all',
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Save auto-accept and welcome message automation settings
+   */
+  public saveSettings(
+    payload: LinkedInSettingsPayload
+  ): Observable<{ ok: boolean }> {
+    return this.apiService.post<{ ok: boolean }>(
+      'linkedin/settings',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Trigger immediate background synchronization of connection requests
+   */
+  public syncInvitations(): Observable<{ ok: boolean; message: string }> {
+    return this.apiService.post<{ ok: boolean; message: string }>(
+      'linkedin/sync-invitations',
+      {},
+      { companyScoped: true }
+    );
+  }
 }
+

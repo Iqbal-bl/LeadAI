@@ -212,14 +212,16 @@ export class LayoutService {
     // Settings is visible for all, but routes or values can change
     adminItems.push({ label: 'Settings', icon: 'pi pi-cog', routerLink: '/client/settings' });
 
-    // Social Media Section
+    // Social Media & Content Section
     sections.push({
-      title: 'SOCIAL MEDIA',
+      title: 'SOCIAL & CONTENT',
       items: [
+        { label: 'Blog & Content Studio', icon: 'pi pi-book', routerLink: '/client/blog' },
         { label: 'Social Media Analytics', icon: 'pi pi-chart-pie', routerLink: '/client/social-analytics' },
         { label: 'Create a Post', icon: 'pi pi-send', routerLink: '/client/create-post' }
       ]
     });
+
 
     // Outreach Section (Channels, Contact Lists, Campaigns)
     if (normalized === 'admin' || normalized === 'manager') {
