@@ -28,7 +28,7 @@ export class CampaignCreateComponent {
   channel: CampaignChannel = 'whatsapp';
   purpose: CampaignPurpose = 'promotional';
   audienceType: AudienceType = 'list';
-  audienceId = '';
+  @Input() audienceId = '';
   body = '';
   scheduledAt = '';
   concurrency: number | null = null;

@@ -2,14 +2,24 @@ import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, combineLatest, map, Observable } from 'rxjs';
 import { AuthService } from './auth.service';
 import { Notification } from '../models/notification.models';
-import { ROLE_COMPANY_ADMIN, ROLE_EMPLOYEE, ROLE_MANAGER } from '../shared/constants/role.constants';
+import {
+  ROLE_COMPANY_ADMIN,
+  ROLE_EMPLOYEE,
+  ROLE_MANAGER,
+} from '../shared/constants/role.constants';
 
 export interface MenuItem {
   label: string;
   icon: string;
   routerLink: string;
   badge?: string;
-  badgeSeverity?: 'success' | 'info' | 'warn' | 'danger' | 'secondary' | 'contrast';
+  badgeSeverity?:
+    | 'success'
+    | 'info'
+    | 'warn'
+    | 'danger'
+    | 'secondary'
+    | 'contrast';
   permission?: string;
 }
 
@@ -19,7 +29,7 @@ export interface SidebarSection {
 }
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class LayoutService {
   private authService = inject(AuthService);
@@ -32,7 +42,8 @@ export class LayoutService {
   public mobileSidebarOpen$ = this.mobileSidebarOpenSubject.asObservable();
 
   private notificationPanelOpenSubject = new BehaviorSubject<boolean>(false);
-  public notificationPanelOpen$ = this.notificationPanelOpenSubject.asObservable();
+  public notificationPanelOpen$ =
+    this.notificationPanelOpenSubject.asObservable();
 
   // Role override for testing
   private roleOverrideSubject = new BehaviorSubject<string | null>(null);
@@ -41,13 +52,13 @@ export class LayoutService {
   // Selected role stream (combines auth role with manual override)
   public currentRole$: Observable<string> = combineLatest([
     this.authService.currentUser$,
-    this.roleOverride$
+    this.roleOverride$,
   ]).pipe(
     map(([user, override]) => {
       if (override) return override;
       const role = user?.role || 'agent';
       return role.toLowerCase();
-    })
+    }),
   );
 
   // Dynamic notifications state
@@ -57,38 +68,192 @@ export class LayoutService {
   // Seed mock notifications per role
   private roleNotifications: Record<string, Notification[]> = {
     admin: [
-      { id: 101, type: 'kb-update', title: 'System Security Audit', message: 'SOC2 compliance audit logs for July exported successfully.', time: '5 min ago', read: false, icon: 'pi pi-shield', severity: 'info' },
-      { id: 102, type: 'ai-alert', title: 'High API Latency Alert', message: 'Auth Service latency spiked to 350ms (threshold 200ms).', time: '12 min ago', read: false, icon: 'pi pi-exclamation-triangle', severity: 'danger' },
-      { id: 103, type: 'worker-activity', title: 'Database Backup Completed', message: 'Automated database snapshot backup-2026-08-03 completed.', time: '1 hour ago', read: true, icon: 'pi pi-database', severity: 'success' },
-      { id: 104, type: 'new-lead', title: 'Enterprise Signup', message: 'Vertex Industries registered a new workspace (250 licenses).', time: '3 hours ago', read: true, icon: 'pi pi-arrow-circle-up', severity: 'success' }
+      {
+        id: 101,
+        type: 'kb-update',
+        title: 'System Security Audit',
+        message: 'SOC2 compliance audit logs for July exported successfully.',
+        time: '5 min ago',
+        read: false,
+        icon: 'pi pi-shield',
+        severity: 'info',
+      },
+      {
+        id: 102,
+        type: 'ai-alert',
+        title: 'High API Latency Alert',
+        message: 'Auth Service latency spiked to 350ms (threshold 200ms).',
+        time: '12 min ago',
+        read: false,
+        icon: 'pi pi-exclamation-triangle',
+        severity: 'danger',
+      },
+      {
+        id: 103,
+        type: 'worker-activity',
+        title: 'Database Backup Completed',
+        message: 'Automated database snapshot backup-2026-08-03 completed.',
+        time: '1 hour ago',
+        read: true,
+        icon: 'pi pi-database',
+        severity: 'success',
+      },
+      {
+        id: 104,
+        type: 'new-lead',
+        title: 'Enterprise Signup',
+        message: 'Vertex Industries registered a new workspace (250 licenses).',
+        time: '3 hours ago',
+        read: true,
+        icon: 'pi pi-arrow-circle-up',
+        severity: 'success',
+      },
     ],
     manager: [
-      { id: 201, type: 'ai-alert', title: 'Manager Attention: Escalation', message: 'Agent Chris Johnson requested supervisor assistance on lead Robert Anderson call.', time: '3 min ago', read: false, icon: 'pi pi-users', severity: 'danger' },
-      { id: 202, type: 'worker-activity', title: 'Agent Performance Target', message: 'Maria Santos completed 35 qualified calls, reaching 120% of daily quota.', time: '20 min ago', read: false, icon: 'pi pi-chart-line', severity: 'success' },
-      { id: 203, type: 'worker-activity', title: 'Shift Handoff Complete', message: 'Evening shift team has clocked in. 8 agents active.', time: '2 hours ago', read: true, icon: 'pi pi-clock', severity: 'info' },
-      { id: 204, type: 'kb-update', title: 'Pending Approval', message: 'Jordan Blake requested approval for custom pricing terms on Lead #832.', time: '4 hours ago', read: true, icon: 'pi pi-check-square', severity: 'warn' }
+      {
+        id: 201,
+        type: 'ai-alert',
+        title: 'Manager Attention: Escalation',
+        message:
+          'Agent Chris Johnson requested supervisor assistance on lead Robert Anderson call.',
+        time: '3 min ago',
+        read: false,
+        icon: 'pi pi-users',
+        severity: 'danger',
+      },
+      {
+        id: 202,
+        type: 'worker-activity',
+        title: 'Agent Performance Target',
+        message:
+          'Maria Santos completed 35 qualified calls, reaching 120% of daily quota.',
+        time: '20 min ago',
+        read: false,
+        icon: 'pi pi-chart-line',
+        severity: 'success',
+      },
+      {
+        id: 203,
+        type: 'worker-activity',
+        title: 'Shift Handoff Complete',
+        message: 'Evening shift team has clocked in. 8 agents active.',
+        time: '2 hours ago',
+        read: true,
+        icon: 'pi pi-clock',
+        severity: 'info',
+      },
+      {
+        id: 204,
+        type: 'kb-update',
+        title: 'Pending Approval',
+        message:
+          'Jordan Blake requested approval for custom pricing terms on Lead #832.',
+        time: '4 hours ago',
+        read: true,
+        icon: 'pi pi-check-square',
+        severity: 'warn',
+      },
     ],
     agent: [
-      { id: 301, type: 'new-lead', title: 'New Lead Assigned', message: 'Sarah Mitchell from TechCorp Solutions has been assigned to your queue.', time: 'Just now', read: false, icon: 'pi pi-user-plus', severity: 'info' },
-      { id: 302, type: 'missed-call', title: 'Callback Scheduled', message: 'Scheduled callback for James Chen is due in 15 minutes.', time: '15 min ago', read: false, icon: 'pi pi-calendar', severity: 'warn' },
-      { id: 303, type: 'ai-alert', title: 'Customer Replied', message: 'Emily Parker sent an email response: "Send the pricing options details ASAP."', time: '1 hour ago', read: true, icon: 'pi pi-envelope', severity: 'success' },
-      { id: 304, type: 'missed-call', title: 'Missed Call Alert', message: 'You missed an inbound call from lead David Kumar.', time: '3 hours ago', read: true, icon: 'pi pi-phone-missed', severity: 'danger' }
+      {
+        id: 301,
+        type: 'new-lead',
+        title: 'New Lead Assigned',
+        message:
+          'Sarah Mitchell from TechCorp Solutions has been assigned to your queue.',
+        time: 'Just now',
+        read: false,
+        icon: 'pi pi-user-plus',
+        severity: 'info',
+      },
+      {
+        id: 302,
+        type: 'missed-call',
+        title: 'Callback Scheduled',
+        message: 'Scheduled callback for James Chen is due in 15 minutes.',
+        time: '15 min ago',
+        read: false,
+        icon: 'pi pi-calendar',
+        severity: 'warn',
+      },
+      {
+        id: 303,
+        type: 'ai-alert',
+        title: 'Customer Replied',
+        message:
+          'Emily Parker sent an email response: "Send the pricing options details ASAP."',
+        time: '1 hour ago',
+        read: true,
+        icon: 'pi pi-envelope',
+        severity: 'success',
+      },
+      {
+        id: 304,
+        type: 'missed-call',
+        title: 'Missed Call Alert',
+        message: 'You missed an inbound call from lead David Kumar.',
+        time: '3 hours ago',
+        read: true,
+        icon: 'pi pi-phone-missed',
+        severity: 'danger',
+      },
     ],
     ai_operator: [
-      { id: 401, type: 'ai-alert', title: 'AI Confidence Drop', message: 'AI Agent confidence fell to 71% on lead Sarah Mitchell call. Sentiment: Frustrated.', time: '2 min ago', read: false, icon: 'pi pi-exclamation-triangle', severity: 'warn' },
-      { id: 402, type: 'kb-update', title: 'KB Indexing Completed', message: 'Product_Features_v3.2.pdf has been chunked and vectorized (142 nodes).', time: '10 min ago', read: false, icon: 'pi pi-book', severity: 'success' },
-      { id: 403, type: 'kb-update', title: 'Prompt Deployed', message: 'Prompt version "Lead Qualification v2.4.1" promoted to production.', time: '1 hour ago', read: true, icon: 'pi pi-code', severity: 'info' },
-      { id: 404, type: 'ai-alert', title: 'LLM Node Warning', message: 'Azure OpenAI endpoint EastUS reported 8.4% token throttling.', time: '5 hours ago', read: true, icon: 'pi pi-server', severity: 'danger' }
-    ]
+      {
+        id: 401,
+        type: 'ai-alert',
+        title: 'AI Confidence Drop',
+        message:
+          'AI Agent confidence fell to 71% on lead Sarah Mitchell call. Sentiment: Frustrated.',
+        time: '2 min ago',
+        read: false,
+        icon: 'pi pi-exclamation-triangle',
+        severity: 'warn',
+      },
+      {
+        id: 402,
+        type: 'kb-update',
+        title: 'KB Indexing Completed',
+        message:
+          'Product_Features_v3.2.pdf has been chunked and vectorized (142 nodes).',
+        time: '10 min ago',
+        read: false,
+        icon: 'pi pi-book',
+        severity: 'success',
+      },
+      {
+        id: 403,
+        type: 'kb-update',
+        title: 'Prompt Deployed',
+        message:
+          'Prompt version "Lead Qualification v2.4.1" promoted to production.',
+        time: '1 hour ago',
+        read: true,
+        icon: 'pi pi-code',
+        severity: 'info',
+      },
+      {
+        id: 404,
+        type: 'ai-alert',
+        title: 'LLM Node Warning',
+        message: 'Azure OpenAI endpoint EastUS reported 8.4% token throttling.',
+        time: '5 hours ago',
+        read: true,
+        icon: 'pi pi-server',
+        severity: 'danger',
+      },
+    ],
   };
 
   constructor() {
     // Populate notifications based on current role changes
-    this.currentRole$.subscribe(role => {
+    this.currentRole$.subscribe((role) => {
       const normalizedRole = this.normalizeRole(role);
-      const seed = this.roleNotifications[normalizedRole] || this.roleNotifications['agent'];
+      const seed =
+        this.roleNotifications[normalizedRole] ||
+        this.roleNotifications['agent'];
       // Deep copy to prevent mutating static seeds across role swaps
-      this.notificationsSubject.next(seed.map(n => ({ ...n })));
+      this.notificationsSubject.next(seed.map((n) => ({ ...n })));
     });
   }
 
@@ -112,7 +277,9 @@ export class LayoutService {
   }
 
   public toggleNotificationPanel(): void {
-    this.notificationPanelOpenSubject.next(!this.notificationPanelOpenSubject.value);
+    this.notificationPanelOpenSubject.next(
+      !this.notificationPanelOpenSubject.value,
+    );
   }
 
   // Role override helpers
@@ -122,11 +289,22 @@ export class LayoutService {
 
   public normalizeRole(role: string): string {
     const r = role.toLowerCase();
-    if (r === 'admin' || r === 'platform_admin' || r === 'platform-admin' || r === ROLE_COMPANY_ADMIN || r === 'company-admin') {
+    if (
+      r === 'admin' ||
+      r === 'platform_admin' ||
+      r === 'platform-admin' ||
+      r === ROLE_COMPANY_ADMIN ||
+      r === 'company-admin'
+    ) {
       return 'admin';
     }
     if (r === ROLE_MANAGER) return 'manager';
-    if (r === 'ai_operator' || r === 'ai operator' || r === 'ai-operator' || r === 'aioperator') {
+    if (
+      r === 'ai_operator' ||
+      r === 'ai operator' ||
+      r === 'ai-operator' ||
+      r === 'aioperator'
+    ) {
       return 'ai_operator';
     }
     if (r === ROLE_EMPLOYEE || r === 'agent') {
@@ -137,7 +315,7 @@ export class LayoutService {
 
   // Notification manipulations
   public markAsRead(id: number): void {
-    const list = this.notificationsSubject.value.map(n => {
+    const list = this.notificationsSubject.value.map((n) => {
       if (n.id === id) {
         return { ...n, read: true };
       }
@@ -147,12 +325,15 @@ export class LayoutService {
   }
 
   public markAllAsRead(): void {
-    const list = this.notificationsSubject.value.map(n => ({ ...n, read: true }));
+    const list = this.notificationsSubject.value.map((n) => ({
+      ...n,
+      read: true,
+    }));
     this.notificationsSubject.next(list);
   }
 
   public dismissNotification(id: number): void {
-    const list = this.notificationsSubject.value.filter(n => n.id !== id);
+    const list = this.notificationsSubject.value.filter((n) => n.id !== id);
     this.notificationsSubject.next(list);
   }
 
@@ -168,49 +349,104 @@ export class LayoutService {
 
     // Core Section
     const coreItems: MenuItem[] = [
-      { label: 'Dashboard', icon: 'pi pi-th-large', routerLink: '/client/dashboard' }
+      {
+        label: 'Dashboard',
+        icon: 'pi pi-th-large',
+        routerLink: '/client/dashboard',
+      },
     ];
 
-    if (normalized === 'admin' || normalized === 'manager' || normalized === 'agent') {
-      coreItems.push({ label: 'Leads', icon: 'pi pi-users', routerLink: '/client/leads' });
-      coreItems.push({ label: 'Conversations', icon: 'pi pi-comments', routerLink: '/client/conversations' });
+    if (
+      normalized === 'admin' ||
+      normalized === 'manager' ||
+      normalized === 'agent'
+    ) {
+      coreItems.push({
+        label: 'Leads',
+        icon: 'pi pi-users',
+        routerLink: '/client/leads',
+      });
+      coreItems.push({
+        label: 'Conversations',
+        icon: 'pi pi-comments',
+        routerLink: '/client/conversations',
+      });
     }
 
     sections.push({
       title: 'CORE SERVICES',
-      items: coreItems
+      items: coreItems,
     });
 
     // AI & KB Section
     const aiItems: MenuItem[] = [];
-    if (normalized === 'admin' || normalized === 'manager' || normalized === 'agent' || normalized === 'ai_operator') {
-      aiItems.push({ label: 'AI Assistant', icon: 'pi pi-microchip-ai', routerLink: '/client/ai-assistant' });
-      aiItems.push({ label: 'Knowledge Base', icon: 'pi pi-book', routerLink: '/client/knowledge-base' });
+    if (
+      normalized === 'admin' ||
+      normalized === 'manager' ||
+      normalized === 'agent' ||
+      normalized === 'ai_operator'
+    ) {
+      aiItems.push({
+        label: 'AI Assistant',
+        icon: 'pi pi-microchip-ai',
+        routerLink: '/client/ai-assistant',
+      });
+      aiItems.push({
+        label: 'Knowledge Base',
+        icon: 'pi pi-book',
+        routerLink: '/client/knowledge-base',
+      });
     }
     if (normalized === 'admin' || normalized === 'ai_operator') {
-      aiItems.push({ label: 'Prompts', icon: 'pi pi-code', routerLink: '/client/prompts' });
+      aiItems.push({
+        label: 'Prompts',
+        icon: 'pi pi-code',
+        routerLink: '/client/prompts',
+      });
     }
 
     if (aiItems.length > 0) {
       sections.push({
         title: 'AI WORKFLOWS',
-        items: aiItems
+        items: aiItems,
       });
     }
 
     // Management & Admin Section
     const adminItems: MenuItem[] = [];
     if (normalized === 'admin' || normalized === 'manager') {
-      adminItems.push({ label: 'Analytics', icon: 'pi pi-chart-bar', routerLink: '/client/analytics' });
-      adminItems.push({ label: 'Team', icon: 'pi pi-user-edit', routerLink: '/client/team' });
-      adminItems.push({ label: 'Lead Threshold', icon: 'pi pi-sliders-h', routerLink: '/client/lead-threshold', permission: 'settings.manage' });
+      adminItems.push({
+        label: 'Analytics',
+        icon: 'pi pi-chart-bar',
+        routerLink: '/client/analytics',
+      });
+      adminItems.push({
+        label: 'Team',
+        icon: 'pi pi-user-edit',
+        routerLink: '/client/team',
+      });
+      adminItems.push({
+        label: 'Lead Threshold',
+        icon: 'pi pi-sliders-h',
+        routerLink: '/client/lead-threshold',
+        permission: 'settings.manage',
+      });
     }
 
     // Billing & Recharges (Visible in Client Dashboard for all roles)
-    adminItems.push({ label: 'Billing & Recharges', icon: 'pi pi-credit-card', routerLink: '/client/billing' });
+    adminItems.push({
+      label: 'Billing & Recharges',
+      icon: 'pi pi-credit-card',
+      routerLink: '/client/billing',
+    });
 
     // Settings is visible for all, but routes or values can change
-    adminItems.push({ label: 'Settings', icon: 'pi pi-cog', routerLink: '/client/settings' });
+    adminItems.push({
+      label: 'Settings',
+      icon: 'pi pi-cog',
+      routerLink: '/client/settings',
+      permission: 'settings.manage',
+    });
 
     // Social Media & Content Section
     sections.push({
@@ -223,41 +459,103 @@ export class LayoutService {
     });
 
 
-    // Outreach Section (Channels, Contact Lists, Campaigns)
+    // Channels & Integrations Section
     if (normalized === 'admin' || normalized === 'manager') {
       sections.push({
-        title: 'OUTREACH',
+        title: 'CHANNELS & INTEGRATIONS',
         items: [
-          { label: 'Channels', icon: 'pi pi-link', routerLink: '/client/channels', permission: 'channel.read' },
-          { label: 'Contact Lists', icon: 'pi pi-list', routerLink: '/client/contact-lists', permission: 'campaign.manage' },
-          { label: 'Campaigns', icon: 'pi pi-megaphone', routerLink: '/client/campaigns', permission: 'campaign.read' },
-        ]
+          {
+            label: 'Channels',
+            icon: 'pi pi-link',
+            routerLink: '/client/channels',
+            permission: 'channel.read',
+          },
+        ],
+      });
+
+      // Audiences Section
+      sections.push({
+        title: 'AUDIENCES',
+        items: [
+          {
+            label: 'Contact Lists',
+            icon: 'pi pi-list',
+            routerLink: '/client/contact-lists',
+            permission: 'campaign.manage',
+          },
+        ],
+      });
+
+      // Outreach & Campaigns Section
+      sections.push({
+        title: 'OUTREACH & CAMPAIGNS',
+        items: [
+          {
+            label: 'Campaigns',
+            icon: 'pi pi-megaphone',
+            routerLink: '/client/campaigns',
+            permission: 'campaign.read',
+          },
+          {
+            label: 'LinkedIn Automation',
+            icon: 'pi pi-linkedin',
+            routerLink: '/client/linkedin',
+            permission: 'channel.read',
+          },
+        ],
       });
     }
 
+    // Social Publishing Section
+    // sections.push({
+    //   title: 'SOCIAL PUBLISHING',
+    //   items: [
+    //     { label: 'Create a Post', icon: 'pi pi-send', routerLink: '/client/create-post', permission: 'campaign.manage' },
+    //     { label: 'Social Media Analytics', icon: 'pi pi-chart-pie', routerLink: '/client/social-analytics', permission: 'analytics.read' },
+    //   ]
+    // });
+
     // CRM Section (Customers)
-    if (normalized === 'admin' || normalized === 'manager' || normalized === 'agent') {
+    if (
+      normalized === 'admin' ||
+      normalized === 'manager' ||
+      normalized === 'agent'
+    ) {
       sections.push({
         title: 'CRM',
         items: [
-          { label: 'Customers', icon: 'pi pi-id-card', routerLink: '/client/customers', permission: 'customer.read' },
-        ]
+          {
+            label: 'Customers',
+            icon: 'pi pi-id-card',
+            routerLink: '/client/customers',
+            permission: 'customer.read',
+          },
+        ],
       });
     }
 
     // Files Section (Documents)
-    if (normalized === 'admin' || normalized === 'manager' || normalized === 'agent') {
+    if (
+      normalized === 'admin' ||
+      normalized === 'manager' ||
+      normalized === 'agent'
+    ) {
       sections.push({
         title: 'FILES',
         items: [
-          { label: 'Documents', icon: 'pi pi-folder-open', routerLink: '/client/documents', permission: 'file.read' },
-        ]
+          {
+            label: 'Documents',
+            icon: 'pi pi-folder-open',
+            routerLink: '/client/documents',
+            permission: 'file.read',
+          },
+        ],
       });
     }
 
     sections.push({
       title: 'MANAGEMENT',
-      items: adminItems
+      items: adminItems,
     });
 
     if (normalized === 'admin') {
@@ -265,10 +563,22 @@ export class LayoutService {
       sections.push({
         title: 'ADMIN CENTER',
         items: [
-          { label: 'Admin Dashboard', icon: 'pi pi-sliders-h', routerLink: '/admin/dashboard' },
-          { label: 'Companies', icon: 'pi pi-building', routerLink: '/client/companies' },
-          { label: 'Plan Management', icon: 'pi pi-key', routerLink: '/admin/plan-management' }
-        ]
+          {
+            label: 'Admin Dashboard',
+            icon: 'pi pi-sliders-h',
+            routerLink: '/admin/dashboard',
+          },
+          {
+            label: 'Companies',
+            icon: 'pi pi-building',
+            routerLink: '/client/companies',
+          },
+          {
+            label: 'Plan Management',
+            icon: 'pi pi-key',
+            routerLink: '/admin/plan-management',
+          },
+        ],
       });
     }
 

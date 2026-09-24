@@ -16,12 +16,6 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         routerLink: '/client/leads',
         permission: 'lead.read.all',
       },
-      // {
-      //   label: 'Conversations',
-      //   icon: 'pi pi-comments',
-      //   routerLink: '/client/conversations',
-      //   permission: 'lead.read.all',
-      // },
       {
         label: 'Customers',
         icon: 'pi pi-id-card',
@@ -58,10 +52,9 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'campaign.manage',
       },
     ],
-
   },
   {
-    title: 'Outreach',
+    title: 'Channels & Integrations',
     items: [
       {
         label: 'Channels',
@@ -69,23 +62,33 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         routerLink: '/client/channels',
         permission: 'channel.read',
       },
-      {
-        label: 'LinkedIn Automation',
-        icon: 'pi pi-linkedin',
-        routerLink: '/client/linkedin',
-        permission: 'channel.read',
-      },
+    ],
+  },
+  {
+    title: 'Audiences',
+    items: [
       {
         label: 'Contact Lists',
         icon: 'pi pi-list',
         routerLink: '/client/contact-lists',
         permission: 'campaign.manage',
       },
+    ],
+  },
+  {
+    title: 'Outreach & Campaigns',
+    items: [
       {
         label: 'Campaigns',
         icon: 'pi pi-megaphone',
         routerLink: '/client/campaigns',
         permission: 'campaign.read',
+      },
+      {
+        label: 'LinkedIn Automation',
+        icon: 'pi pi-linkedin',
+        routerLink: '/client/linkedin',
+        permission: 'channel.read',
       },
     ],
   },
@@ -103,6 +106,17 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         icon: 'pi pi-file-edit',
         routerLink: '/client/prompts',
         permission: 'prompt.read',
+      },
+    ],
+  },
+  {
+    title: 'Files',
+    items: [
+      {
+        label: 'Documents',
+        icon: 'pi pi-folder-open',
+        routerLink: '/client/documents',
+        permission: 'file.read',
       },
     ],
   },

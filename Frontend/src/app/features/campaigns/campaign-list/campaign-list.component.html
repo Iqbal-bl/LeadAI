@@ -209,6 +209,7 @@
 <app-campaign-create
   *ngIf="showCreate"
   [visible]="showCreate"
+  [audienceId]="selectedAudienceId"
   (complete)="onCreateComplete()"
   (close)="onCreateClose()"
 >

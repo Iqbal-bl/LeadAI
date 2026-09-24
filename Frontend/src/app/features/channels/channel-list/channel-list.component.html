@@ -1,8 +1,19 @@
 <app-confirmation-dialog></app-confirmation-dialog>
 
-<div class="mb-6">
-  <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">Channel Connections</h1>
-  <p class="text-sm mt-0.5" style="color: var(--app-text-muted);">Connect, configure, and manage WhatsApp, Messenger, Instagram & LinkedIn channels</p>
+<div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text);">Channel Connections</h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted);">Connect, configure, and manage WhatsApp, Messenger, Instagram & LinkedIn channels</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <p-button
+      label="LinkedIn Automation"
+      icon="pi pi-linkedin"
+      [outlined]="true"
+      [rounded]="true"
+      routerLink="/client/linkedin"
+    ></p-button>
+  </div>
 </div>
 
 <!-- LinkedIn Company Connection Card -->

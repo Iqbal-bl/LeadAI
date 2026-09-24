@@ -42,6 +42,8 @@
         <td><span class="text-sm" style="color: var(--app-text-secondary);">{{ list.created_at }}</span></td>
         <td>
           <div class="flex gap-1">
+            <p-button icon="pi pi-megaphone" [rounded]="true" [text]="true" severity="success"
+                      pTooltip="Launch Campaign with List" (onClick)="launchCampaign(list)"></p-button>
             <p-button icon="pi pi-eye" [rounded]="true" [text]="true" severity="info"
                       pTooltip="View Contacts" (onClick)="viewItems(list)"></p-button>
             <p-button icon="pi pi-trash" [rounded]="true" [text]="true" severity="danger"
