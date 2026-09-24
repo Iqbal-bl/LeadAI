@@ -8,7 +8,7 @@ Route ordering matters in two places:
    are registered first so it is obvious which surface is externally reachable.
 
 2. `voice.router` is imported LAST because it pulls in the call bridge, which
-   imports multiligual_call. Keeping it late avoids any chance of a circular
+   imports outbound.app. Keeping it late avoids any chance of a circular
    import during app construction.
 """
 from fastapi import APIRouter

@@ -24,8 +24,8 @@ from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
 
-from base import Base
-from database import SessionLocalAdmin, engine_admin
+from core.base import Base
+from core.database import SessionLocalAdmin, engine_admin
 
 logger = logging.getLogger(__name__)
 

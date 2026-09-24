@@ -37,7 +37,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 
-from base import Base
+from core.base import Base
 
 
 def _uuid() -> str:

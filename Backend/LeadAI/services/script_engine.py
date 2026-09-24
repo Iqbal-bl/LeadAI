@@ -129,7 +129,7 @@ def parse_script_xml(xml: str) -> list[dict]:
     if not xml or not xml.strip():
         return []
     try:
-        from xml_parser import parse_xml_to_sections
+        from outbound.xml_parser import parse_xml_to_sections
 
         return parse_xml_to_sections(xml)
     except Exception as exc:  # noqa: BLE001
@@ -142,7 +142,7 @@ def sections_to_system_prompt(sections: list[dict]) -> str:
     if not sections:
         return ""
     try:
-        from xml_parser import sections_to_prompt
+        from outbound.xml_parser import sections_to_prompt
 
         return sections_to_prompt(sections)
     except Exception as exc:  # noqa: BLE001
@@ -280,7 +280,7 @@ def import_from_disk(db: Session, client_id: str, filename: str, created_by: str
     """
     import os
 
-    from multiligual_call import SCRIPTS_DIR
+    from outbound.app import SCRIPTS_DIR
 
     safe = os.path.basename(filename)
     if not safe.endswith(".xml"):

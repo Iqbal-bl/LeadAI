@@ -42,7 +42,6 @@ LeadAI/
 ├── schemas.py              ← request/response contracts
 ├── serializers.py          ← ORM→DTO + the PII masking rule
 ├── router.py               ← aggregator
-├── requirements-leadai.txt
 ├── .env.leadai.example
 ├── services/
 │   ├── embeddings.py       ← OpenAI embeddings + offline fallback
@@ -942,7 +941,6 @@ Base          ███               8
 
 ```bash
 pip install -r requirements.txt
-pip install -r LeadAI/requirements-leadai.txt
 ```
 Required additions: `cryptography` (PII), `pypdf` + `python-docx` (extraction). Optional: `redis`, `qdrant-client`.
 

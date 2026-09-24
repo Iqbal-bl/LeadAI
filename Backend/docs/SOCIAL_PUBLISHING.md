@@ -165,7 +165,6 @@ LeadAI/social/agent_bridge.py    lazy, tenant-aware entry to the LLM agent
 LeadAI/social/schemas.py         request/response models
 LeadAI/models_social.py          leadai_social_posts, leadai_social_topics
 LeadAI/routers/social.py         the router
-requirements-social.txt          optional AI extras
 ```
 
 **Modified (four small, additive edits)**

@@ -11,10 +11,10 @@ does four additive things:
 
 WHY THE PUBLIC-PATH STEP IS DONE THIS WAY
 -----------------------------------------
-`multiligual_call.TokenValidationMiddleware` reads the module-level `PUBLIC_PATHS`
+`outbound.app.TokenValidationMiddleware` reads the module-level `PUBLIC_PATHS`
 tuple through `_is_public_path()` on every request. Rebinding that module
 attribute at import time therefore extends the exemption list WITHOUT editing
-multiligual_call.py — the file stays byte-identical to the version you have in
+outbound/app.py — the file stays byte-identical to the version you have in
 production. The alternative (editing the tuple in place) would mean modifying a
 working file, which the brief rules out.
 
@@ -53,9 +53,9 @@ PUBLIC_LEADAI_PATHS = (
 
 
 def _extend_public_paths() -> None:
-    """Additively extend multiligual_call.PUBLIC_PATHS (no file edit)."""
+    """Additively extend outbound.app.PUBLIC_PATHS (no file edit)."""
     try:
-        import multiligual_call as mc
+        import outbound.app as mc
     except Exception as exc:  # noqa: BLE001
         logger.warning("[LeadAI] could not extend PUBLIC_PATHS: %s", exc)
         return
@@ -79,7 +79,7 @@ def _register_websockets(app: FastAPI) -> None:
     the existing WS routes do.
     """
     try:
-        from Websockets.connection import manager
+        from core.websocket_manager import manager
     except Exception as exc:  # noqa: BLE001
         logger.warning("[LeadAI] websocket manager unavailable: %s", exc)
         return
@@ -87,7 +87,7 @@ def _register_websockets(app: FastAPI) -> None:
     @app.websocket("/ws/leadai/inbox/{client_id}")
     async def leadai_inbox_ws(websocket: WebSocket, client_id: str):
         """Per-company inbox channel: new lead, handoff, assignment, call status."""
-        from auth import get_current_user_websocket
+        from core.auth import get_current_user_websocket
 
         try:
             await get_current_user_websocket(websocket)
@@ -110,7 +110,7 @@ def _register_websockets(app: FastAPI) -> None:
     @app.websocket("/ws/leadai/conversation/{conversation_id}")
     async def leadai_conversation_ws(websocket: WebSocket, conversation_id: str):
         """Per-conversation channel: live message stream for an open thread."""
-        from auth import get_current_user_websocket
+        from core.auth import get_current_user_websocket
 
         try:
             await get_current_user_websocket(websocket)

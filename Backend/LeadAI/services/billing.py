@@ -368,7 +368,7 @@ def deduct_call_usage(
 def _terminate_all_active_client_calls(client_id: str) -> None:
     """Terminate all ongoing calls for a client when balance reaches 0."""
     try:
-        from multiligual_call import active_calls, twilio_client
+        from outbound.app import active_calls, twilio_client
 
         terminated_count = 0
         for sid, call_info in list(active_calls.items()):
@@ -706,7 +706,7 @@ def verify_razorpay_payment(
     invoice_url = f"/api/leadai/billing/invoices/{recharge.Id}/download"
     invoice_id = None
     try:
-        from Domain.models import Client
+        from domain.models import Client
         from ..services import invoice as invoice_svc
 
         client_obj = db.get(Client, client_id)
@@ -1101,7 +1101,7 @@ def verify_razorpay_subscription_payment(
     invoice_url = f"/api/leadai/billing/invoices/{recharge.Id}/download"
     invoice_id = None
     try:
-        from Domain.models import Client
+        from domain.models import Client
         from ..services import invoice as invoice_svc
 
         client_obj = db.get(Client, client_id)
@@ -1273,7 +1273,7 @@ def handle_razorpay_webhook(
             db.commit()
 
         try:
-            from Domain.models import Client
+            from domain.models import Client
             from ..services import invoice as invoice_svc
 
             client_obj = db.get(Client, client_id)
@@ -1791,7 +1791,7 @@ def verify_channel_addon_payment(
 
     # 4. Generate invoice for the prorated add-on charge
     try:
-        from Domain.models import Client
+        from domain.models import Client
         from ..services import invoice as invoice_svc
 
         client_obj = db.get(Client, client_id)

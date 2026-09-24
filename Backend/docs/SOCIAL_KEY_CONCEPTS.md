@@ -239,7 +239,7 @@ Overridable per role in the role-permissions table, like everything else.
 | 502 with a Meta message | Token validity, permissions granted, `ApiVersion` |
 | Instagram fails, Facebook works | Media URL reachability from outside; IG needs media |
 | Media URL errors | `MINIO_PUBLIC_BASE_URL` — public? HTTPS? object endpoint? |
-| 503 on AI endpoints | `pip install -r requirements-social.txt` |
+| 503 on AI endpoints | `pip install -r requirements.txt` (the AI extras are part of it now) |
 | Slow Instagram video | Normal — container processing |
 
 ---

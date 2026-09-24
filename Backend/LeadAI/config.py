@@ -8,7 +8,7 @@ gracefully:
   * OPENAI_API_KEY missing  -> local hashed-ngram embeddings + deterministic
                                (extractive) answering. RAG still works.
   * EXOTEL_* missing        -> outbound voice falls back to the Twilio leg that
-                               is already wired up in multiligual_call.py.
+                               is already wired up in outbound/app.py.
   * SARVAM_API_KEY missing  -> the existing sarvam_stt/sarvam_tts modules
                                already handle their own absence.
   * REDIS_URL missing       -> in-process cache.

@@ -225,7 +225,7 @@ direct posting **fails to boot the entire LeadAI API** — Channels, Campaigns,
 Inbox, everything — over a dependency it never asked for.
 
 So the import happens inside `agent_bridge.run_task()`, and an `ImportError`
-becomes a clean 503 naming `requirements-social.txt`. Direct posting works
+becomes a clean 503 naming `requirements.txt`. Direct posting works
 today with zero new dependencies.
 
 Credentials still propagate correctly through the agent: its tools call the same
@@ -249,7 +249,6 @@ tenancy.
 | `LeadAI/social/schemas.py` | Request/response models |
 | `LeadAI/models_social.py` | `leadai_social_posts`, `leadai_social_topics` |
 | `LeadAI/routers/social.py` | The router |
-| `requirements-social.txt` | Optional AI extras |
 
 **Modified — four files, all additive**
 

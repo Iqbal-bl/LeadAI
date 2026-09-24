@@ -1,7 +1,10 @@
 # =============================================================================
-# Unified requirements.txt — AIOutbound + LeadAI + Social Agent + Browser Agent
-# =============================================================================
-# Install: pip install -r requirements.txt
+# LeadAI Backend — the ONE requirements file for everything:
+#   outbound calling + batch calling, LeadAI platform, social agent, billing.
+#
+#   pip install -r requirements.txt
+#
+# Optional extras (not installed by default) are listed at the bottom, commented.
 # =============================================================================
 
 # --- Web Framework ---
@@ -91,12 +94,14 @@ cloudinary>=1.40.0
 
 # --- LangChain / LangGraph (Social Agent AI) ---
 langchain>=0.3
+langchain-core>=0.3
 langchain-openai>=0.2
 langchain-text-splitters>=0.3
 langchain-chroma>=0.1
 langgraph>=0.2
 chromadb>=0.5
 tavily-python>=0.5
+tenacity>=8.2
 
 # --- Browser Agent ---
 playwright>=1.45
@@ -170,8 +175,18 @@ typing_extensions==4.15.0
 wrapt==1.17.3
 yarl==1.20.1
 
-# Payment Gateway
-razorpay
+# --- Payments (Razorpay checkout, AutoPay subscriptions) ---
+razorpay>=1.4.2
 
-# PDF Invoice Generation
+# --- PDF invoice generation ---
 xhtml2pdf==0.2.18
+
+# --- LinkedIn automation (unofficial API client: search + connection requests) ---
+linkedin-api>=2.0.0
+
+# =============================================================================
+# Optional extras — uncomment only if you use them
+# =============================================================================
+# Production vector store for the knowledge base (enable with QDRANT_URL=http://host:6333).
+# Without it, embeddings are stored in MySQL and scored in-process with numpy.
+# qdrant-client==1.12.1

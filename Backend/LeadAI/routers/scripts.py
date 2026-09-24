@@ -12,7 +12,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from Domain.models import Client
+from domain.models import Client
 
 from .. import activity
 from ..activity import A
@@ -167,7 +167,7 @@ def importable_scripts(
 ):
     """Lists the app's existing scripts/*.xml so a working script can be adopted
     by a company instead of re-authored."""
-    from multiligual_call import SCRIPTS_DIR
+    from outbound.app import SCRIPTS_DIR
 
     try:
         files = sorted(f for f in os.listdir(SCRIPTS_DIR) if f.endswith(".xml"))
