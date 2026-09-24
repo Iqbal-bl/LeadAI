@@ -48,6 +48,7 @@ PUBLIC_LEADAI_PATHS = (
     f"{settings.api_prefix}/channels/linkedin/callback",
     f"{settings.api_prefix}/linkedin/callback",
     f"{settings.api_prefix}/billing/invoices",
+    f"{settings.api_prefix}/billing/webhook",
 )
 
 

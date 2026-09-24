@@ -844,13 +844,68 @@ def ensure_razorpay_plan(db: Session, template: LeadRechargePlanTemplate) -> str
         raise ValueError(f"Razorpay plan creation failed: {err_msg}") from err
 
 
+def ensure_bundle_razorpay_plan(
+    db: Session,
+    amount: float,
+    channels: list[str],
+    base_template: Optional[LeadRechargePlanTemplate] = None,
+) -> str:
+    """Ensures a recurring Plan exists in Razorpay for a bundle amount (base plan + channels) and returns its plan ID."""
+    if base_template and abs(base_template.Price - amount) < 0.01 and base_template.RazorpayPlanId:
+        return base_template.RazorpayPlanId
+
+    amount_paise = int(round(amount * 100))
+
+    # Look for an existing active template with this exact price and valid RazorpayPlanId
+    existing = (
+        db.query(LeadRechargePlanTemplate)
+        .filter(
+            func.abs(LeadRechargePlanTemplate.Price - amount) < 0.01,
+            LeadRechargePlanTemplate.RazorpayPlanId.isnot(None),
+            LeadRechargePlanTemplate.IsActive == True,
+        )
+        .first()
+    )
+    if existing and existing.RazorpayPlanId:
+        return existing.RazorpayPlanId
+
+    rzp = get_razorpay_client()
+    channels_str = ", ".join([c.title() for c in channels]) if channels else "Core Voice"
+    plan_name = f"LeadAI Bundle ({channels_str})" if channels else "LeadAI Subscription"
+    desc = f"LeadAI AutoPay Bundle ₹{amount:.0f}/mo with {channels_str}"
+
+    try:
+        rzp_plan = rzp.plan.create({
+            "period": "monthly",
+            "interval": 1,
+            "item": {
+                "name": plan_name[:40],
+                "amount": amount_paise,
+                "currency": "INR",
+                "description": desc[:120],
+            },
+            "notes": {
+                "type": "dynamic_bundle",
+                "channels": ",".join(channels),
+                "amount": str(amount),
+            },
+        })
+        plan_id = rzp_plan["id"]
+        logger.info(f"[Billing] Created dynamic Razorpay bundle plan {plan_id} for ₹{amount:.2f} ({channels_str})")
+        return plan_id
+    except Exception as err:
+        err_msg = str(err).strip()
+        logger.error(f"[Billing] Failed to create dynamic Razorpay bundle plan for amount {amount}: {err_msg}")
+        raise ValueError(f"Failed to create Razorpay plan for bundle ₹{amount}: {err_msg}") from err
+
+
 def create_razorpay_subscription(
     db: Session,
     client_id: str,
     plan_template_id: str,
     user_email: str,
 ) -> dict:
-    """Creates a Razorpay recurring subscription (e-Mandate / UPI AutoPay) for the client."""
+    """Creates a Razorpay recurring subscription (e-Mandate / UPI AutoPay) for the client with RBI-compliant Max Cap."""
     now = utcnow()
     active_plan = get_active_recharge(db, client_id)
     if active_plan and (not active_plan.ExpiresAt or not _is_expired(active_plan.ExpiresAt, now)) and not active_plan.CancelAtPeriodEnd:
@@ -867,28 +922,49 @@ def create_razorpay_subscription(
 
     total_count = 12 if template.ValidityDays < 360 else 5
     amount_paise = int(round(template.Price * 100))
+    mandate_max = max(template.Price, getattr(settings, "razorpay_mandate_max_amount", 15000.0))
+    mandate_max_paise = int(round(mandate_max * 100))
+
+    sub_payload = {
+        "plan_id": rzp_plan_id,
+        "total_count": total_count,
+        "quantity": 1,
+        "customer_notify": 1,
+        "max_amount": mandate_max_paise,
+        "notes": {
+            "client_id": client_id,
+            "plan_template_id": template.Id,
+            "user_email": user_email,
+        },
+    }
 
     try:
-        rzp_sub = rzp.subscription.create({
-            "plan_id": rzp_plan_id,
-            "total_count": total_count,
-            "quantity": 1,
-            "customer_notify": 1,
-            "notes": {
-                "client_id": client_id,
-                "plan_template_id": template.Id,
-                "user_email": user_email,
-            },
-        })
+        rzp_sub = rzp.subscription.create(sub_payload)
     except Exception as err:
         err_msg = str(err).strip()
-        if not err_msg or "ServerError" in type(err).__name__:
-            err_msg = (
-                "Subscriptions feature is not enabled on your Razorpay merchant account. "
-                "Please enable 'Subscriptions / Recurring Payments' in your Razorpay Dashboard (Settings -> Subscriptions)."
-            )
-        logger.error(f"[Billing] Failed to create Razorpay subscription: {err_msg}")
-        raise ValueError(f"Failed to initialize subscription: {err_msg}") from err
+        if "max_amount" in err_msg.lower():
+            logger.warning(f"[Billing] Razorpay rejected max_amount parameter ({err_msg}). Retrying standard subscription creation...")
+            fallback_payload = dict(sub_payload)
+            fallback_payload.pop("max_amount", None)
+            try:
+                rzp_sub = rzp.subscription.create(fallback_payload)
+            except Exception as retry_err:
+                err_msg = str(retry_err).strip()
+                if not err_msg or "ServerError" in type(retry_err).__name__:
+                    err_msg = (
+                        "Subscriptions feature is not enabled on your Razorpay merchant account. "
+                        "Please enable 'Subscriptions / Recurring Payments' in your Razorpay Dashboard (Settings -> Subscriptions)."
+                    )
+                logger.error(f"[Billing] Failed to create Razorpay subscription: {err_msg}")
+                raise ValueError(f"Failed to initialize subscription: {err_msg}") from retry_err
+        else:
+            if not err_msg or "ServerError" in type(err).__name__:
+                err_msg = (
+                    "Subscriptions feature is not enabled on your Razorpay merchant account. "
+                    "Please enable 'Subscriptions / Recurring Payments' in your Razorpay Dashboard (Settings -> Subscriptions)."
+                )
+            logger.error(f"[Billing] Failed to create Razorpay subscription: {err_msg}")
+            raise ValueError(f"Failed to initialize subscription: {err_msg}") from err
 
     sub_id = rzp_sub["id"]
     channels = list(template.AddonChannels or []) if template else []
@@ -913,7 +989,7 @@ def create_razorpay_subscription(
     db.refresh(pending_recharge)
 
     logger.info(
-        f"[Billing] Created Razorpay subscription {sub_id} for client {client_id}, plan {template.Name} (₹{template.Price}/mo)"
+        f"[Billing] Created Razorpay subscription {sub_id} for client {client_id}, plan {template.Name} (₹{template.Price}/mo, Mandate Cap: ₹{mandate_max:.0f})"
     )
 
     return {
@@ -924,6 +1000,7 @@ def create_razorpay_subscription(
         "amount": amount_paise,
         "currency": "INR",
         "included_minutes": template.IncludedMinutes,
+        "mandate_max_amount": mandate_max_paise,
     }
 
 
@@ -1140,7 +1217,13 @@ def handle_razorpay_webhook(
         plan_name = template.Name if template else prev_recharge.PlanNameSnapshot
         minutes = template.IncludedMinutes if template else prev_recharge.PurchasedMinutes
         validity = template.ValidityDays if template else prev_recharge.ValidityDaysSnapshot
-        price = template.Price if template else prev_recharge.PricePaid
+        
+        # Determine actual price from Razorpay charged event or fallback to template/previous
+        charged_amount_paise = payment_entity.get("amount")
+        if charged_amount_paise:
+            price = round(float(charged_amount_paise) / 100.0, 2)
+        else:
+            price = template.Price if template else prev_recharge.PricePaid
 
         # 3. Minute Rollover with 1x Monthly Quota Cap (prevents infinite accumulation liability)
         unspent = max(0.0, float(prev_recharge.RemainingMinutes)) if (prev_recharge and prev_recharge.RemainingMinutes) else 0.0
@@ -1462,6 +1545,27 @@ def cancel_channel_for_next_cycle(
     addon_sum = sum(ADDON_BENCHMARKS.get(c, 0.0) for c in curr_next)
     next_cycle_price = round(base_voice_price + addon_sum, 2)
 
+    # Sync updated lower bundle price with Razorpay AutoPay subscription schedule
+    if active_plan.RazorpaySubscriptionId and not active_plan.CancelAtPeriodEnd:
+        try:
+            reduced_plan_id = ensure_bundle_razorpay_plan(db, next_cycle_price, curr_next, template)
+            rzp = get_razorpay_client()
+            rzp.subscription.update(
+                active_plan.RazorpaySubscriptionId,
+                {
+                    "plan_id": reduced_plan_id,
+                    "schedule_change_at": "cycle_end",
+                },
+            )
+            logger.info(
+                f"[Billing] Successfully scheduled Razorpay subscription {active_plan.RazorpaySubscriptionId} "
+                f"update to plan {reduced_plan_id} (₹{next_cycle_price}) at cycle end after cancelling {ch_key}."
+            )
+        except Exception as sched_err:
+            logger.warning(
+                f"[Billing] Notice: Could not schedule Razorpay subscription update on channel cancel: {sched_err}"
+            )
+
     db.add(active_plan)
     db.commit()
     db.refresh(active_plan)
@@ -1591,6 +1695,32 @@ def verify_channel_addon_payment(
     if channel not in curr_next:
         curr_next.append(channel)
     active_plan.NextCycleChannels = curr_next
+
+    # 2b. If active plan is on a Razorpay AutoPay subscription, update the subscription schedule for next cycle
+    if active_plan.RazorpaySubscriptionId and not active_plan.CancelAtPeriodEnd:
+        try:
+            template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
+            base_voice_price = template.Price if template else active_plan.PricePaid
+            addon_sum = sum(ADDON_BENCHMARKS.get(c, 0.0) for c in curr_next)
+            next_cycle_price = round(base_voice_price + addon_sum, 2)
+
+            new_plan_id = ensure_bundle_razorpay_plan(db, next_cycle_price, curr_next, template)
+            rzp = get_razorpay_client()
+            rzp.subscription.update(
+                active_plan.RazorpaySubscriptionId,
+                {
+                    "plan_id": new_plan_id,
+                    "schedule_change_at": "cycle_end",
+                },
+            )
+            logger.info(
+                f"[Billing Addon] Successfully scheduled Razorpay subscription {active_plan.RazorpaySubscriptionId} "
+                f"to plan {new_plan_id} (₹{next_cycle_price}) for upcoming renewal."
+            )
+        except Exception as sched_err:
+            logger.warning(
+                f"[Billing Addon] Notice: Could not schedule Razorpay subscription update for next cycle: {sched_err}"
+            )
 
     # 3. Update the pending order record to completed
     pending = (
