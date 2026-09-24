@@ -174,15 +174,25 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
           const msgId = msgPayload.id;
 
           if (text) {
-            const rawSender = msgPayload.type || msgPayload.sender || 'ai';
-            const mappedType =
+            const rawSender = (
+              msgPayload.sender ||
+              msgPayload.role ||
+              (msgPayload.type && msgPayload.type !== 'message'
+                ? msgPayload.type
+                : null) ||
+              'ai'
+            ).toLowerCase();
+            const isCust =
               rawSender === 'customer' ||
               rawSender === 'user' ||
-              rawSender === 'Human'
-                ? 'Human'
-                : 'AI';
+              rawSender === 'human' ||
+              rawSender === 'lead' ||
+              msgPayload.type === 'Human';
+            const mappedType = isCust ? 'Human' : 'AI';
             const mappedAgent =
-              rawSender === 'agent' || rawSender === 'Agent' ? 'Agent' : 'AI';
+              rawSender === 'agent' || rawSender === 'staff' || msgPayload.agent === 'Agent'
+                ? 'Agent'
+                : 'AI';
             const startTime =
               msgPayload.timestamp ||
               msgPayload.created_at ||
@@ -204,7 +214,7 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
                 type: mappedType,
                 agent: mappedAgent,
                 callSid: callSid,
-                sender: rawSender,
+                sender: isCust ? 'customer' : rawSender,
               };
               this.conversations = updated;
             } else {
@@ -233,7 +243,7 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
                     confidence: msgPayload.confidence || 1.0,
                     agent: mappedAgent,
                     callSid: callSid,
-                    sender: rawSender,
+                    sender: isCust ? 'customer' : rawSender,
                   },
                 ];
               }
@@ -317,6 +327,7 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
               summary: currentMsg,
               confidence: 1.0,
               agent: 'Agent',
+              sender: 'agent',
               callSid: null,
             },
           ];
@@ -375,22 +386,41 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
         };
 
         this.conversations = (detail.messages || []).map(
-          (m: any, idx: number) => ({
-            id: idx + 1,
-            leadId: Number(detail.id) || 1,
-            leadName: this.lead.name,
-            type: m.sender === 'customer' ? 'Human' : 'AI',
-            status: 'Completed',
-            startTime: m.created_at || detail.created_at,
-            duration: '0:00',
-            summary: m.content || m.message,
-            confidence: m.confidence || 1.0,
-            agent: m.sender === 'agent' ? 'Agent' : 'AI',
-            callSid: m.call_sid || null,
-            sender: m.sender,
-            delivery_status: m.delivery_status || m.deliveryStatus || null,
-            delivery_error: m.delivery_error || m.deliveryError || null,
-          }),
+          (m: any, idx: number) => {
+            const rawSender = (
+              m.sender ||
+              m.role ||
+              (m.type && m.type !== 'message' ? m.type : null) ||
+              'ai'
+            ).toLowerCase();
+            const isCust =
+              rawSender === 'customer' ||
+              rawSender === 'user' ||
+              rawSender === 'human' ||
+              rawSender === 'lead' ||
+              m.type === 'Human';
+            return {
+              id: m.id || idx + 1,
+              leadId: Number(detail.id) || 1,
+              leadName: this.lead.name,
+              type: isCust ? 'Human' : 'AI',
+              status: 'Completed',
+              startTime: m.created_at || m.timestamp || detail.created_at,
+              duration: '0:00',
+              summary: m.content || m.message || m.text,
+              confidence: m.confidence || 1.0,
+              agent:
+                rawSender === 'agent' ||
+                rawSender === 'staff' ||
+                m.agent === 'Agent'
+                  ? 'Agent'
+                  : 'AI',
+              callSid: m.call_sid || null,
+              sender: isCust ? 'customer' : rawSender,
+              delivery_status: m.delivery_status || m.deliveryStatus || null,
+              delivery_error: m.delivery_error || m.deliveryError || null,
+            };
+          },
         );
       },
       error: () => {},

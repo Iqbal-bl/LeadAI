@@ -95,39 +95,33 @@
     <div
       *ngIf="msg.sender !== 'system'"
       class="flex flex-col"
-      [class.items-end]="msg.type === 'Human'"
-      [class.items-start]="msg.type !== 'Human'"
+      [class.items-end]="isCustomer(msg)"
+      [class.items-start]="!isCustomer(msg)"
     >
       <div
         class="max-w-[80%] px-4 py-3 rounded-2xl text-sm shadow-sm"
         [style.background-color]="
-          msg.type === 'Human' ? '#6366f1' : 'var(--card-bg)'
+          isCustomer(msg) ? '#6366f1' : 'var(--card-bg)'
         "
-        [style.color]="msg.type === 'Human' ? '#ffffff' : 'var(--app-text)'"
+        [style.color]="isCustomer(msg) ? '#ffffff' : 'var(--app-text)'"
         [style.border]="
-          msg.type === 'Human' ? 'none' : '1px solid var(--app-border)'
+          isCustomer(msg) ? 'none' : '1px solid var(--app-border)'
         "
         [ngClass]="
-          msg.type === 'Human' ? 'rounded-tr-none' : 'rounded-tl-none'
+          isCustomer(msg) ? 'rounded-tr-none' : 'rounded-tl-none'
         "
       >
         <div
           class="font-semibold text-[10px] mb-1.5 opacity-75"
           [style.color]="
-            msg.type === 'Human' ? '#e0e7ff' : 'var(--app-text-muted)'
+            isCustomer(msg) ? '#e0e7ff' : 'var(--app-text-muted)'
           "
         >
-          {{
-            msg.type === "Human"
-              ? "Customer"
-              : msg.agent === "Agent"
-                ? "Agent"
-                : "AI Assistant"
-          }}
-          · {{ msg.startTime | date: "mediumTime" }}
+          {{ getSenderLabel(msg) }}
+          · {{ (msg.startTime || msg.created_at || msg.timestamp) | date: "mediumTime" }}
         </div>
         <div class="whitespace-pre-wrap leading-relaxed">
-          {{ msg.summary }}
+          {{ msg.summary || msg.content || msg.text || msg.message }}
         </div>
 
         <!-- Social / Omnichannel Delivery Status -->

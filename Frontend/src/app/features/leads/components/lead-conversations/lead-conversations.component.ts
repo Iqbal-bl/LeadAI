@@ -55,6 +55,46 @@ export class LeadConversationsComponent implements OnChanges {
     this.previewTranscript.emit(msg);
   }
 
+  isCustomer(msg: any): boolean {
+    if (!msg) return false;
+    const sender = (msg.sender || '').toLowerCase().trim();
+    const type = (msg.type || '').toLowerCase().trim();
+    const role = (msg.role || '').toLowerCase().trim();
+    return (
+      sender === 'customer' ||
+      sender === 'user' ||
+      sender === 'human' ||
+      sender === 'lead' ||
+      type === 'human' ||
+      type === 'customer' ||
+      type === 'user' ||
+      role === 'customer' ||
+      role === 'user'
+    );
+  }
+
+  isAgent(msg: any): boolean {
+    if (!msg) return false;
+    const sender = (msg.sender || '').toLowerCase().trim();
+    const agent = (msg.agent || '').toLowerCase().trim();
+    return (
+      sender === 'agent' ||
+      sender === 'staff' ||
+      agent === 'agent' ||
+      agent === 'staff'
+    );
+  }
+
+  getSenderLabel(msg: any): string {
+    if (this.isCustomer(msg)) {
+      return msg.leadName || 'Customer';
+    }
+    if (this.isAgent(msg)) {
+      return 'Agent';
+    }
+    return 'AI Assistant';
+  }
+
   scrollToBottom(): void {
     try {
       setTimeout(() => {

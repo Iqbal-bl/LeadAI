@@ -34,69 +34,6 @@ export class CompaniesListComponent implements OnInit {
   totalUsersLicensed = 0;
   totalConversationsCount = 0;
 
-  private mockCompanies: Company[] = [
-    {
-      id: 'company-1',
-      name: 'TechCorp Solutions',
-      email: 'billing@techcorp.com',
-      phone_number: '+1 (555) 234-5678',
-      description:
-        'Enterprise SaaS provider specializing in sales automation and custom CRM integrations.',
-      is_active: true,
-      created_at: '2024-01-15',
-      user_count: 142,
-      document_count: 24,
-      chunk_count: 1240,
-      script_count: 5,
-      conversation_count: 1845,
-    },
-    {
-      id: 'company-2',
-      name: 'GlobalFin Partners',
-      email: 'contact@globalfin.com',
-      phone_number: '+1 (555) 345-6789',
-      description:
-        'Global investment banking and asset management group requiring high OIDC security compliance.',
-      is_active: true,
-      created_at: '2024-01-12',
-      user_count: 89,
-      document_count: 18,
-      chunk_count: 820,
-      script_count: 3,
-      conversation_count: 942,
-    },
-    {
-      id: 'company-3',
-      name: 'HealthPlus Analytics',
-      email: 'support@healthplus.io',
-      phone_number: '+1 (555) 456-7890',
-      description:
-        'AI-driven clinical health data solutions and automated customer portal routing.',
-      is_active: true,
-      created_at: '2024-01-10',
-      user_count: 56,
-      document_count: 12,
-      chunk_count: 450,
-      script_count: 2,
-      conversation_count: 480,
-    },
-    {
-      id: 'company-4',
-      name: 'RetailMax Corp',
-      email: 'operations@retailmax.com',
-      phone_number: '+1 (555) 567-8901',
-      description:
-        'E-commerce logistics and national direct-to-consumer distribution networks.',
-      is_active: false,
-      created_at: '2024-01-08',
-      user_count: 12,
-      document_count: 4,
-      chunk_count: 150,
-      script_count: 1,
-      conversation_count: 125,
-    },
-  ];
-
   ngOnInit(): void {
     this.loadCompanies();
   }
@@ -105,14 +42,12 @@ export class CompaniesListComponent implements OnInit {
     this.loading = true;
     this.companyService.getCompanies(true).subscribe({
       next: (data) => {
-        this.companies =
-          data && data.length > 0 ? data : [...this.mockCompanies];
+        this.companies = data;
         this.calculateStats();
         this.loading = false;
       },
       error: () => {
         // Fall back to robust mock data for local demo execution
-        this.companies = [...this.mockCompanies];
         this.calculateStats();
         this.loading = false;
       },
@@ -206,7 +141,8 @@ export class CompaniesListComponent implements OnInit {
             this.messageService.add({
               severity: 'error',
               summary: 'Delete Failed',
-              detail: err?.error?.message || 'Failed to delete company workspace',
+              detail:
+                err?.error?.message || 'Failed to delete company workspace',
             });
           },
         });

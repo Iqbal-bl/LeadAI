@@ -1,13 +1,13 @@
-<div class="bg-white rounded-3xl border border-gray-200 shadow-sm flex flex-col h-full">
+<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-sm flex flex-col h-full transition-colors duration-200">
   <!-- ========================================================
        Header
   ========================================================= -->
 
-  <div class="flex items-center justify-between px-6 py-5 border-b border-gray-200">
+  <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700/60">
     <div class="min-w-0">
-      <h2 class="text-xl font-semibold text-[#0a3d2e]">Create new post</h2>
+      <h2 class="text-sm font-bold text-slate-900 dark:text-slate-100">Create new post</h2>
 
-      <p class="text-sm text-gray-500 mt-1">Share your content across multiple platforms</p>
+      <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Share your content across multiple platforms</p>
     </div>
 
     <!-- ======================================================
@@ -18,7 +18,7 @@
       <!-- Create Button -->
 
       <p-button icon="pi pi-plus" [rounded]="true" type="button"
-        styleClass="!bg-[#0a3d2e] !border-[#0a3d2e] hover:!bg-[#086048] !w-11 !h-11 !text-white"
+        styleClass="!bg-brand-600 hover:!bg-brand-500 !border-brand-600 !w-8 !h-8 !text-white shadow-xs transition-all"
         (click)="toggleCreateMenu($event)">
       </p-button>
 
@@ -27,11 +27,11 @@
       ===================================================== -->
 
       @if (showCreateMenu) {
-      <div class="create-menu">
+      <div class="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl py-1.5 z-20 transition-all">
         <!-- Add Location -->
 
-        <button type="button" class="create-menu__item" (click)="onAddLocation()">
-          <span class="create-menu__icon create-menu__icon--red">
+        <button type="button" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors text-left cursor-pointer" (click)="onAddLocation()">
+          <span class="w-6 h-6 rounded-lg bg-red-500/10 text-red-500 dark:text-red-400 flex items-center justify-center text-xs">
             <i class="pi pi-map-marker"></i>
           </span>
 
@@ -40,8 +40,8 @@
 
         <!-- Create Poll -->
 
-        <button type="button" class="create-menu__item" (click)="onCreatePoll()">
-          <span class="create-menu__icon create-menu__icon--blue">
+        <button type="button" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-colors text-left cursor-pointer" (click)="onCreatePoll()">
+          <span class="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-500 dark:text-blue-400 flex items-center justify-center text-xs">
             <i class="pi pi-chart-bar"></i>
           </span>
 
@@ -59,7 +59,7 @@
   <div class="flex-1 px-6 py-5">
     <textarea #postContentInput [(ngModel)]="postContent" (ngModelChange)="onContentChange()"
       [maxlength]="maxCharacters" rows="8" placeholder="What's on your mind today?"
-      class="w-full min-h-[220px] resize-none border-none outline-none text-[15px] leading-7 text-gray-700 placeholder:text-gray-400">
+      class="w-full min-h-[220px] resize-none border-none outline-none bg-transparent text-sm leading-relaxed text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none">
     </textarea>
   </div>
 
@@ -68,50 +68,52 @@
   ========================================================= -->
 
   @if (showAiPrompt) {
-  <div class="px-6 pb-5">
-    <div class="ai-prompt-panel" (click)="$event.stopPropagation()">
+  <div class="px-6 pb-4">
+    <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/80 transition-all" (click)="$event.stopPropagation()">
       <!-- AI Header -->
 
-      <div class="flex items-start justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <div class="ai-prompt-icon">
-            <i class="fa-solid fa-feather-pointed"></i>
+      <div class="flex items-start justify-between gap-4 mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center text-xs">
+            <i class="pi pi-sparkles"></i>
           </div>
 
           <div>
-            <span class="ai-prompt-eyebrow">AI Assist</span>
-            <h3 class="text-sm font-semibold text-gray-900 mt-0.5">Draft this post</h3>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 block">AI Assist</span>
+            <h3 class="text-xs font-semibold text-slate-900 dark:text-slate-100">Draft this post</h3>
           </div>
         </div>
 
         <!-- Close -->
-        <button type="button" class="ai-close-button" (click)="closeAiPrompt()">
-          <i class="fa-solid fa-xmark"></i>
+        <button type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer" (click)="closeAiPrompt()">
+          <i class="pi pi-times text-xs"></i>
         </button>
       </div>
 
       <!-- AI Instruction -->
       <textarea #aiPromptInput [(ngModel)]="aiPrompt" rows="3" maxlength="1000"
-        placeholder="e.g. Announce our new AI-powered campaign feature, upbeat and concise..." class="ai-prompt-input">
+        placeholder="e.g. Announce our new AI-powered campaign feature, upbeat and concise..."
+        class="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none">
       </textarea>
 
       <!-- Prompt Hint -->
-      <div class="flex items-center justify-between mt-2">
-        <span class="text-[11px] text-gray-400"> Tell it the topic, tone, or audience. </span>
-        <span class="text-[11px] text-gray-400"> {{ aiPrompt.length }} / 1000 </span>
+      <div class="flex items-center justify-between mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+        <span> Tell it the topic, tone, or audience. </span>
+        <span> {{ aiPrompt.length }} / 1000 </span>
       </div>
 
       <!-- AI Actions -->
       <div class="flex items-center justify-end gap-2 mt-3">
-        <button type="button" class="ai-cancel-button" (click)="closeAiPrompt()">Cancel</button>
+        <button type="button" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-800 transition-all cursor-pointer" (click)="closeAiPrompt()">Cancel</button>
 
-        <button type="button" class="ai-generate-button" [disabled]="!aiPrompt.trim() || isGenerating"
+        <button type="button" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer"
+          [disabled]="!aiPrompt.trim() || isGenerating"
           (click)="generateAiDraft()">
           @if (isGenerating) {
-          <i class="fa-solid fa-spinner fa-spin"></i>
+          <i class="pi pi-spin pi-spinner text-xs"></i>
           <span>Drafting...</span>
           } @else {
-          <i class="fa-solid fa-feather-pointed"></i>
+          <i class="pi pi-sparkles text-xs"></i>
           <span>Draft post</span>
           }
         </button>
@@ -124,24 +126,25 @@
        Footer
   ========================================================= -->
 
-  <div class="border-t border-gray-200 px-6 py-4">
+  <div class="border-t border-slate-100 dark:border-slate-700/60 px-6 py-3.5">
     <div class="flex items-center justify-between gap-4 flex-wrap">
       <!-- Quick Actions -->
       <div class="flex items-center gap-2 flex-wrap">
         <!-- AI -->
-        <button type="button" (click)="toggleAiPrompt($event)" [class.action-chip--ai-active]="showAiPrompt"
-          class="action-chip action-chip--ai">
-          <span class="action-chip__icon">
-            <i class="fa-solid fa-feather-pointed text-xs"></i>
-          </span>
-          <!-- <span class="text-xs font-medium">AI</span> -->
+        <button type="button" (click)="toggleAiPrompt($event)"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+          [ngClass]="showAiPrompt 
+            ? 'bg-brand-600 text-white shadow-xs' 
+            : 'bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 hover:bg-brand-500/20'">
+          <i class="pi pi-sparkles text-xs"></i>
+          <span>AI Assist</span>
         </button>
       </div>
 
       <!-- Character Count -->
-      <div class="text-sm font-medium" [ngClass]="{
-        'text-gray-500': postContent.length < maxCharacters,
-        'text-red-500': postContent.length >= maxCharacters,
+      <div class="text-xs font-medium" [ngClass]="{
+        'text-slate-400 dark:text-slate-500': postContent.length < maxCharacters,
+        'text-red-500 dark:text-red-400 font-semibold': postContent.length >= maxCharacters
       }">
         {{ postContent.length }} / {{ maxCharacters }}
       </div>
