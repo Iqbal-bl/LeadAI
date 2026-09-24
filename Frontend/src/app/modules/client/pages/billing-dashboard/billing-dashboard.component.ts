@@ -35,7 +35,7 @@ export class BillingDashboardComponent implements OnInit {
     private billingService: BillingService,
     private messageService: MessageService,
     private authService: AuthService,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.loadData();
@@ -115,8 +115,8 @@ export class BillingDashboardComponent implements OnInit {
             typeof err?.error?.detail === 'string'
               ? err.error.detail
               : Array.isArray(err?.error?.detail)
-              ? err.error.detail.map((e: any) => e.msg || e.detail).join(', ')
-              : err?.message || 'Failed to initiate recurring subscription mandate.';
+                ? err.error.detail.map((e: any) => e.msg || e.detail).join(', ')
+                : err?.message || 'Failed to initiate recurring subscription mandate.';
           this.messageService.add({
             severity: 'error',
             summary: 'AutoPay Mandate Failed',
@@ -137,8 +137,8 @@ export class BillingDashboardComponent implements OnInit {
             typeof err?.error?.detail === 'string'
               ? err.error.detail
               : Array.isArray(err?.error?.detail)
-              ? err.error.detail.map((e: any) => e.msg || e.detail).join(', ')
-              : err?.message || 'Failed to initiate payment order.';
+                ? err.error.detail.map((e: any) => e.msg || e.detail).join(', ')
+                : err?.message || 'Failed to initiate payment order.';
           this.messageService.add({
             severity: 'error',
             summary: 'Order Initiation Failed',
@@ -732,6 +732,34 @@ export class BillingDashboardComponent implements OnInit {
           severity: 'error',
           summary: 'Cancellation Failed',
           detail: err?.error?.detail || `Failed to cancel ${channelName} renewal.`,
+        });
+      },
+    });
+  }
+
+  resumingChannel: { [key: string]: boolean } = {};
+
+  confirmResumeChannel(channelKey: string): void {
+    const channelName = this.CHANNEL_PRICING[channelKey]?.name || channelKey;
+
+    this.resumingChannel[channelKey] = true;
+    this.billingService.resumeChannel(channelKey).subscribe({
+      next: (res: any) => {
+        this.resumingChannel[channelKey] = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Renewal Resumed',
+          detail: res.message || `${channelName} renewal has been resumed for the next cycle.`,
+          life: 8000,
+        });
+        this.loadData();
+      },
+      error: (err: any) => {
+        this.resumingChannel[channelKey] = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Resume Failed',
+          detail: err?.error?.detail || `Failed to resume ${channelName} renewal.`,
         });
       },
     });
