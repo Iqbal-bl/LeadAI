@@ -6,6 +6,8 @@ import {
   LinkedInProfile,
   LinkedInCredentialsPayload,
   LinkedInInvitationItem,
+  LinkedInConversation,
+  LinkedInMessage,
 } from '../../models/linkedin.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../shared/services/confirmation.service';
@@ -28,8 +30,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   private pollingInterval: any = null;
   private messageListener: any = null;
 
-  // Bot Session Credentials (Email & Password)
+  // Bot Session Credentials (Cookie or Email & Password)
+  authMode: 'cookie' | 'credentials' = 'cookie';
   credentialsForm: LinkedInCredentialsPayload = {
+    cookie_li_at: '',
     username: '',
     password: '',
   };
@@ -64,6 +68,20 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   invitationResults: Record<string, { success: boolean; message: string }> | null = null;
   showResultsModal = false;
 
+  // Direct Messaging & InMail
+  conversations: LinkedInConversation[] = [];
+  selectedConversation: LinkedInConversation | null = null;
+  messages: LinkedInMessage[] = [];
+  loadingConversations = false;
+  loadingMessages = false;
+  sendingMessage = false;
+  replyMessageText = '';
+  syncingMessages = false;
+  searchConversationText = '';
+
+  // Credentials Form State
+  showAdvancedCookie = false;
+
   constructor(
     private linkedinService: LinkedinService,
     private messageService: MessageService,
@@ -96,6 +114,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           }
           if (res.connected && res['has_cookie_credentials']) {
             this.loadInvitations();
+            this.loadConversations();
           }
         }
       },
@@ -108,14 +127,16 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   private setupOAuthMessageListener(): void {
     this.messageListener = (event: MessageEvent) => {
-      if (event.data?.type === 'LINKEDIN_OAUTH_SUCCESS') {
+      if (!event.data) return;
+
+      if (event.data.type === 'LINKEDIN_OAUTH_SUCCESS') {
         this.oauthLoading = false;
         this.clearPolling();
         this.loadStatus();
         this.messageService.add({
           severity: 'success',
           summary: 'LinkedIn Connected',
-          detail: 'OAuth authorization completed. Configure Bot Credentials for Automation.',
+          detail: 'OAuth authorization completed. You can now use LinkedIn posting and automation.',
         });
       }
     };
@@ -213,19 +234,22 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   // --- Bot Automation Credentials ---
   saveBotCredentials(): void {
-    if (!this.credentialsForm.username?.trim() || !this.credentialsForm.password?.trim()) {
+    const hasCookie = !!this.credentialsForm.cookie_li_at?.trim();
+    const hasCreds = !!this.credentialsForm.username?.trim() && !!this.credentialsForm.password?.trim();
+
+    if (!hasCookie && !hasCreds) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Missing Credentials',
-        detail: 'Please enter both your LinkedIn email and password.',
+        detail: 'Please enter your LinkedIn email and password.',
       });
       return;
     }
 
     const payload: LinkedInCredentialsPayload = {
-      cookie_li_at: null,
-      username: this.credentialsForm.username.trim(),
-      password: this.credentialsForm.password.trim(),
+      cookie_li_at: this.credentialsForm.cookie_li_at?.trim() || null,
+      username: this.credentialsForm.username?.trim() || null,
+      password: this.credentialsForm.password?.trim() || null,
     };
 
     this.savingCredentials = true;
@@ -236,9 +260,11 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'Credentials Saved',
-          detail: 'LinkedIn bot automation credentials configured successfully.',
+          detail: 'LinkedIn session credentials configured successfully.',
         });
         this.loadStatus();
+        this.loadConversations();
+        this.loadInvitations();
       },
       error: (err) => {
         this.savingCredentials = false;
@@ -250,6 +276,41 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       },
     });
   }
+
+  disconnectBotCredentials(): void {
+    this.confirmationService.confirm({
+      message: 'Are you sure you want to remove your personal LinkedIn session token/credentials?',
+      header: 'Remove Session Credentials',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.linkedinService.disconnectCredentials().subscribe({
+          next: () => {
+            this.credentialsForm = { cookie_li_at: '', username: '', password: '' };
+            this.showCredentialsSuccess = false;
+            this.conversations = [];
+            this.selectedConversation = null;
+            this.messages = [];
+            this.invitations = [];
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Credentials Removed',
+              detail: 'Personal LinkedIn session and credentials removed successfully.',
+            });
+            this.loadStatus();
+          },
+          error: (err) => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: err?.error?.detail || 'Failed to remove credentials.',
+            });
+          },
+        });
+      },
+    });
+  }
+
 
   // --- Auto-Accept & Automation Settings ---
   saveAutomationSettings(): void {
@@ -570,4 +631,153 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       this.invitationMessage = (this.invitationMessage || '') + ` {${tag}}`;
     }
   }
+
+  // --- Direct Messaging & InMail Methods ---
+  loadConversations(): void {
+    if (!this.status?.connected || !this.status?.['has_cookie_credentials']) {
+      return;
+    }
+    this.loadingConversations = true;
+    this.linkedinService.getConversations(30).subscribe({
+      next: (res) => {
+        this.loadingConversations = false;
+        this.conversations = res.conversations || [];
+        if (this.conversations.length > 0) {
+          if (!this.selectedConversation) {
+            this.selectConversation(this.conversations[0]);
+          } else {
+            const found = this.conversations.find(
+              (c) =>
+                (c.conversation_id && c.conversation_id === this.selectedConversation?.conversation_id) ||
+                (c.conversation_urn && c.conversation_urn === this.selectedConversation?.conversation_urn)
+            );
+            if (found) {
+              this.selectedConversation = found;
+            }
+          }
+        }
+      },
+      error: (err) => {
+        this.loadingConversations = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Could Not Load Messages',
+          detail: err?.error?.detail || 'Unable to retrieve LinkedIn messages.',
+        });
+      },
+    });
+  }
+
+  selectConversation(conv: LinkedInConversation): void {
+    this.selectedConversation = conv;
+    this.messages = [];
+    this.loadingMessages = true;
+    const convId = conv.conversation_id || conv.conversation_urn;
+    this.linkedinService.getConversationMessages(convId).subscribe({
+      next: (res) => {
+        this.loadingMessages = false;
+        this.messages = res.messages || [];
+        this.scrollToBottom();
+      },
+      error: (err) => {
+        this.loadingMessages = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Message Fetch Failed',
+          detail: err?.error?.detail || 'Could not load conversation thread messages.',
+        });
+      },
+    });
+  }
+
+  sendDirectReply(): void {
+    if (!this.selectedConversation || !this.replyMessageText?.trim()) return;
+    const text = this.replyMessageText.trim();
+    const convId =
+      this.selectedConversation.conversation_id || this.selectedConversation.conversation_urn;
+    this.sendingMessage = true;
+
+    this.linkedinService.sendMessage(convId, text).subscribe({
+      next: () => {
+        this.sendingMessage = false;
+        this.replyMessageText = '';
+        this.messages.push({
+          text,
+          sender_name: 'You',
+          is_self: true,
+          created_at: Date.now(),
+        });
+        if (this.selectedConversation) {
+          this.selectedConversation.last_message = text;
+          this.selectedConversation.last_activity_at = Date.now();
+        }
+        this.scrollToBottom();
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Message Sent',
+          detail: `Reply delivered to ${this.selectedConversation?.contact_name || 'contact'}.`,
+        });
+      },
+      error: (err) => {
+        this.sendingMessage = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Send Failed',
+          detail: err?.error?.detail || 'Failed to dispatch reply message.',
+        });
+      },
+    });
+  }
+
+  triggerMessageSync(): void {
+    this.syncingMessages = true;
+    this.linkedinService.syncMessages().subscribe({
+      next: (res) => {
+        this.syncingMessages = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Messages Synced',
+          detail: `Synced ${res.synced_conversations || 0} conversations and ${res.synced_messages || 0} messages to CRM.`,
+        });
+        this.loadConversations();
+      },
+      error: (err) => {
+        this.syncingMessages = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Sync Failed',
+          detail: err?.error?.detail || 'Failed to sync LinkedIn messages.',
+        });
+      },
+    });
+  }
+
+  getFilteredConversations(): LinkedInConversation[] {
+    if (!this.searchConversationText?.trim()) {
+      return this.conversations;
+    }
+    const q = this.searchConversationText.toLowerCase().trim();
+    return this.conversations.filter(
+      (c) =>
+        (c.contact_name && c.contact_name.toLowerCase().includes(q)) ||
+        (c.contact_headline && c.contact_headline.toLowerCase().includes(q)) ||
+        (c.last_message && c.last_message.toLowerCase().includes(q))
+    );
+  }
+
+  getUnreadConversationsCount(): number {
+    return this.conversations.filter(
+      (c) => !c.is_read || (c.unread_count && c.unread_count > 0)
+    ).length;
+  }
+
+  private scrollToBottom(): void {
+    setTimeout(() => {
+      const chatContainer = document.getElementById('linkedin-chat-messages-container');
+      if (chatContainer) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+    }, 60);
+  }
 }
+

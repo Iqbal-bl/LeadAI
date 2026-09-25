@@ -285,17 +285,84 @@ async def save_linkedin_credentials(
 
     # Encrypt and save the credentials
     if payload.cookie_li_at:
-        row.LinkedinCookieEnc = encrypt_pii(payload.cookie_li_at)
+        import re
+        raw_cookie = payload.cookie_li_at.strip()
+        li_at_match = re.search(r'li_at=([^;]+)', raw_cookie)
+        jsessionid_match = re.search(r'JSESSIONID="?([^";]+)"?', raw_cookie)
+        
+        li_at = (li_at_match.group(1) if li_at_match else raw_cookie).strip('"; \t\r\n')
+        jsessionid = (jsessionid_match.group(1) if jsessionid_match else "").strip('"; \t\r\n')
+        
+        if jsessionid:
+            row.LinkedinCookieEnc = encrypt_pii(f"{li_at}|||{jsessionid}")
+        else:
+            row.LinkedinCookieEnc = encrypt_pii(li_at)
+            
         row.LinkedinUsernameEnc = None
         row.LinkedinPasswordEnc = None
-    else:
-        row.LinkedinCookieEnc = None
-        row.LinkedinUsernameEnc = encrypt_pii(payload.username)
-        row.LinkedinPasswordEnc = encrypt_pii(payload.password)
+    elif payload.username and payload.password:
+        row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
+        row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
+        
+        # Attempt automated headless browser session extraction
+        from ..social import linkedin_bot
+        extracted_cookie = await linkedin_bot.extract_session_cookie_via_browser(payload.username.strip(), payload.password.strip())
+        if extracted_cookie:
+            row.LinkedinCookieEnc = encrypt_pii(extracted_cookie)
+        else:
+            # Wipe stale expired cookie so it is not used
+            row.LinkedinCookieEnc = None
+            row.UpdatedAt = utcnow()
+            db.commit()
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "LinkedIn triggered a security check (CAPTCHA / 2FA code) or invalid login. Please switch to 'Mode B: Session Token (li_at)' and paste your li_at token directly."
+            )
 
     row.UpdatedAt = utcnow()
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+
+
+@router.delete(
+    "/credentials",
+    summary="Remove personal LinkedIn session cookie and credentials",
+)
+@router.post(
+    "/credentials/disconnect",
+    summary="Remove personal LinkedIn session cookie and credentials",
+)
+async def disconnect_linkedin_credentials(
+    request: Request,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == client_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False
+    ).first()
+
+    if row:
+        row.LinkedinCookieEnc = None
+        row.LinkedinUsernameEnc = None
+        row.LinkedinPasswordEnc = None
+        row.UpdatedAt = utcnow()
+        
+        activity.log_principal(
+            db,
+            principal,
+            action=A.CHANNEL_UPDATED,
+            client_id=client_id,
+            entity_type="channel_account",
+            entity_id=row.Id,
+            message="Removed personal LinkedIn session cookie and credentials",
+            request=request,
+        )
+        db.commit()
+
+    return {"ok": True, "message": "Personal LinkedIn credentials and session cookie removed successfully"}
 
 
 @router.post(
@@ -481,6 +548,8 @@ async def get_linkedin_invitations(
     try:
         invitations = await linkedin_bot.fetch_received_invitations_api(row, limit=limit)
         return {"invitations": invitations}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     except Exception as exc:
         logger.error("Failed to fetch received LinkedIn invitations: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to retrieve invitations: {str(exc)}")
@@ -522,6 +591,8 @@ async def reply_linkedin_invitation(
         return result
     except HTTPException:
         raise
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     except Exception as exc:
         logger.error("Failed to reply to LinkedIn invitation: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LinkedIn reply failed: {str(exc)}")
@@ -549,7 +620,141 @@ async def accept_all_linkedin_invitations(
     try:
         result = await linkedin_bot.accept_all_invitations_api(db, row)
         return result
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     except Exception as exc:
         logger.error("Failed to accept all LinkedIn invitations: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Batch accept failed: {str(exc)}")
+
+
+# ===========================================================================
+# LinkedIn Direct Messages & InMail
+# ===========================================================================
+
+class LinkedInSendMessageInput(BaseModel):
+    message: str = Field(min_length=1, max_length=5000)
+
+
+@router.get(
+    "/conversations",
+    summary="Get list of recent LinkedIn conversation threads",
+)
+async def get_linkedin_conversations(
+    limit: int = 25,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        conversations = await linkedin_bot.fetch_conversations_api(row, limit=limit)
+        return {"conversations": conversations}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except Exception as exc:
+        logger.error("Failed to fetch LinkedIn conversations: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to retrieve conversations: {str(exc)}")
+
+
+@router.get(
+    "/conversations/{conversation_urn_id}/messages",
+    summary="Get message history for a specific LinkedIn conversation thread",
+)
+async def get_linkedin_conversation_messages(
+    conversation_urn_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        messages = await linkedin_bot.fetch_conversation_messages_api(row, conversation_urn_id)
+        return {"messages": messages}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except Exception as exc:
+        logger.error("Failed to fetch LinkedIn messages for thread %s: %s", conversation_urn_id, exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to retrieve messages: {str(exc)}")
+
+
+@router.post(
+    "/conversations/{conversation_urn_id}/send",
+    summary="Send a message reply to a LinkedIn conversation thread",
+)
+async def send_linkedin_conversation_message(
+    conversation_urn_id: str,
+    payload: LinkedInSendMessageInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        result = await linkedin_bot.send_conversation_message_api(
+            account=row,
+            conversation_urn_id=conversation_urn_id,
+            message_body=payload.message
+        )
+        return result
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except Exception as exc:
+        logger.error("Failed to send LinkedIn message to thread %s: %s", conversation_urn_id, exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to send message: {str(exc)}")
+
+
+@router.post(
+    "/sync-messages",
+    summary="Sync LinkedIn conversations & messages to LeadAI database",
+)
+async def sync_linkedin_messages(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        import asyncio
+        result = await asyncio.to_thread(linkedin_bot.sync_linkedin_conversations, db, row)
+        return result
+    except Exception as exc:
+        logger.error("Failed to sync LinkedIn conversations: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to sync messages: {str(exc)}")
+
 

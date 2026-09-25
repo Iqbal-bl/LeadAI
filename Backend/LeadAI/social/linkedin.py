@@ -58,6 +58,10 @@ async def request_with_retry(method: str, url: str, **kwargs) -> httpx.Response:
 async def build_authorize_url(db, client_id: str) -> str:
     from urllib.parse import urlencode
     from ..services import cache
+
+    if not settings.linkedin_client_id:
+        raise ValueError("LinkedIn OAuth App credentials (LINKEDIN_CLIENT_ID & LINKEDIN_CLIENT_SECRET) are missing in Backend/.env.")
+
     state = secrets.token_urlsafe(24)
     
     # Save the OAuth state mapping to cache (expires in 10 minutes)

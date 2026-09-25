@@ -198,6 +198,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "file.manage",
         "social.read",
         "social.post",
+        "social.facebook",
+        "social.instagram",
+        "social.whatsapp",
+        "social.linkedin",
     },
     ROLE_EMPLOYEE: {
         "company.read",

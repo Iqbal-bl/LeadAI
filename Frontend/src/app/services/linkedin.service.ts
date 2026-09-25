@@ -14,7 +14,12 @@ import {
   LinkedInReplyInvitationPayload,
   BatchAcceptResponse,
   LinkedInSettingsPayload,
+  GetConversationsResponse,
+  GetConversationMessagesResponse,
+  SendMessageResponse,
+  SyncMessagesResponse,
 } from '../models/linkedin.models';
+
 
 
 @Injectable({
@@ -61,6 +66,17 @@ export class LinkedinService {
     return this.apiService.post<{ ok: boolean }>(
       'linkedin/credentials',
       payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Disconnect / remove personal session cookie and credentials
+   */
+  public disconnectCredentials(): Observable<{ ok: boolean; message?: string }> {
+    return this.apiService.post<{ ok: boolean; message?: string }>(
+      'linkedin/credentials/disconnect',
+      {},
       { companyScoped: true }
     );
   }
@@ -162,5 +178,53 @@ export class LinkedinService {
       { companyScoped: true }
     );
   }
+
+  /**
+   * Fetch recent LinkedIn conversation threads
+   */
+  public getConversations(limit: number = 25): Observable<GetConversationsResponse> {
+    return this.apiService.get<GetConversationsResponse>('linkedin/conversations', {
+      params: { limit: limit.toString() },
+      companyScoped: true,
+    });
+  }
+
+  /**
+   * Fetch message history for a specific LinkedIn thread
+   */
+  public getConversationMessages(
+    conversationUrnId: string
+  ): Observable<GetConversationMessagesResponse> {
+    return this.apiService.get<GetConversationMessagesResponse>(
+      `linkedin/conversations/${encodeURIComponent(conversationUrnId)}/messages`,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Send a direct message to a LinkedIn conversation thread
+   */
+  public sendMessage(
+    conversationUrnId: string,
+    message: string
+  ): Observable<SendMessageResponse> {
+    return this.apiService.post<SendMessageResponse>(
+      `linkedin/conversations/${encodeURIComponent(conversationUrnId)}/send`,
+      { message },
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Sync LinkedIn conversations and messages to database
+   */
+  public syncMessages(): Observable<SyncMessagesResponse> {
+    return this.apiService.post<SyncMessagesResponse>(
+      'linkedin/sync-messages',
+      {},
+      { companyScoped: true }
+    );
+  }
 }
+
 

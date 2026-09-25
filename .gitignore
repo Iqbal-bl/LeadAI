@@ -1,1 +1,37 @@
+# Dependencies & Package Managers
+node_modules/
 Frontend/pnpm-lock.yaml
+
+# Environments & Secrets
+.env
+.env.*
+*.env
+
+# Python Caches & Virtual Envs
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# LinkedIn Bot Browser & Cache Files
+.linkedin_browser_profile/
+.linkedin_cookies/
+Backend/.linkedin_browser_profile/
+Backend/.linkedin_cookies/
+**/.linkedin_browser_profile/**
+**/.linkedin_cookies/**
+*.session
+
+# Build & Temp
+dist/
+temp/
+scratch/
+.angular/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

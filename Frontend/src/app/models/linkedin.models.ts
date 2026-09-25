@@ -97,3 +97,59 @@ export interface BatchAcceptResponse {
   accepted: number;
 }
 
+export interface LinkedInConversationParticipant {
+  name: string;
+  headline?: string;
+  public_id?: string;
+  urn?: string;
+  picture_url?: string | null;
+  is_self?: boolean;
+}
+
+export interface LinkedInConversation {
+  conversation_urn: string;
+  conversation_id: string;
+  contact_name: string;
+  contact_headline?: string;
+  contact_public_id?: string;
+  contact_urn?: string;
+  contact_avatar?: string | null;
+  participants?: LinkedInConversationParticipant[];
+  last_message?: string;
+  last_sender_name?: string;
+  last_activity_at?: number;
+  unread_count?: number;
+  is_read?: boolean;
+  total_events?: number;
+}
+
+export interface LinkedInMessage {
+  event_urn?: string;
+  created_at?: number;
+  text: string;
+  sender_name: string;
+  sender_urn?: string;
+  sender_public_id?: string;
+  sender_avatar?: string | null;
+  is_self: boolean;
+}
+
+export interface GetConversationsResponse {
+  conversations: LinkedInConversation[];
+}
+
+export interface GetConversationMessagesResponse {
+  messages: LinkedInMessage[];
+}
+
+export interface SendMessageResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface SyncMessagesResponse {
+  synced_conversations: number;
+  synced_messages: number;
+}
+
+

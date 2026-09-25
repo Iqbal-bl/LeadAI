@@ -385,7 +385,7 @@ def calculate_next_periodic_run(base_minutes: int = 120, jitter_minutes: int = 1
 
 
 def bootstrap_linkedin_job(db) -> None:
-    """Ensure that the recurring LinkedIn connection request job exists."""
+    """Ensure that the recurring LinkedIn connection request job exists and is scheduled correctly."""
     existing = (
         db.query(LeadJob)
         .filter(
@@ -399,6 +399,12 @@ def bootstrap_linkedin_job(db) -> None:
         run_at = calculate_next_periodic_run(base_minutes=120, jitter_minutes=15)
         enqueue(db, "linkedin.process_invitations", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.process_invitations at %s", run_at)
+    elif existing and existing.RunAt and existing.RunAt > (utcnow() + timedelta(hours=3)):
+        # Reset any stale long-delay job from older daily schedule to the ~2-hour interval
+        existing.RunAt = calculate_next_periodic_run(base_minutes=120, jitter_minutes=15)
+        db.commit()
+        logger.info("[LeadAI jobs] Rescheduled future linkedin.process_invitations job to %s", existing.RunAt)
+
 
 
 # ===========================================================================
