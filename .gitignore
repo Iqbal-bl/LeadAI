@@ -1,6 +1,7 @@
 # Dependencies & Package Managers
 node_modules/
 Frontend/pnpm-lock.yaml
+package-lock.json
 
 # Environments & Secrets
 .env

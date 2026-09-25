@@ -379,6 +379,11 @@ class LeadConversation(LeadAIBase):
     # Set once the lead crosses the company's threshold, so "new hot lead"
     # notifications fire exactly once instead of on every subsequent message.
     ThresholdNotifiedAt = Column(DateTime, nullable=True)
+    # Set when the AI finishes the conversation (its closing message told the
+    # customer an advisor will follow up). While set, a bare "ok" / "thanks" gets a
+    # short fixed reply instead of restarting the qualification questions. Cleared
+    # if the customer comes back with a real question.
+    AiCompletedAt = Column(DateTime, nullable=True)
 
 
 class LeadMessage(LeadAIBase):

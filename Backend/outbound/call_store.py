@@ -29,7 +29,7 @@ from sqlalchemy import func
 from core.database import engine_admin, SessionLocalAdmin
 from core.base import Base
 try:
-    from Domain import models  # noqa: F401
+    from domain import models  # noqa: F401
 except ImportError:
     from domain import models  # noqa: F401
 

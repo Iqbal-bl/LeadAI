@@ -196,13 +196,6 @@ export const CLIENT_ROUTES: Routes = [
         pathMatch: 'full',
       },
       {
-        path: 'social-analytics',
-        loadComponent: () =>
-          import('../../features/campaigns/pages/analytics-layout/analytics-layout').then(
-            (m) => m.AnalyticsLayoutComponent,
-          ),
-      },
-      {
         path: 'billing',
         loadComponent: () =>
           import('./pages/billing-dashboard/billing-dashboard.component').then(

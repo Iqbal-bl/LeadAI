@@ -3,10 +3,10 @@ ORM -> DTO conversion, and the one place the PII masking rule is enforced.
 
 THE MASKING RULE
 ----------------
-An agent working a lead sees `Customer #48192`, a masked phone, and the full
-conversation. They do NOT see the customer's real name, number, email or social
-handle. Only a role holding `lead.reveal_pii` (company_admin, Admin) can
-reveal those, via an explicit endpoint that writes an audit row.
+Every role, admins included, sees `Customer #48192`, a masked phone, and the full
+conversation. Nobody sees the customer's real name, number, email or social handle
+in a list or detail response. A role holding `lead.reveal_pii` (company_admin,
+Admin) can reveal them, via the explicit /contact endpoint that writes an audit row.
 
 The rule is implemented HERE rather than in each router so there is no route that
 can accidentally forget it: every conversation response is built by these two
@@ -21,6 +21,7 @@ from domain.models import Client
 from .models import (
     Lead,
     LeadCall,
+    LeadChannelIdentity,
     LeadCompanyScript,
     LeadConversation,
     LeadCustomer,
@@ -225,6 +226,55 @@ def call_out(row: LeadCall) -> CallOut:
     )
 
 
+def customer_number(customer: LeadCustomer | None) -> str | None:
+    """The customer's phone number, from whichever field holds one.
+
+    A number can sit in `PhoneEnc` or, for a WhatsApp contact, only in `WhatsAppEnc`.
+    Reading just the first left such customers with no number anywhere in the inbox.
+    """
+    if not customer:
+        return None
+    for encrypted in (customer.PhoneEnc, customer.WhatsAppEnc):
+        value = decrypt_pii(encrypted) if encrypted else None
+        if value:
+            return value
+    return None
+
+
+def resolve_display_name(
+    db: Session, customer: LeadCustomer | None, conversation: LeadConversation | None = None
+) -> str | None:
+    """The best name we have for a customer, whichever channel they came through.
+
+    Order: the name saved on the customer, then the profile name on the channel
+    identity the conversation arrived on (then any other identity of theirs), then
+    the stored Instagram handle. Messenger and Instagram send only an opaque id, so
+    the name usually lives on the identity row, not on the customer.
+    """
+    if not customer:
+        return None
+    if customer.DisplayName:
+        return customer.DisplayName
+
+    identities = (
+        db.query(LeadChannelIdentity)
+        .filter(
+            LeadChannelIdentity.CustomerId == customer.Id,
+            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
+        )
+        .order_by(LeadChannelIdentity.CreatedAt.asc())
+        .all()
+    )
+    account_id = getattr(conversation, "ChannelAccountId", None)
+    identities.sort(key=lambda i: 0 if account_id and i.ChannelAccountId == account_id else 1)
+    for identity in identities:
+        name = identity.ProfileName or identity.ExternalUsername
+        if name:
+            return name
+
+    return decrypt_pii(customer.InstagramEnc) or None
+
+
 def conversation_out(
     db: Session, conversation: LeadConversation, principal
 ) -> ConversationOut:
@@ -233,24 +283,17 @@ def conversation_out(
         db.query(Lead).filter(Lead.ConversationId == conversation.Id).one_or_none()
     )
 
-    # The masking gate. `can_reveal` is the ONLY thing that unlocks identity.
-    can_reveal = principal.can("lead.reveal_pii")
-    display_name = customer.DisplayName if (customer and can_reveal) else None
+    # The masking rule: NO role, admins included, gets the customer's name from a
+    # list or detail response. The name is identity, and identity is released only by
+    # the explicit, audited /contact (Reveal) call. Until then everyone works with the
+    # customer number (`customer_ref`, e.g. "Customer #51998"), which is always present.
+    # `customer_name` stays in the response shape, always null, so clients that read
+    # it keep working.
+    display_name = None
 
-    # For Instagram standalone accounts, DisplayName is often None because the
-    # Graph API cannot look up other users' profiles with a User token.  Fall
-    # back to the decrypted InstagramEnc which holds the @username or raw
-    # IG-scoped id.
-    if can_reveal and not display_name and customer and conversation.Channel == "instagram":
-        ig_handle = decrypt_pii(customer.InstagramEnc)
-        if ig_handle:
-            display_name = ig_handle
-
-    phone_masked = None
-    if customer:
-        # Even for privileged roles this stays masked in list/detail responses —
-        # the full number requires the explicit, audited /contact call.
-        phone_masked = mask_phone(decrypt_pii(customer.PhoneEnc))
+    # The phone is present whenever the customer has one, for every role, but only
+    # masked. The full number also requires the /contact call.
+    phone_masked = mask_phone(customer_number(customer))
 
     return ConversationOut(
         id=conversation.Id,

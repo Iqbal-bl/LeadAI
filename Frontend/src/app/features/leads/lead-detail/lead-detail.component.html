@@ -12,11 +12,11 @@
       class="text-xl lg:text-2xl font-bold tracking-tight"
       style="color: var(--app-text)"
     >
-      {{ lead.name }}
+      {{ lead?.name }}
     </h1>
     <!-- <p class="text-sm" style="color: var(--app-text-muted);">{{ lead.company }} · {{ lead.industry }}</p> -->
   </div>
-  <app-lead-status-badge [status]="lead.status"></app-lead-status-badge>
+  <app-lead-status-badge [status]="lead?.status || 'New'"></app-lead-status-badge>
 </div>
 
 <!-- Main Grid -->
@@ -51,10 +51,7 @@
     ></app-worker-assignment>
 
     <!-- Calling Panel -->
-    <app-calling-panel
-      *ngIf="lead?.channel !== 'instagram' && lead?.channel !== 'messenger'"
-      [lead]="lead"
-    ></app-calling-panel>
+    <app-calling-panel *ngIf="lead?.phone" [lead]="lead"></app-calling-panel>
   </div>
 </div>
 

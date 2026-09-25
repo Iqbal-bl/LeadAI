@@ -671,7 +671,7 @@ Query: `status` · `lead_status` · `channel` · `assigned_to` (`me`|`unassigned
                               "budget_known":12,"product_known":8,"sentiment":0},
            "qualified_at":"2026-07-30T09:40:55Z"}}]}
 ```
-> `customer_name` is `null` unless the viewer holds `lead.reveal_pii`. `customer_phone_masked` is **always** masked, even for admins — the full number requires the audited `/contact` call.
+> `customer_name` is **always** `null` in list and detail responses, for every role. Staff identify a customer by `customer_ref` until they call the audited `/contact` reveal, which returns `display_name`. `customer_phone_masked` is **always** masked, even for admins — the full number requires the audited `/contact` call.
 
 #### `GET /inbox/queue` · `lead.read.*`
 The work queue: `needs_human` and unclaimed, **ordered by lead score** so the most valuable is worked first.

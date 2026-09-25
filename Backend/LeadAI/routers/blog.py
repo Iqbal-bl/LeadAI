@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from Domain.models import Client
+from domain.models import Client
 
 from ..db import get_leadai_db
 from ..models_blog import LeadBlogSettings

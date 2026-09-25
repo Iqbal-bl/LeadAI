@@ -76,18 +76,21 @@
 <ng-template #conversationList>
   <ng-container *ngFor="let msg of conversations">
     <!-- System message -->
-    <div *ngIf="msg.sender === 'system'" class="flex justify-center">
+    <div *ngIf="msg.sender === 'system'" class="flex justify-center my-1.5">
       <div
         class="px-4 py-1.5 rounded-full text-[11px] font-medium"
         style="
           background-color: var(--app-bg-secondary, #f1f5f9);
-          color: var(--app-text-muted, #b89494);
           border: 1px solid var(--app-border);
         "
       >
-        {{ msg.summary }}
-        <span class="ml-1 opacity-60">·</span>
-        <span class="opacity-60">{{ msg.startTime | date: "shortTime" }}</span>
+        <span [style.color]="getStatusColor(msg.summary)" class="font-semibold">
+          {{ msg.summary }}
+        </span>
+        <span class="ml-1 opacity-60" style="color: var(--app-text-muted, #94a3b8)">·</span>
+        <span class="ml-1 opacity-60" style="color: var(--app-text-muted, #94a3b8)">
+          {{ msg.startTime | date: "shortTime" }}
+        </span>
       </div>
     </div>
 
@@ -112,13 +115,28 @@
         "
       >
         <div
-          class="font-semibold text-[10px] mb-1.5 opacity-75"
+          class="font-semibold text-[10px] mb-1.5 opacity-80 flex items-center justify-between gap-2"
           [style.color]="
             isCustomer(msg) ? '#e0e7ff' : 'var(--app-text-muted)'
           "
         >
-          {{ getSenderLabel(msg) }}
-          · {{ (msg.startTime || msg.created_at || msg.timestamp) | date: "mediumTime" }}
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span>{{ getSenderLabel(msg) }}</span>
+            <span class="opacity-60">·</span>
+            <span class="opacity-60">{{ (msg.startTime || msg.created_at || msg.timestamp) | date: "mediumTime" }}</span>
+          </div>
+
+          <!-- AI Response Confidence Score Badge -->
+          <span
+            *ngIf="isAi(msg) && getConfidencePercent(msg.confidence) !== null"
+            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold tracking-wide"
+            [ngClass]="getConfidenceBadgeClass(msg.confidence)"
+            [pTooltip]="'AI Confidence: ' + getConfidencePercent(msg.confidence) + '%' + (msg.model_used ? ' (' + msg.model_used + ')' : '')"
+            tooltipPosition="top"
+          >
+            <i class="pi pi-shield text-[8px]"></i>
+            <span>{{ getConfidencePercent(msg.confidence) }}% confidence</span>
+          </span>
         </div>
         <div class="whitespace-pre-wrap leading-relaxed">
           {{ msg.summary || msg.content || msg.text || msg.message }}

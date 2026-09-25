@@ -40,12 +40,6 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'campaign.read',
       },
       {
-        label: 'Social Media Analytics',
-        icon: 'pi pi-chart-pie',
-        routerLink: '/client/social-analytics',
-        permission: 'analytics.read',
-      },
-      {
         label: 'Create a Post',
         icon: 'pi pi-send',
         routerLink: '/client/create-post',
@@ -106,17 +100,6 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         icon: 'pi pi-file-edit',
         routerLink: '/client/prompts',
         permission: 'prompt.read',
-      },
-    ],
-  },
-  {
-    title: 'Files',
-    items: [
-      {
-        label: 'Documents',
-        icon: 'pi pi-folder-open',
-        routerLink: '/client/documents',
-        permission: 'file.read',
       },
     ],
   },
