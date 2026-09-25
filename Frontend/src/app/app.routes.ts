@@ -1,39 +1,12 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './guards/auth.guard';
+import { SUPER_ADMIN_GUARD } from './guards/role.guard';
 
 export const routes: Routes = [
   {
     path: 'auth',
-    children: [
-      {
-        path: 'callback',
-        loadComponent: () =>
-          import('./features/auth/callback/callback.component').then(
-            (m) => m.CallbackComponent,
-          ),
-      },
-      {
-        path: 'instagram/callback',
-        loadComponent: () =>
-          import('./features/auth/instagram/instagram-callback.component').then(
-            (m) => m.InstagramCallbackComponent,
-          ),
-      },
-      {
-        path: 'facebook/callback',
-        loadComponent: () =>
-          import('./features/auth/facebook/facebook-callback.component').then(
-            (m) => m.FacebookCallbackComponent,
-          ),
-      },
-      // {
-      //   path: 'instagram',
-      //   loadComponent: () =>
-      //     import(
-      //       './features/auth/instagram/instagram-callback.component'
-      //     ).then((m) => m.InstagramCallbackComponent),
-      // },
-    ],
+    loadChildren: () =>
+      import('./features/auth/auth.routes').then((m) => m.AUTH_ROUTES),
   },
   {
     path: 'client',
@@ -47,7 +20,7 @@ export const routes: Routes = [
       import('./modules/admin/shell/admin-shell/admin-shell.component').then(
         (m) => m.AdminShellComponent,
       ),
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, SUPER_ADMIN_GUARD],
     loadChildren: () =>
       import('./modules/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },
@@ -70,4 +43,3 @@ export const routes: Routes = [
     redirectTo: 'admin/dashboard',
   },
 ];
-

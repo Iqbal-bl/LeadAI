@@ -4,7 +4,7 @@ import { Subscription } from 'rxjs';
 import { ToastService } from '../../../shared/services/toast.service';
 import { LeadService } from '../../../services/lead.service';
 import { VoiceService } from '../../../services/voice.service';
-import { AiSummary } from '../../../models/lead.models';
+import { AiSummary, Lead } from '../../../models/lead.models';
 import { CallTranscript } from '../../../models/voice.models';
 import { InboxService } from '../../../services/inbox.service';
 import { RoleManagementService } from '../../../services/role-management.service';
@@ -17,6 +17,7 @@ import { CallingPanelComponent } from '../components/calling-panel/calling-panel
 import { WorkerAssignmentComponent } from '../components/worker-assignment/worker-assignment.component';
 import { LeadStatusBadgeComponent } from '../components/lead-status-badge/lead-status-badge.component';
 import { LeadConversationsComponent } from '../components/lead-conversations/lead-conversations.component';
+import { LeadDetail } from '../../../models/inbox.models';
 
 @Component({
   selector: 'app-lead-detail',
@@ -34,7 +35,7 @@ import { LeadConversationsComponent } from '../components/lead-conversations/lea
   styleUrl: './lead-detail.component.scss',
 })
 export class LeadDetailComponent implements OnInit, OnDestroy {
-  lead: any = {};
+  lead?: LeadDetail;
   aiSummary!: AiSummary;
   conversations: any[] = [];
   assignableUsers: AssignableUser[] = [];
@@ -92,7 +93,7 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
             : 'Conversation unassigned',
           'Agent Assigned',
         );
-        this.loadLeadDetail(this.lead.id);
+        this.loadLeadDetail(this.lead!.id);
       },
       error: (err) => {
         this.toastService.error(
@@ -145,7 +146,6 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
               {
                 id: 'status-' + new Date().getTime(),
                 leadId: Number(id) || 1,
-                leadName: this.lead?.name || 'Customer',
                 type: 'System',
                 status: 'Completed',
                 startTime: data.timestamp || new Date().toISOString(),
@@ -190,7 +190,9 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
               msgPayload.type === 'Human';
             const mappedType = isCust ? 'Human' : 'AI';
             const mappedAgent =
-              rawSender === 'agent' || rawSender === 'staff' || msgPayload.agent === 'Agent'
+              rawSender === 'agent' ||
+              rawSender === 'staff' ||
+              msgPayload.agent === 'Agent'
                 ? 'Agent'
                 : 'AI';
             const startTime =
@@ -215,6 +217,16 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
                 agent: mappedAgent,
                 callSid: callSid,
                 sender: isCust ? 'customer' : rawSender,
+                confidence:
+                  msgPayload.confidence !== undefined &&
+                  msgPayload.confidence !== null
+                    ? msgPayload.confidence
+                    : updated[existingIdx].confidence,
+                sources: msgPayload.sources || updated[existingIdx].sources || [],
+                model_used:
+                  msgPayload.model_used ||
+                  updated[existingIdx].model_used ||
+                  null,
               };
               this.conversations = updated;
             } else {
@@ -234,16 +246,21 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
                   {
                     id: msgId || this.conversations.length + 1,
                     leadId: Number(id) || 1,
-                    leadName: this.lead?.name || 'Customer',
                     type: mappedType,
                     status: 'Completed',
                     startTime: startTime,
                     duration: '0:00',
                     summary: text,
-                    confidence: msgPayload.confidence || 1.0,
+                    confidence:
+                      msgPayload.confidence !== undefined &&
+                      msgPayload.confidence !== null
+                        ? msgPayload.confidence
+                        : null,
                     agent: mappedAgent,
                     callSid: callSid,
                     sender: isCust ? 'customer' : rawSender,
+                    sources: msgPayload.sources || [],
+                    model_used: msgPayload.model_used || null,
                   },
                 ];
               }
@@ -318,8 +335,7 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
             ...this.conversations,
             {
               id: this.conversations.length + 1,
-              leadId: this.lead.id,
-              leadName: this.lead.name,
+              leadId: this.lead?.id || 1,
               type: 'AI', // Set as staff/agent response
               status: 'Completed',
               startTime: new Date().toISOString(),
@@ -332,7 +348,9 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
             },
           ];
         }
-        this.loadLeadDetail(this.lead.id);
+        if (this.lead?.id) {
+          this.loadLeadDetail(this.lead.id);
+        }
       },
       error: (err: any) => {
         this.sendingReply = false;
@@ -349,10 +367,11 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
       next: (detail) => {
         const score = detail.lead?.score || 0;
         this.lead = {
+          ...detail,
           id: detail.id,
           name: detail.customer_name || detail.customer_ref,
           email: 'N/A',
-          phone: detail.customer_phone_masked,
+          phone: detail.customer_phone_masked || '',
           company: detail.client_id || 'N/A',
           address: 'N/A',
           industry: detail.lead?.product || 'N/A',
@@ -365,12 +384,10 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
               : detail.status === 'open'
                 ? 'New'
                 : 'Closed',
-          source: detail.channel || 'web',
           channel: detail.channel || 'web',
           assignedTo: detail.assigned_user_email || 'Unassigned',
           createdAt: detail.created_at,
           updatedAt: detail.last_message_at,
-          avatar: '',
           leadStatus: detail.lead?.status || '',
         };
 
@@ -381,7 +398,6 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
           painPoints: [],
           budget: detail.lead?.budget || 'N/A',
           timeline: detail.lead?.timeline || 'N/A',
-          decisionMaker: 'Yes',
           buyingIntent: score > 75 ? 'High' : score > 40 ? 'Medium' : 'Low',
         };
 
@@ -402,13 +418,15 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
             return {
               id: m.id || idx + 1,
               leadId: Number(detail.id) || 1,
-              leadName: this.lead.name,
               type: isCust ? 'Human' : 'AI',
               status: 'Completed',
               startTime: m.created_at || m.timestamp || detail.created_at,
               duration: '0:00',
               summary: m.content || m.message || m.text,
-              confidence: m.confidence || 1.0,
+              confidence:
+                m.confidence !== undefined && m.confidence !== null
+                  ? m.confidence
+                  : null,
               agent:
                 rawSender === 'agent' ||
                 rawSender === 'staff' ||
@@ -419,6 +437,8 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
               sender: isCust ? 'customer' : rawSender,
               delivery_status: m.delivery_status || m.deliveryStatus || null,
               delivery_error: m.delivery_error || m.deliveryError || null,
+              sources: m.sources || [],
+              model_used: m.model_used || null,
             };
           },
         );

@@ -3,7 +3,10 @@ import { Router } from '@angular/router';
 import { Table } from 'primeng/table';
 import { Menu } from 'primeng/menu';
 import { Subscription } from 'rxjs';
-import { InboxService, InboxQueryParams } from '../../../services/inbox.service';
+import {
+  InboxService,
+  InboxQueryParams,
+} from '../../../services/inbox.service';
 import { AuthService } from '../../../services/auth.service';
 import { LeadService } from '../../../services/lead.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -15,7 +18,7 @@ import { SharedModule } from '../../../shared/shared.module';
   standalone: true,
   imports: [SharedModule],
   templateUrl: './lead-list.component.html',
-  styleUrl: './lead-list.component.scss'
+  styleUrl: './lead-list.component.scss',
 })
 export class LeadListComponent implements OnInit, OnDestroy {
   @ViewChild('dt') dt!: Table;
@@ -104,10 +107,10 @@ export class LeadListComponent implements OnInit, OnDestroy {
             },
             error: (err: any) => {
               console.warn('Inbox WS error:', err);
-            }
+            },
           });
         }
-      }
+      },
     });
   }
 
@@ -137,14 +140,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
             tags: item.lead?.interest ? [item.lead.interest] : [],
             leadScore: score,
             priority: score > 75 ? 'High' : score > 45 ? 'Medium' : 'Low',
-            status:
-              item.status === 'needs_human'
-                ? 'Assigned'
-                : item.status === 'open'
-                ? 'New'
-                : item.status === 'closed'
-                ? 'Closed'
-                : 'New',
+            status: item.lead.status.toUpperCase(),
             source: item.channel || 'web',
             assignedTo: item.assigned_user_email || 'AI Assistant',
             createdAt: item.created_at || '',
@@ -160,7 +156,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -177,19 +173,22 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
     if (this.selectedChannel) {
       result = result.filter(
-        (lead) => lead.source?.toLowerCase() === this.selectedChannel.toLowerCase()
+        (lead) =>
+          lead.source?.toLowerCase() === this.selectedChannel.toLowerCase(),
       );
     }
 
     if (this.selectedStatus) {
       result = result.filter(
-        (lead) => lead.status?.toLowerCase() === this.selectedStatus.toLowerCase()
+        (lead) =>
+          lead.status?.toLowerCase() === this.selectedStatus.toLowerCase(),
       );
     }
 
     if (this.selectedPriority) {
       result = result.filter(
-        (lead) => lead.priority?.toLowerCase() === this.selectedPriority.toLowerCase()
+        (lead) =>
+          lead.priority?.toLowerCase() === this.selectedPriority.toLowerCase(),
       );
     }
 
@@ -256,23 +255,37 @@ export class LeadListComponent implements OnInit, OnDestroy {
     }
   }
 
-  getStatusSeverity(status: string): 'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast' | undefined {
-    const map: Record<string, 'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'> = {
-      'New': 'info',
-      'Assigned': 'secondary',
+  getStatusSeverity(
+    status: string,
+  ):
+    | 'success'
+    | 'secondary'
+    | 'info'
+    | 'warn'
+    | 'danger'
+    | 'contrast'
+    | undefined {
+    const map: Record<
+      string,
+      'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'
+    > = {
+      New: 'info',
+      Assigned: 'secondary',
       'Follow-up': 'warn',
-      'Interested': 'success',
-      'Negotiation': 'contrast',
-      'Won': 'success',
-      'Lost': 'danger',
-      'Closed': 'secondary',
-      'Completed': 'success',
+      Interested: 'success',
+      Negotiation: 'contrast',
+      Won: 'success',
+      Lost: 'danger',
+      Closed: 'secondary',
+      Completed: 'success',
       'In Progress': 'info',
     };
     return map[status] || 'info';
   }
 
-  getPrioritySeverity(priority: string): 'danger' | 'warn' | 'info' | 'secondary' {
+  getPrioritySeverity(
+    priority: string,
+  ): 'danger' | 'warn' | 'info' | 'secondary' {
     const map: Record<string, 'danger' | 'warn' | 'info' | 'secondary'> = {
       High: 'danger',
       Medium: 'warn',
@@ -329,7 +342,8 @@ export class LeadListComponent implements OnInit, OnDestroy {
       '#06b6d4',
       '#3b82f6',
     ];
-    const numId = typeof id === 'number' ? id : (id?.toString().charCodeAt(0) || 0);
+    const numId =
+      typeof id === 'number' ? id : id?.toString().charCodeAt(0) || 0;
     return colors[numId % colors.length];
   }
 
