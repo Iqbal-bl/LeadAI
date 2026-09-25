@@ -38,9 +38,13 @@ Kestrel Heights possession dates: Tower A and Tower B are scheduled for possessi
 
 Kestrel Heights amenities: a clubhouse with a gym and indoor games room, a swimming pool, a children's play area, a jogging track, a landscaped central park, 24-hour security with gated entry, full power backup for common areas and lifts, electric-vehicle charging points in the parking area, and rainwater harvesting.
 
-### Where is Kestrel Heights located?
+### Where is Kestrel Heights located, and what is the area and neighbourhood like?
 
-Kestrel Heights is in Sector 82, Mohali, close to the Airport Road corridor and the IT City area. Kestrel Heights is roughly 15 to 20 minutes from Chandigarh International Airport and about 30 minutes from Chandigarh Sector 17, depending on traffic. Schools, hospitals and markets are within a short drive of Kestrel Heights.
+Kestrel Heights is in Sector 82, Mohali, close to the Airport Road corridor and the IT City area. Kestrel Heights is roughly 15 to 20 minutes from Chandigarh International Airport and about 30 minutes from Chandigarh Sector 17, depending on traffic.
+
+### What public facilities are near Kestrel Heights?
+
+The area around Kestrel Heights has the public facilities a family needs within a short drive: schools, hospitals and clinics, markets and shopping, banks and ATMs, petrol pumps, parks, and restaurants. Bus and cab services connect the Kestrel Heights neighbourhood in Sector 82 to Mohali and Chandigarh. The Kestrel Homes sales team can share a map of the nearby schools, hospitals and markets around Kestrel Heights on a site visit or on WhatsApp.
 
 ## Kestrel Enclave — Residential Plots in New Chandigarh
 
@@ -49,6 +53,10 @@ Kestrel Enclave is a plotted development in New Chandigarh with wide internal ro
 ### What is the price of a plot at Kestrel Enclave?
 
 The Kestrel Enclave 150 square yard plot starts from 95 lakh rupees. The Kestrel Enclave 200 square yard plot starts from 1.25 crore rupees, and the 200 square yard plot is the most popular size at Kestrel Enclave. The Kestrel Enclave 300 square yard plot starts from 1.85 crore rupees. Corner and park-facing plots at Kestrel Enclave are priced higher and are limited.
+
+### Where is Kestrel Enclave located, and what public facilities are nearby?
+
+Kestrel Enclave is in New Chandigarh, on the Chandigarh side of the Mohali and Zirakpur belt. The area around Kestrel Enclave has schools, hospitals, markets, banks, petrol pumps and parks within a short drive, and the Kestrel Enclave neighbourhood is connected to Chandigarh and Mohali by main roads and bus and cab services.
 
 ### What are the registry and possession terms for plots at Kestrel Enclave?
 
@@ -61,6 +69,10 @@ Kestrel Arcade is a commercial building in Zirakpur on a main road, with ground-
 ### What is the price of a shop or office at Kestrel Arcade?
 
 The Kestrel Arcade retail shop is on the ground floor and is about 300 square feet, with a starting price of 62 lakh rupees. The Kestrel Arcade office space is on the upper floors and is about 500 square feet, with a starting price of 48 lakh rupees. Possession of Kestrel Arcade offices is scheduled for June 2027.
+
+### Where is Kestrel Arcade located, and what is the area like?
+
+Kestrel Arcade is in Zirakpur, on a main road with high footfall. The area around Kestrel Arcade has banks, restaurants, markets, petrol pumps, hospitals and bus and cab connectivity to Chandigarh and Mohali within a short distance.
 
 ### Does Kestrel Arcade offer assured rental or returns?
 

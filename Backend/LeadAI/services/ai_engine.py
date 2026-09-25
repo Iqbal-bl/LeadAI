@@ -35,6 +35,7 @@ import re
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..engine.text import split_sentences
 from ..models import Lead, LeadCompanySettings, LeadConversation, LeadMessage
 from . import llm, memory, reply_cleanup, script_engine, vectorstore
 
@@ -125,7 +126,7 @@ def _sentences(text: str) -> list[str]:
     """
     out: list[str] = []
     for line in (text or "").split("\n"):
-        out.extend(s.strip(" -•\t") for s in re.split(r"(?<=[.!?])\s+", line.strip()))
+        out.extend(s.strip(" -•\t") for s in split_sentences(line))
     return [s for s in out if s]
 
 
@@ -334,9 +335,12 @@ def answer(
         # passage (a different product's price). Say so explicitly, so it declines rather
         # than guesses; the handoff flag alone does not stop a wrong answer being sent.
         weak_match = (
-            "\n\n(The match with the company knowledge is weak. State a price, size, date "
-            "or policy ONLY if the knowledge above says it for the exact product or topic "
-            "asked about; otherwise say a specialist will confirm it. Do not guess.)"
+            "\n\n(The match with the company knowledge is weak, so read it carefully. If it "
+            "answers the question in different words (for example 'public facilities' "
+            "versus 'schools, hospitals and markets nearby'), answer from it. State a "
+            "price, size or date ONLY if it is given for the exact product asked about, "
+            "never one taken from a different product. If the knowledge really does not "
+            "cover the topic, say a specialist will confirm it. Do not guess.)"
             if confidence < threshold
             else ""
         )

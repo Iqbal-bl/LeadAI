@@ -18,19 +18,18 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 
-from ..config import settings
+from ..engine import gateway
 
 logger = logging.getLogger(__name__)
 
 
 def provider() -> str:
-    return "openai" if settings.llm_enabled else "builtin-extractive"
+    return gateway.provider()
 
 
 def model_name() -> str:
-    return settings.openai_model if settings.llm_enabled else "builtin-extractive"
+    return gateway.model_name()
 
 
 def complete(
@@ -39,47 +38,25 @@ def complete(
     temperature: float = 0.25,
     max_tokens: int = 600,
     json_mode: bool = False,
+    profile: str = "chat",
 ) -> tuple[str | None, dict]:
     """Return (text_or_None, meta).
+
+    The HTTP call, retry policy and tracing live in engine/gateway.py so every
+    channel shares them. This wrapper keeps the original signature, so existing
+    callers (and test doubles) are untouched.
 
     meta always carries latency_ms and model, so the caller can persist how a
     given reply was produced — useful when debugging "why did the AI say that".
     """
-    meta: dict = {"model": model_name(), "latency_ms": 0, "provider": provider()}
-    if not settings.llm_enabled:
-        return None, meta
-
-    started = time.perf_counter()
-    try:
-        import httpx
-
-        payload = {
-            "model": settings.openai_model,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "messages": [{"role": "system", "content": system}, *messages],
-        }
-        if json_mode:
-            payload["response_format"] = {"type": "json_object"}
-
-        resp = httpx.post(
-            f"{settings.openai_base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-            json=payload,
-            timeout=settings.openai_timeout,
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
-        usage = body.get("usage") or {}
-        meta["prompt_tokens"] = usage.get("prompt_tokens")
-        meta["completion_tokens"] = usage.get("completion_tokens")
-        return body["choices"][0]["message"]["content"], meta
-    except Exception as exc:  # noqa: BLE001
-        meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
-        meta["error"] = str(exc)[:200]
-        logger.warning("[LeadAI llm] completion failed (%s) — falling back", exc)
-        return None, meta
+    return gateway.complete(
+        system,
+        messages,
+        profile=profile,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        json_mode=json_mode,
+    )
 
 
 def complete_json(system: str, messages: list[dict]) -> tuple[dict | None, dict]:
