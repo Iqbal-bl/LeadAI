@@ -60,11 +60,23 @@ class PublisherService:
             social_res = cls.publish_to_social(db, client_id, article, social_channels, actor=actor)
             results.update(social_res)
             if "linkedin" in results and results["linkedin"].get("id"):
-                article.LinkedInPostId = str(results["linkedin"]["id"])
+                li_id = str(results["linkedin"]["id"])
+                article.LinkedInPostId = li_id
+                if not results["linkedin"].get("url"):
+                    if li_id.startswith("http"):
+                        results["linkedin"]["url"] = li_id
+                    elif ":" in li_id:
+                        results["linkedin"]["url"] = f"https://www.linkedin.com/feed/update/{li_id}/"
+                    else:
+                        results["linkedin"]["url"] = f"https://www.linkedin.com/feed/update/urn:li:share:{li_id}/"
             if "facebook" in results and results["facebook"].get("id"):
                 article.FacebookPostId = str(results["facebook"]["id"])
+                if not results["facebook"].get("url"):
+                    results["facebook"]["url"] = f"https://www.facebook.com/{results['facebook']['id']}"
             if "instagram" in results and results["instagram"].get("id"):
                 article.InstagramMediaId = str(results["instagram"]["id"])
+                if not results["instagram"].get("url"):
+                    results["instagram"]["url"] = f"https://www.instagram.com/p/{results['instagram']['id']}/"
 
         # Determine overall success
         any_success = any(r.get("success") for r in results.values())

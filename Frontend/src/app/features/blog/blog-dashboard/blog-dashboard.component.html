@@ -52,7 +52,16 @@
       (click)="mainTab = 'articles'"
     >
       <i class="pi pi-book"></i>
-      <span>Articles & Posts ({{ stats.total }})</span>
+      <span>Editorial Queue ({{ stats.total }})</span>
+    </button>
+    <button
+      class="tab-btn"
+      [class.active]="mainTab === 'history'"
+      (click)="mainTab = 'history'"
+    >
+      <i class="pi pi-history"></i>
+      <span>Upload & Publishing History ({{ publishedArticles.length }})</span>
+      <span class="count-badge" *ngIf="publishedArticles.length > 0">{{ publishedArticles.length }}</span>
     </button>
     <button
       class="tab-btn"
@@ -284,7 +293,417 @@
   </div>
 
   <!-- ======================================================================= -->
-  <!-- TAB 2: AI GENERATOR STUDIO                                              -->
+  <!-- TAB 2: PUBLISHING & UPLOAD HISTORY                                      -->
+  <!-- ======================================================================= -->
+  <div *ngIf="mainTab === 'history'" class="tab-content history-tab-content">
+    <!-- History KPI Metrics Strip -->
+    <div class="history-metrics-grid">
+      <div class="metric-card total-metric">
+        <div class="metric-icon-wrap">
+          <i class="pi pi-send"></i>
+        </div>
+        <div class="metric-info">
+          <span class="metric-label">Total Published Blogs</span>
+          <span class="metric-value">{{ publishedHistoryStats.total }}</span>
+        </div>
+        <span class="metric-subtext">Across all connected channels</span>
+      </div>
+
+      <div class="metric-card linkedin-metric">
+        <div class="metric-icon-wrap li-icon">
+          <i class="pi pi-linkedin"></i>
+        </div>
+        <div class="metric-info">
+          <span class="metric-label">LinkedIn Distributions</span>
+          <span class="metric-value">{{ publishedHistoryStats.linkedin }}</span>
+        </div>
+        <span class="metric-subtext">Long-form thought leadership</span>
+      </div>
+
+      <div class="metric-card wp-metric">
+        <div class="metric-icon-wrap wp-icon">
+          <i class="pi pi-globe"></i>
+        </div>
+        <div class="metric-info">
+          <span class="metric-label">WordPress / Web Articles</span>
+          <span class="metric-value">{{ publishedHistoryStats.wordpress }}</span>
+        </div>
+        <span class="metric-subtext">Live on company website</span>
+      </div>
+
+      <div class="metric-card scheduler-metric">
+        <div class="metric-icon-wrap auto-icon">
+          <i class="pi pi-bolt"></i>
+        </div>
+        <div class="metric-info">
+          <span class="metric-label">Autonomous Daily Scheduler</span>
+          <span class="metric-value">{{ publishedHistoryStats.autonomous }}</span>
+        </div>
+        <span class="metric-subtext">Automated trending topic runs</span>
+      </div>
+    </div>
+
+    <!-- History Filter & Search Bar -->
+    <div class="history-filter-bar">
+      <div class="filter-left">
+        <div class="filter-pill-group">
+          <span class="filter-group-label">Channel:</span>
+          <button
+            class="filter-pill"
+            [class.active]="historyChannelFilter === 'all'"
+            (click)="historyChannelFilter = 'all'"
+          >
+            All Channels
+          </button>
+          <button
+            class="filter-pill li-pill"
+            [class.active]="historyChannelFilter === 'linkedin'"
+            (click)="historyChannelFilter = 'linkedin'"
+          >
+            <i class="pi pi-linkedin"></i> LinkedIn ({{ publishedHistoryStats.linkedin }})
+          </button>
+          <button
+            class="filter-pill wp-pill"
+            [class.active]="historyChannelFilter === 'wordpress'"
+            (click)="historyChannelFilter = 'wordpress'"
+          >
+            <i class="pi pi-globe"></i> WordPress ({{ publishedHistoryStats.wordpress }})
+          </button>
+          <button
+            class="filter-pill fb-pill"
+            [class.active]="historyChannelFilter === 'facebook'"
+            (click)="historyChannelFilter = 'facebook'"
+          >
+            <i class="pi pi-facebook"></i> Facebook
+          </button>
+          <button
+            class="filter-pill ig-pill"
+            [class.active]="historyChannelFilter === 'instagram'"
+            (click)="historyChannelFilter = 'instagram'"
+          >
+            <i class="pi pi-instagram"></i> Instagram
+          </button>
+        </div>
+
+        <div class="filter-pill-group mode-group">
+          <span class="filter-group-label">Source:</span>
+          <button
+            class="filter-pill"
+            [class.active]="historyModeFilter === 'all'"
+            (click)="historyModeFilter = 'all'"
+          >
+            All
+          </button>
+          <button
+            class="filter-pill auto-pill"
+            [class.active]="historyModeFilter === 'daily_scheduler'"
+            (click)="historyModeFilter = 'daily_scheduler'"
+          >
+            <i class="pi pi-bolt"></i> Daily Scheduler
+          </button>
+          <button
+            class="filter-pill manual-pill"
+            [class.active]="historyModeFilter === 'manual'"
+            (click)="historyModeFilter = 'manual'"
+          >
+            <i class="pi pi-check-circle"></i> Manual / Review
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-right">
+        <div class="search-box history-search">
+          <i class="pi pi-search search-icon"></i>
+          <input
+            type="text"
+            placeholder="Search upload history by title, keywords, or post ID..."
+            [(ngModel)]="historySearchQuery"
+          />
+        </div>
+        <button class="btn btn-secondary btn-icon-only" (click)="loadArticles()" title="Refresh Upload History">
+          <i class="pi pi-refresh" [class.pi-spin]="loadingArticles"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="filteredHistoryArticles.length === 0" class="empty-state history-empty">
+      <div class="empty-icon"><i class="pi pi-cloud-upload"></i></div>
+      <h3>No upload history matches your filter</h3>
+      <p *ngIf="publishedArticles.length === 0">
+        No articles have been uploaded yet. Articles generated by the Daily Scheduler or approved in your Editorial Queue will automatically appear here with live URLs.
+      </p>
+      <p *ngIf="publishedArticles.length > 0">
+        No published blogs match the selected channel or source filter.
+      </p>
+      <div class="empty-actions">
+        <button class="btn btn-secondary" (click)="historyChannelFilter = 'all'; historyModeFilter = 'all'; historySearchQuery = ''">
+          <i class="pi pi-filter-slash"></i>
+          <span>Clear Filters</span>
+        </button>
+        <button class="btn btn-primary" (click)="mainTab = 'articles'">
+          <i class="pi pi-list"></i>
+          <span>Go to Editorial Queue</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Upload History Cards List -->
+    <div *ngIf="filteredHistoryArticles.length > 0" class="history-list">
+      <div *ngFor="let article of filteredHistoryArticles" class="history-card">
+        <!-- Card Header: Title, Timestamp, Status & Mechanism -->
+        <div class="history-card-header">
+          <div class="article-meta-left">
+            <div class="thumb-cover" *ngIf="article.cover_image" [style.background-image]="'url(' + article.cover_image + ')'"></div>
+            <div class="thumb-cover-placeholder" *ngIf="!article.cover_image">
+              <i class="pi pi-file-edit"></i>
+            </div>
+
+            <div class="title-and-meta">
+              <div class="top-row">
+                <span class="status-live-badge">
+                  <span class="live-dot"></span> Live & Published
+                </span>
+                <span class="version-tag">Version {{ article.current_version }}</span>
+                <span class="mechanism-badge" [ngClass]="getPublishingMechanism(article).badgeClass">
+                  <i [class]="getPublishingMechanism(article).icon"></i>
+                  {{ getPublishingMechanism(article).label }}
+                </span>
+              </div>
+              <h3 class="history-article-title" (click)="openArticleModal(article)">
+                {{ article.title }}
+              </h3>
+              <div class="upload-timestamp">
+                <i class="pi pi-calendar-plus"></i>
+                <span><strong>Uploaded:</strong> {{ (article.published_at || article.created_at) | date:'medium' }}</span>
+                <span class="bullet-sep">•</span>
+                <i class="pi pi-clock"></i>
+                <span>Created {{ article.created_at | date:'shortTime' }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="header-quick-actions">
+            <button class="btn btn-secondary btn-sm" (click)="openArticleModal(article)">
+              <i class="pi pi-eye"></i>
+              <span>Inspect Content</span>
+            </button>
+            <button class="btn btn-secondary btn-sm" (click)="openPublishModal(article)" title="Publish or Re-distribute to more channels">
+              <i class="pi pi-share-alt"></i>
+              <span>Re-publish</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Where Uploaded: Destination Channels & Live Links Grid -->
+        <div class="history-channels-section">
+          <div class="section-label">
+            <i class="pi pi-send"></i>
+            <span>Distribution Channels & Live Destination:</span>
+          </div>
+
+          <div class="channel-destinations-grid">
+            <!-- LinkedIn Destination Box -->
+            <div
+              class="channel-box linkedin-box"
+              [class.is-active]="getChannelStatus(article, 'linkedin') === 'published'"
+              [class.is-failed]="getChannelStatus(article, 'linkedin') === 'failed'"
+            >
+              <div class="channel-box-header">
+                <div class="channel-brand">
+                  <i class="pi pi-linkedin"></i>
+                  <span class="channel-name">LinkedIn</span>
+                </div>
+                <span
+                  class="channel-status-pill"
+                  [class.success]="getChannelStatus(article, 'linkedin') === 'published'"
+                  [class.failed]="getChannelStatus(article, 'linkedin') === 'failed'"
+                  [class.skipped]="getChannelStatus(article, 'linkedin') === 'skipped'"
+                >
+                  {{ getChannelStatus(article, 'linkedin') === 'published' ? 'Live on LinkedIn' : (getChannelStatus(article, 'linkedin') === 'failed' ? 'Failed' : 'Not Targeted') }}
+                </span>
+              </div>
+
+              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'linkedin') === 'published'">
+                <div class="post-id-row" *ngIf="article.linkedin_post_id">
+                  <span class="id-label">Post ID:</span>
+                  <code class="id-code" [title]="article.linkedin_post_id">{{ article.linkedin_post_id }}</code>
+                </div>
+                <div class="channel-actions">
+                  <a
+                    *ngIf="getLiveUrl(article, 'linkedin')"
+                    [href]="getLiveUrl(article, 'linkedin')"
+                    target="_blank"
+                    class="live-link-btn"
+                  >
+                    <i class="pi pi-external-link"></i>
+                    <span>Open Post on LinkedIn</span>
+                  </a>
+                  <button
+                    *ngIf="getLiveUrl(article, 'linkedin')"
+                    class="copy-btn"
+                    (click)="copyLink(getLiveUrl(article, 'linkedin'), 'LinkedIn Post Link')"
+                    title="Copy LinkedIn Post URL"
+                  >
+                    <i class="pi pi-copy"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'linkedin') !== 'published'">
+                <span class="channel-msg">
+                  {{ getChannelStatus(article, 'linkedin') === 'failed' ? 'Failed to post on LinkedIn account.' : 'Not distributed to LinkedIn.' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- WordPress Destination Box -->
+            <div
+              class="channel-box wordpress-box"
+              [class.is-active]="getChannelStatus(article, 'wordpress') === 'published'"
+              [class.is-failed]="getChannelStatus(article, 'wordpress') === 'failed'"
+            >
+              <div class="channel-box-header">
+                <div class="channel-brand">
+                  <i class="pi pi-globe"></i>
+                  <span class="channel-name">WordPress / Website</span>
+                </div>
+                <span
+                  class="channel-status-pill"
+                  [class.success]="getChannelStatus(article, 'wordpress') === 'published'"
+                  [class.failed]="getChannelStatus(article, 'wordpress') === 'failed'"
+                  [class.skipped]="getChannelStatus(article, 'wordpress') === 'skipped'"
+                >
+                  {{ getChannelStatus(article, 'wordpress') === 'published' ? 'Live on Website' : (getChannelStatus(article, 'wordpress') === 'failed' ? 'Failed' : 'Not Targeted') }}
+                </span>
+              </div>
+
+              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'wordpress') === 'published'">
+                <div class="post-id-row" *ngIf="article.wordpress_post_url">
+                  <span class="id-label">Live URL:</span>
+                  <a [href]="article.wordpress_post_url" target="_blank" class="url-code" [title]="article.wordpress_post_url">
+                    {{ article.wordpress_post_url }}
+                  </a>
+                </div>
+                <div class="channel-actions">
+                  <a
+                    *ngIf="article.wordpress_post_url"
+                    [href]="article.wordpress_post_url"
+                    target="_blank"
+                    class="live-link-btn"
+                  >
+                    <i class="pi pi-external-link"></i>
+                    <span>View Article on Website</span>
+                  </a>
+                  <button
+                    *ngIf="article.wordpress_post_url"
+                    class="copy-btn"
+                    (click)="copyLink(article.wordpress_post_url, 'WordPress Article URL')"
+                    title="Copy Article URL"
+                  >
+                    <i class="pi pi-copy"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'wordpress') !== 'published'">
+                <span class="channel-msg">
+                  {{ getChannelStatus(article, 'wordpress') === 'failed' ? 'Failed to upload to WordPress REST API.' : 'Not distributed to WordPress.' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Facebook Destination Box -->
+            <div
+              class="channel-box facebook-box"
+              [class.is-active]="getChannelStatus(article, 'facebook') === 'published'"
+              [class.is-failed]="getChannelStatus(article, 'facebook') === 'failed'"
+            >
+              <div class="channel-box-header">
+                <div class="channel-brand">
+                  <i class="pi pi-facebook"></i>
+                  <span class="channel-name">Facebook</span>
+                </div>
+                <span
+                  class="channel-status-pill"
+                  [class.success]="getChannelStatus(article, 'facebook') === 'published'"
+                  [class.failed]="getChannelStatus(article, 'facebook') === 'failed'"
+                  [class.skipped]="getChannelStatus(article, 'facebook') === 'skipped'"
+                >
+                  {{ getChannelStatus(article, 'facebook') === 'published' ? 'Live on Facebook' : 'Not Targeted' }}
+                </span>
+              </div>
+              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'facebook') === 'published'">
+                <div class="post-id-row" *ngIf="article.facebook_post_id">
+                  <span class="id-label">Post ID:</span>
+                  <code class="id-code">{{ article.facebook_post_id }}</code>
+                </div>
+                <div class="channel-actions" *ngIf="getLiveUrl(article, 'facebook')">
+                  <a [href]="getLiveUrl(article, 'facebook')" target="_blank" class="live-link-btn">
+                    <i class="pi pi-external-link"></i>
+                    <span>Open on Facebook</span>
+                  </a>
+                </div>
+              </div>
+              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'facebook') !== 'published'">
+                <span class="channel-msg">Not distributed to Facebook.</span>
+              </div>
+            </div>
+
+            <!-- Instagram Destination Box -->
+            <div
+              class="channel-box instagram-box"
+              [class.is-active]="getChannelStatus(article, 'instagram') === 'published'"
+              [class.is-failed]="getChannelStatus(article, 'instagram') === 'failed'"
+            >
+              <div class="channel-box-header">
+                <div class="channel-brand">
+                  <i class="pi pi-instagram"></i>
+                  <span class="channel-name">Instagram</span>
+                </div>
+                <span
+                  class="channel-status-pill"
+                  [class.success]="getChannelStatus(article, 'instagram') === 'published'"
+                  [class.failed]="getChannelStatus(article, 'instagram') === 'failed'"
+                  [class.skipped]="getChannelStatus(article, 'instagram') === 'skipped'"
+                >
+                  {{ getChannelStatus(article, 'instagram') === 'published' ? 'Live on Instagram' : 'Not Targeted' }}
+                </span>
+              </div>
+              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'instagram') === 'published'">
+                <div class="post-id-row" *ngIf="article.instagram_media_id">
+                  <span class="id-label">Media ID:</span>
+                  <code class="id-code">{{ article.instagram_media_id }}</code>
+                </div>
+                <div class="channel-actions" *ngIf="getLiveUrl(article, 'instagram')">
+                  <a [href]="getLiveUrl(article, 'instagram')" target="_blank" class="live-link-btn">
+                    <i class="pi pi-external-link"></i>
+                    <span>Open on Instagram</span>
+                  </a>
+                </div>
+              </div>
+              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'instagram') !== 'published'">
+                <span class="channel-msg">Not distributed to Instagram.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary & Tags Footer -->
+        <div class="history-card-footer">
+          <p class="history-summary" *ngIf="article.summary">
+            <strong>Executive Summary:</strong> {{ article.summary }}
+          </p>
+          <div class="history-tags" *ngIf="article.tags && article.tags.length > 0">
+            <span *ngFor="let tag of article.tags" class="tag-chip">#{{ tag }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- TAB 3: AI GENERATOR STUDIO                                              -->
   <!-- ======================================================================= -->
   <div *ngIf="mainTab === 'generator'" class="tab-content">
     <div class="custom-generator-card">

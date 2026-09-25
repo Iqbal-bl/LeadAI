@@ -42,8 +42,13 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   activeStatusFilter: string = 'all';
   searchQuery: string = '';
 
-  // Active Tab: 'articles' | 'settings' | 'generator'
-  mainTab: 'articles' | 'settings' | 'generator' = 'articles';
+  // Active Tab: 'articles' | 'history' | 'generator' | 'settings'
+  mainTab: 'articles' | 'history' | 'generator' | 'settings' = 'articles';
+
+  // Upload History Filters & Search
+  historyChannelFilter: string = 'all';
+  historyModeFilter: string = 'all';
+  historySearchQuery: string = '';
 
   // Article Details / Editor Modal
   selectedArticle: Article | null = null;
@@ -502,7 +507,169 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // Helper
+  // --------------------------------------------------------------------------
+  // Upload & Publishing History Helpers
+  // --------------------------------------------------------------------------
+  get publishedArticles(): Article[] {
+    return this.articles.filter(
+      (a) => a.status === 'published' || !!a.published_at || (a.results && Object.keys(a.results).length > 0)
+    );
+  }
+
+  get filteredHistoryArticles(): Article[] {
+    return this.publishedArticles.filter((a) => {
+      // Channel filter
+      if (this.historyChannelFilter !== 'all') {
+        const hasChannel =
+          (a.target_channels || []).includes(this.historyChannelFilter) ||
+          (a.results && a.results[this.historyChannelFilter]) ||
+          (this.historyChannelFilter === 'linkedin' && !!a.linkedin_post_id) ||
+          (this.historyChannelFilter === 'wordpress' && !!a.wordpress_post_url) ||
+          (this.historyChannelFilter === 'facebook' && !!a.facebook_post_id) ||
+          (this.historyChannelFilter === 'instagram' && !!a.instagram_media_id);
+        if (!hasChannel) return false;
+      }
+
+      // Mode filter
+      if (this.historyModeFilter !== 'all') {
+        if (this.historyModeFilter === 'daily_scheduler' && a.generation_mode !== 'daily_scheduler') return false;
+        if (this.historyModeFilter === 'manual' && a.generation_mode === 'daily_scheduler') return false;
+      }
+
+      // Search query
+      if (this.historySearchQuery.trim()) {
+        const q = this.historySearchQuery.toLowerCase();
+        const matchTitle = (a.title || '').toLowerCase().includes(q);
+        const matchSummary = (a.summary || '').toLowerCase().includes(q);
+        const matchTags = (a.tags || []).some((t) => t.toLowerCase().includes(q));
+        const matchLiId = (a.linkedin_post_id || '').toLowerCase().includes(q);
+        const matchWpUrl = (a.wordpress_post_url || '').toLowerCase().includes(q);
+        if (!matchTitle && !matchSummary && !matchTags && !matchLiId && !matchWpUrl) return false;
+      }
+
+      return true;
+    });
+  }
+
+  get publishedHistoryStats() {
+    const list = this.publishedArticles;
+    const linkedinCount = list.filter(
+      (a) => !!a.linkedin_post_id || (a.results && a.results['linkedin']?.success)
+    ).length;
+    const wordpressCount = list.filter(
+      (a) => !!a.wordpress_post_url || (a.results && a.results['wordpress']?.success)
+    ).length;
+    const metaCount = list.filter(
+      (a) =>
+        !!a.facebook_post_id ||
+        !!a.instagram_media_id ||
+        (a.results && (a.results['facebook']?.success || a.results['instagram']?.success))
+    ).length;
+    const autonomousCount = list.filter((a) => a.generation_mode === 'daily_scheduler').length;
+
+    let lastUploadDate: Date | null = null;
+    list.forEach((a) => {
+      const dt = a.published_at
+        ? new Date(a.published_at)
+        : a.created_at
+        ? new Date(a.created_at)
+        : null;
+      if (dt && (!lastUploadDate || dt > lastUploadDate)) {
+        lastUploadDate = dt;
+      }
+    });
+
+    return {
+      total: list.length,
+      linkedin: linkedinCount,
+      wordpress: wordpressCount,
+      meta: metaCount,
+      autonomous: autonomousCount,
+      lastUpload: lastUploadDate,
+    };
+  }
+
+  getLiveUrl(article: Article, channel: string): string | null {
+    if (channel === 'wordpress') {
+      return article.wordpress_post_url || (article.results && article.results['wordpress']?.url) || null;
+    }
+    if (channel === 'linkedin') {
+      const directUrl = article.results && article.results['linkedin']?.url;
+      if (directUrl) return directUrl;
+      const id = article.linkedin_post_id || (article.results && article.results['linkedin']?.id);
+      if (!id) return null;
+      if (id.startsWith('http')) return id;
+      if (id.includes(':')) return `https://www.linkedin.com/feed/update/${id}/`;
+      return `https://www.linkedin.com/feed/update/urn:li:share:${id}/`;
+    }
+    if (channel === 'facebook') {
+      const directUrl = article.results && article.results['facebook']?.url;
+      if (directUrl) return directUrl;
+      const id = article.facebook_post_id || (article.results && article.results['facebook']?.id);
+      return id ? `https://www.facebook.com/${id}` : null;
+    }
+    if (channel === 'instagram') {
+      const directUrl = article.results && article.results['instagram']?.url;
+      if (directUrl) return directUrl;
+      const id = article.instagram_media_id || (article.results && article.results['instagram']?.id);
+      return id ? `https://www.instagram.com/p/${id}/` : null;
+    }
+    return null;
+  }
+
+  getChannelStatus(article: Article, channel: string): 'published' | 'failed' | 'skipped' | 'none' {
+    if (!article.results || !article.results[channel]) {
+      if (channel === 'linkedin' && article.linkedin_post_id) return 'published';
+      if (channel === 'wordpress' && article.wordpress_post_url) return 'published';
+      if (channel === 'facebook' && article.facebook_post_id) return 'published';
+      if (channel === 'instagram' && article.instagram_media_id) return 'published';
+      return (article.target_channels || []).includes(channel) ? 'skipped' : 'none';
+    }
+    const res = article.results[channel];
+    if (res.success) return 'published';
+    if (res.skipped) return 'skipped';
+    return 'failed';
+  }
+
+  getPublishingMechanism(article: Article): { label: string; icon: string; badgeClass: string } {
+    if (article.generation_mode === 'daily_scheduler') {
+      return {
+        label: 'LeadAI Daily Scheduler (Autonomous)',
+        icon: 'pi pi-bolt',
+        badgeClass: 'mechanism-auto',
+      };
+    }
+    if (article.reviewed_at || (article.review_notes && article.review_notes.length > 0)) {
+      const reviewer = article.author_name || 'Admin';
+      return {
+        label: `Admin Approved (${reviewer})`,
+        icon: 'pi pi-check-circle',
+        badgeClass: 'mechanism-approval',
+      };
+    }
+    return {
+      label: 'Manual 1-Click Publish',
+      icon: 'pi pi-send',
+      badgeClass: 'mechanism-manual',
+    };
+  }
+
+  openLiveUrl(url: string | null | undefined): void {
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  copyLink(text: string | null | undefined, label: string = 'Link'): void {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Copied!',
+      detail: `${label} copied to clipboard.`,
+    });
+  }
+
   getStatusClass(status: string): string {
     switch (status) {
       case 'published':
