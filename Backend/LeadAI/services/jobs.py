@@ -413,7 +413,7 @@ def handle_blog_daily_scheduler(db: Session, payload: dict) -> dict:
     """
     from ..models_blog import LeadBlogSettings
     from .blog.topic_picker import TopicPickerService
-    from Domain.models import Client
+    from domain.models import Client
 
     now = utcnow()
     now_hour_min = now.strftime("%H:%M")

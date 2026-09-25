@@ -62,6 +62,8 @@ from ..serializers import (
     chat_conversation_detail,
     conversation_detail,
     conversation_out,
+    customer_number,
+    resolve_display_name,
 )
 from ..services import ai_engine, conversation_flow
 
@@ -672,11 +674,11 @@ def reveal_contact(
         )
 
     return ContactReveal(
-        phone=decrypt_pii(customer.PhoneEnc),
+        phone=customer_number(customer),
         email=decrypt_pii(customer.EmailEnc),
         whatsapp=decrypt_pii(customer.WhatsAppEnc),
         instagram=decrypt_pii(customer.InstagramEnc),
-        display_name=customer.DisplayName or decrypt_pii(customer.InstagramEnc),
+        display_name=resolve_display_name(db, customer, conversation),
         social_identities=social,
         revealed_at=datetime.now(timezone.utc),
     )

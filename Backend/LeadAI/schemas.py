@@ -492,7 +492,8 @@ class ConversationOut(BaseModel):
     channel: str
     status: str
     customer_ref: str
-    # Populated only for roles holding lead.reveal_pii; masked otherwise.
+    # Always null here: the name is released only by the audited /inbox/{id}/contact
+    # (Reveal) call. Until then, staff identify a customer by `customer_ref`.
     customer_name: str | None = None
     customer_phone_masked: str | None = None
     summary: str | None = None

@@ -51,7 +51,7 @@ from ..models import (
     utcnow,
 )
 from ..security import decrypt_pii, encrypt_pii, phone_fingerprint
-from . import ai_engine, memory, script_engine
+from . import ai_engine, memory, reply_cleanup, script_engine
 
 try:
     from core.websocket_manager import _fire_and_forget, manager as ws_manager
@@ -728,10 +728,33 @@ def handle_customer_turn(
         )
 
     # ---- AI turn ----------------------------------------------------------
-    result = ai_engine.answer(
-        db, client_id, client.Name, text, history=history, channel="chat",
-        carryover=carryover,
-    )
+    # Once the AI has finished the conversation (told the customer an advisor will
+    # follow up), a bare "ok" / "yes" / "thanks" must not restart the qualification
+    # questions. It gets one short fixed line, with no retrieval and no LLM call.
+    already_completed = conversation.AiCompletedAt is not None
+    if already_completed and reply_cleanup.is_acknowledgement(text):
+        result = {
+            "reply": reply_cleanup.closing_reply(client.Name, text),
+            "confidence": 1.0,
+            "needs_human": False,
+            "ends_conversation": False,
+            "handoff_reason": None,
+            "sources": [],
+            "model": "closing-template",
+            "latency_ms": 0,
+        }
+    else:
+        result = ai_engine.answer(
+            db, client_id, client.Name, text, history=history, channel="chat",
+            carryover=carryover,
+            # A customer who keeps talking after completion asked something real:
+            # continue from where we stopped, do not start over.
+            session_note=reply_cleanup.COMPLETED_NOTE if already_completed else "",
+        )
+        if result.get("ends_conversation"):
+            conversation.AiCompletedAt = utcnow()
+        elif already_completed:
+            conversation.AiCompletedAt = None  # they reopened it with a new question
 
     outbound = LeadMessage(
         ClientId=client_id,
@@ -797,6 +820,10 @@ def handle_customer_turn(
     above, crossed = apply_threshold(db, client, conversation, lead, request)
 
     handed_off = False
+    if result.get("ends_conversation") and conversation.Status == "needs_human":
+        # Already waiting for a human (e.g. auto-paused earlier): the reason shown to
+        # staff should be the current one, not a stale one.
+        conversation.HandoffReason = (result["handoff_reason"] or "")[:300]
     if result["needs_human"] and conversation.Status == "open":
         conversation.Status = "needs_human"
         conversation.HandoffReason = (result["handoff_reason"] or "")[:300]

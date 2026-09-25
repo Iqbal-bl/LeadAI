@@ -69,7 +69,8 @@ router = APIRouter(prefix="/public/webhooks", tags=["LeadAI • Inbound webhooks
 OPT_OUT_WORDS = {"stop", "unsubscribe", "opt out", "optout", "band karo", "cancel"}
 OPT_IN_WORDS = {"start", "subscribe", "unstop", "resume"}
 LOOP_WINDOW_MINUTES = 10
-LOOP_MAX_TURNS = 8
+# Configurable with LEADAI_LOOP_MAX_TURNS (see LeadAI/config.py). Never below 1.
+LOOP_MAX_TURNS = max(1, settings.loop_max_turns)
 
 @router.get("/meta", summary="Meta webhook verification handshake")
 def verify_webhook(
@@ -361,8 +362,9 @@ def _process_one(db: Session, item: dict) -> None:
         )
         db.commit()
         logger.warning(
-            "[LeadAI webhook] loop breaker tripped on conversation %s (%s)",
-            conversation.Id, account.Channel,
+            "[LeadAI webhook] loop breaker tripped on conversation %s (%s): %s AI replies in %sm, "
+            "limit %s (set LEADAI_LOOP_MAX_TURNS to change)",
+            conversation.Id, account.Channel, recent_ai_turns, LOOP_WINDOW_MINUTES, LOOP_MAX_TURNS,
         )
         return
 

@@ -26,9 +26,14 @@ from core.config_guard import validate as _validate_config
 
 _validate_config()
 
+# Scrub access tokens / bearer tokens from every log line (see core/log_redaction.py).
+from core.log_redaction import install as _install_log_redaction
+
+_install_log_redaction()
+
 from fastapi import WebSocket, WebSocketDisconnect  # noqa: E402
 
-import Domain  # noqa: F401  (registers domain module aliases)
+import domain  # noqa: F401  (registers domain module aliases)
 
 # Import the complete, already-built Sarvam app. This pulls in db.py (users +
 # transcripts) and, transitively via batching below, the Domain/ ORM used for

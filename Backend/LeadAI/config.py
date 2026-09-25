@@ -22,20 +22,35 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _env(name: str, default) -> str:
+    """The value of an env var, with a trailing comment removed.
+
+    .env files only treat `#` as a comment, so `LEADAI_X=true  // note` used to reach us
+    as the text "true  // note", which is not "true": booleans silently became false and
+    numbers fell back to their default. A `//` (or `#`) after whitespace now ends the value.
+    """
+    value = str(os.getenv(name, default))
+    for marker in (" //", "	//", " #", "	#"):
+        cut = value.find(marker)
+        if cut != -1:
+            value = value[:cut]
+    return value.strip()
+
+
 def _b(name: str, default: str = "false") -> bool:
-    return os.getenv(name, default).strip().lower() in ("1", "true", "yes", "on")
+    return _env(name, default).lower() in ("1", "true", "yes", "on")
 
 
 def _f(name: str, default: float) -> float:
     try:
-        return float(os.getenv(name, default))
+        return float(_env(name, default))
     except (TypeError, ValueError):
         return default
 
 
 def _i(name: str, default: int) -> int:
     try:
-        return int(os.getenv(name, default))
+        return int(_env(name, default))
     except (TypeError, ValueError):
         return default
 
@@ -150,6 +165,14 @@ class LeadAISettings:
     meta_verify_signatures: bool = _b("META_VERIFY_SIGNATURES", "true")
     # Meta only permits free-form replies within 24h of the user's last message.
     meta_session_window_hours: int = _i("META_SESSION_WINDOW_HOURS", 24)
+    # Loop breaker: if the AI has already sent this many replies in one conversation
+    # within 10 minutes, it stops replying and hands the conversation to a human.
+    # Catches bot-to-bot loops and retry storms; raise it if a fast human chat trips it.
+    loop_max_turns: int = _i("LEADAI_LOOP_MAX_TURNS", 20)
+    # Read the whole conversation with the LLM to set intent, timeline, budget, product
+    # and sentiment (falls back to keyword rules if the LLM is off or fails). Same call
+    # also writes the handoff summary, so it adds no extra request per message.
+    llm_qualification: bool = _b("LEADAI_LLM_QUALIFICATION", "true")
     # Master switch — lets you keep web chat only until the Meta app is approved.
     social_channels_enabled: bool = _b("LEADAI_SOCIAL_CHANNELS_ENABLED", "true")
     web_chat_enabled: bool = _b("LEADAI_WEB_CHAT_ENABLED", "true")

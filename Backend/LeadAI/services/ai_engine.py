@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..models import Lead, LeadCompanySettings, LeadConversation, LeadMessage
-from . import llm, memory, script_engine, vectorstore
+from . import llm, memory, reply_cleanup, script_engine, vectorstore
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,10 @@ HUMAN_REQUEST = re.compile(
 INTENT_SIGNALS = {
     "ready_to_buy": ["apply", "sign up", "open an account", "purchase", "buy", "book",
                      "proceed", "enroll", "onboard", "close the deal", "send the link",
-                     "how do i start", "i'll take it"],
+                     "how do i start", "i'll take it", "i will take", "i'll take",
+                     "i want to take", "go ahead", "sign me up", "let's proceed",
+                     "lets proceed", "let's do it", "lets do it", "i am ready",
+                     "i'm ready"],
     "comparing": ["compare", " vs ", "versus", "better than", "difference between",
                   "alternative", "other options", "which one"],
     "evaluating": ["eligibility", "eligible", "documents", "requirement", "process",
@@ -187,8 +190,12 @@ def answer(
     channel: str = "chat",
     script=None,
     carryover: str = "",
+    session_note: str = "",
 ) -> dict:
     """Answer strictly from this company's knowledge base.
+
+    `session_note` is an optional instruction about the state of THIS conversation
+    (e.g. it is already complete), injected as its own system turn.
 
     `carryover` is an optional cross-channel memory digest (see services/memory.
     py). It describes the customer, never the company, and is injected as its own
@@ -307,6 +314,9 @@ def answer(
                 },
             )
 
+        if session_note:
+            chat.insert(0, {"role": "system", "content": session_note})
+
         chat.append(
             {
                 "role": "user",
@@ -327,16 +337,23 @@ def answer(
         )
         meta.setdefault("model", "builtin-extractive")
 
-    needs_human = wants_human or confidence < threshold
+    # The model signals "this conversation is finished" with [END_CALL]. The script's
+    # closing message promises an advisor follow-up, so that is a handoff too.
+    ends_conversation = reply_cleanup.has_end_call_token(reply)
+    needs_human = wants_human or confidence < threshold or ends_conversation
     return {
-        "reply": (reply or "").strip(),
+        # [END_CALL] is a voice control token; it must never reach a customer.
+        "reply": reply_cleanup.strip_control_tokens((reply or "").strip()),
         "confidence": confidence,
         "needs_human": needs_human,
+        "ends_conversation": ends_conversation,
         "handoff_reason": (
             "Customer asked to speak to a human"
             if wants_human
             else (f"Answer confidence {confidence} below threshold {threshold}"
-                  if needs_human else None)
+                  if confidence < threshold
+                  else ("AI completed the conversation; advisor follow-up"
+                        if ends_conversation else None))
         ),
         "sources": [
             {
@@ -415,6 +432,76 @@ def _budget_from(text: str) -> str | None:
     return match.group(0).strip().upper() if match else None
 
 
+_ANALYSIS_PROMPT = """You analyse a sales conversation between a company's assistant and a customer, for the company's sales team. Judge ONLY from what the customer actually said or agreed to. Never invent facts. Reply with a single JSON object with exactly these keys:
+
+"intent": one of
+  "ready_to_buy"    - the customer has chosen a specific product/option and is giving details to proceed, asks to apply or sign up, or accepts an advisor call or next step;
+  "evaluating"      - asking about rates, fees, eligibility, documents or process for something they are considering;
+  "comparing"       - weighing several options or providers;
+  "browsing"        - general questions, nothing chosen yet;
+  "not_interested"  - declines, asks to stop, or says they are not interested.
+"timeline": "immediate" (within about a week), "this_month", "next_quarter", or "unknown". Use "unknown" unless the customer said or clearly implied when they want to proceed.
+"budget": the amount, income or loan size the customer stated, in their own words (for example "Rs 50 lakh loan"), else "unknown".
+"product": the specific product or service the customer wants, as a short name (for example "Business Loan"), else "unknown".
+"sentiment": "positive", "neutral" or "negative", about the company.
+"summary": at most 3 short plain sentences for the sales rep who will take this over: who the customer is, what they want, what was established.
+"next_step": one sentence with the single best action for the rep."""
+
+_VALID_INTENTS = {"ready_to_buy", "evaluating", "comparing", "browsing", "not_interested"}
+_VALID_TIMELINES = {"immediate", "this_month", "next_quarter", "unknown"}
+_VALID_SENTIMENTS = {"positive", "neutral", "negative"}
+
+
+def _llm_analysis(messages: list[LeadMessage]) -> dict | None:
+    """Ask the LLM to read the conversation. Returns a validated dict, or None.
+
+    None (LLM off, call failed, unusable output) means "use the keyword rules"; this
+    function never raises, because scoring runs inside a live customer turn.
+    """
+    if not (settings.llm_enabled and settings.llm_qualification):
+        return None
+    turns = [
+        m for m in messages
+        if (m.Sender or "") in ("customer", "ai", "agent") and (m.Content or "").strip()
+    ]
+    if not any(m.Sender == "customer" for m in turns):
+        return None
+    transcript = "\n".join(
+        f"{'Customer' if m.Sender == 'customer' else 'Assistant'}: "
+        f"{reply_cleanup.strip_control_tokens(m.Content)}"
+        for m in turns[-30:]
+    )
+    try:
+        data, _ = llm.complete_json(_ANALYSIS_PROMPT, [{"role": "user", "content": transcript}])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[LeadAI qualify] LLM analysis failed (%s) — using keyword rules", exc)
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    def text(key: str, limit: int) -> str:
+        value = data.get(key)
+        return str(value).strip()[:limit] if isinstance(value, (str, int, float)) else ""
+
+    def pick(key: str, allowed: set[str]) -> str:
+        value = text(key, 40).lower().replace(" ", "_")
+        return value if value in allowed else ""
+
+    def fact(key: str) -> str:
+        value = text(key, 120)
+        return value if value and value.lower() not in ("unknown", "none", "n/a", "null") else "unknown"
+
+    return {
+        "intent": pick("intent", _VALID_INTENTS),
+        "timeline": pick("timeline", _VALID_TIMELINES) or "unknown",
+        "budget": fact("budget").upper(),
+        "product": fact("product"),
+        "sentiment": pick("sentiment", _VALID_SENTIMENTS),
+        "summary": text("summary", 2000),
+        "next_step": text("next_step", 500),
+    }
+
+
 def qualify(
     db: Session,
     client_id: str,
@@ -431,12 +518,14 @@ def qualify(
         m.Content for m in messages if m.Sender == "customer" and m.Content
     ).lower()
 
+    # Keyword rules first: free, instant, and the fallback when the LLM is off or fails.
+    # INTENT_SIGNALS is ordered strongest first, so the strongest signal present wins
+    # (previously a weaker label later in the dict, e.g. "browsing", could overwrite it).
     intent = lead.Intent or "browsing"
     for label, words in INTENT_SIGNALS.items():
         if any(w in customer_text for w in words):
             intent = label
-            if label == "ready_to_buy":
-                break  # strongest signal wins outright
+            break
 
     timeline = lead.Timeline or "unknown"
     for label, words in TIMELINE_SIGNALS.items():
@@ -457,13 +546,29 @@ def qualify(
     neg = sum(customer_text.count(w) for w in NEGATIVE)
     sentiment = "positive" if pos > neg else ("negative" if neg > pos else "neutral")
 
+    # Then let the LLM read the whole conversation. Keywords cannot tell that "I will
+    # take the business loan" plus an amount and company details means the customer is
+    # ready to proceed. Anything the model is unsure of stays as the rules found it.
+    analysis = _llm_analysis(messages)
+    if analysis:
+        intent = analysis["intent"] or intent
+        if analysis["timeline"] != "unknown":
+            timeline = analysis["timeline"]
+        if analysis["budget"] != "unknown":
+            budget = analysis["budget"]
+        if analysis["product"] != "unknown":
+            product = analysis["product"]
+        sentiment = analysis["sentiment"] or sentiment
+        # summarize() reuses this so one LLM call serves both.
+        lead._ai_brief = (analysis["summary"], analysis["next_step"])
+
     turns = sum(1 for m in messages if m.Sender == "customer")
 
     breakdown = {
         "base": 8,
         "engagement": min(turns * 6, 24),
         "intent": {"ready_to_buy": 32, "comparing": 20, "evaluating": 16,
-                   "browsing": 4}.get(intent, 0),
+                   "browsing": 4, "not_interested": 0}.get(intent, 0),
         "timeline": {"immediate": 22, "this_month": 15, "next_quarter": 7}.get(timeline, 0),
         "budget_known": 12 if budget != "unknown" else 0,
         "product_known": 8 if product != "unknown" else 0,
@@ -528,6 +633,12 @@ def summarize(
     messages: list[LeadMessage],
 ) -> tuple[str, str]:
     """Return (summary, recommended_next_step) for the agent handoff card."""
+    # qualify() already had the LLM write these in the same call; reuse them.
+    brief = getattr(lead, "_ai_brief", None)
+    if brief and brief[0]:
+        lead._ai_brief = None
+        return brief[0][:2000], (brief[1] or NEXT_STEP.get(lead.Status, ""))[:500]
+
     if settings.llm_enabled and len(messages) >= 2:
         transcript = "\n".join(
             f"{m.Sender}: {m.Content}" for m in messages[-20:] if m.Content
