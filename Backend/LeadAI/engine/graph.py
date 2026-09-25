@@ -13,7 +13,9 @@ The conversation graph.
   verify  Checks that hard facts (numbers) in the reply exist in the retrieved
           sources. Observe-only by default, so it records a verdict without changing
           any reply until the evaluation shows it is safe to enforce.
-  decide  Folds everything into the final reply / handoff decision.
+  decide  Folds everything into the final reply / handoff decision, and (when
+          enforcing) escalates to a human if the reply invented a figure or said in
+          words that it cannot answer.
 
 Persistence, qualification, broadcast and delivery stay in conversation_flow for now;
 they move behind the graph in later phases. Keeping this graph free of I/O is what
@@ -26,7 +28,7 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
-from . import grounding
+from . import decline, grounding
 from .state import (
     CONTROL_ACTIVE,
     CONTROL_STOPPED,
@@ -39,6 +41,7 @@ from .state import (
 AnswerFn = Callable[[TurnState], dict[str, Any]]
 
 UNSUPPORTED_HANDOFF = "Reply stated figures not found in company knowledge"
+DECLINED_HANDOFF = "AI could not answer from company knowledge"
 
 
 def _guard(state: TurnState) -> dict:
@@ -79,19 +82,25 @@ def _verify(state: TurnState) -> dict:
     return {"verdict": VERDICT_UNSUPPORTED, "unsupported_figures": check.unsupported_raw}
 
 
-def _make_decide(enforce_grounding: bool):
+def _make_decide(enforce: bool):
     def _decide(state: TurnState) -> dict:
         result = state.get("result") or {}
         needs_human = bool(result.get("needs_human"))
         reason = result.get("handoff_reason")
-        if enforce_grounding and state.get("verdict") == VERDICT_UNSUPPORTED:
+        declined = decline.is_decline(result.get("reply"))
+        if enforce and state.get("verdict") == VERDICT_UNSUPPORTED:
             # Better an honest handoff than an invented figure sent to a customer.
             needs_human = True
             reason = reason or UNSUPPORTED_HANDOFF
+        if enforce and declined and not needs_human:
+            # The reply tells the customer a specialist will help; make that true.
+            needs_human = True
+            reason = reason or DECLINED_HANDOFF
         return {
             "reply": result.get("reply", ""),
             "needs_human": needs_human,
             "handoff_reason": reason,
+            "declined": declined,
         }
 
     return _decide
@@ -101,14 +110,14 @@ def _skip(state: TurnState) -> dict:
     return {"reply": "", "needs_human": False, "handoff_reason": None, "result": {}}
 
 
-def build_graph(answer_fn: AnswerFn, *, enforce_grounding: bool = False):
+def build_graph(answer_fn: AnswerFn, *, enforce: bool = False):
     """Compile the graph. `answer_fn` is called with the TurnState."""
     g = StateGraph(TurnState)
     g.add_node("guard", _guard)
     g.add_node("skip", _skip)
     g.add_node("answer", _make_answer(answer_fn))
     g.add_node("verify", _verify)
-    g.add_node("decide", _make_decide(enforce_grounding))
+    g.add_node("decide", _make_decide(enforce))
 
     g.set_entry_point("guard")
     g.add_conditional_edges("guard", _after_guard, {"skip": "skip", "answer": "answer"})
@@ -119,8 +128,10 @@ def build_graph(answer_fn: AnswerFn, *, enforce_grounding: bool = False):
     return g.compile()
 
 
-def run_turn(
-    state: TurnState, answer_fn: AnswerFn, *, enforce_grounding: bool = False
-) -> TurnState:
-    """Run one turn through the graph and return the final state."""
-    return build_graph(answer_fn, enforce_grounding=enforce_grounding).invoke(state)
+def run_turn(state: TurnState, answer_fn: AnswerFn, *, enforce: bool = False) -> TurnState:
+    """Run one turn through the graph and return the final state.
+
+    enforce=False records verdicts (grounding, declined) without changing the decision;
+    enforce=True lets them escalate to a human.
+    """
+    return build_graph(answer_fn, enforce=enforce).invoke(state)

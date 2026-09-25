@@ -2,6 +2,8 @@
   "answer_correct": 0.857,
   "abstain": 0.714,
   "safe_on_unknown": 0.714,
+  "abstain_engine": 0.714,
+  "answer_correct_engine": 0.857,
   "human_handoff": 1.0,
   "greeting_ok": 1.0,
   "forbid_clean": 0.0,

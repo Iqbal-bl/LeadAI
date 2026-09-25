@@ -71,14 +71,14 @@ def test_unsupported_figure_is_recorded_but_not_blocked_by_default():
 
 def test_enforced_grounding_escalates_instead_of_sending_an_invented_figure():
     a = Answerer(reply="The fee is Rs. 15,000.", context=CONTEXT)
-    out = run_turn({"text": "fee?", "client_id": "c1", "conversation_id": "v1"}, a, enforce_grounding=True)
+    out = run_turn({"text": "fee?", "client_id": "c1", "conversation_id": "v1"}, a, enforce=True)
     assert out["verdict"] == VERDICT_UNSUPPORTED
     assert out["needs_human"] is True and out["handoff_reason"] == UNSUPPORTED_HANDOFF
 
 
 def test_existing_handoff_reason_is_kept_when_enforcing():
     a = Answerer(reply="Rs. 15,000", context=CONTEXT, needs_human=True, handoff_reason="low confidence")
-    out = run_turn({"text": "fee?", "client_id": "c1", "conversation_id": "v1"}, a, enforce_grounding=True)
+    out = run_turn({"text": "fee?", "client_id": "c1", "conversation_id": "v1"}, a, enforce=True)
     assert out["handoff_reason"] == "low confidence"
 
 

@@ -394,6 +394,9 @@ def answer(
         "model": meta.get("model"),
         "latency_ms": meta.get("latency_ms", 0),
         "script_id": getattr(script, "Id", None),
+        # Full retrieved text, for the engine's grounding check. `sources` above only
+        # carries 220-char excerpts, which would make true statements look unsupported.
+        "context": [h["text"] for h in hits],
     }
 
 

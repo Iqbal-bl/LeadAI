@@ -22,6 +22,9 @@ Metrics
                    the conversation un-flagged, so no human ever follows up)
   forbid_clean     replies that must NOT contain a specific wrong figure, and do not
   no_false_figure  share of ALL replies whose numbers are all present in the sources
+  *_engine         the same, after the engine (ENGINE_MODE=enforce) has judged the reply:
+                   abstain_engine should rise, and answer_correct_engine must NOT fall
+                   below answer_correct (the engine may never escalate a good answer)
   human_handoff    "talk to a human" -> escalated
   greeting_ok      greeting -> answered, no handoff
 
@@ -42,7 +45,7 @@ from conftest_stub import Base, SessionLocalAdmin, engine  # noqa: E402
 
 from LeadAI import models  # noqa: E402
 from LeadAI.config import settings as real_settings  # noqa: E402
-from LeadAI.engine import grounding  # noqa: E402
+from LeadAI.engine import bridge, grounding  # noqa: E402
 from LeadAI.services import ai_engine, vectorstore  # noqa: E402
 
 GOLDEN = json.loads((HERE / "golden_set.json").read_text(encoding="utf-8"))
@@ -131,27 +134,32 @@ def run(live: bool = False) -> dict:
         allowed = [case["q"], *[t for _, t in case.get("history") or []]]
         figures_ok = grounding.check_reply(reply, source_texts, allowed=allowed)
 
-        if kind == "answer":
-            ok = _contains_any(reply, case["expect_any"]) and not out["needs_human"]
-        elif kind == "unknown":
-            ok = bool(out["needs_human"])
-        elif kind == "human":
-            ok = bool(out["needs_human"])
-        else:  # greeting
-            ok = not out["needs_human"] and bool(reply)
+        def verdict(needs_human: bool) -> bool:
+            if kind == "answer":
+                return _contains_any(reply, case["expect_any"]) and not needs_human
+            if kind in ("unknown", "human"):
+                return bool(needs_human)
+            return not needs_human and bool(reply)  # greeting
+
+        judged = bridge.apply(
+            out, text=case["q"], client_id=CLIENT_ID, conversation_id=case["id"],
+            channel="chat", mode="enforce",
+        )
+        ok = verdict(out["needs_human"])
+        ok_engine = verdict(judged["needs_human"])
         forbid_ok = not _contains_any(reply, case.get("forbid", []))
         safe = bool(out["needs_human"]) or bool(DECLINE.search(reply))
         rows.append(
             {
-                "id": case["id"], "kind": kind, "ok": ok, "forbid_ok": forbid_ok,
+                "id": case["id"], "kind": kind, "ok": ok, "ok_engine": ok_engine, "forbid_ok": forbid_ok,
                 "safe": safe, "figures_ok": figures_ok.supported, "unsupported": figures_ok.unsupported_raw,
                 "confidence": out["confidence"], "needs_human": out["needs_human"], "reply": reply,
             }
         )
 
-    def rate(kind):
+    def rate(kind, key="ok"):
         sel = [r for r in rows if r["kind"] == kind]
-        return round(sum(r["ok"] for r in sel) / len(sel), 3) if sel else None
+        return round(sum(r[key] for r in sel) / len(sel), 3) if sel else None
 
     forbid_rows = [r for r, c in zip(rows, GOLDEN["cases"]) if c.get("forbid")]
     metrics = {
@@ -162,6 +170,8 @@ def run(live: bool = False) -> dict:
             / sum(1 for r in rows if r["kind"] == "unknown"),
             3,
         ),
+        "abstain_engine": rate("unknown", "ok_engine"),
+        "answer_correct_engine": rate("answer", "ok_engine"),
         "human_handoff": rate("human"),
         "greeting_ok": rate("greeting"),
         "forbid_clean": round(sum(r["forbid_ok"] for r in forbid_rows) / len(forbid_rows), 3),
@@ -173,7 +183,8 @@ def run(live: bool = False) -> dict:
 def _print(report: dict) -> None:
     print(f"\nMode: {'LIVE LLM' if report['live'] else 'extractive (no LLM)'}\n")
     for r in report["rows"]:
-        flag = "ok  " if r["ok"] and r["forbid_ok"] and r["figures_ok"] else "FAIL"
+        flag = "ok  " if r["ok_engine"] and r["forbid_ok"] and r["figures_ok"] else "FAIL"
+        flag = flag if r["ok"] == r["ok_engine"] else flag + "*"
         extra = f"  unsupported={r['unsupported']}" if r["unsupported"] else ""
         print(f"  [{flag}] {r['id']:<14} conf={r['confidence']:<5} human={str(r['needs_human']):<5}{extra}")
         if flag == "FAIL":

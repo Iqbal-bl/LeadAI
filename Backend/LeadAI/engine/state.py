@@ -41,6 +41,7 @@ class TurnState(TypedDict, total=False):
     result: dict[str, Any]     # the answer: reply, confidence, needs_human, sources...
     verdict: str               # VERDICT_*
     unsupported_figures: list[str]
+    declined: bool             # the reply itself says "I can't answer this"
 
     # ---- final decision -----------------------------------------------------
     reply: str

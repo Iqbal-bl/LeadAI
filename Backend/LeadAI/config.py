@@ -72,6 +72,9 @@ class LeadAISettings:
 
     # ---- RAG tuning -------------------------------------------------------
     retrieval_top_k: int = _i("LEADAI_RETRIEVAL_TOP_K", 5)
+    # Conversation engine (LeadAI/engine): off | observe | enforce. See engine/bridge.py.
+    # "observe" judges every reply and records a verdict without changing anything.
+    engine_mode: str = os.getenv("ENGINE_MODE", "off").strip().lower()
     handoff_confidence_threshold: float = _f("LEADAI_HANDOFF_THRESHOLD", 0.40)
     chunk_max_chars: int = _i("LEADAI_CHUNK_MAX_CHARS", 900)
     chunk_overlap: int = _i("LEADAI_CHUNK_OVERLAP", 150)
@@ -118,6 +121,8 @@ class LeadAISettings:
     # ---- Sarvam (STT/TTS) -------------------------------------------------
     sarvam_api_key: str | None = os.getenv("SARVAM_API_KEY") or None
     default_language: str = os.getenv("LEADAI_DEFAULT_LANGUAGE", "en-IN")
+    # Country assumed for phone numbers customers type without a country code.
+    default_phone_region: str = _env("LEADAI_DEFAULT_PHONE_REGION", "IN").upper()
 
     # ---- Files ------------------------------------------------------------
     max_upload_bytes: int = _i("LEADAI_MAX_UPLOAD_BYTES", 15 * 1024 * 1024)

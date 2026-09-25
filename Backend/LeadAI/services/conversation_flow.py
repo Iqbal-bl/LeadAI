@@ -39,6 +39,7 @@ from domain.models import Client
 from .. import activity
 from ..activity import A
 from ..config import settings
+from ..engine import bridge as engine_bridge
 from ..models import (
     CHANNEL_WEB,
     Lead,
@@ -51,7 +52,7 @@ from ..models import (
     utcnow,
 )
 from ..security import decrypt_pii, encrypt_pii, phone_fingerprint
-from . import ai_engine, memory, reply_cleanup, script_engine
+from . import ai_engine, contact_capture, memory, reply_cleanup, script_engine
 
 try:
     from core.websocket_manager import _fire_and_forget, manager as ws_manager
@@ -663,6 +664,14 @@ def handle_customer_turn(
     history.append(inbound)
     conversation.LastMessageAt = utcnow()
 
+    # A customer who types their number into the chat ("yes it's 98765 43210") has given
+    # it to us: keep it on the customer record, encrypted, so staff see it masked and can
+    # Reveal it. Runs before the human-takeover check, so it works while an agent is on it.
+    contact_capture.capture_phone(
+        db, db.get(LeadCustomer, conversation.CustomerId), text,
+        client_id=client_id, conversation_id=conversation.Id, actor=source,
+    )
+
     # Broadcast customer message immediately so staff sees it before AI processing
     _broadcast_conversation(
         conversation.Id,
@@ -751,6 +760,11 @@ def handle_customer_turn(
             # continue from where we stopped, do not start over.
             session_note=reply_cleanup.COMPLETED_NOTE if already_completed else "",
         )
+        # Judge (observe) or decide (enforce) the reply; a no-op unless ENGINE_MODE is set.
+        result = engine_bridge.apply(
+            result, text=text, client_id=client_id, conversation_id=conversation.Id,
+            channel=conversation.Channel,
+        )
         if result.get("ends_conversation"):
             conversation.AiCompletedAt = utcnow()
         elif already_completed:
@@ -786,6 +800,7 @@ def handle_customer_turn(
             "model": result["model"],
             "latency_ms": result["latency_ms"],
             "channel": conversation.Channel,
+            **engine_bridge.audit_meta(result),
         },
         request=request,
     )

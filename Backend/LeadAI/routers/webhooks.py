@@ -256,6 +256,16 @@ def _process_one(db: Session, item: dict) -> None:
         return
 
     text = (item.get("text") or "").strip()
+
+    # Meta sometimes delivers a bare "template" attachment (a structured card container
+    # with no text, and here an empty element list). A customer cannot send one, it carries
+    # nothing to read, and it used to be stored as a fake "[template received]" message
+    # and even handed to the AI as if the customer had said it. Ignore it.
+    if not text and item.get("media_type") == "template":
+        logger.info("[LeadAI webhook] ignored an empty 'template' attachment from %s",
+                    item.get("external_user_id"))
+        return
+
     client, conversation, identity = conversation_flow.resolve_social_conversation(
         db,
         account,
