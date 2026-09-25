@@ -487,6 +487,35 @@ def require(*permissions: str) -> Callable[..., Principal]:
     return guard
 
 
+def super_admin(*permissions: str) -> Callable[..., Principal]:
+    """Route guard for platform-level endpoints: super admin (role `Admin`) ONLY.
+
+    Companies, and the roles / permissions that govern them, are managed by the
+    platform team, never by a company's own admin. This checks the ROLE first, so it
+    holds even if a company_admin is later given a matching permission through the
+    role-permissions overrides; then, if permissions are named, any one of them must
+    also be held (so an override that removes a permission from Admin still applies).
+
+        principal: Principal = Depends(super_admin("company.manage"))
+    """
+
+    def guard(principal: Principal = Depends(current_principal)) -> Principal:
+        if not principal.is_platform_admin:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail="Only a super admin can do this.",
+            )
+        if permissions and not any(principal.can(p) for p in permissions):
+            names = ", ".join(P.get(p, p) for p in permissions)
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                detail=f"Your role ({principal.role}) does not allow this action ({names}).",
+            )
+        return principal
+
+    return guard
+
+
 def resolve_scope(principal: Principal) -> str:
     """Return the ClientId this request operates on, or 403/400.
 

@@ -217,8 +217,21 @@ def answer(
             "[LeadAI answer] greeting detected — channel=%s prompt_key=greeting",
             channel,
         )
+        reply, meta = None, {"model": "greeting-template", "latency_ms": 0}
+        if settings.llm_enabled:
+            # Use the company's own greeting prompt, so the persona introduces itself
+            # ("Hi, I'm Kabir from Kestrel Homes…") and editing that prompt in the
+            # dashboard actually changes what customers see. The fixed line below is
+            # only the fallback when the LLM is off or the call fails.
+            generated, llm_meta = llm.complete(
+                greeting, [{"role": "user", "content": question}], max_tokens=120
+            )
+            generated = reply_cleanup.strip_control_tokens((generated or "").strip())
+            if generated:
+                reply, meta = generated, llm_meta
         return {
-            "reply": (
+            "reply": reply
+            or (
                 f"Hi! I'm the {company_name} assistant. Ask me anything about our "
                 "products and I'll answer from our official information."
             ),
@@ -226,8 +239,8 @@ def answer(
             "needs_human": False,
             "handoff_reason": None,
             "sources": [],
-            "model": "greeting-template",
-            "latency_ms": 0,
+            "model": meta.get("model", "greeting-template"),
+            "latency_ms": meta.get("latency_ms", 0),
             "script_id": getattr(script, "Id", None),
             "prompt_used": greeting,
         }
@@ -317,12 +330,22 @@ def answer(
         if session_note:
             chat.insert(0, {"role": "system", "content": session_note})
 
+        # When retrieval is weak the model tends to grab a figure from the nearest-looking
+        # passage (a different product's price). Say so explicitly, so it declines rather
+        # than guesses; the handoff flag alone does not stop a wrong answer being sent.
+        weak_match = (
+            "\n\n(The match with the company knowledge is weak. State a price, size, date "
+            "or policy ONLY if the knowledge above says it for the exact product or topic "
+            "asked about; otherwise say a specialist will confirm it. Do not guess.)"
+            if confidence < threshold
+            else ""
+        )
         chat.append(
             {
                 "role": "user",
                 "content": (
                     f"Company knowledge (the ONLY source you may use):\n{context}\n\n"
-                    f"Customer question: {question}"
+                    f"Customer question: {question}{weak_match}"
                 ),
             }
         )

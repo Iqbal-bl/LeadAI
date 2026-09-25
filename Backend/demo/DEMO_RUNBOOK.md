@@ -1,5 +1,15 @@
 # Demo Runbook — Nexa Finserv
 
+> **Two demo companies ship with the repo.** `nexa_finserv` (lending, persona Aanya) is described below.
+> `kestrel_homes` (real estate in Mohali, persona Kabir: apartments, plots, shops; the conversion event is a booked site visit) is
+> seeded the same way. Both use `demo/seed_demo_company.py --demo <name>`; add `--grant-plan` to give the company a free plan with every
+> channel (without an active plan, WhatsApp / Instagram / Facebook / LinkedIn and voice are blocked by billing; web chat is not).
+> The token must belong to a super admin, because companies are managed by the platform team only.
+>
+>     python demo/seed_demo_company.py --demo kestrel_homes --token "$TOKEN" --grant-plan
+>
+> Re-running is safe: the knowledge base and script are replaced in place, not duplicated.
+
 Twenty minutes of setup, then a demonstration that shows chat, social, calling
 and cross-channel memory as one system rather than four features.
 

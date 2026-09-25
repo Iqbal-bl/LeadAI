@@ -411,6 +411,8 @@ Which backing services are live vs in fallback. Use this to verify a deployment.
 #### `GET /access/permissions`
 Full catalogue + role matrix. Renders an accurate permissions screen without hardcoding the matrix.
 
+> **Super admin only:** `GET /access/permissions`, `GET/POST/PATCH /access/roles` and everything under `/access/role-permissions` return `403 Only a super admin can do this.` to any other role. Still open to company staff: `GET /access/me`, `GET /access/assignable-users`, and `DELETE /access/roles/{id}` (used by the client Team page to remove a member).
+
 #### `GET /access/roles` · `role.read`
 Query: `for_company` (platform admin only). Company admins see only their own company's grants.
 
@@ -433,6 +435,8 @@ Users a conversation can be assigned to (active `agent`/`manager`/`company_admin
 ---
 
 ### 4.2 Companies
+
+> **Super admin only.** Every `/companies` endpoint except `GET/PUT /companies/{id}/settings` (a company's own AI settings) returns `403 Only a super admin can do this.` to company admins, managers and employees. Companies are created and managed by the platform team.
 
 #### `GET /companies` · `company.read`
 Query: `include_inactive`. Company-scoped users see only companies they hold a grant in.

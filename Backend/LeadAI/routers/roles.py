@@ -27,6 +27,7 @@ from ..rbac import (
     current_principal,
     require,
     resolve_scope,
+    super_admin,
     visible_roles,
 )
 from ..schemas import (
@@ -89,7 +90,7 @@ def me(
     response_model=PermissionCatalogOut,
     summary="Permission catalogue and the role matrix",
 )
-def permission_catalogue(principal: Principal = Depends(current_principal)):
+def permission_catalogue(principal: Principal = Depends(super_admin())):
     """Static reference so a frontend can render an accurate permissions screen
     without hardcoding the matrix."""
     return PermissionCatalogOut(
@@ -101,7 +102,7 @@ def permission_catalogue(principal: Principal = Depends(current_principal)):
 @router.get("/roles", response_model=list[RoleOut], summary="List role grants")
 def list_roles(
     company_id: str | None = Query(default=None, alias="for_company"),
-    principal: Principal = Depends(require("role.read")),
+    principal: Principal = Depends(super_admin("role.read")),
     db: Session = Depends(get_leadai_db),
 ):
     query = db.query(LeadUserRole).filter(LeadUserRole.IsDeleted == False)  # noqa: E712
@@ -127,7 +128,7 @@ def list_roles(
 def grant_role(
     payload: RoleGrant,
     request: Request,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     email = payload.user_email.lower()
@@ -217,7 +218,7 @@ def update_role(
     grant_id: str,
     payload: RoleUpdate,
     request: Request,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     row = db.get(LeadUserRole, grant_id)

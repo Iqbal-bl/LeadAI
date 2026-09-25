@@ -23,7 +23,7 @@ from ..models import (
     LeadUserRole,
     utcnow,
 )
-from ..rbac import Principal, require, resolve_scope, visible_roles
+from ..rbac import Principal, require, resolve_scope, super_admin, visible_roles
 from ..schemas import MemberCreate, MemberListOut, MemberOut, MemberUpdate, UserManagementCreate, UserManagementOut, UserManagementUpdate
 
 router = APIRouter(prefix="/user-management", tags=["LeadAI • User Management"])
@@ -172,8 +172,25 @@ async def _update_idp_user(
 async def create_user(
     payload: UserManagementCreate,
     request: Request,
+    # Super admin only. This creates a real login AND writes a role for it, with any role
+    # the caller names (including `Admin`), so it must never be open to ordinary staff.
+    # It used to have no permission check at all: any signed-in user could make
+    # themselves a super admin. Company admins add their own team through /members.
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
+    if payload.role and payload.role not in (ROLE_ADMIN, ROLE_COMPANY_ADMIN, ROLE_MANAGER, ROLE_EMPLOYEE):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown role '{payload.role}'. Use one of: "
+                   f"{ROLE_ADMIN}, {ROLE_COMPANY_ADMIN}, {ROLE_MANAGER}, {ROLE_EMPLOYEE}.",
+        )
+    if payload.role != ROLE_ADMIN and not payload.client_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="client_id is required for every role except Admin.",
+        )
+
     # 1. Create user in the identity server
     try:
         idp_result = await _create_idp_user(
@@ -246,7 +263,7 @@ async def create_user(
         db,
         action=A.USER_CREATED,
         client_id=payload.client_id,
-        actor_email=payload.email,
+        actor_email=principal.email,        # who did it, not the user who was created
         entity_type="user",
         entity_id=str(user_id),
         message=f"Created user '{payload.email}' as {granted_role}",
