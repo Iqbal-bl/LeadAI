@@ -21,6 +21,7 @@ What is new:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -76,6 +77,61 @@ def _emit_trace(meta: dict, system: str, messages: list, reply: str | None) -> N
             logger.warning("[LeadAI gateway] trace hook failed", exc_info=True)
 
 
+# ------------------------------------------------------------------- shared HTTP client
+# One connection pool for every model call. The first live phone call showed a 2.7 s embedding
+# request and a 2.8 s greeting: each call opened a brand-new connection to the provider,
+# TLS handshake included, and from India to a US endpoint that alone costs a second or more.
+# A pooled keep-alive connection is reused across turns and across calls. httpx.Client is
+# thread-safe, and the brain runs in worker threads.
+_client = None
+_client_lock = threading.Lock()
+KEEPALIVE_SECONDS = 30.0        # shorter than providers' idle timeouts, so we rarely reuse a dead one
+
+
+def shared_client():
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                import httpx
+
+                _client = httpx.Client(
+                    limits=httpx.Limits(max_keepalive_connections=20, keepalive_expiry=KEEPALIVE_SECONDS),
+                )
+    return _client
+
+
+def warm_connection() -> None:
+    """Open the model connection ahead of need (one tiny request, no tokens).
+
+    A phone call rings for several seconds before pickup. Opening the connection then means
+    the greeting, the first thing the caller hears, does not pay for the handshake. Never
+    raises: warming is an optimisation.
+    """
+    if not settings.llm_enabled:
+        return
+    try:
+        shared_client().get(
+            f"{settings.openai_base_url}/models/{settings.openai_model}",
+            headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+            timeout=8.0,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("[LeadAI gateway] connection warm-up failed", exc_info=True)
+
+
+def _post(url: str, *, headers: dict, json: dict, timeout: float):
+    return shared_client().post(url, headers=headers, json=json, timeout=timeout)
+
+
+def _is_stale_connection(exc: Exception) -> bool:
+    """A reused connection the server had already closed. The request never ran, so retrying
+    once on a fresh connection is safe, whatever the profile's retry policy."""
+    import httpx
+
+    return isinstance(exc, httpx.RemoteProtocolError | httpx.ReadError | httpx.WriteError)
+
+
 def provider() -> str:
     return "openai" if settings.llm_enabled else "builtin-extractive"
 
@@ -127,12 +183,12 @@ def complete(
 
     started = time.perf_counter()
     reply: str | None = None
-    for attempt in range(prof.retries + 1):
+    stale_retry_used = False
+    attempt = 0
+    while attempt < prof.retries + 1:
         meta["attempts"] = attempt + 1
         try:
-            import httpx
-
-            resp = httpx.post(
+            resp = _post(
                 f"{settings.openai_base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {settings.openai_api_key}"},
                 json=payload,
@@ -148,9 +204,15 @@ def complete(
             break
         except Exception as exc:  # noqa: BLE001
             meta["error"] = str(exc)[:200]
+            if not stale_retry_used and _is_stale_connection(exc):
+                # Not a failed attempt: the pooled connection was dead. Try a fresh one.
+                stale_retry_used = True
+                logger.info("[LeadAI gateway] stale pooled connection (%s) — retrying once", exc)
+                continue
             if attempt < prof.retries and _is_transient(exc):
                 logger.info("[LeadAI gateway] transient failure (%s) — retrying", exc)
                 time.sleep(_BACKOFF_SECONDS * (attempt + 1))
+                attempt += 1
                 continue
             logger.warning("[LeadAI gateway] completion failed (%s) — falling back", exc)
             break

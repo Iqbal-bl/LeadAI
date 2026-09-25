@@ -48,13 +48,17 @@ sarvamai
 
 # --- Voice / Audio ---
 pysilero_vad==2.1.1
+# Pipecat phone pipeline (LeadAI/voice). Do NOT add the [deepgram] extra: it upgrades
+# deepgram-sdk to 7.x, which breaks outbound/bot/deepgram_speech.py (needs the 4.8.1 pin above).
+pipecat-ai[silero,websocket,sarvam]==1.11.0
 webrtcvad-wheels==2.0.14
 SpeechRecognition==3.14.3
 pydub==0.25.1
 librosa==0.11.0
 soundfile==0.13.1
 soxr==1.0.0
-onnxruntime==1.22.1
+# 1.24.x is required by Pipecat's Silero VAD; pysilero_vad above runs fine on it.
+onnxruntime==1.24.4
 audioread==3.0.1
 
 # --- Twilio (SMS / Voice) ---

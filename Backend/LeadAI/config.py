@@ -75,6 +75,24 @@ class LeadAISettings:
     # Conversation engine (LeadAI/engine): off | observe | enforce. See engine/bridge.py.
     # "observe" judges every reply and records a verdict without changing anything.
     engine_mode: str = os.getenv("ENGINE_MODE", "off").strip().lower()
+    # Serialise turns per conversation (MySQL advisory lock). Off by default: it holds one
+    # extra DB connection per in-flight turn, so enable it once the pool is sized for that.
+    # Write a row to leadai_events for every turn (engine/outbox.py). Off by default until
+    # the table exists in the target database and something consumes it.
+    engine_events: bool = _b("ENGINE_EVENTS", "false")
+    # Decision trace (engine/trace.py): a log line per decision (ENGINE_TRACE_LOG) and a JSON
+    # trace stored on the message (ENGINE_TRACE_STORE). Both on: they hold ids, scores and
+    # reasons, never message text.
+    engine_trace_log: bool = _b("ENGINE_TRACE_LOG", "true")
+    engine_trace_store: bool = _b("ENGINE_TRACE_STORE", "true")
+    # Which pipeline drives LeadAI phone calls (LeadAI/voice/routing.py):
+    #   legacy  the existing /media-stream loop in outbound/app.py (default)
+    #   canary  Pipecat only for the numbers in VOICE_PIPECAT_NUMBERS, legacy for the rest
+    #   pipecat Pipecat for every LeadAI call
+    voice_pipeline: str = os.getenv("VOICE_PIPELINE", "legacy").strip().lower()
+    voice_pipecat_numbers: str = os.getenv("VOICE_PIPECAT_NUMBERS", "")
+    conversation_lock: bool = _b("LEADAI_CONVERSATION_LOCK", "false")
+    conversation_lock_timeout: int = _i("LEADAI_CONVERSATION_LOCK_TIMEOUT", 30)
     handoff_confidence_threshold: float = _f("LEADAI_HANDOFF_THRESHOLD", 0.40)
     chunk_max_chars: int = _i("LEADAI_CHUNK_MAX_CHARS", 900)
     chunk_overlap: int = _i("LEADAI_CHUNK_OVERLAP", 150)

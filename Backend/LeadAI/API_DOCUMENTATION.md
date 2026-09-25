@@ -753,6 +753,11 @@ Provider selection: Exotel if configured → falls back to your Twilio leg → f
 
 #### `GET /voice/conversations/{id}/calls` · `call.read`
 
+#### Call recordings · `call.read`
+Every call object (`calls[]` in `GET /inbox/{id}`, `GET /voice/conversations/{id}/calls`, and the call-transcript views) carries `recording_url`: a **signed link that expires** (`MINIO_PRESIGN_SECONDS`, 15 minutes here) to the call's audio, or `null` when the call has no recording. Roles without `call.read` always get `null`.
+`GET /voice/recordings/{call_sid}` returns a fresh link when one has expired: `{"call_sid": "...", "url": "...", "expires_in_seconds": 900}`. It answers 404 for a call that is not yours or has no recording.
+Play it with a plain `<audio src="{recording_url}">`: the signature is in the link, so no auth header is needed.
+
 #### `POST /voice/calls/{id}/hangup` · `call.initiate`
 Records the reason in your existing `globals.call_hangup_reasons` so your transcript annotation stays accurate.
 

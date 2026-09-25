@@ -40,6 +40,12 @@ from .. import activity
 from ..activity import A
 from ..config import settings
 from ..engine import bridge as engine_bridge
+from ..engine import control as engine_control
+from ..engine import outbox
+from ..engine.events import TurnEvent
+from ..engine.locks import conversation_lock
+from ..engine.trace import TurnTrace
+from ..engine.trace import step as trace_step
 from ..models import (
     CHANNEL_WEB,
     Lead,
@@ -133,6 +139,7 @@ def apply_threshold(
     conversation: LeadConversation,
     lead: Lead,
     request: Request | None = None,
+    trace: TurnTrace | None = None,
 ) -> tuple[bool, bool]:
     """Evaluate the lead against the company's threshold.
 
@@ -156,6 +163,13 @@ def apply_threshold(
     crossed = is_above and not was_above and lead.ThresholdCrossedAt is None
     if crossed:
         lead.ThresholdCrossedAt = utcnow()
+    trace_step(
+        trace, "threshold",
+        "crossed the bar now: notify once" if crossed
+        else ("above the bar" if is_above else "below the bar"),
+        score=score, threshold=threshold, was_above=was_above, is_above=is_above,
+        already_notified=lead.ThresholdCrossedAt is not None and not crossed,
+    )
 
     if not crossed:
         return is_above, False
@@ -579,6 +593,27 @@ def _last_customer_message_at(db: Session, conversation: LeadConversation):
     return row.CreatedAt if row else None
 
 
+def _event(db: Session, type_: str, conversation: LeadConversation, *, speaker: str, **fields) -> None:
+    """Queue a turn event on this transaction (a no-op unless ENGINE_EVENTS is on).
+
+    `text`, `confidence`, `latency_ms` and `turn_id` are first-class event fields; anything
+    else lands in `data`. Queued, not written: it commits or rolls back with the turn.
+    """
+    known = {k: fields.pop(k) for k in ("text", "confidence", "latency_ms", "turn_id") if k in fields}
+    outbox.emit(
+        db,
+        TurnEvent(
+            type=type_,
+            client_id=conversation.ClientId,
+            conversation_id=conversation.Id,
+            channel=conversation.Channel or "web",
+            speaker=speaker,
+            data=fields,
+            **known,
+        ),
+    )
+
+
 def _broadcast_inbox(client_id: str, payload: dict) -> None:
     if ws_manager is None:
         return
@@ -597,6 +632,32 @@ def _broadcast_conversation(conversation_id: str, payload: dict) -> None:
 # the pipeline
 # =========================================================================== #
 def handle_customer_turn(
+    db: Session,
+    client: Client,
+    conversation: LeadConversation,
+    text: str,
+    *,
+    request: Request | None = None,
+    source: str = "widget",
+    deliver_reply: bool = False,
+    external_message_id: str | None = None,
+) -> TurnResult:
+    """Process one inbound customer message, end to end, one turn at a time per
+    conversation (when LEADAI_CONVERSATION_LOCK is on; see engine/locks.py).
+
+    Two messages arriving together no longer race: the second waits, then runs with the
+    first one's message and reply already in its history.
+    """
+    conversation_id = conversation.Id
+    with conversation_lock(db, conversation_id):
+        return _run_customer_turn(
+            db, client, conversation, text,
+            request=request, source=source, deliver_reply=deliver_reply,
+            external_message_id=external_message_id,
+        )
+
+
+def _run_customer_turn(
     db: Session,
     client: Client,
     conversation: LeadConversation,
@@ -628,6 +689,15 @@ def handle_customer_turn(
     be unrecoverable.
     """
     client_id = client.Id
+    trace = TurnTrace(
+        conversation_id=conversation.Id, client_id=client_id,
+        channel=conversation.Channel, turn_id=external_message_id,
+    )
+    trace_step(trace, "receive", f"customer message via {source}",
+               msg_chars=len(text or ""), deliver_reply=deliver_reply,
+               external_id_present=bool(external_message_id),
+               conversation_status=conversation.Status,
+               control_status=engine_control.get_control(conversation))
 
     # Centralised in memory.thread_history() so the voice path and the chat path
     # can never window history differently. Same query as before.
@@ -652,6 +722,11 @@ def handle_customer_turn(
                 len(carryover),
             )
 
+    trace_step(trace, "memory", "history loaded",
+               history_msgs=len(history), window_turns=memory.LLM_WINDOW_TURNS,
+               thread_truncated=memory.thread_is_truncated(history),
+               carryover_applied=bool(carryover), carryover_chars=len(carryover))
+
     inbound = LeadMessage(
         ClientId=client_id,
         ConversationId=conversation.Id,
@@ -663,14 +738,18 @@ def handle_customer_turn(
     db.flush()
     history.append(inbound)
     conversation.LastMessageAt = utcnow()
+    _event(db, "turn.received", conversation, speaker="customer", text=text,
+           turn_id=external_message_id, source=source)
 
     # A customer who types their number into the chat ("yes it's 98765 43210") has given
     # it to us: keep it on the customer record, encrypted, so staff see it masked and can
     # Reveal it. Runs before the human-takeover check, so it works while an agent is on it.
-    contact_capture.capture_phone(
+    captured = contact_capture.capture_phone(
         db, db.get(LeadCustomer, conversation.CustomerId), text,
         client_id=client_id, conversation_id=conversation.Id, actor=source,
     )
+    # Whether a number was saved, never the number.
+    trace_step(trace, "phone_capture", "phone number saved" if captured else "nothing to save")
 
     # Broadcast customer message immediately so staff sees it before AI processing
     _broadcast_conversation(
@@ -713,14 +792,42 @@ def handle_customer_turn(
         request=request,
     )
 
+    # ---- stopped from outside (paused / terminated): the AI stays silent -----
+    # Set by staff or the monitor agent (engine/control.py). The message is stored so
+    # nothing the customer said is lost, but nothing else happens: no reply, and no
+    # re-scoring, so a lead that was nullified stays nullified.
+    if engine_control.is_stopped(conversation):
+        conversation.MessageCount = len(history)
+        _event(db, "turn.skipped", conversation, speaker="system",
+               reason=f"conversation {engine_control.get_control(conversation)}")
+        trace_step(trace, "control",
+                   f"stopped: {engine_control.get_control(conversation)}; AI silent, no re-scoring",
+                   reason=conversation.ControlReason, set_by=conversation.ControlBy)
+        inbound.TraceJson = trace.as_json()
+        db.commit()
+        return TurnResult(
+            reply="",
+            confidence=1.0,
+            needs_human=False,
+            handed_off=conversation.Status in ("needs_human", "assigned"),
+            lead_status=lead.Status,
+            lead_score=lead.Score or 0,
+            conversation_id=conversation.Id,
+            ai_replied=False,
+        )
+
     # ---- a human has taken over: the AI stays silent ----------------------
     if conversation.Status == "assigned":
-        ai_engine.qualify(db, client_id, lead, history)
+        _event(db, "turn.skipped", conversation, speaker="system", reason="human took over")
+        trace_step(trace, "takeover", "a human has taken over: AI silent, lead still scored",
+                   assigned_to_set=bool(conversation.AssignedUserEmail))
+        ai_engine.qualify(db, client_id, lead, history, trace=trace)
         conversation.Summary, conversation.NextStep = ai_engine.summarize(
-            db, client_id, client.Name, lead, history
+            db, client_id, client.Name, lead, history, trace=trace
         )
         conversation.MessageCount = len(history)
-        above, crossed = apply_threshold(db, client, conversation, lead, request)
+        above, crossed = apply_threshold(db, client, conversation, lead, request, trace=trace)
+        inbound.TraceJson = trace.as_json()
         db.commit()
 
         return TurnResult(
@@ -742,6 +849,9 @@ def handle_customer_turn(
     # questions. It gets one short fixed line, with no retrieval and no LLM call.
     already_completed = conversation.AiCompletedAt is not None
     if already_completed and reply_cleanup.is_acknowledgement(text):
+        trace_step(trace, "shortcut",
+                   "conversation already complete and message is an acknowledgement: "
+                   "fixed closing line, no retrieval, no model call")
         result = {
             "reply": reply_cleanup.closing_reply(client.Name, text),
             "confidence": 1.0,
@@ -753,17 +863,36 @@ def handle_customer_turn(
             "latency_ms": 0,
         }
     else:
+        # Once the thread outgrows the model's window, re-supply what is already
+        # established (facts, summary) so an early detail is not forgotten. "" for
+        # short threads, where the model sees everything anyway.
+        state_note = memory.thread_state_note(db, conversation, history)
+        trace_step(trace, "state_note",
+                   "added: thread outgrew the model window" if state_note else "not needed",
+                   chars=len(state_note), already_completed=already_completed)
         result = ai_engine.answer(
             db, client_id, client.Name, text, history=history, channel="chat",
             carryover=carryover,
             # A customer who keeps talking after completion asked something real:
             # continue from where we stopped, do not start over.
-            session_note=reply_cleanup.COMPLETED_NOTE if already_completed else "",
+            session_note="\n\n".join(
+                n for n in (state_note, reply_cleanup.COMPLETED_NOTE if already_completed else "") if n
+            ),
+            trace=trace,
         )
         # Judge (observe) or decide (enforce) the reply; a no-op unless ENGINE_MODE is set.
         result = engine_bridge.apply(
             result, text=text, client_id=client_id, conversation_id=conversation.Id,
             channel=conversation.Channel,
+        )
+        note = result.get("engine")
+        trace_step(
+            trace, "engine",
+            "off" if not note else f"{note['mode']}: verdict={note['verdict']}",
+            **({} if not note else {
+                "unsupported_figures": note["unsupported_count"], "declined_in_words": note["declined"],
+                "escalation": note["escalation"],
+            }),
         )
         if result.get("ends_conversation"):
             conversation.AiCompletedAt = utcnow()
@@ -784,6 +913,10 @@ def handle_customer_turn(
     db.add(outbound)
     db.flush()
     history.append(outbound)
+    _event(db, "turn.replied", conversation, speaker="ai", text=result["reply"],
+           confidence=result["confidence"], latency_ms=result["latency_ms"],
+           model=result["model"], sources=len(result["sources"]),
+           needs_human=bool(result["needs_human"]), **engine_bridge.audit_meta(result))
 
     activity.log(
         db,
@@ -806,9 +939,9 @@ def handle_customer_turn(
     )
 
     previous_status = lead.Status
-    ai_engine.qualify(db, client_id, lead, history)
+    ai_engine.qualify(db, client_id, lead, history, trace=trace)
     conversation.Summary, conversation.NextStep = ai_engine.summarize(
-        db, client_id, client.Name, lead, history
+        db, client_id, client.Name, lead, history, trace=trace
     )
     conversation.MessageCount = len(history)
     conversation.LastMessageAt = utcnow()
@@ -832,7 +965,7 @@ def handle_customer_turn(
             request=request,
         )
 
-    above, crossed = apply_threshold(db, client, conversation, lead, request)
+    above, crossed = apply_threshold(db, client, conversation, lead, request, trace=trace)
 
     handed_off = False
     if result.get("ends_conversation") and conversation.Status == "needs_human":
@@ -843,6 +976,8 @@ def handle_customer_turn(
         conversation.Status = "needs_human"
         conversation.HandoffReason = (result["handoff_reason"] or "")[:300]
         handed_off = True
+        _event(db, "handoff.requested", conversation, speaker="ai",
+               reason=conversation.HandoffReason, confidence=result["confidence"])
         activity.log(
             db,
             action=A.AI_HANDOFF,
@@ -857,6 +992,17 @@ def handle_customer_turn(
             request=request,
         )
 
+    if result["needs_human"] and not handed_off:
+        trace_step(trace, "handoff", "AI wanted a human, but no new handoff was raised",
+                   conversation_status=conversation.Status, reason=result.get("handoff_reason"))
+    else:
+        trace_step(trace, "handoff",
+                   "raised: conversation now needs a human" if handed_off else "none needed",
+                   reason=conversation.HandoffReason if handed_off else None,
+                   conversation_status=conversation.Status)
+    trace_step(trace, "commit", "turn committed as one transaction",
+               reply_chars=len(result["reply"] or ""), messages_in_thread=len(history))
+    outbound.TraceJson = trace.as_json()
     db.commit()
 
     # ---- post-commit side effects ----------------------------------------
@@ -865,7 +1011,10 @@ def handle_customer_turn(
         # An AI reply that Meta rejected now shows as failed in the inbox rather
         # than sitting there looking delivered.
         delivery = deliver(db, conversation, result["reply"], message=outbound)
+        trace_step(trace, "deliver", f"delivery {delivery.status}",
+                   channel=conversation.Channel, error=getattr(delivery, "error", None))
         if delivery.status != "not_applicable":
+            outbound.TraceJson = trace.as_json()
             db.commit()
 
     _broadcast_conversation(

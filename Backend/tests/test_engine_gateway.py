@@ -1,6 +1,6 @@
 """LLM gateway: retry only on transient failures, per-channel profiles, trace hooks.
 
-The network is faked (httpx.post). Run: python tests/test_engine_gateway.py
+The network is faked (gateway._post). Run: python tests/test_engine_gateway.py
 """
 import conftest_stub  # noqa: F401  — installs core.* stubs before LeadAI imports
 
@@ -39,7 +39,7 @@ def _ok(text="hello"):
 
 
 class _Net:
-    """Scripted httpx.post: each call pops the next outcome (a response or an exception)."""
+    """Scripted gateway._post: each call pops the next outcome (a response or an exception)."""
 
     def __init__(self, *outcomes):
         self.outcomes = list(outcomes)
@@ -54,13 +54,13 @@ class _Net:
 
 
 def _run(net, settings=None, **kwargs):
-    saved = (httpx.post, gateway.settings, gateway.time.sleep)
-    httpx.post, gateway.settings, gateway.time.sleep = net, settings or _Settings(), lambda s: None
+    saved = (gateway._post, gateway.settings, gateway.time.sleep)
+    gateway._post, gateway.settings, gateway.time.sleep = net, settings or _Settings(), lambda s: None
     gateway.clear_trace_hooks()
     try:
         return gateway.complete("sys", [{"role": "user", "content": "hi"}], **kwargs)
     finally:
-        httpx.post, gateway.settings, gateway.time.sleep = saved
+        gateway._post, gateway.settings, gateway.time.sleep = saved
 
 
 def test_no_key_returns_none_without_calling_the_network():
@@ -133,26 +133,59 @@ def test_json_mode_sets_response_format():
 
 def test_trace_hook_sees_every_call_and_cannot_break_it():
     seen = []
-    saved = (httpx.post, gateway.settings)
-    httpx.post, gateway.settings = _Net(_ok("traced")), _Settings()
+    saved = (gateway._post, gateway.settings)
+    gateway._post, gateway.settings = _Net(_ok("traced")), _Settings()
     gateway.clear_trace_hooks()
     gateway.add_trace_hook(lambda meta, system, messages, reply: seen.append((meta["model"], reply)))
     gateway.add_trace_hook(lambda *a: 1 / 0)  # a broken observer must not affect the reply
     try:
         text, _ = gateway.complete("sys", [])
     finally:
-        httpx.post, gateway.settings = saved
+        gateway._post, gateway.settings = saved
         gateway.clear_trace_hooks()
     assert text == "traced" and seen == [("fake-model", "traced")]
 
 
+def test_a_stale_pooled_connection_is_retried_once_even_on_the_voice_profile():
+    # A reused keep-alive connection the server already closed: the request never ran, so one
+    # immediate retry on a fresh connection is safe, and it is not counted as a failed attempt.
+    text, meta = _run(_Net(httpx.RemoteProtocolError("Server disconnected"), _ok("fresh")), profile="voice")
+    assert text == "fresh" and meta["attempts"] == 1
+
+
+def test_a_stale_connection_is_retried_only_once():
+    net = _Net(httpx.RemoteProtocolError("gone"), httpx.RemoteProtocolError("gone again"), _ok("never"))
+    text, meta = _run(net, profile="voice")
+    assert text is None and len(net.payloads) == 2
+
+
+def test_every_model_call_shares_one_keep_alive_connection_pool():
+    # Opening a fresh connection (TLS handshake included) per call cost ~1-2 s from India to a US
+    # endpoint on the first live call. The pool is shared, thread-safe, and expires idle connections
+    # before the provider does.
+    assert gateway.shared_client() is gateway.shared_client()
+    assert gateway.KEEPALIVE_SECONDS < 60
+
+
+def test_warming_the_connection_never_raises_and_does_nothing_without_a_key():
+    saved = gateway.settings
+    try:
+        gateway.settings = _NoKey()
+        gateway.warm_connection()                       # no key: returns without a request
+        gateway.settings = _Settings()
+        gateway.settings.openai_base_url = "http://127.0.0.1:1"      # unreachable
+        gateway.warm_connection()                       # a failing warm-up is swallowed
+    finally:
+        gateway.settings = saved
+
+
 def test_llm_wrapper_keeps_its_signature_and_delegates():
-    saved = (httpx.post, gateway.settings)
-    httpx.post, gateway.settings = _Net(_ok("via wrapper")), _Settings()
+    saved = (gateway._post, gateway.settings)
+    gateway._post, gateway.settings = _Net(_ok("via wrapper")), _Settings()
     try:
         text, meta = llm.complete("sys", [], temperature=0.1, max_tokens=99)
     finally:
-        httpx.post, gateway.settings = saved
+        gateway._post, gateway.settings = saved
     assert text == "via wrapper" and meta["profile"] == "chat"
 
 

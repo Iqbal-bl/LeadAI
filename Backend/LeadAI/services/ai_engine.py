@@ -29,6 +29,7 @@ from IDF-weighted sentence coverage rather than from the LLM.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 
@@ -36,6 +37,8 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..engine.text import split_sentences
+from ..engine.trace import TurnTrace
+from ..engine.trace import step as trace_step
 from ..models import Lead, LeadCompanySettings, LeadConversation, LeadMessage
 from . import llm, memory, reply_cleanup, script_engine, vectorstore
 
@@ -192,8 +195,19 @@ def answer(
     script=None,
     carryover: str = "",
     session_note: str = "",
+    trace: TurnTrace | None = None,
+    query_override: str | None = None,
 ) -> dict:
     """Answer strictly from this company's knowledge base.
+
+    `trace`, when given, records every decision made here (see engine/trace.py).
+
+    `query_override` is an English version of a question asked in another language. The
+    retriever only extracts keywords from Latin letters, so a Hindi or Punjabi question had
+    NO keywords: its lexical coverage was always 0, its confidence could never rise above the
+    embedding score alone, and nearly every non-English turn was flagged as a hand-off. When
+    given, it is used for retrieval, for the confidence score and for spotting a request for
+    a human; the model still sees the customer's own words.
 
     `session_note` is an optional instruction about the state of THIS conversation
     (e.g. it is already complete), injected as its own system turn.
@@ -209,6 +223,8 @@ def answer(
     """
     history = history or []
     threshold, top_k = company_thresholds(db, client_id)
+    trace_step(trace, "thresholds", "loaded", handoff_threshold=threshold, top_k=top_k,
+               history_msgs=len(history), channel=channel)
 
     # A greeting is not a knowledge question. Running "hi" through retrieval
     # scores ~0 and would escalate a customer who has not asked anything yet.
@@ -230,6 +246,9 @@ def answer(
             generated = reply_cleanup.strip_control_tokens((generated or "").strip())
             if generated:
                 reply, meta = generated, llm_meta
+        trace_step(trace, "greeting", "short-circuit: no retrieval, confidence 1.0",
+                   llm_used=bool(reply), model=meta.get("model", "greeting-template"),
+                   latency_ms=meta.get("latency_ms", 0), prompt_key="greeting")
         return {
             "reply": reply
             or (
@@ -246,7 +265,9 @@ def answer(
             "prompt_used": greeting,
         }
 
-    wants_human = bool(HUMAN_REQUEST.search(question or ""))
+    scoring_q = query_override or question
+    wants_human = bool(HUMAN_REQUEST.search(question or "") or HUMAN_REQUEST.search(query_override or ""))
+    trace_step(trace, "human_request", "customer asked for a human" if wants_human else "no")
 
     # Retrieval runs on a HISTORY-AWARE query, not the raw utterance.
     #
@@ -259,21 +280,28 @@ def answer(
     # Scoring below still uses the ORIGINAL `question`: lexical coverage measures
     # how well a retrieved sentence answers what the customer actually asked, and
     # padding that side with carried-over words would inflate confidence.
-    search_query = memory.retrieval_query(question, history)
+    search_query = memory.retrieval_query(scoring_q, history)
 
     hits = vectorstore.search(db, client_id, search_query, top_k=top_k)
     idf, unseen = vectorstore.idf_map(db, client_id)
     top_score = hits[0]["score"] if hits else 0.0
+    trace_step(trace, "retrieve", f"{len(hits)} chunks",
+               query_expanded=(search_query != scoring_q), translated=bool(query_override), top_k=top_k,
+               top_score=top_score, chunk_ids=[h["chunk_id"] for h in hits],
+               scores=[round(h["score"], 3) for h in hits])
 
     # Sentence-level coverage is a sharper signal than chunk-level: a 900-char
     # chunk can dilute an exact answer that sits in a single line.
-    sentence_scores = _scored_sentences(question, hits, idf, unseen)
+    sentence_scores = _scored_sentences(scoring_q, hits, idf, unseen)
     coverage = max(
-        (vectorstore.lexical_coverage(question, s, idf, unseen) for _, s in sentence_scores[:6]),
+        (vectorstore.lexical_coverage(scoring_q, s, idf, unseen) for _, s in sentence_scores[:6]),
         default=0.0,
     )
     # Blend: chunk-level retrieval strength (45%) + best-sentence coverage (55%).
     confidence = round(min(1.0, 0.45 * min(top_score / 0.6, 1.0) + 0.55 * coverage), 3)
+    trace_step(trace, "confidence", f"{confidence}", top_score=top_score,
+               sentence_coverage=coverage, formula="0.45*min(top_score/0.6,1)+0.55*coverage",
+               threshold=threshold, meets_threshold=confidence >= threshold)
 
     system_prompt, script = script_engine.build_system_prompt(
         db, client_id, company_name, channel=channel, script=script, wants_human=wants_human
@@ -344,6 +372,12 @@ def answer(
             if confidence < threshold
             else ""
         )
+        trace_step(trace, "prompt", prompt_key,
+                   script_id=getattr(script, "Id", None), script_name=getattr(script, "Name", None),
+                   window_turns=len(chat), carryover_chars=len(carryover),
+                   session_note_chars=len(session_note), context_chars=len(context),
+                   weak_match_hint=bool(weak_match),
+                   max_tokens=220 if channel == "voice" else 600)
         chat.append(
             {
                 "role": "user",
@@ -357,23 +391,44 @@ def answer(
         reply, meta = llm.complete(
             system_prompt, chat, max_tokens=220 if channel == "voice" else 600
         )
+        trace_step(trace, "generate", "llm reply" if reply is not None else "llm call failed",
+                   model=meta.get("model"), latency_ms=meta.get("latency_ms"),
+                   prompt_tokens=meta.get("prompt_tokens"),
+                   completion_tokens=meta.get("completion_tokens"),
+                   attempts=meta.get("attempts"), error=meta.get("error"))
 
     if reply is None:
-        reply = _extractive_reply(
-            company_name, question, hits, confidence, wants_human, threshold, idf, unseen
+        reason = (
+            "human_requested" if wants_human
+            else "llm_disabled" if not settings.llm_enabled
+            else "llm_call_failed"
         )
-        meta.setdefault("model", "builtin-extractive")
+        reply = _extractive_reply(
+            company_name, scoring_q, hits, confidence, wants_human, threshold, idf, unseen
+        )
+        # The reply came from the knowledge base, not the model, so say so. This used to
+        # keep the model's name from the failed call, mislabelling the stored message.
+        meta["model"] = "builtin-extractive"
+        trace_step(trace, "generate", "extractive fallback", reason=reason,
+                   note="reply quoted from company knowledge only; cannot invent facts")
 
     # The model signals "this conversation is finished" with [END_CALL]. The script's
     # closing message promises an advisor follow-up, so that is a handoff too.
     ends_conversation = reply_cleanup.has_end_call_token(reply)
     needs_human = wants_human or confidence < threshold or ends_conversation
+    trace_step(
+        trace, "answer_decision", "hand off to human" if needs_human else "answer",
+        wants_human=wants_human, low_confidence=confidence < threshold,
+        ends_conversation=ends_conversation, confidence=confidence, threshold=threshold,
+        reply_chars=len(reply or ""),
+    )
     return {
         # [END_CALL] is a voice control token; it must never reach a customer.
         "reply": reply_cleanup.strip_control_tokens((reply or "").strip()),
         "confidence": confidence,
         "needs_human": needs_human,
         "ends_conversation": ends_conversation,
+        "wants_human": wants_human,
         "handoff_reason": (
             "Customer asked to speak to a human"
             if wants_human
@@ -475,14 +530,53 @@ _ANALYSIS_PROMPT = """You analyse a sales conversation between a company's assis
 "product": the specific product or service the customer wants, as a short name (for example "Business Loan"), else "unknown".
 "sentiment": "positive", "neutral" or "negative", about the company.
 "summary": at most 3 short plain sentences for the sales rep who will take this over: who the customer is, what they want, what was established.
-"next_step": one sentence with the single best action for the rep."""
+"next_step": one sentence with the single best action for the rep.
+"facts": a JSON array of at most 12 short strings (each under 100 characters): durable things the CUSTOMER stated about themselves or their situation that a sales rep would need later, such as name, city, employer or business, income, family or property details, deadlines, constraints and preferences. If "Already known facts" are given, start from them: keep each unless the customer corrected it, and add new ones. Never include anything only the assistant said. Use [] if there are none."""
 
 _VALID_INTENTS = {"ready_to_buy", "evaluating", "comparing", "browsing", "not_interested"}
 _VALID_TIMELINES = {"immediate", "this_month", "next_quarter", "unknown"}
 _VALID_SENTIMENTS = {"positive", "neutral", "negative"}
 
 
-def _llm_analysis(messages: list[LeadMessage]) -> dict | None:
+MAX_FACTS = 12
+MAX_FACT_CHARS = 100
+
+
+def clean_facts(raw) -> list[str]:
+    """Normalise a model-supplied facts list: short single-line strings, de-duplicated."""
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, (str, int, float)):
+            continue
+        fact = re.sub(r"\s+", " ", str(item)).strip(" -•" + chr(9))[:MAX_FACT_CHARS]
+        if fact and fact.lower() not in seen:
+            seen.add(fact.lower())
+            out.append(fact)
+    return out[:MAX_FACTS]
+
+
+def merge_facts(existing: list[str], proposed: list[str]) -> list[str]:
+    """Combine the stored facts with the model's updated list, never losing memory.
+
+    The model is asked for the complete updated list, so normally that list wins (it is
+    how a correction replaces an old fact). But a failed or truncated answer must not
+    erase what we already know, so a list that is less than half the size of the stored
+    one is treated as suspect and merged instead of trusted.
+    """
+    if not proposed:
+        return existing
+    if len(proposed) * 2 < len(existing):
+        combined = list(proposed)
+        lowered = {f.lower() for f in combined}
+        combined += [f for f in existing if f.lower() not in lowered]
+        return combined[:MAX_FACTS]
+    return proposed
+
+
+def _llm_analysis(messages: list[LeadMessage], known_facts: list[str] | None = None) -> dict | None:
     """Ask the LLM to read the conversation. Returns a validated dict, or None.
 
     None (LLM off, call failed, unusable output) means "use the keyword rules"; this
@@ -501,6 +595,8 @@ def _llm_analysis(messages: list[LeadMessage]) -> dict | None:
         f"{reply_cleanup.strip_control_tokens(m.Content)}"
         for m in turns[-30:]
     )
+    if known_facts:
+        transcript += "\n\nAlready known facts: " + json.dumps(known_facts, ensure_ascii=False)
     try:
         data, _ = llm.complete_json(_ANALYSIS_PROMPT, [{"role": "user", "content": transcript}])
     except Exception as exc:  # noqa: BLE001
@@ -529,6 +625,7 @@ def _llm_analysis(messages: list[LeadMessage]) -> dict | None:
         "sentiment": pick("sentiment", _VALID_SENTIMENTS),
         "summary": text("summary", 2000),
         "next_step": text("next_step", 500),
+        "facts": clean_facts(data.get("facts")),
     }
 
 
@@ -537,6 +634,7 @@ def qualify(
     client_id: str,
     lead: Lead,
     messages: list[LeadMessage],
+    trace: TurnTrace | None = None,
 ) -> Lead:
     """Recompute the lead's qualification state in place. Caller commits.
 
@@ -544,6 +642,12 @@ def qualify(
     row so the dashboard can show *why* a lead is hot, which is what makes a
     sales team trust the number.
     """
+    before = {
+        "intent": lead.Intent, "timeline": lead.Timeline, "sentiment": lead.Sentiment,
+        "status": lead.Status, "score": lead.Score,
+        "budget_known": bool(lead.Budget and lead.Budget != "unknown"),
+        "product_known": bool(lead.Product and lead.Product != "unknown"),
+    }
     customer_text = " ".join(
         m.Content for m in messages if m.Sender == "customer" and m.Content
     ).lower()
@@ -579,8 +683,10 @@ def qualify(
     # Then let the LLM read the whole conversation. Keywords cannot tell that "I will
     # take the business loan" plus an amount and company details means the customer is
     # ready to proceed. Anything the model is unsure of stays as the rules found it.
-    analysis = _llm_analysis(messages)
+    known_facts = clean_facts(lead.FactsJson)
+    analysis = _llm_analysis(messages, known_facts)
     if analysis:
+        lead.FactsJson = merge_facts(known_facts, analysis["facts"]) or None
         intent = analysis["intent"] or intent
         if analysis["timeline"] != "unknown":
             timeline = analysis["timeline"]
@@ -640,6 +746,25 @@ def qualify(
         from ..models import utcnow
 
         lead.QualifiedAt = utcnow()
+
+    if analysis:
+        source = "llm"
+    elif not (settings.llm_enabled and settings.llm_qualification):
+        source = "keyword rules (llm qualification off)"
+    else:
+        source = "keyword rules (llm failed or unusable)"
+    after = {
+        "intent": intent, "timeline": timeline, "sentiment": sentiment, "status": status,
+        "score": score, "budget_known": budget != "unknown", "product_known": product != "unknown",
+    }
+    trace_step(
+        trace, "qualify", f"{status} score={score}",
+        analysis=source, customer_turns=turns, breakdown=breakdown,
+        # Only labels and yes/no: amounts and names are customer data, not log material.
+        after={k: v for k, v in after.items() if k != "score"},
+        changed={k: [before[k], after[k]] for k in after if before.get(k) != after[k]},
+        facts_stored=len(lead.FactsJson or []), signals_known=known,
+    )
     return lead
 
 
@@ -661,12 +786,14 @@ def summarize(
     company_name: str,
     lead: Lead,
     messages: list[LeadMessage],
+    trace: TurnTrace | None = None,
 ) -> tuple[str, str]:
     """Return (summary, recommended_next_step) for the agent handoff card."""
     # qualify() already had the LLM write these in the same call; reuse them.
     brief = getattr(lead, "_ai_brief", None)
     if brief and brief[0]:
         lead._ai_brief = None
+        trace_step(trace, "summarize", "reused the qualification analysis (no extra llm call)")
         return brief[0][:2000], (brief[1] or NEXT_STEP.get(lead.Status, ""))[:500]
 
     if settings.llm_enabled and len(messages) >= 2:
@@ -685,6 +812,7 @@ def summarize(
             parts = raw.split("Next step:")
             summary = parts[0].strip()
             step = parts[1].strip() if len(parts) > 1 else NEXT_STEP.get(lead.Status, "")
+            trace_step(trace, "summarize", "llm summary", window_msgs=min(len(messages), 20))
             return summary[:2000], step[:500]
 
     # Deterministic brief: assembled from extracted facts, so it is always
@@ -704,6 +832,7 @@ def summarize(
     lines.append(
         f"Sentiment is {lead.Sentiment}, lead scored {lead.Score}/100 ({lead.Status})."
     )
+    trace_step(trace, "summarize", "deterministic summary from extracted facts (llm unavailable)")
     return " ".join(lines)[:2000], NEXT_STEP.get(lead.Status, "")[:500]
 
 

@@ -541,6 +541,37 @@ class LeadCompanyPermission(LeadAIBase):
 
 
 
+# ===========================================================================
+# 6. Engine events (outbox)
+# ===========================================================================
+class LeadEvent(LeadAIBase):
+    """One thing that happened in a conversation, for other components to react to.
+
+    Written in the SAME transaction as the turn that produced it, so an event exists if
+    and only if that turn committed. Consumers (the monitor agent, the lead scorer,
+    analytics) read this table and never reach into the live conversation, which is
+    what keeps them off the customer's reply path. `ProcessedAt` is set by a consumer
+    when it has handled the row. See engine/events.py for the schema and outbox.py for
+    writing.
+    """
+
+    __tablename__ = "leadai_events"
+    __table_args__ = (
+        Index("ix_leadai_event_unprocessed", "ProcessedAt", "CreatedAt"),
+        Index("ix_leadai_event_client_created", "ClientId", "CreatedAt"),
+        Index("ix_leadai_event_conv_created", "ConversationId", "CreatedAt"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    ConversationId = Column(String(36), nullable=True)
+    Type = Column(String(40), nullable=False)        # turn.received, turn.replied, ...
+    Channel = Column(String(20), nullable=True)
+    TurnId = Column(String(80), nullable=True)
+    Speaker = Column(String(16), nullable=True)      # customer | ai | agent | system
+    PayloadJson = Column(JSON, nullable=True)        # the full TurnEvent
+    ProcessedAt = Column(DateTime, nullable=True)
+
+
 ALL_LEADAI_EXT_TABLES = (
     LeadChannelAccount,
     LeadChannelIdentity,
@@ -554,5 +585,6 @@ ALL_LEADAI_EXT_TABLES = (
     LeadFile,
     LeadJob,
     LeadCompanyPermission,
+    LeadEvent,
 )
 

@@ -49,6 +49,7 @@ from .schemas import (
 )
 from .security import decrypt_pii, mask_phone
 from .services import ai_engine, script_engine
+from .services import recordings as recording_service
 
 
 # ===========================================================================
@@ -207,7 +208,7 @@ def lead_out(row: Lead | None) -> LeadOut | None:
     )
 
 
-def call_out(row: LeadCall) -> CallOut:
+def call_out(row: LeadCall, recording_url: str | None = None) -> CallOut:
     return CallOut(
         id=row.Id,
         conversation_id=row.ConversationId,
@@ -222,6 +223,7 @@ def call_out(row: LeadCall) -> CallOut:
         script_id=row.ScriptId,
         initiated_by_email=row.InitiatedByEmail,
         failure_reason=row.FailureReason,
+        recording_url=recording_url,
         created_at=row.CreatedAt,
     )
 
@@ -338,12 +340,17 @@ def conversation_detail(
         .all()
     )
     lead = db.query(Lead).filter(Lead.ConversationId == conversation.Id).one_or_none()
+    # Call audio: only for roles that may read calls; one query for all the calls.
+    recordings = (
+        recording_service.playable_urls(db, [c.CallSid for c in calls])
+        if principal.can("call.read") else {}
+    )
 
     return ConversationDetail(
         **base.model_dump(),
         messages=[message_out(m) for m in messages],
         suggestions=ai_engine.agent_suggestions(lead, conversation),
-        calls=[call_out(c) for c in calls],
+        calls=[call_out(c, recordings.get(c.CallSid)) for c in calls],
     )
 
 
@@ -420,10 +427,16 @@ def call_conversation_detail(
     lead = db.query(Lead).filter(Lead.ConversationId == conversation.Id).one_or_none()
 
     # Build CallWithTranscript for each call
+    recordings = (
+        recording_service.playable_urls(db, [c.CallSid for c in calls])
+        if principal.can("call.read") else {}
+    )
     call_details = []
     for c in calls:
         call_messages = messages_by_call.get(c.CallSid, [])
-        recording_url = f"/api/leadai/voice/recordings/{c.CallSid}" if c.Status == "completed" and c.CallSid else None
+        # A real, playable link, or null when the call has no recording (the old value was a
+        # path to a route that does not exist, so the player always got a 404).
+        recording_url = recordings.get(c.CallSid)
         call_details.append(
             CallWithTranscript(
                 id=c.Id,
