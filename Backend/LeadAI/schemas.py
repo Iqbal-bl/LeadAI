@@ -228,6 +228,17 @@ class RolePermissionsBulkUpdate(BaseModel):
     permissions: list[RolePermissionUpdate]
 
 
+class CompanyRolePermissionOut(BaseModel):
+    role: str
+    permission_key: str
+    is_granted: bool
+
+
+class CompanyRolePermissionUpdate(BaseModel):
+    permission_key: str
+    is_granted: bool
+
+
 # ===========================================================================
 # knowledge base
 # ===========================================================================

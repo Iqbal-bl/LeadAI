@@ -540,6 +540,33 @@ class LeadCompanyPermission(LeadAIBase):
     GrantedBy = Column(String(100), nullable=True)
 
 
+class LeadCompanyRolePermission(LeadAIBase):
+    """A company admin's own grant of one permission to one role, scoped to their
+    company only.
+
+    Different from LeadRolePermission (leadai_role_permissions): that table is
+    global — a platform admin's override there changes a role's permissions for
+    EVERY company, because it has no ClientId column at all. This table exists so
+    "let Managers at Kestrel Homes reveal customer contact details" does not also
+    grant it to Managers everywhere else.
+
+    Deliberately narrow: rbac.COMPANY_GRANTABLE_PERMISSIONS is the only set of
+    PermissionKeys a company admin may write here (today: lead.reveal_pii), so
+    this can never become a way to self-grant a platform-level capability.
+    """
+
+    __tablename__ = "leadai_company_role_permissions"
+    __table_args__ = (
+        UniqueConstraint("ClientId", "Role", "PermissionKey", name="uq_leadai_comp_role_perm"),
+        Index("ix_leadai_comp_role_perm_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    Role = Column(String(40), nullable=False)
+    PermissionKey = Column(String(80), nullable=False)
+    IsGranted = Column(Boolean, nullable=False, default=True)
+    GrantedBy = Column(String(100), nullable=True)
+
 
 # ===========================================================================
 # 6. Engine events (outbox)
@@ -585,6 +612,7 @@ ALL_LEADAI_EXT_TABLES = (
     LeadFile,
     LeadJob,
     LeadCompanyPermission,
+    LeadCompanyRolePermission,
     LeadEvent,
 )
 

@@ -124,6 +124,19 @@ COMPANY_GATED_FEATURES: set[str] = {
     "email_marketing",
 }
 
+# Permissions a COMPANY ADMIN may grant to (or revoke from) a role, scoped to their own
+# company only — see LeadCompanyRolePermission. Deliberately a tiny, explicit allow-list:
+# a company admin must never be able to use this mechanism to hand a role (or themselves)
+# a platform-level capability like role.manage or company.manage. Grow it permission by
+# permission, never by removing the check.
+COMPANY_GRANTABLE_PERMISSIONS: set[str] = {
+    "lead.reveal_pii",
+}
+
+# Roles a company admin may grant COMPANY_GRANTABLE_PERMISSIONS to. Mirrors visible_roles():
+# never their own role (company_admin already has these by default) and never Admin.
+COMPANY_GRANTABLE_ROLES: tuple[str, ...] = (ROLE_MANAGER, ROLE_EMPLOYEE)
+
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     ROLE_ADMIN: set(P),  # everything, across all companies
     ROLE_COMPANY_ADMIN: {
@@ -240,8 +253,27 @@ def _db_overrides(db: Session, role: str) -> dict[str, bool]:
     return {r.PermissionKey: r.IsGranted for r in rows}
 
 
-def effective_permissions_for(db: Session, role: str) -> set[str]:
-    """Compute effective permissions: hardcoded defaults + database overrides."""
+def _company_role_overrides(db: Session, client_id: str, role: str) -> dict[str, bool]:
+    """Return {permission_key: is_granted} overrides a COMPANY ADMIN set for one role
+    in their own company (see LeadCompanyRolePermission). Only ever contains keys from
+    COMPANY_GRANTABLE_PERMISSIONS — the write path enforces that, this just reads it."""
+    from .models_ext import LeadCompanyRolePermission
+
+    rows = (
+        db.query(LeadCompanyRolePermission)
+        .filter(
+            LeadCompanyRolePermission.ClientId == client_id,
+            LeadCompanyRolePermission.Role == role,
+            LeadCompanyRolePermission.IsDeleted == False,  # noqa: E712
+        )
+        .all()
+    )
+    return {r.PermissionKey: r.IsGranted for r in rows}
+
+
+def effective_permissions_for(db: Session, role: str, client_id: str | None = None) -> set[str]:
+    """Compute effective permissions: hardcoded defaults + platform-wide database
+    overrides + (when client_id is given) this one company's own per-role grants."""
     perms = set(ROLE_PERMISSIONS.get(role, set()))
     overrides = _db_overrides(db, role)
     for key, granted in overrides.items():
@@ -249,6 +281,14 @@ def effective_permissions_for(db: Session, role: str) -> set[str]:
             perms.add(key)
         else:
             perms.discard(key)
+    if client_id:
+        for key, granted in _company_role_overrides(db, client_id, role).items():
+            if key not in COMPANY_GRANTABLE_PERMISSIONS:
+                continue  # defence in depth: a stray row can never leak a wider grant
+            if granted:
+                perms.add(key)
+            else:
+                perms.discard(key)
     return perms
 
 
@@ -430,7 +470,7 @@ def current_principal(
             key=lambda g: order.index(g.Role) if g.Role in order else 99,
         )[0]
 
-    effective_perms = effective_permissions_for(db, chosen.Role)
+    effective_perms = effective_permissions_for(db, chosen.Role, client_id=chosen.ClientId)
     if chosen.ClientId:
         comp_rows = (
             db.query(LeadCompanyPermission)

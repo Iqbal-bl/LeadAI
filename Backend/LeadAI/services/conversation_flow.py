@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -39,6 +40,7 @@ from domain.models import Client
 from .. import activity
 from ..activity import A
 from ..config import settings
+from ..db import session as new_session
 from ..engine import bridge as engine_bridge
 from ..engine import control as engine_control
 from ..engine import outbox
@@ -225,6 +227,71 @@ def apply_threshold(
     return True, True
 
 
+def run_deferred_scoring(client_id: str, conversation_id: str, message_id: str | None) -> None:
+    """Phase 2 for a push-delivered turn (WhatsApp/Instagram/Messenger), in its own session,
+    after the reply has already been sent. Mirrors voice_flow.run_deferred_scoring: on a call
+    every second is felt, and on chat the customer is equally just watching a "..." — qualify
+    and summarise are a second LLM round trip that changes nothing about what they see, so it
+    runs after delivery instead of blocking it.
+
+    Appends its steps to the AI message's trace, so "why did the AI say that" and "how was the
+    lead scored" still read as one record. Never raises: called fire-and-forget.
+    """
+    db = new_session()
+    try:
+        client = db.get(Client, client_id)
+        conversation = db.get(LeadConversation, conversation_id)
+        if client is None or conversation is None:
+            return
+        lead = db.query(Lead).filter(Lead.ConversationId == conversation_id).one_or_none()
+        if lead is None:
+            lead = Lead(ClientId=client_id, ConversationId=conversation_id, CreatedBy="ai")
+            db.add(lead)
+            db.flush()
+        history = memory.thread_history(db, conversation_id)
+        trace = TurnTrace(conversation_id=conversation_id, client_id=client_id, channel=conversation.Channel)
+        trace_step(trace, "post_turn", "scoring after the reply was delivered")
+
+        previous_status = lead.Status
+        ai_engine.qualify(db, client_id, lead, history, trace=trace)
+        conversation.Summary, conversation.NextStep = ai_engine.summarize(
+            db, client_id, client.Name, lead, history, trace=trace
+        )
+        conversation.MessageCount = len(history)
+
+        if lead.Status == "qualified" and previous_status != "qualified":
+            activity.log(
+                db,
+                action=A.LEAD_QUALIFIED,
+                client_id=client_id,
+                actor_email="ai",
+                actor_role="ai",
+                entity_type="lead",
+                entity_id=lead.Id,
+                message=f"Lead qualified at score {lead.Score}",
+                meta={
+                    "score": lead.Score,
+                    "intent": lead.Intent,
+                    "timeline": lead.Timeline,
+                    "product": lead.Product,
+                },
+            )
+
+        apply_threshold(db, client, conversation, lead, None, trace=trace)
+
+        message = db.get(LeadMessage, message_id) if message_id else None
+        if message is not None and message.TraceJson and trace.as_json():
+            merged = dict(message.TraceJson)
+            merged["steps"] = list(merged.get("steps", [])) + trace.as_json()["steps"]
+            message.TraceJson = merged
+        db.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("[LeadAI flow] deferred scoring failed for conv %s", conversation_id, exc_info=True)
+        db.rollback()
+    finally:
+        db.close()
+
+
 # =========================================================================== #
 # social conversation resolution
 # =========================================================================== #
@@ -276,7 +343,8 @@ def resolve_social_conversation(
     # call per NEW social contact, not one per message. A failure is silent and
     # returns {}: a missing display name must never stop us handling the message.
     social_handle: str | None = None
-    if not profile_name or (identity is not None and not identity.ProfileName):
+    already_known = bool(profile_name) or (identity is not None and bool(identity.ProfileName))
+    if not already_known:
         from . import channels as ch
 
         profile = ch.fetch_profile(account, account.Channel, str(external_user_id))
@@ -938,34 +1006,8 @@ def _run_customer_turn(
         request=request,
     )
 
-    previous_status = lead.Status
-    ai_engine.qualify(db, client_id, lead, history, trace=trace)
-    conversation.Summary, conversation.NextStep = ai_engine.summarize(
-        db, client_id, client.Name, lead, history, trace=trace
-    )
     conversation.MessageCount = len(history)
     conversation.LastMessageAt = utcnow()
-
-    if lead.Status == "qualified" and previous_status != "qualified":
-        activity.log(
-            db,
-            action=A.LEAD_QUALIFIED,
-            client_id=client_id,
-            actor_email="ai",
-            actor_role="ai",
-            entity_type="lead",
-            entity_id=lead.Id,
-            message=f"Lead qualified at score {lead.Score}",
-            meta={
-                "score": lead.Score,
-                "intent": lead.Intent,
-                "timeline": lead.Timeline,
-                "product": lead.Product,
-            },
-            request=request,
-        )
-
-    above, crossed = apply_threshold(db, client, conversation, lead, request, trace=trace)
 
     handed_off = False
     if result.get("ends_conversation") and conversation.Status == "needs_human":
@@ -1000,6 +1042,40 @@ def _run_customer_turn(
                    "raised: conversation now needs a human" if handed_off else "none needed",
                    reason=conversation.HandoffReason if handed_off else None,
                    conversation_status=conversation.Status)
+
+    # Lead scoring (qualify + summarise) is a second LLM round trip that changes nothing
+    # about the reply already decided above. On a push channel the customer is only waiting
+    # on delivery, so scoring runs AFTER it (run_deferred_scoring, its own session) instead of
+    # adding its latency to every reply. The widget is pull-based and its response carries
+    # lead_status/lead_score, so it still scores inline, as before.
+    defer_scoring = deliver_reply
+    above, crossed = False, False
+    if not defer_scoring:
+        previous_status = lead.Status
+        ai_engine.qualify(db, client_id, lead, history, trace=trace)
+        conversation.Summary, conversation.NextStep = ai_engine.summarize(
+            db, client_id, client.Name, lead, history, trace=trace
+        )
+        if lead.Status == "qualified" and previous_status != "qualified":
+            activity.log(
+                db,
+                action=A.LEAD_QUALIFIED,
+                client_id=client_id,
+                actor_email="ai",
+                actor_role="ai",
+                entity_type="lead",
+                entity_id=lead.Id,
+                message=f"Lead qualified at score {lead.Score}",
+                meta={
+                    "score": lead.Score,
+                    "intent": lead.Intent,
+                    "timeline": lead.Timeline,
+                    "product": lead.Product,
+                },
+                request=request,
+            )
+        above, crossed = apply_threshold(db, client, conversation, lead, request, trace=trace)
+
     trace_step(trace, "commit", "turn committed as one transaction",
                reply_chars=len(result["reply"] or ""), messages_in_thread=len(history))
     outbound.TraceJson = trace.as_json()
@@ -1016,6 +1092,13 @@ def _run_customer_turn(
         if delivery.status != "not_applicable":
             outbound.TraceJson = trace.as_json()
             db.commit()
+
+    if defer_scoring and result["reply"]:
+        threading.Thread(
+            target=run_deferred_scoring,
+            args=(client_id, conversation.Id, outbound.Id),
+            daemon=True,
+        ).start()
 
     _broadcast_conversation(
         conversation.Id,

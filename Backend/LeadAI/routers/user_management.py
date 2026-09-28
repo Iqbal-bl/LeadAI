@@ -346,10 +346,18 @@ async def create_member(
         )
     except HTTPException as exc:
         if exc.status_code == status.HTTP_409_CONFLICT:
-            # User already exists in IDP — proceed with local role assignment
-            idp_result = {}
-        else:
-            raise
+            # This used to swallow the conflict and proceed with a local role grant
+            # only. Since the identity server refused to create the account, the
+            # password the admin just typed was silently discarded and never applied
+            # anywhere — the response still said 201 Created, so nothing told them the
+            # new member could not actually log in with it. Surface it instead.
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"'{payload.email}' is already registered with the identity "
+                       "server. Use a different email, or ask a platform admin to add "
+                       "this person to your company if they already have an account.",
+            ) from exc
+        raise
     except Exception as exc:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,

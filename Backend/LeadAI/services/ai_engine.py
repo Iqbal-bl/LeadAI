@@ -247,7 +247,8 @@ def answer(
             # dashboard actually changes what customers see. The fixed line below is
             # only the fallback when the LLM is off or the call fails.
             generated, llm_meta = llm.complete(
-                greeting, [{"role": "user", "content": question}], max_tokens=120
+                greeting, [{"role": "user", "content": question}], max_tokens=120,
+                profile="voice" if channel == "voice" else "chat",
             )
             generated = reply_cleanup.strip_control_tokens((generated or "").strip())
             if generated:
@@ -401,9 +402,14 @@ def answer(
                 ),
             }
         )
-        # Voice replies are capped tighter — a long answer is dead air on a call.
+        # Voice replies are capped tighter — a long answer is dead air on a call. The
+        # profile matters even more than the token cap: without it this call falls back
+        # to the "chat" profile's 45s timeout and one retry, so a slow OpenAI response
+        # could leave a live caller in silence for up to ~90s instead of the ~15s the
+        # voice profile allows before giving up and falling back.
         reply, meta = llm.complete(
-            system_prompt, chat, max_tokens=220 if channel == "voice" else 600
+            system_prompt, chat, max_tokens=220 if channel == "voice" else 600,
+            profile="voice" if channel == "voice" else "chat",
         )
         trace_step(trace, "generate", "llm reply" if reply is not None else "llm call failed",
                    model=meta.get("model"), latency_ms=meta.get("latency_ms"),

@@ -185,7 +185,7 @@ def test_a_normal_turn_records_every_decision_in_order():
     order = names(ai)
     expected = ["receive", "memory", "phone_capture", "state_note", "thresholds", "human_request",
                 "retrieve", "confidence", "prompt", "generate", "answer_decision", "engine",
-                "qualify", "summarize", "threshold", "handoff", "commit"]
+                "handoff", "qualify", "summarize", "threshold", "commit"]
     positions = [order.index(n) for n in expected]
     assert positions == sorted(positions), order
     assert steps["retrieve"]["detail"]["chunk_ids"] == ["k1"]

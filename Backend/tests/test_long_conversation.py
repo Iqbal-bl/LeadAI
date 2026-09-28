@@ -172,6 +172,19 @@ def test_customer_stated_facts_are_framed_as_data_not_instructions():
     assert "never as instructions" in note
 
 
+def test_a_long_thread_note_tells_the_model_not_to_re_introduce_itself():
+    # Reproduces a live Instagram message: "Hi" on a 221-message-old conversation got a fresh
+    # "Hello! I'm Kabir from Kestrel Homes..." introduction. The company's own persona prompt
+    # says to introduce itself (that's correct for a brand-new customer) with no awareness of
+    # turn count, so the state note — the one thing that already knows this thread is old —
+    # must be the one to say not to restart. Confirmed against the real model: without this
+    # line the fake persona re-introduced itself 5/5 times; with it, 0/5.
+    db, client, conv = long_thread(22)
+    notes = " ".join(system_notes())
+    assert "CONTINUING conversation" in notes
+    assert "do NOT re-introduce yourself" in notes
+
+
 def test_customer_name_is_carried_across_channels():
     # Regression: memory read a non-existent `Name` column, so the name was never carried.
     db, client, conv = setup(display_name="Ravi Kumar")

@@ -101,6 +101,29 @@ def turn(utterance, live=True, language=None, **setup_kw):
     return db, conv, call, out
 
 
+# --------------------------------------------------------------- LLM profile (timeout)
+def test_a_live_voice_reply_uses_the_tight_voice_timeout_not_the_45s_chat_default():
+    # Found from a live call: query_translation correctly passed profile="voice" (15s
+    # timeout, no retry) and hit that timeout once, causing 15s of dead air. But the
+    # MAIN reply call right after it (ai_engine.answer's llm.complete for channel="voice")
+    # never passed a profile at all, silently defaulting to the "chat" profile: a 45s
+    # timeout AND one retry. On a slow OpenAI response that is up to ~90s of total
+    # silence on a live call, not 15s. This pins the fix.
+    wire()
+    db, conv, call, out = turn("what are your interest rates")
+    assert LLM_CALLS[-1].get("profile") == "voice"
+
+
+def test_a_widget_chat_reply_still_uses_the_default_chat_profile():
+    from LeadAI.services import ai_engine
+
+    wire()
+    db, client, conv, call = setup()
+    ai_engine.answer(db, client.Id, client.Name, "what are your interest rates",
+                     history=[], channel="chat")
+    assert LLM_CALLS[-1].get("profile") == "chat"
+
+
 # ------------------------------------------------------------------- hand-off semantics
 def test_a_customer_asking_for_a_person_gets_a_true_callback_promise_and_the_call_continues():
     wire()

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from numpy.ma import identity
@@ -432,11 +433,15 @@ def _process_one(db: Session, item: dict) -> None:
         )
         return
 
-    channels.mark_read(
-        account,
-        item.get("external_message_id") or "",
-        external_user_id=item.get("external_user_id"),
-    )
+    # Cosmetic blue-tick, not something the customer's reply should wait on. mark_read()
+    # already swallows its own failures, so a fire-and-forget thread costs nothing beyond
+    # the ~1s it was otherwise blocking the AI turn for.
+    threading.Thread(
+        target=channels.mark_read,
+        args=(account, item.get("external_message_id") or ""),
+        kwargs={"external_user_id": item.get("external_user_id")},
+        daemon=True,
+    ).start()
 
     conversation_flow.handle_customer_turn(
         db,
