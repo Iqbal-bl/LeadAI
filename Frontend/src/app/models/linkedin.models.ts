@@ -152,4 +152,66 @@ export interface SyncMessagesResponse {
   synced_messages: number;
 }
 
+export interface LinkedInSocialComment {
+  id: string;
+  post_urn: string;
+  post_title?: string;
+  post_snippet?: string;
+  comment_urn: string;
+  parent_comment_urn?: string;
+  author_name: string;
+  author_headline?: string;
+  author_avatar?: string | null;
+  author_profile_url?: string;
+  comment_text: string;
+  comment_created_at?: string | number;
+  sentiment?: 'positive' | 'question' | 'lead_inquiry' | 'praise' | 'critical' | 'neutral';
+  intent_score?: number;
+  is_question?: boolean;
+  is_lead_candidate?: boolean;
+  suggested_reply?: string;
+  suggested_reply_rationale?: string;
+  status: 'pending_review' | 'approved' | 'auto_replied' | 'replied' | 'ignored';
+  reply_text?: string;
+  reply_urn?: string;
+  replied_at?: string | number;
+  replied_by?: string;
+  customer_id?: string;
+  
+  // Local UI state
+  isEditing?: boolean;
+  draftReply?: string;
+  customInstruction?: string;
+  isGenerating?: boolean;
+  isReplying?: boolean;
+  isCapturingLead?: boolean;
+}
+
+export interface LinkedInCommentSettings {
+  is_auto_reply_enabled: boolean;
+  require_approval_for_questions: boolean;
+  reply_tone: string;
+  custom_instructions?: string | null;
+  signature_text?: string | null;
+  auto_capture_leads: boolean;
+  min_lead_intent_threshold: number;
+  exclude_keywords: string[];
+}
+
+export interface GetCommentsResponse {
+  comments: LinkedInSocialComment[];
+  total: number;
+}
+
+export interface SyncCommentsResponse {
+  ok: boolean;
+  message: string;
+  data?: {
+    synced_comments: number;
+    new_leads: number;
+    auto_replies: number;
+    total_posts_scanned: number;
+  };
+}
+
 

@@ -654,6 +654,8 @@ from .models_blog import (  # noqa: E402
     LeadArticle,
     LeadArticleVersion,
     LeadBlogReviewNote,
+    LeadSocialComment,
+    LeadCommentSettings,
 )
 
 ALL_LEADAI_TABLES = ALL_LEADAI_TABLES + ALL_LEADAI_SOCIAL_TABLES + ALL_LEADAI_BLOG_TABLES

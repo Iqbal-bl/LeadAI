@@ -8,6 +8,8 @@ import {
   LinkedInInvitationItem,
   LinkedInConversation,
   LinkedInMessage,
+  LinkedInSocialComment,
+  LinkedInCommentSettings,
 } from '../../models/linkedin.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../shared/services/confirmation.service';
@@ -79,6 +81,26 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   syncingMessages = false;
   searchConversationText = '';
 
+  // Comments & AI Replies Automation State
+  comments: LinkedInSocialComment[] = [];
+  loadingComments = false;
+  syncingComments = false;
+  commentStatusFilter: string = 'all'; // 'all' | 'pending_review' | 'replied' | 'auto_replied' | 'leads'
+  commentSearchText: string = '';
+  selectedCommentSentiment: string = 'all';
+  showCommentSettingsModal = false;
+  savingCommentSettings = false;
+  commentSettings: LinkedInCommentSettings = {
+    is_auto_reply_enabled: false,
+    require_approval_for_questions: true,
+    reply_tone: 'thought_leadership',
+    custom_instructions: '',
+    signature_text: '',
+    auto_capture_leads: true,
+    min_lead_intent_threshold: 0.6,
+    exclude_keywords: ['scam', 'spam', 'refund', 'fake', 'terrible', 'complaint'],
+  };
+
   // Credentials Form State
   showAdvancedCookie = false;
 
@@ -115,6 +137,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           if (res.connected && res['has_cookie_credentials']) {
             this.loadInvitations();
             this.loadConversations();
+            this.loadCommentSettings();
+            this.loadComments();
           }
         }
       },
@@ -779,5 +803,275 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       }
     }, 60);
   }
+
+  // =========================================================================
+  // Comments & AI Replies Automation Methods
+  // =========================================================================
+
+  loadCommentSettings(): void {
+    this.linkedinService.getCommentSettings().subscribe({
+      next: (res) => {
+        if (res) {
+          this.commentSettings = {
+            ...this.commentSettings,
+            ...res,
+          };
+        }
+      },
+      error: (err) => {
+        console.debug('Could not load comment settings:', err);
+      },
+    });
+  }
+
+  saveCommentSettings(): void {
+    this.savingCommentSettings = true;
+    this.linkedinService.updateCommentSettings(this.commentSettings).subscribe({
+      next: (res) => {
+        this.savingCommentSettings = false;
+        this.showCommentSettingsModal = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Settings Saved',
+          detail: 'LinkedIn comment automation rules have been updated.',
+        });
+      },
+      error: (err) => {
+        this.savingCommentSettings = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Save Failed',
+          detail: err?.error?.detail || 'Failed to update comment settings.',
+        });
+      },
+    });
+  }
+
+  loadComments(): void {
+    if (!this.status?.connected || !this.status?.['has_cookie_credentials']) {
+      return;
+    }
+    this.loadingComments = true;
+    this.linkedinService.getComments({ limit: 50 }).subscribe({
+      next: (res) => {
+        this.loadingComments = false;
+        this.comments = (res.comments || []).map((c: LinkedInSocialComment) => ({
+          ...c,
+          isEditing: false,
+          draftReply: c.suggested_reply || '',
+          customInstruction: '',
+          isGenerating: false,
+          isReplying: false,
+          isCapturingLead: false,
+        }));
+      },
+      error: (err) => {
+        this.loadingComments = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Could Not Load Comments',
+          detail: err?.error?.detail || 'Unable to retrieve LinkedIn post comments.',
+        });
+      },
+    });
+  }
+
+  syncLinkedInComments(): void {
+    this.syncingComments = true;
+    this.linkedinService.syncComments().subscribe({
+      next: (res) => {
+        this.syncingComments = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Comments Synced',
+          detail: res.message || 'Scanned recent posts and updated comment queue.',
+        });
+        this.loadComments();
+      },
+      error: (err) => {
+        this.syncingComments = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Sync Failed',
+          detail: err?.error?.detail || 'Failed to scan LinkedIn post comments.',
+        });
+      },
+    });
+  }
+
+  approveAndSendReply(comment: LinkedInSocialComment, customText?: string): void {
+    const textToSend = customText !== undefined ? customText : (comment.draftReply || comment.suggested_reply || '');
+    if (!textToSend.trim()) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Reply Text Required',
+        detail: 'Please enter a reply message before posting.',
+      });
+      return;
+    }
+
+    comment.isReplying = true;
+    this.linkedinService.postCommentReply(comment.id, textToSend.trim()).subscribe({
+      next: (res) => {
+        comment.isReplying = false;
+        comment.isEditing = false;
+        comment.status = 'replied';
+        comment.reply_text = textToSend.trim();
+        comment.replied_at = Date.now();
+        comment.replied_by = 'operator';
+
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Reply Published',
+          detail: `Comment reply sent to ${comment.author_name}.`,
+        });
+      },
+      error: (err) => {
+        comment.isReplying = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Reply Failed',
+          detail: err?.error?.detail || 'Could not post comment reply to LinkedIn.',
+        });
+      },
+    });
+  }
+
+  startEditingReply(comment: LinkedInSocialComment): void {
+    comment.isEditing = true;
+    comment.draftReply = comment.draftReply || comment.suggested_reply || '';
+  }
+
+  cancelEditingReply(comment: LinkedInSocialComment): void {
+    comment.isEditing = false;
+    comment.draftReply = comment.suggested_reply || '';
+  }
+
+  regenerateReply(comment: LinkedInSocialComment): void {
+    comment.isGenerating = true;
+    this.linkedinService.generateCommentReply(comment.id, comment.customInstruction).subscribe({
+      next: (res) => {
+        comment.isGenerating = false;
+        comment.suggested_reply = res.suggested_reply;
+        comment.suggested_reply_rationale = res.rationale;
+        comment.sentiment = res.sentiment as any;
+        comment.intent_score = res.intent_score;
+        comment.is_lead_candidate = res.is_lead_candidate;
+        comment.draftReply = res.suggested_reply;
+        comment.customInstruction = '';
+
+        this.messageService.add({
+          severity: 'info',
+          summary: 'AI Reply Formulated',
+          detail: 'Generated a new context-grounded reply proposal.',
+        });
+      },
+      error: (err) => {
+        comment.isGenerating = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'AI Generation Failed',
+          detail: err?.error?.detail || 'Failed to regenerate comment reply.',
+        });
+      },
+    });
+  }
+
+  ignoreComment(comment: LinkedInSocialComment): void {
+    this.confirmationService.confirm({
+      message: `Are you sure you want to dismiss the comment from "${comment.author_name}"?`,
+      header: 'Ignore Comment',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Ignore',
+      rejectLabel: 'Cancel',
+      accept: () => {
+        this.linkedinService.ignoreComment(comment.id).subscribe({
+          next: () => {
+            comment.status = 'ignored';
+            this.messageService.add({
+              severity: 'info',
+              summary: 'Comment Ignored',
+              detail: 'Comment removed from pending review queue.',
+            });
+          },
+          error: (err) => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Action Failed',
+              detail: err?.error?.detail || 'Failed to ignore comment.',
+            });
+          },
+        });
+      },
+    });
+  }
+
+  captureCommentLead(comment: LinkedInSocialComment): void {
+    comment.isCapturingLead = true;
+    this.linkedinService.captureCommentLead(comment.id).subscribe({
+      next: (res) => {
+        comment.isCapturingLead = false;
+        comment.customer_id = res.customer_id;
+        comment.is_lead_candidate = true;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Lead Captured',
+          detail: `${res.display_name || comment.author_name} logged as a CRM Lead.`,
+        });
+      },
+      error: (err) => {
+        comment.isCapturingLead = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Capture Failed',
+          detail: err?.error?.detail || 'Could not convert commenter to lead.',
+        });
+      },
+    });
+  }
+
+  getFilteredComments(): LinkedInSocialComment[] {
+    return this.comments.filter((c) => {
+      // Status filter
+      if (this.commentStatusFilter === 'pending_review' && c.status !== 'pending_review') {
+        return false;
+      }
+      if (this.commentStatusFilter === 'replied' && c.status !== 'replied' && c.status !== 'auto_replied') {
+        return false;
+      }
+      if (this.commentStatusFilter === 'leads' && !c.is_lead_candidate && !c.customer_id) {
+        return false;
+      }
+      if (this.commentStatusFilter === 'auto_replied' && c.status !== 'auto_replied') {
+        return false;
+      }
+
+      // Sentiment filter
+      if (this.selectedCommentSentiment !== 'all' && c.sentiment !== this.selectedCommentSentiment) {
+        return false;
+      }
+
+      // Search text filter
+      if (this.commentSearchText.trim()) {
+        const q = this.commentSearchText.toLowerCase().trim();
+        const matchesAuthor = c.author_name.toLowerCase().includes(q);
+        const matchesText = c.comment_text.toLowerCase().includes(q);
+        const matchesPost = (c.post_title || '').toLowerCase().includes(q) || (c.post_snippet || '').toLowerCase().includes(q);
+        const matchesHeadline = (c.author_headline || '').toLowerCase().includes(q);
+        return matchesAuthor || matchesText || matchesPost || matchesHeadline;
+      }
+
+      return true;
+    });
+  }
+
+  getPendingReviewCommentsCount(): number {
+    return this.comments.filter((c) => c.status === 'pending_review').length;
+  }
+
+  getCapturedLeadsCount(): number {
+    return this.comments.filter((c) => c.is_lead_candidate || c.customer_id).length;
+  }
 }
+
 

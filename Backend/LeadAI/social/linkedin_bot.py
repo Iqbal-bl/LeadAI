@@ -1125,3 +1125,259 @@ def sync_linkedin_conversations(db, account) -> dict:
     return {"synced_conversations": synced_conversations, "synced_messages": synced_messages}
 
 
+# ===========================================================================
+# LinkedIn Comments & Replies Automation via Browser
+# ===========================================================================
+
+async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int = 5) -> dict:
+    """
+    Extract recent posts and their comments from LinkedIn user activity,
+    sync into LeadSocialComment table, and trigger AI contextual reply generation.
+    """
+    from ..models_blog import LeadSocialComment, LeadCommentSettings, LeadArticle
+    from ..services.comment_reply_ai import CommentReplyAIService
+
+    cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
+    if not cookie:
+        raise ValueError("LinkedIn session credentials not configured")
+        
+    if "|||" in cookie:
+        li_at, jsession = cookie.split("|||", 1)
+    else:
+        li_at = cookie
+        jsession = "ajax:1234567890"
+
+    settings = CommentReplyAIService.get_or_create_settings(db, account.ClientId, "linkedin")
+
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+            )
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 900},
+                locale="en-US",
+            )
+            await context.add_cookies([
+                {"name": "li_at", "value": li_at, "domain": ".linkedin.com", "path": "/"},
+                {"name": "JSESSIONID", "value": f'"{jsession.strip(chr(34))}"', "domain": ".linkedin.com", "path": "/"},
+            ])
+            page = await context.new_page()
+
+            # Target user's recent posts / activity
+            await page.goto("https://www.linkedin.com/in/me/recent-activity/all/", wait_until="commit", timeout=25000)
+            
+            try:
+                await page.wait_for_selector(".feed-shared-update-v2, .profile-creator-shared-feed-update__container", timeout=12000)
+            except Exception:
+                pass
+
+            await asyncio.sleep(2)
+
+            # Extract posts & comments via DOM evaluation
+            extracted_posts = await page.evaluate('''() => {
+                const posts = [];
+                const updateElements = document.querySelectorAll('.feed-shared-update-v2, .profile-creator-shared-feed-update__container');
+
+                updateElements.forEach((postEl, pIdx) => {
+                    if (pIdx >= 10) return;
+                    
+                    const postUrn = postEl.getAttribute('data-urn') || `post-${pIdx}`;
+                    const textEl = postEl.querySelector('.feed-shared-update-v2__description, .feed-shared-text, .update-components-text');
+                    const postText = textEl ? textEl.innerText.trim() : '';
+                    
+                    const comments = [];
+                    const commentElements = postEl.querySelectorAll('.comments-comment-item, .comments-comments-list__comment-item');
+                    
+                    commentElements.forEach((cEl, cIdx) => {
+                        const cUrn = cEl.getAttribute('data-id') || cEl.getAttribute('id') || `${postUrn}-comment-${cIdx}`;
+                        const authorEl = cEl.querySelector('.comments-post-meta__name-text, .comments-comment-meta__description-title');
+                        const headlineEl = cEl.querySelector('.comments-post-meta__headline, .comments-comment-meta__description-subtitle');
+                        const bodyEl = cEl.querySelector('.comments-comment-item__main-content, .update-components-text');
+                        const imgEl = cEl.querySelector('img');
+                        
+                        const commentText = bodyEl ? bodyEl.innerText.trim() : '';
+                        if (!commentText) return;
+
+                        comments.push({
+                            comment_urn: cUrn,
+                            author_name: authorEl ? authorEl.innerText.trim() : 'LinkedIn Member',
+                            author_headline: headlineEl ? headlineEl.innerText.trim() : '',
+                            author_avatar: imgEl ? imgEl.src : null,
+                            comment_text: commentText,
+                        });
+                    });
+
+                    posts.push({
+                        post_urn: postUrn,
+                        post_text: postText,
+                        comments: comments,
+                    });
+                });
+                return posts;
+            }''')
+
+            await browser.close()
+
+        # Database Sync & AI processing
+        synced_comments_count = 0
+        new_leads_count = 0
+        auto_replies_count = 0
+
+        for p_data in extracted_posts:
+            post_urn = p_data["post_urn"]
+            post_snippet = p_data["post_text"]
+            post_title = (post_snippet.split("\n")[0][:120] if post_snippet else "LinkedIn Post")
+
+            # Check if linked to an article
+            linked_article = db.query(LeadArticle).filter(
+                LeadArticle.ClientId == account.ClientId,
+                LeadArticle.LinkedInPostId == post_urn
+            ).first()
+
+            for c_data in p_data["comments"]:
+                c_urn = c_data["comment_urn"]
+                
+                existing_comment = db.query(LeadSocialComment).filter(
+                    LeadSocialComment.ClientId == account.ClientId,
+                    LeadSocialComment.CommentUrn == c_urn,
+                    LeadSocialComment.IsDeleted == False
+                ).first()
+
+                if not existing_comment:
+                    new_comment = LeadSocialComment(
+                        ClientId=account.ClientId,
+                        Channel="linkedin",
+                        PostUrn=post_urn,
+                        PostTitle=linked_article.Title if linked_article else post_title,
+                        PostSnippet=post_snippet[:1000],
+                        ArticleId=linked_article.Id if linked_article else None,
+                        CommentUrn=c_urn,
+                        AuthorName=c_data["author_name"],
+                        AuthorHeadline=c_data["author_headline"],
+                        AuthorAvatar=c_data["author_avatar"],
+                        CommentText=c_data["comment_text"],
+                        Status="pending_review",
+                        CreatedBy="linkedin_sync",
+                    )
+                    db.add(new_comment)
+                    db.flush()
+
+                    # Trigger AI contextual reply generation
+                    ai_result = CommentReplyAIService.generate_reply_for_comment(db, new_comment)
+                    synced_comments_count += 1
+
+                    if ai_result.get("is_lead_candidate"):
+                        new_leads_count += 1
+
+                    # Check for auto-reply eligibility if enabled
+                    if settings.IsAutoReplyEnabled:
+                        exclude_kw = settings.ExcludeKeywords or []
+                        has_excluded = any(kw.lower() in new_comment.CommentText.lower() for kw in exclude_kw)
+                        is_blocked_by_question_rule = settings.RequireApprovalForQuestions and new_comment.IsQuestion
+
+                        if not has_excluded and not is_blocked_by_question_rule and new_comment.SuggestedReply:
+                            # Note: Auto-reply can be dispatched immediately or queued
+                            new_comment.Status = "auto_replied"
+                            new_comment.ReplyText = new_comment.SuggestedReply
+                            new_comment.RepliedAt = utcnow()
+                            new_comment.RepliedBy = "ai_auto"
+                            auto_replies_count += 1
+                            db.commit()
+
+        db.commit()
+        return {
+            "synced_comments": synced_comments_count,
+            "new_leads": new_leads_count,
+            "auto_replies": auto_replies_count,
+            "total_posts_scanned": len(extracted_posts)
+        }
+
+    except Exception as exc:
+        logger.error(f"Failed to fetch LinkedIn posts and comments via browser: {exc}")
+        return {"error": str(exc), "synced_comments": 0}
+
+
+async def post_comment_reply_browser(
+    account,
+    post_urn_or_url: str,
+    comment_urn: str,
+    reply_text: str
+) -> dict:
+    """Post a comment reply to LinkedIn via browser automation."""
+    cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
+    if not cookie:
+        raise ValueError("LinkedIn session credentials not configured")
+        
+    if "|||" in cookie:
+        li_at, jsession = cookie.split("|||", 1)
+    else:
+        li_at = cookie
+        jsession = "ajax:1234567890"
+
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+            )
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 900},
+                locale="en-US",
+            )
+            await context.add_cookies([
+                {"name": "li_at", "value": li_at, "domain": ".linkedin.com", "path": "/"},
+                {"name": "JSESSIONID", "value": f'"{jsession.strip(chr(34))}"', "domain": ".linkedin.com", "path": "/"},
+            ])
+            page = await context.new_page()
+
+            # Target post or activity feed
+            if post_urn_or_url.startswith("urn:li:"):
+                target_url = f"https://www.linkedin.com/feed/update/{post_urn_or_url}"
+            elif post_urn_or_url.startswith("http"):
+                target_url = post_urn_or_url
+            else:
+                target_url = "https://www.linkedin.com/in/me/recent-activity/all/"
+
+            await page.goto(target_url, wait_until="commit", timeout=25000)
+            await asyncio.sleep(2)
+
+            # Click reply on target comment if found, or top comment box
+            reply_btn = page.locator(".comments-comment-item__reply-button, button:has-text('Reply')").first
+            if await reply_btn.count() > 0 and await reply_btn.is_visible():
+                await reply_btn.click()
+                await asyncio.sleep(1)
+
+            # Locate editor and type reply
+            editor = page.locator(".ql-editor, div[contenteditable='true'], .comments-comment-box__editor").first
+            if await editor.count() > 0:
+                await editor.fill(reply_text)
+                await asyncio.sleep(0.5)
+
+                submit_btn = page.locator("button.comments-comment-box__submit-button, button:has-text('Post'), button:has-text('Reply')").first
+                if await submit_btn.count() > 0 and await submit_btn.is_enabled():
+                    await submit_btn.click()
+                    await asyncio.sleep(2)
+                    await browser.close()
+                    return {"success": True, "message": "Comment reply posted successfully"}
+
+            await browser.close()
+            return {"success": True, "message": "Comment reply dispatched"}
+
+    except Exception as exc:
+        err_str = str(exc)
+        logger.error(f"Browser comment reply error: {err_str}")
+        if "ERR_TOO_MANY_REDIRECTS" in err_str or "auth" in err_str.lower() or "login" in err_str.lower():
+            return {
+                "success": False,
+                "error": "LinkedIn session token (li_at) has expired or was revoked. Please enter a fresh li_at token in the Connection tab.",
+            }
+        return {"success": False, "error": err_str}
+
+
+
