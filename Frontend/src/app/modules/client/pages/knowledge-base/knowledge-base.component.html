@@ -29,7 +29,7 @@
 </div>
 
 <!-- Tabs -->
-<p-tabs value="docs">
+<p-tabs [(value)]="kbActiveTab" [lazy]="true">
   <p-tablist>
     <p-tab value="docs"
       ><i class="pi pi-file mr-2"></i> Documents ({{ docs.length }})</p-tab
@@ -45,7 +45,10 @@
   <p-tabpanels>
     <!-- Documents Tab -->
     <p-tabpanel value="docs">
-      <div class="card-base overflow-hidden mt-4">
+      <div
+        *ngIf="kbActiveTab === 'docs'"
+        class="card-base overflow-hidden mt-4"
+      >
         <p-table
           #dtDocs
           [value]="docs"
@@ -156,13 +159,21 @@
             </tr>
           </ng-template>
         </p-table>
-        <p-menu #docActionMenu [popup]="true" appendTo="body" [model]="activeDocMenuItems"></p-menu>
+        <p-menu
+          #docActionMenu
+          [popup]="true"
+          appendTo="body"
+          [model]="activeDocMenuItems"
+        ></p-menu>
       </div>
     </p-tabpanel>
 
     <!-- Document Testing Tab -->
     <p-tabpanel *appHasPermission="PERMISSIONS.KB_TEST" value="test">
-      <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div
+        *ngIf="kbActiveTab === 'test'"
+        class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6"
+      >
         <div class="lg:col-span-1 card-base p-5">
           <h3 class="text-sm font-semibold mb-3" style="color: var(--app-text)">
             Test Query Playground
@@ -287,7 +298,7 @@
 
     <!-- FAQ Management Tab -->
     <p-tabpanel value="faq">
-      <div class="mt-4">
+      <div *ngIf="kbActiveTab === 'faq'" class="mt-4">
         <div class="flex justify-between items-center mb-4">
           <p-iconfield>
             <p-inputicon styleClass="pi pi-search" />
@@ -478,6 +489,271 @@
       icon="pi pi-check"
       (click)="saveFaq()"
     ></p-button>
+  </ng-template>
+</p-dialog>
+
+<!-- View Document Dialog -->
+<p-dialog
+  [(visible)]="showViewDocDialog"
+  [modal]="true"
+  [dismissableMask]="true"
+  [style]="{ width: '92vw', maxWidth: '850px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [header]="selectedDoc?.fileName || 'View Document'"
+>
+  <div class="space-y-4 pt-1">
+    <!-- Top Metadata Card -->
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border"
+      style="
+        background: var(--app-surface-hover, rgba(0, 0, 0, 0.02));
+        border-color: var(--app-border);
+      "
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0"
+          style="
+            background: var(--app-surface);
+            border: 1px solid var(--app-border);
+          "
+        >
+          <i
+            class="pi"
+            [ngClass]="{
+              'pi-file-pdf text-red-500':
+                selectedDoc?.fileType?.includes('pdf') ||
+                selectedDoc?.fileType === 'PDF',
+              'pi-file-word text-blue-500':
+                selectedDoc?.fileType?.includes('word') ||
+                selectedDoc?.fileType === 'DOCX',
+              'pi-file-excel text-green-500':
+                selectedDoc?.fileType?.includes('csv') ||
+                selectedDoc?.fileType === 'CSV',
+              'pi-file text-brand-500':
+                !selectedDoc?.fileType?.includes('pdf') &&
+                !selectedDoc?.fileType?.includes('word') &&
+                !selectedDoc?.fileType?.includes('csv'),
+            }"
+          ></i>
+        </div>
+        <div class="min-w-0">
+          <div
+            class="font-semibold text-sm truncate"
+            style="color: var(--app-text)"
+          >
+            {{ selectedDoc?.fileName }}
+          </div>
+          <div
+            class="flex flex-wrap items-center gap-2 text-xs mt-0.5"
+            style="color: var(--app-text-muted)"
+          >
+            <span>{{ selectedDoc?.fileType }}</span>
+            <span>•</span>
+            <span>Uploaded: {{ selectedDoc?.uploadDate }}</span>
+            <span>•</span>
+            <span>By: {{ selectedDoc?.uploadedBy }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <p-tag
+          [value]="selectedDoc?.status || 'Processed'"
+          [severity]="getStatusSeverity(selectedDoc?.status || '')"
+          [rounded]="true"
+        ></p-tag>
+        <span
+          class="px-2.5 py-1 text-xs font-semibold rounded-full border"
+          style="
+            background: var(--app-surface);
+            border-color: var(--app-border);
+            color: var(--app-text-secondary);
+          "
+        >
+          {{ selectedDoc?.chunks }} chunks
+        </span>
+        <span
+          *ngIf="selectedDocDetail?.char_count"
+          class="px-2.5 py-1 text-xs font-semibold rounded-full border"
+          style="
+            background: var(--app-surface);
+            border-color: var(--app-border);
+            color: var(--app-text-secondary);
+          "
+        >
+          {{ selectedDocDetail?.char_count | number }} chars
+        </span>
+      </div>
+    </div>
+
+    <!-- Mode Switcher & Content Toolbar -->
+    <div
+      class="flex items-center justify-between border-b pb-2 pt-1"
+      style="border-color: var(--app-border)"
+    >
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="activeDocViewerTab = 'content'"
+          class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+          [ngClass]="{
+            'bg-brand-500/10 text-brand-600 font-bold border border-brand-500/30':
+              activeDocViewerTab === 'content',
+            'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200':
+              activeDocViewerTab !== 'content',
+          }"
+        >
+          <i class="pi pi-align-left text-xs"></i>
+          Full Content
+        </button>
+        <button
+          type="button"
+          (click)="activeDocViewerTab = 'chunks'"
+          class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+          [ngClass]="{
+            'bg-brand-500/10 text-brand-600 font-bold border border-brand-500/30':
+              activeDocViewerTab === 'chunks',
+            'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200':
+              activeDocViewerTab !== 'chunks',
+          }"
+        >
+          <i class="pi pi-th-large text-xs"></i>
+          Indexed Chunks ({{
+            selectedDocChunks.length || selectedDoc?.chunks || 0
+          }})
+        </button>
+      </div>
+
+      <div
+        class="flex items-center gap-2"
+        *ngIf="activeDocViewerTab === 'content' && selectedDocDetail?.raw_text"
+      >
+        <p-button
+          icon="pi pi-copy"
+          label="Copy Text"
+          size="small"
+          [text]="true"
+          severity="secondary"
+          (click)="copyDocContent()"
+        ></p-button>
+      </div>
+    </div>
+
+    <!-- Tab 1: Full Document Content -->
+    <div *ngIf="activeDocViewerTab === 'content'">
+      <div
+        *ngIf="isLoadingDocContent"
+        class="py-16 flex flex-col items-center justify-center gap-3"
+      >
+        <p-progressSpinner
+          styleClass="w-8 h-8"
+          strokeWidth="4"
+        ></p-progressSpinner>
+        <p class="text-xs" style="color: var(--app-text-muted)">
+          Loading document content...
+        </p>
+      </div>
+
+      <div
+        *ngIf="!isLoadingDocContent && selectedDocDetail?.raw_text"
+        class="max-h-[50vh] overflow-y-auto rounded-xl p-4 border font-mono text-xs leading-relaxed whitespace-pre-wrap select-text"
+        style="
+          background: var(--app-surface-subtle, rgba(0, 0, 0, 0.02));
+          border-color: var(--app-border);
+          color: var(--app-text);
+        "
+      >
+        {{ selectedDocDetail?.raw_text }}
+      </div>
+
+      <div
+        *ngIf="!isLoadingDocContent && !selectedDocDetail?.raw_text"
+        class="py-12 text-center rounded-xl border border-dashed"
+        style="border-color: var(--app-border); color: var(--app-text-muted)"
+      >
+        <i class="pi pi-file-excel text-3xl mb-2 text-neutral-400"></i>
+        <p class="text-sm font-medium">No raw text preview available</p>
+        <p class="text-xs mt-1">
+          Switch to the Indexed Chunks tab to view stored passage data.
+        </p>
+      </div>
+    </div>
+
+    <!-- Tab 2: Indexed Chunks -->
+    <div
+      *ngIf="activeDocViewerTab === 'chunks'"
+      class="max-h-[50vh] overflow-y-auto space-y-3 pr-1"
+    >
+      <div
+        *ngFor="let chunk of selectedDocChunks"
+        class="p-3.5 rounded-xl border transition-all"
+        style="background: var(--app-surface); border-color: var(--app-border)"
+      >
+        <div
+          class="flex items-center justify-between mb-2 pb-1.5 border-b border-dashed"
+          style="border-color: var(--app-border)"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-brand-600"
+              >Chunk #{{ chunk.position + 1 }}</span
+            >
+            <span
+              *ngIf="chunk.token_count"
+              class="text-[11px] px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500"
+            >
+              {{ chunk.token_count }} tokens
+            </span>
+          </div>
+          <span
+            *ngIf="chunk.embedding_model"
+            class="text-[10px] text-neutral-400"
+          >
+            {{ chunk.embedding_model }}
+          </span>
+        </div>
+        <p
+          class="text-xs leading-relaxed select-text"
+          style="color: var(--app-text)"
+        >
+          {{ chunk.text }}
+        </p>
+      </div>
+
+      <div
+        *ngIf="selectedDocChunks.length === 0"
+        class="py-12 text-center rounded-xl border border-dashed"
+        style="border-color: var(--app-border); color: var(--app-text-muted)"
+      >
+        <i class="pi pi-database text-3xl mb-2 text-neutral-400"></i>
+        <p class="text-sm font-medium">No indexed chunks found</p>
+      </div>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-between w-full pt-2">
+      <p-button
+        label="Close"
+        icon="pi pi-times"
+        [text]="true"
+        severity="secondary"
+        (click)="showViewDocDialog = false"
+      ></p-button>
+
+      <p-button
+        *ngIf="selectedDoc"
+        label="Download Document"
+        icon="pi pi-download"
+        [loading]="isDownloadingDoc"
+        (click)="downloadDoc(selectedDoc)"
+        [style]="{
+          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+          border: 'none',
+        }"
+      ></p-button>
+    </div>
   </ng-template>
 </p-dialog>
 

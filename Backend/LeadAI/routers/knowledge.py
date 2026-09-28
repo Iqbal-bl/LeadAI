@@ -16,6 +16,7 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
+    Response,
     UploadFile,
     status,
 )
@@ -30,6 +31,7 @@ from ..db import get_leadai_db
 from ..models import LeadKbChunk, LeadKbDocument, utcnow
 from ..rbac import Principal, assert_owns, require, resolve_scope
 from ..schemas import (
+    DocumentDetailOut,
     DocumentOut,
     FaqCreate,
     KbStatsOut,
@@ -38,7 +40,7 @@ from ..schemas import (
     RetrievalTestOut,
     TextCreate,
 )
-from ..serializers import document_out
+from ..serializers import document_detail_out, document_out
 from ..services import ai_engine, embeddings, ingest, vectorstore
 
 logger = logging.getLogger(__name__)
@@ -268,6 +270,80 @@ def add_text(
             tags=payload.tags,
             request=request,
         )
+    )
+
+
+@router.get(
+    "/documents/{document_id}",
+    response_model=DocumentDetailOut,
+    summary="Get document details and raw content",
+)
+def get_document(
+    document_id: str,
+    principal: Principal = Depends(require("kb.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    client_id = resolve_scope(principal)
+    doc = db.get(LeadKbDocument, document_id)
+    if not doc or doc.IsDeleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    assert_owns(doc.ClientId, client_id)
+
+    raw_text = doc.RawText
+    if not raw_text:
+        chunks = (
+            db.query(LeadKbChunk)
+            .filter(LeadKbChunk.ClientId == client_id, LeadKbChunk.DocumentId == document_id)
+            .order_by(LeadKbChunk.Position.asc())
+            .all()
+        )
+        if chunks:
+            raw_text = "\n\n".join(c.ChunkText for c in chunks if c.ChunkText)
+
+    return document_detail_out(doc, raw_text=raw_text)
+
+
+@router.get(
+    "/documents/{document_id}/download",
+    summary="Download a document's content as a file",
+)
+def download_document(
+    document_id: str,
+    principal: Principal = Depends(require("kb.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    client_id = resolve_scope(principal)
+    doc = db.get(LeadKbDocument, document_id)
+    if not doc or doc.IsDeleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    assert_owns(doc.ClientId, client_id)
+
+    raw_text = doc.RawText
+    if not raw_text:
+        chunks = (
+            db.query(LeadKbChunk)
+            .filter(LeadKbChunk.ClientId == client_id, LeadKbChunk.DocumentId == document_id)
+            .order_by(LeadKbChunk.Position.asc())
+            .all()
+        )
+        if chunks:
+            raw_text = "\n\n".join(c.ChunkText for c in chunks if c.ChunkText)
+
+    if not raw_text:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document content is empty or unavailable")
+
+    filename = doc.FileName or f"{doc.Title or 'document'}.txt"
+    media_type = doc.ContentType or "text/plain"
+    safe_filename = filename.replace('"', '\\"')
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{safe_filename}"',
+        "Access-Control-Expose-Headers": "Content-Disposition",
+    }
+    return Response(
+        content=raw_text.encode("utf-8"),
+        media_type=media_type,
+        headers=headers,
     )
 
 

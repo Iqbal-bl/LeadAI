@@ -67,7 +67,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   invitationMessage =
     'Hi {name},\n\nI came across your profile and was really impressed by your background. Would love to connect and stay in touch!';
   isSendingInvitations = false;
-  invitationResults: Record<string, { success: boolean; message: string }> | null = null;
+  invitationResults: Record<
+    string,
+    { success: boolean; message: string }
+  > | null = null;
   showResultsModal = false;
 
   // Direct Messaging & InMail
@@ -107,7 +110,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   constructor(
     private linkedinService: LinkedinService,
     private messageService: MessageService,
-    private confirmationService: ConfirmationService
+    private confirmationService: ConfirmationService,
   ) {}
 
   ngOnInit(): void {
@@ -160,7 +163,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'LinkedIn Connected',
-          detail: 'OAuth authorization completed. You can now use LinkedIn posting and automation.',
+          detail:
+            'OAuth authorization completed. You can now use LinkedIn posting and automation.',
         });
       }
     };
@@ -179,7 +183,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           const popup = window.open(
             res.authorize_url,
             'linkedin-oauth',
-            `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=yes`
+            `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=yes`,
           );
 
           this.clearPolling();
@@ -212,7 +216,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'error',
           summary: 'OAuth Failed',
-          detail: err?.error?.detail || err?.message || 'Could not initiate LinkedIn connection.',
+          detail:
+            err?.error?.detail ||
+            err?.message ||
+            'Could not initiate LinkedIn connection.',
         });
       },
     });
@@ -220,7 +227,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   disconnectProfile(): void {
     this.confirmationService.confirm({
-      message: 'Are you sure you want to disconnect this LinkedIn profile and clear bot sessions?',
+      message:
+        'Are you sure you want to disconnect this LinkedIn profile and clear bot sessions?',
       header: 'Disconnect LinkedIn',
       icon: 'pi pi-exclamation-triangle',
       acceptButtonStyleClass: 'p-button-danger',
@@ -259,7 +267,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   // --- Bot Automation Credentials ---
   saveBotCredentials(): void {
     const hasCookie = !!this.credentialsForm.cookie_li_at?.trim();
-    const hasCreds = !!this.credentialsForm.username?.trim() && !!this.credentialsForm.password?.trim();
+    const hasCreds =
+      !!this.credentialsForm.username?.trim() &&
+      !!this.credentialsForm.password?.trim();
 
     if (!hasCookie && !hasCreds) {
       this.messageService.add({
@@ -303,14 +313,19 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   disconnectBotCredentials(): void {
     this.confirmationService.confirm({
-      message: 'Are you sure you want to remove your personal LinkedIn session token/credentials?',
+      message:
+        'Are you sure you want to remove your personal LinkedIn session token/credentials?',
       header: 'Remove Session Credentials',
       icon: 'pi pi-exclamation-triangle',
       acceptButtonStyleClass: 'p-button-danger',
       accept: () => {
         this.linkedinService.disconnectCredentials().subscribe({
           next: () => {
-            this.credentialsForm = { cookie_li_at: '', username: '', password: '' };
+            this.credentialsForm = {
+              cookie_li_at: '',
+              username: '',
+              password: '',
+            };
             this.showCredentialsSuccess = false;
             this.conversations = [];
             this.selectedConversation = null;
@@ -319,7 +334,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.messageService.add({
               severity: 'success',
               summary: 'Credentials Removed',
-              detail: 'Personal LinkedIn session and credentials removed successfully.',
+              detail:
+                'Personal LinkedIn session and credentials removed successfully.',
             });
             this.loadStatus();
           },
@@ -334,7 +350,6 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       },
     });
   }
-
 
   // --- Auto-Accept & Automation Settings ---
   saveAutomationSettings(): void {
@@ -373,7 +388,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'info',
           summary: 'Sync Queued',
-          detail: res.message || 'Background sync of connection requests started.',
+          detail:
+            res.message || 'Background sync of connection requests started.',
         });
         setTimeout(() => this.loadInvitations(), 3000);
       },
@@ -427,7 +443,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         next: () => {
           item.processing = false;
           this.invitations = this.invitations.filter(
-            (i) => i.invitation_urn !== item.invitation_urn
+            (i) => i.invitation_urn !== item.invitation_urn,
           );
           this.messageService.add({
             severity: 'success',
@@ -440,7 +456,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'error',
             summary: 'Accept Failed',
-            detail: err?.error?.detail || 'Failed to accept LinkedIn invitation.',
+            detail:
+              err?.error?.detail || 'Failed to accept LinkedIn invitation.',
           });
         },
       });
@@ -464,7 +481,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             next: () => {
               item.processing = false;
               this.invitations = this.invitations.filter(
-                (i) => i.invitation_urn !== item.invitation_urn
+                (i) => i.invitation_urn !== item.invitation_urn,
               );
               this.messageService.add({
                 severity: 'info',
@@ -510,7 +527,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.messageService.add({
               severity: 'error',
               summary: 'Batch Accept Failed',
-              detail: err?.error?.detail || 'Failed to process batch invitations.',
+              detail:
+                err?.error?.detail || 'Failed to process batch invitations.',
             });
           },
         });
@@ -565,6 +583,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           ...p,
           selected: false,
         }));
+        this.updateSelectedState();
         this.messageService.add({
           severity: 'info',
           summary: 'Search Completed',
@@ -587,19 +606,37 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   toggleSelectAll(): void {
     this.selectAllChecked = !this.selectAllChecked;
     this.profiles.forEach((p) => (p.selected = this.selectAllChecked));
+    this.updateSelectedState();
   }
 
   onProfileSelectChange(): void {
+    this.updateSelectedState();
+  }
+
+  selectSingleProfile(profile: LinkedInProfile): void {
+    profile.selected = true;
+    this.updateSelectedState();
+    this.activeTab = 'invitations';
+  }
+
+  deselectProfile(profile: LinkedInProfile): void {
+    profile.selected = false;
+    this.updateSelectedState();
+  }
+
+  updateSelectedState(): void {
+    this.selectedProfiles = this.profiles.filter((p) => p.selected);
+    this.selectedCount = this.selectedProfiles.length;
     this.selectAllChecked =
-      this.profiles.length > 0 && this.profiles.every((p) => p.selected);
+      this.profiles.length > 0 && this.selectedCount === this.profiles.length;
   }
 
   getSelectedCount(): number {
-    return this.profiles.filter((p) => p.selected).length;
+    return this.selectedCount;
   }
 
   getSelectedProfiles(): LinkedInProfile[] {
-    return this.profiles.filter((p) => p.selected);
+    return this.selectedProfiles;
   }
 
   // --- Send Invitations ---
@@ -609,7 +646,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       this.messageService.add({
         severity: 'warn',
         summary: 'No Profiles Selected',
-        detail: 'Please select at least one candidate profile from search results.',
+        detail:
+          'Please select at least one candidate profile from search results.',
       });
       return;
     }
@@ -642,7 +680,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'error',
           summary: 'Invitation Error',
-          detail: err?.error?.detail || 'Failed to dispatch connection requests.',
+          detail:
+            err?.error?.detail || 'Failed to dispatch connection requests.',
         });
       },
     });
@@ -666,14 +705,20 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.loadingConversations = false;
         this.conversations = res.conversations || [];
+        this.updateUnreadCount();
+        this.applyConversationFilter();
         if (this.conversations.length > 0) {
           if (!this.selectedConversation) {
             this.selectConversation(this.conversations[0]);
           } else {
             const found = this.conversations.find(
               (c) =>
-                (c.conversation_id && c.conversation_id === this.selectedConversation?.conversation_id) ||
-                (c.conversation_urn && c.conversation_urn === this.selectedConversation?.conversation_urn)
+                (c.conversation_id &&
+                  c.conversation_id ===
+                    this.selectedConversation?.conversation_id) ||
+                (c.conversation_urn &&
+                  c.conversation_urn ===
+                    this.selectedConversation?.conversation_urn),
             );
             if (found) {
               this.selectedConversation = found;
@@ -694,6 +739,11 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   selectConversation(conv: LinkedInConversation): void {
     this.selectedConversation = conv;
+    if (!conv.is_read || (conv.unread_count && conv.unread_count > 0)) {
+      conv.is_read = true;
+      conv.unread_count = 0;
+      this.updateUnreadCount();
+    }
     this.messages = [];
     this.loadingMessages = true;
     const convId = conv.conversation_id || conv.conversation_urn;
@@ -708,7 +758,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'error',
           summary: 'Message Fetch Failed',
-          detail: err?.error?.detail || 'Could not load conversation thread messages.',
+          detail:
+            err?.error?.detail ||
+            'Could not load conversation thread messages.',
         });
       },
     });
@@ -718,13 +770,16 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     if (!this.selectedConversation || !this.replyMessageText?.trim()) return;
     const text = this.replyMessageText.trim();
     const convId =
-      this.selectedConversation.conversation_id || this.selectedConversation.conversation_urn;
+      this.selectedConversation.conversation_id ||
+      this.selectedConversation.conversation_urn;
     this.sendingMessage = true;
+    this.canSendReply = false;
 
     this.linkedinService.sendMessage(convId, text).subscribe({
       next: () => {
         this.sendingMessage = false;
         this.replyMessageText = '';
+        this.canSendReply = false;
         this.messages.push({
           text,
           sender_name: 'You',
@@ -744,6 +799,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.sendingMessage = false;
+        this.onReplyTextChange(this.replyMessageText);
         this.messageService.add({
           severity: 'error',
           summary: 'Send Failed',
@@ -776,28 +832,45 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  getFilteredConversations(): LinkedInConversation[] {
+  applyConversationFilter(): void {
     if (!this.searchConversationText?.trim()) {
-      return this.conversations;
+      this.filteredConversations = this.conversations;
+      return;
     }
     const q = this.searchConversationText.toLowerCase().trim();
-    return this.conversations.filter(
+    this.filteredConversations = this.conversations.filter(
       (c) =>
         (c.contact_name && c.contact_name.toLowerCase().includes(q)) ||
         (c.contact_headline && c.contact_headline.toLowerCase().includes(q)) ||
-        (c.last_message && c.last_message.toLowerCase().includes(q))
+        (c.last_message && c.last_message.toLowerCase().includes(q)),
     );
   }
 
-  getUnreadConversationsCount(): number {
-    return this.conversations.filter(
-      (c) => !c.is_read || (c.unread_count && c.unread_count > 0)
+  updateUnreadCount(): void {
+    this.unreadConversationsCount = this.conversations.filter(
+      (c) => !c.is_read || (c.unread_count && c.unread_count > 0),
     ).length;
+  }
+
+  onReplyTextChange(text: string): void {
+    this.replyMessageText = text;
+    this.canSendReply =
+      !this.sendingMessage && !!text && text.trim().length > 0;
+  }
+
+  getFilteredConversations(): LinkedInConversation[] {
+    return this.filteredConversations;
+  }
+
+  getUnreadConversationsCount(): number {
+    return this.unreadConversationsCount;
   }
 
   private scrollToBottom(): void {
     setTimeout(() => {
-      const chatContainer = document.getElementById('linkedin-chat-messages-container');
+      const chatContainer = document.getElementById(
+        'linkedin-chat-messages-container',
+      );
       if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }

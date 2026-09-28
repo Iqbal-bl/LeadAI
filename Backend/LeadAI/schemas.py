@@ -257,6 +257,10 @@ class DocumentOut(BaseModel):
         return dt.isoformat()
 
 
+class DocumentDetailOut(DocumentOut):
+    raw_text: str | None = None
+
+
 class FaqCreate(BaseModel):
     title: str = Field(default="FAQ", max_length=255)
     content: str = Field(min_length=10)

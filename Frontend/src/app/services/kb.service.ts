@@ -93,6 +93,21 @@ export class KbService {
     );
   }
 
+  // GET /knowledge/documents/{id}
+  public getDocument(id: string): Observable<KbDocument> {
+    return this.apiService.get<KbDocument>(`knowledge/documents/${id}`, {
+      companyScoped: true,
+    });
+  }
+
+  // GET /knowledge/documents/{id}/download
+  public downloadDocument(id: string): Observable<Blob> {
+    return this.apiService.get<Blob>(`knowledge/documents/${id}/download`, {
+      companyScoped: true,
+      responseType: 'blob',
+    });
+  }
+
   // DELETE /knowledge/documents/{id}
   public deleteDocument(id: string): Observable<void> {
     return this.apiService.delete<void>(`knowledge/documents/${id}`, {

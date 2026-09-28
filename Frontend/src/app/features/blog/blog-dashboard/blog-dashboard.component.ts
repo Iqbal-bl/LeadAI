@@ -44,6 +44,8 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
 
   // Active Tab: 'articles' | 'history' | 'generator' | 'settings'
   mainTab: 'articles' | 'history' | 'generator' | 'settings' = 'articles';
+  loadedTabs = new Set<'articles' | 'history' | 'generator' | 'settings'>(['articles']);
+  settingsLoaded = false;
 
   // Upload History Filters & Search
   historyChannelFilter: string = 'all';
@@ -131,7 +133,22 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.loadStats();
     this.loadArticles();
-    this.loadSettings();
+    // Preload settings on browser idle so initial tab renders instantly
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(() => {
+        if (!this.settingsLoaded) {
+          this.loadSettings();
+        }
+      });
+    }
+  }
+
+  setMainTab(tab: 'articles' | 'history' | 'generator' | 'settings'): void {
+    this.mainTab = tab;
+    this.loadedTabs.add(tab);
+    if (tab === 'settings' && !this.settingsLoaded) {
+      this.loadSettings();
+    }
   }
 
   ngOnDestroy(): void {
@@ -189,6 +206,7 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
           wordpress: channels.includes('wordpress'),
         };
         this.loadingSettings = false;
+        this.settingsLoaded = true;
       },
       error: (err) => {
         this.loadingSettings = false;

@@ -75,6 +75,7 @@
           type="text"
           pInputText
           [(ngModel)]="searchQuery"
+          (ngModelChange)="updateFilteredPermissions()"
           placeholder="Search permissions..."
           class="w-full text-sm"
         />
@@ -102,10 +103,7 @@
     <div *ngIf="!loading" class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
-          <tr
-            class="border-b"
-            style="border-color: var(--app-border)"
-          >
+          <tr class="border-b" style="border-color: var(--app-border)">
             <th
               class="text-left px-5 py-4 font-semibold text-xs uppercase tracking-wider"
               style="color: var(--app-text-secondary)"
@@ -117,13 +115,13 @@
               class="text-center px-4 py-4 font-semibold text-xs uppercase tracking-wider"
               style="color: var(--app-text-secondary)"
             >
-              {{ formatRoleName(role) }}
+              {{ formattedRoleNames[role] || role }}
             </th>
           </tr>
         </thead>
         <tbody>
           <tr
-            *ngFor="let perm of getFilteredPermissions(); let odd = odd"
+            *ngFor="let perm of filteredPermissions; let odd = odd"
             class="border-b transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/30"
             [class.bg-slate-25]="odd"
             style="border-color: var(--app-border)"
@@ -142,10 +140,7 @@
                 >
               </div>
             </td>
-            <td
-              *ngFor="let role of roles"
-              class="text-center px-4 py-3.5"
-            >
+            <td *ngFor="let role of roles" class="text-center px-4 py-3.5">
               <i
                 *ngIf="hasPermission(role, perm)"
                 class="pi pi-check-circle text-green-500 text-lg"
