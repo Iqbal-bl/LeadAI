@@ -16,7 +16,9 @@
     </h1>
     <!-- <p class="text-sm" style="color: var(--app-text-muted);">{{ lead.company }} · {{ lead.industry }}</p> -->
   </div>
-  <app-lead-status-badge [status]="lead?.status || 'New'"></app-lead-status-badge>
+  <app-lead-status-badge
+    [status]="lead?.status || 'New'"
+  ></app-lead-status-badge>
 </div>
 
 <!-- Main Grid -->
@@ -57,6 +59,7 @@
 
 <!-- Transcript Preview Dialog -->
 <p-dialog
+  *ngIf="transcriptVisible"
   [(visible)]="transcriptVisible"
   [modal]="true"
   [header]="
@@ -141,8 +144,8 @@
       <div
         *ngFor="let msg of activeTranscript.messages"
         class="flex flex-col"
-        [class.items-end]="msg.sender === 'customer'"
-        [class.items-start]="msg.sender !== 'customer'"
+        [class.items-start]="msg.sender === 'customer'"
+        [class.items-end]="msg.sender !== 'customer'"
       >
         <div
           class="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs shadow-sm"
@@ -156,7 +159,7 @@
             msg.sender === 'customer' ? 'none' : '1px solid var(--app-border)'
           "
           [ngClass]="
-            msg.sender === 'customer' ? 'rounded-tr-none' : 'rounded-tl-none'
+            msg.sender === 'customer' ? 'rounded-tl-none' : 'rounded-tr-none'
           "
         >
           <div

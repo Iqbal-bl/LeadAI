@@ -2,7 +2,11 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 import { KbService } from '../../../../services/kb.service';
 
 import { SharedModule } from '../../../../shared/shared.module';
-import { Faq, KnowledgeBaseDoc } from '../../../../models/kb.models';
+import {
+  Faq,
+  KbDocument,
+  KnowledgeBaseDoc,
+} from '../../../../models/kb.models';
 import { CLIENT_PERMISSIONS } from '../../constants/permission.constants';
 import { MenuItem } from 'primeng/api';
 import { Menu } from 'primeng/menu';
@@ -24,6 +28,7 @@ export class KnowledgeBaseComponent implements OnInit {
   faqs: Faq[] = [];
 
   activeDocMenuItems: MenuItem[] = [];
+  kbActiveTab: 'docs' | 'test' | 'faq' = 'docs';
 
   // Testing tab state
   testQuestion = 'What is the enterprise pricing model and refund policy?';
@@ -35,6 +40,15 @@ export class KnowledgeBaseComponent implements OnInit {
   newFaq = { question: '', answer: '', category: 'Product' };
 
   showUploadDialog = false;
+
+  // View Document dialog state
+  showViewDocDialog = false;
+  selectedDoc: KnowledgeBaseDoc | null = null;
+  selectedDocDetail: KbDocument | null = null;
+  selectedDocChunks: any[] = [];
+  isLoadingDocContent = false;
+  isDownloadingDoc = false;
+  activeDocViewerTab: 'content' | 'chunks' = 'content';
 
   constructor(
     private kbService: KbService,
@@ -60,11 +74,11 @@ export class KnowledgeBaseComponent implements OnInit {
         // );
 
         this.docs = documents.map((d) => ({
-          id: d.id as any,
-          fileName: d.file_name,
-          fileType: d.content_type,
+          id: d.id,
+          fileName: d.file_name || d.title || 'Untitled Document',
+          fileType: d.content_type || 'text/plain',
           chunks: d.chunk_count,
-          uploadDate: d.created_at.split('T')[0],
+          uploadDate: d.created_at ? d.created_at.split('T')[0] : '',
           uploadedBy: d.created_by || 'Admin',
           status:
             d.status === 'indexed'
@@ -72,6 +86,7 @@ export class KnowledgeBaseComponent implements OnInit {
               : d.status === 'indexing'
                 ? 'Processing'
                 : ('Failed' as any),
+          rawDoc: d,
         }));
 
         // Fallback to mock FAQs if none returned from API, otherwise map from documents
@@ -174,9 +189,16 @@ export class KnowledgeBaseComponent implements OnInit {
   openDocMenu(event: Event, doc: KnowledgeBaseDoc): void {
     event.stopPropagation();
     this.activeDocMenuItems = [
-      { label: 'View Document', icon: 'pi pi-eye' },
-      { label: 'Test Queries', icon: 'pi pi-bolt' },
-      { label: 'Download', icon: 'pi pi-download' },
+      {
+        label: 'View Document',
+        icon: 'pi pi-eye',
+        command: () => this.viewDoc(doc),
+      },
+      {
+        label: 'Download',
+        icon: 'pi pi-download',
+        command: () => this.downloadDoc(doc),
+      },
       { separator: true },
       {
         label: 'Delete',
@@ -186,6 +208,110 @@ export class KnowledgeBaseComponent implements OnInit {
       },
     ];
     this.docActionMenu.toggle(event);
+  }
+
+  viewDoc(doc: KnowledgeBaseDoc): void {
+    this.selectedDoc = doc;
+    this.selectedDocDetail = null;
+    this.selectedDocChunks = [];
+    this.activeDocViewerTab = 'content';
+    this.showViewDocDialog = true;
+
+    if (doc.id) {
+      this.isLoadingDocContent = true;
+      this.kbService.getDocumentChunks(String(doc.id), 500).subscribe({
+        next: (chunkData) => {
+          this.selectedDocChunks = chunkData.chunks || [];
+          const assembled = this.selectedDocChunks
+            .map((c) => c.text)
+            .join('\n\n');
+          this.selectedDocDetail = {
+            id: String(doc.id),
+            title: chunkData.title || doc.fileName,
+            file_name: doc.fileName,
+            content_type: doc.fileType,
+            source_type: 'upload',
+            status: 'indexed',
+            status_message: null,
+            chunk_count: chunkData.total_chunks || doc.chunks,
+            char_count: assembled.length,
+            embedding_model: this.selectedDocChunks[0]?.embedding_model || '',
+            tags: '',
+            created_at: doc.uploadDate,
+            created_by: doc.uploadedBy,
+            raw_text: assembled,
+          };
+          this.isLoadingDocContent = false;
+        },
+        error: (err) => {
+          console.error('Failed to load document chunks', err);
+          this.isLoadingDocContent = false;
+          this.toastService.error('Failed to load document content.');
+        },
+      });
+    }
+  }
+
+  downloadDoc(doc: KnowledgeBaseDoc): void {
+    if (!doc.id) return;
+
+    // If document content is already in memory, trigger immediate download without network call
+    if (this.selectedDoc?.id === doc.id && this.selectedDocDetail?.raw_text) {
+      this.triggerFileDownload(doc.fileName, this.selectedDocDetail.raw_text);
+      return;
+    }
+
+    this.isDownloadingDoc = true;
+    this.toastService.info(`Preparing download for "${doc.fileName}"...`);
+
+    this.kbService.getDocumentChunks(String(doc.id), 500).subscribe({
+      next: (chunkData) => {
+        this.isDownloadingDoc = false;
+        const chunks = chunkData.chunks || [];
+        const content = chunks.map((c) => c.text).join('\n\n');
+        if (content) {
+          this.triggerFileDownload(doc.fileName, content);
+        } else {
+          this.toastService.error(
+            `Document "${doc.fileName}" has no content to download.`,
+          );
+        }
+      },
+      error: (err) => {
+        this.isDownloadingDoc = false;
+        console.error('Download failed', err);
+        this.toastService.error(`Failed to download "${doc.fileName}".`);
+      },
+    });
+  }
+
+  private triggerFileDownload(fileName: string, content: string): void {
+    const textBlob = new Blob([content], {
+      type: 'text/plain;charset=utf-8',
+    });
+    const blobUrl = window.URL.createObjectURL(textBlob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName || 'document.txt';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+    this.toastService.success(`Downloaded "${fileName}".`);
+  }
+
+  copyDocContent(): void {
+    const textToCopy = this.selectedDocDetail?.raw_text || '';
+    if (textToCopy) {
+      navigator.clipboard
+        .writeText(textToCopy)
+        .then(() => {
+          this.toastService.success('Document content copied to clipboard.');
+        })
+        .catch(() => {
+          this.toastService.error('Failed to copy to clipboard.');
+        });
+    }
   }
 
   deleteDoc(doc: KnowledgeBaseDoc): void {
@@ -205,7 +331,7 @@ export class KnowledgeBaseComponent implements OnInit {
         } else {
           this.docs = this.docs.filter((d) => d.id !== doc.id);
         }
-      }
+      },
     );
   }
 

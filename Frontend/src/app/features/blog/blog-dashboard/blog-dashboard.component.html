@@ -9,12 +9,13 @@
         <span class="gradient-text">Blog & Content Studio</span>
       </h1>
       <p class="page-subtitle">
-        Automated multi-channel blog creation, daily trending topic scheduler, and editorial approval workflow.
+        Automated multi-channel blog creation, daily trending topic scheduler,
+        and editorial approval workflow.
       </p>
     </div>
 
     <!-- Header Actions -->
-    <div class="header-actions">
+    <!-- <div class="header-actions">
       <button
         class="btn btn-secondary"
         (click)="mainTab = 'settings'"
@@ -41,7 +42,7 @@
         <i class="pi" [ngClass]="isGeneratingDaily ? 'pi-spin pi-spinner' : 'pi-sparkles'"></i>
         <span>{{ isGeneratingDaily ? 'Generating Today\'s Post...' : 'Generate Today\'s Topic' }}</span>
       </button>
-    </div>
+    </div> -->
   </div>
 
   <!-- Navigation Tabs -->
@@ -49,7 +50,7 @@
     <button
       class="tab-btn"
       [class.active]="mainTab === 'articles'"
-      (click)="mainTab = 'articles'"
+      (click)="setMainTab('articles')"
     >
       <i class="pi pi-book"></i>
       <span>Editorial Queue ({{ stats.total }})</span>
@@ -57,16 +58,18 @@
     <button
       class="tab-btn"
       [class.active]="mainTab === 'history'"
-      (click)="mainTab = 'history'"
+      (click)="setMainTab('history')"
     >
       <i class="pi pi-history"></i>
       <span>Upload & Publishing History ({{ publishedArticles.length }})</span>
-      <span class="count-badge" *ngIf="publishedArticles.length > 0">{{ publishedArticles.length }}</span>
+      <span class="count-badge" *ngIf="publishedArticles.length > 0">{{
+        publishedArticles.length
+      }}</span>
     </button>
     <button
       class="tab-btn"
       [class.active]="mainTab === 'generator'"
-      (click)="mainTab = 'generator'"
+      (click)="setMainTab('generator')"
     >
       <i class="pi pi-bolt"></i>
       <span>AI Generator Studio</span>
@@ -74,11 +77,14 @@
     <button
       class="tab-btn"
       [class.active]="mainTab === 'settings'"
-      (click)="mainTab = 'settings'"
+      (click)="setMainTab('settings')"
     >
       <i class="pi pi-sliders-h"></i>
       <span>Company Auto-Blog Settings</span>
-      <span class="status-indicator" [class.enabled]="settings.is_auto_blog_enabled"></span>
+      <span
+        class="status-indicator"
+        [class.enabled]="settings.is_auto_blog_enabled"
+      ></span>
     </button>
   </div>
 
@@ -87,22 +93,40 @@
   <!-- ======================================================================= -->
   <div *ngIf="mainTab === 'articles'" class="tab-content">
     <!-- Active Daily Automation Schedule Strip -->
-    <div class="active-schedule-strip" (click)="mainTab = 'settings'">
+    <div class="active-schedule-strip" (click)="setMainTab('settings')">
       <div class="strip-left">
-        <span class="pulse-dot" [class.paused]="!settings.is_auto_blog_enabled"></span>
+        <span
+          class="pulse-dot"
+          [class.paused]="!settings.is_auto_blog_enabled"
+        ></span>
         <span class="strip-status">
           <strong>Daily Auto-Blog:</strong>
-          {{ settings.is_auto_blog_enabled ? 'Active & Scheduled' : 'Paused' }}
+          {{ settings.is_auto_blog_enabled ? "Active & Scheduled" : "Paused" }}
         </span>
-        <span class="strip-divider" *ngIf="settings.is_auto_blog_enabled">•</span>
+        <span class="strip-divider" *ngIf="settings.is_auto_blog_enabled"
+          >•</span
+        >
         <span class="strip-time" *ngIf="settings.is_auto_blog_enabled">
           <i class="pi pi-clock"></i>
-          Runs daily at <strong>{{ settings.schedule_time || '09:00' }} UTC</strong> ({{ getLocalTimeFromUtc(settings.schedule_time || '09:00') }} Local)
+          Runs daily at
+          <strong>{{ settings.schedule_time || "09:00" }} UTC</strong> ({{
+            getLocalTimeFromUtc(settings.schedule_time || "09:00")
+          }}
+          Local)
         </span>
         <span class="strip-divider">•</span>
         <span class="strip-mode">
-          <i class="pi" [ngClass]="settings.mode === 'automatic' ? 'pi-bolt' : 'pi-envelope'"></i>
-          {{ settings.mode === 'automatic' ? 'Direct Auto-Publish' : 'Manual Approval Required' }}
+          <i
+            class="pi"
+            [ngClass]="
+              settings.mode === 'automatic' ? 'pi-bolt' : 'pi-envelope'
+            "
+          ></i>
+          {{
+            settings.mode === "automatic"
+              ? "Direct Auto-Publish"
+              : "Manual Approval Required"
+          }}
         </span>
       </div>
       <div class="strip-right">
@@ -112,7 +136,11 @@
 
     <!-- Stat Counter Cards -->
     <div class="stats-grid">
-      <div class="stat-card" (click)="filterByStatus('all')" [class.selected]="activeStatusFilter === 'all'">
+      <div
+        class="stat-card"
+        (click)="filterByStatus('all')"
+        [class.selected]="activeStatusFilter === 'all'"
+      >
         <div class="stat-icon total-icon"><i class="pi pi-list"></i></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.total }}</div>
@@ -120,7 +148,11 @@
         </div>
       </div>
 
-      <div class="stat-card" (click)="filterByStatus('pending_approval')" [class.selected]="activeStatusFilter === 'pending_approval'">
+      <div
+        class="stat-card"
+        (click)="filterByStatus('pending_approval')"
+        [class.selected]="activeStatusFilter === 'pending_approval'"
+      >
         <div class="stat-icon pending-icon"><i class="pi pi-clock"></i></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.pending_approval }}</div>
@@ -128,15 +160,25 @@
         </div>
       </div>
 
-      <div class="stat-card" (click)="filterByStatus('approved')" [class.selected]="activeStatusFilter === 'approved'">
-        <div class="stat-icon approved-icon"><i class="pi pi-check-circle"></i></div>
+      <div
+        class="stat-card"
+        (click)="filterByStatus('approved')"
+        [class.selected]="activeStatusFilter === 'approved'"
+      >
+        <div class="stat-icon approved-icon">
+          <i class="pi pi-check-circle"></i>
+        </div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.approved }}</div>
           <div class="stat-label">Approved</div>
         </div>
       </div>
 
-      <div class="stat-card" (click)="filterByStatus('published')" [class.selected]="activeStatusFilter === 'published'">
+      <div
+        class="stat-card"
+        (click)="filterByStatus('published')"
+        [class.selected]="activeStatusFilter === 'published'"
+      >
         <div class="stat-icon published-icon"><i class="pi pi-send"></i></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.published }}</div>
@@ -144,7 +186,11 @@
         </div>
       </div>
 
-      <div class="stat-card" (click)="filterByStatus('changes_requested')" [class.selected]="activeStatusFilter === 'changes_requested'">
+      <div
+        class="stat-card"
+        (click)="filterByStatus('changes_requested')"
+        [class.selected]="activeStatusFilter === 'changes_requested'"
+      >
         <div class="stat-icon changes-icon"><i class="pi pi-replay"></i></div>
         <div class="stat-info">
           <div class="stat-value">{{ stats.changes_requested }}</div>
@@ -213,7 +259,10 @@
     <div *ngIf="!loadingArticles && articles.length === 0" class="empty-state">
       <div class="empty-icon"><i class="pi pi-book"></i></div>
       <h3>No articles found</h3>
-      <p>Generate your first AI blog post or configure daily automatic creation in settings.</p>
+      <p>
+        Generate your first AI blog post or configure daily automatic creation
+        in settings.
+      </p>
       <button class="btn btn-primary" (click)="triggerDailyRun()">
         <i class="pi pi-sparkles"></i>
         <span>Generate Daily Topic Now</span>
@@ -221,11 +270,23 @@
     </div>
 
     <div *ngIf="!loadingArticles && articles.length > 0" class="articles-grid">
-      <div *ngFor="let article of articles" class="article-card" (click)="openArticleModal(article)">
+      <div
+        *ngFor="let article of articles"
+        class="article-card"
+        (click)="openArticleModal(article)"
+      >
         <!-- Card Header Image / Placeholder -->
-        <div class="card-cover" [style.background-image]="article.cover_image ? 'url(' + article.cover_image + ')' : ''">
+        <div
+          class="card-cover"
+          [style.background-image]="
+            article.cover_image ? 'url(' + article.cover_image + ')' : ''
+          "
+        >
           <div class="cover-overlay">
-            <span class="status-badge" [ngClass]="getStatusClass(article.status)">
+            <span
+              class="status-badge"
+              [ngClass]="getStatusClass(article.status)"
+            >
               {{ getStatusLabel(article.status) }}
             </span>
             <span class="version-badge">v{{ article.current_version }}</span>
@@ -235,28 +296,53 @@
         <!-- Card Body -->
         <div class="card-content">
           <h3 class="article-title">{{ article.title }}</h3>
-          <p class="article-summary">{{ article.summary || 'Click to review content and inspect version outline...' }}</p>
+          <p class="article-summary">
+            {{
+              article.summary ||
+                "Click to review content and inspect version outline..."
+            }}
+          </p>
 
           <!-- Tags -->
-          <div class="article-tags" *ngIf="article.tags && article.tags.length > 0">
-            <span *ngFor="let tag of article.tags | slice:0:3" class="tag-chip">#{{ tag }}</span>
+          <div
+            class="article-tags"
+            *ngIf="article.tags && article.tags.length > 0"
+          >
+            <span
+              *ngFor="let tag of article.tags | slice: 0 : 3"
+              class="tag-chip"
+              >#{{ tag }}</span
+            >
           </div>
 
           <!-- Channel Indicators -->
           <div class="channels-row">
             <div class="channels-list">
-              <span class="channel-icon wp" title="WordPress / Website"><i class="pi pi-globe"></i></span>
-              <span class="channel-icon li" title="LinkedIn"><i class="pi pi-linkedin"></i></span>
-              <span class="channel-icon fb" title="Facebook"><i class="pi pi-facebook"></i></span>
-              <span class="channel-icon ig" title="Instagram"><i class="pi pi-instagram"></i></span>
+              <span class="channel-icon wp" title="WordPress / Website"
+                ><i class="pi pi-globe"></i
+              ></span>
+              <span class="channel-icon li" title="LinkedIn"
+                ><i class="pi pi-linkedin"></i
+              ></span>
+              <span class="channel-icon fb" title="Facebook"
+                ><i class="pi pi-facebook"></i
+              ></span>
+              <span class="channel-icon ig" title="Instagram"
+                ><i class="pi pi-instagram"></i
+              ></span>
             </div>
-            <span class="article-date">{{ article.created_at | date:'mediumDate' }}</span>
+            <span class="article-date">{{
+              article.created_at | date: "mediumDate"
+            }}</span>
           </div>
 
           <!-- Card Actions Footer -->
           <div class="card-footer" (click)="$event.stopPropagation()">
             <button
-              *ngIf="article.status === 'pending_approval' || article.status === 'changes_requested'"
+              *ngIf="
+                article.status === 'pending_approval' ||
+                article.status === 'changes_requested'
+              "
               class="btn-action review-btn"
               (click)="openReviewModal(article, 'approved')"
             >
@@ -265,7 +351,9 @@
             </button>
 
             <button
-              *ngIf="article.status === 'approved' || article.status === 'draft'"
+              *ngIf="
+                article.status === 'approved' || article.status === 'draft'
+              "
               class="btn-action publish-btn"
               (click)="openPublishModal(article)"
             >
@@ -274,7 +362,9 @@
             </button>
 
             <a
-              *ngIf="article.status === 'published' && article.wordpress_post_url"
+              *ngIf="
+                article.status === 'published' && article.wordpress_post_url
+              "
               [href]="article.wordpress_post_url"
               target="_blank"
               class="btn-action view-btn"
@@ -283,7 +373,11 @@
               <span>View Live</span>
             </a>
 
-            <button class="btn-icon delete-btn" (click)="deleteArticle(article, $event)" title="Delete Article">
+            <button
+              class="btn-icon delete-btn"
+              (click)="deleteArticle(article, $event)"
+              title="Delete Article"
+            >
               <i class="pi pi-trash"></i>
             </button>
           </div>
@@ -295,7 +389,10 @@
   <!-- ======================================================================= -->
   <!-- TAB 2: PUBLISHING & UPLOAD HISTORY                                      -->
   <!-- ======================================================================= -->
-  <div *ngIf="mainTab === 'history'" class="tab-content history-tab-content">
+  <div
+    *ngIf="mainTab === 'history' && loadedTabs.has('history')"
+    class="tab-content history-tab-content"
+  >
     <!-- History KPI Metrics Strip -->
     <div class="history-metrics-grid">
       <div class="metric-card total-metric">
@@ -326,7 +423,9 @@
         </div>
         <div class="metric-info">
           <span class="metric-label">WordPress / Web Articles</span>
-          <span class="metric-value">{{ publishedHistoryStats.wordpress }}</span>
+          <span class="metric-value">{{
+            publishedHistoryStats.wordpress
+          }}</span>
         </div>
         <span class="metric-subtext">Live on company website</span>
       </div>
@@ -337,7 +436,9 @@
         </div>
         <div class="metric-info">
           <span class="metric-label">Autonomous Daily Scheduler</span>
-          <span class="metric-value">{{ publishedHistoryStats.autonomous }}</span>
+          <span class="metric-value">{{
+            publishedHistoryStats.autonomous
+          }}</span>
         </div>
         <span class="metric-subtext">Automated trending topic runs</span>
       </div>
@@ -360,14 +461,18 @@
             [class.active]="historyChannelFilter === 'linkedin'"
             (click)="historyChannelFilter = 'linkedin'"
           >
-            <i class="pi pi-linkedin"></i> LinkedIn ({{ publishedHistoryStats.linkedin }})
+            <i class="pi pi-linkedin"></i> LinkedIn ({{
+              publishedHistoryStats.linkedin
+            }})
           </button>
           <button
             class="filter-pill wp-pill"
             [class.active]="historyChannelFilter === 'wordpress'"
             (click)="historyChannelFilter = 'wordpress'"
           >
-            <i class="pi pi-globe"></i> WordPress ({{ publishedHistoryStats.wordpress }})
+            <i class="pi pi-globe"></i> WordPress ({{
+              publishedHistoryStats.wordpress
+            }})
           </button>
           <button
             class="filter-pill fb-pill"
@@ -420,28 +525,44 @@
             [(ngModel)]="historySearchQuery"
           />
         </div>
-        <button class="btn btn-secondary btn-icon-only" (click)="loadArticles()" title="Refresh Upload History">
+        <button
+          class="btn btn-secondary btn-icon-only"
+          (click)="loadArticles()"
+          title="Refresh Upload History"
+        >
           <i class="pi pi-refresh" [class.pi-spin]="loadingArticles"></i>
         </button>
       </div>
     </div>
 
     <!-- Empty State -->
-    <div *ngIf="filteredHistoryArticles.length === 0" class="empty-state history-empty">
+    <div
+      *ngIf="filteredHistoryArticles.length === 0"
+      class="empty-state history-empty"
+    >
       <div class="empty-icon"><i class="pi pi-cloud-upload"></i></div>
       <h3>No upload history matches your filter</h3>
       <p *ngIf="publishedArticles.length === 0">
-        No articles have been uploaded yet. Articles generated by the Daily Scheduler or approved in your Editorial Queue will automatically appear here with live URLs.
+        No articles have been uploaded yet. Articles generated by the Daily
+        Scheduler or approved in your Editorial Queue will automatically appear
+        here with live URLs.
       </p>
       <p *ngIf="publishedArticles.length > 0">
         No published blogs match the selected channel or source filter.
       </p>
       <div class="empty-actions">
-        <button class="btn btn-secondary" (click)="historyChannelFilter = 'all'; historyModeFilter = 'all'; historySearchQuery = ''">
+        <button
+          class="btn btn-secondary"
+          (click)="
+            historyChannelFilter = 'all';
+            historyModeFilter = 'all';
+            historySearchQuery = ''
+          "
+        >
           <i class="pi pi-filter-slash"></i>
           <span>Clear Filters</span>
         </button>
-        <button class="btn btn-primary" (click)="mainTab = 'articles'">
+        <button class="btn btn-primary" (click)="setMainTab('articles')">
           <i class="pi pi-list"></i>
           <span>Go to Editorial Queue</span>
         </button>
@@ -454,7 +575,11 @@
         <!-- Card Header: Title, Timestamp, Status & Mechanism -->
         <div class="history-card-header">
           <div class="article-meta-left">
-            <div class="thumb-cover" *ngIf="article.cover_image" [style.background-image]="'url(' + article.cover_image + ')'"></div>
+            <div
+              class="thumb-cover"
+              *ngIf="article.cover_image"
+              [style.background-image]="'url(' + article.cover_image + ')'"
+            ></div>
             <div class="thumb-cover-placeholder" *ngIf="!article.cover_image">
               <i class="pi pi-file-edit"></i>
             </div>
@@ -464,31 +589,53 @@
                 <span class="status-live-badge">
                   <span class="live-dot"></span> Live & Published
                 </span>
-                <span class="version-tag">Version {{ article.current_version }}</span>
-                <span class="mechanism-badge" [ngClass]="getPublishingMechanism(article).badgeClass">
+                <span class="version-tag"
+                  >Version {{ article.current_version }}</span
+                >
+                <span
+                  class="mechanism-badge"
+                  [ngClass]="getPublishingMechanism(article).badgeClass"
+                >
                   <i [class]="getPublishingMechanism(article).icon"></i>
                   {{ getPublishingMechanism(article).label }}
                 </span>
               </div>
-              <h3 class="history-article-title" (click)="openArticleModal(article)">
+              <h3
+                class="history-article-title"
+                (click)="openArticleModal(article)"
+              >
                 {{ article.title }}
               </h3>
               <div class="upload-timestamp">
                 <i class="pi pi-calendar-plus"></i>
-                <span><strong>Uploaded:</strong> {{ (article.published_at || article.created_at) | date:'medium' }}</span>
+                <span
+                  ><strong>Uploaded:</strong>
+                  {{
+                    article.published_at || article.created_at | date: "medium"
+                  }}</span
+                >
                 <span class="bullet-sep">•</span>
                 <i class="pi pi-clock"></i>
-                <span>Created {{ article.created_at | date:'shortTime' }}</span>
+                <span
+                  >Created {{ article.created_at | date: "shortTime" }}</span
+                >
               </div>
             </div>
           </div>
 
           <div class="header-quick-actions">
-            <button class="btn btn-secondary btn-sm" (click)="openArticleModal(article)">
+            <button
+              class="btn btn-secondary btn-sm"
+              (click)="openArticleModal(article)"
+            >
               <i class="pi pi-eye"></i>
               <span>Inspect Content</span>
             </button>
-            <button class="btn btn-secondary btn-sm" (click)="openPublishModal(article)" title="Publish or Re-distribute to more channels">
+            <button
+              class="btn btn-secondary btn-sm"
+              (click)="openPublishModal(article)"
+              title="Publish or Re-distribute to more channels"
+            >
               <i class="pi pi-share-alt"></i>
               <span>Re-publish</span>
             </button>
@@ -506,8 +653,12 @@
             <!-- LinkedIn Destination Box -->
             <div
               class="channel-box linkedin-box"
-              [class.is-active]="getChannelStatus(article, 'linkedin') === 'published'"
-              [class.is-failed]="getChannelStatus(article, 'linkedin') === 'failed'"
+              [class.is-active]="
+                getChannelStatus(article, 'linkedin') === 'published'
+              "
+              [class.is-failed]="
+                getChannelStatus(article, 'linkedin') === 'failed'
+              "
             >
               <div class="channel-box-header">
                 <div class="channel-brand">
@@ -516,18 +667,35 @@
                 </div>
                 <span
                   class="channel-status-pill"
-                  [class.success]="getChannelStatus(article, 'linkedin') === 'published'"
-                  [class.failed]="getChannelStatus(article, 'linkedin') === 'failed'"
-                  [class.skipped]="getChannelStatus(article, 'linkedin') === 'skipped'"
+                  [class.success]="
+                    getChannelStatus(article, 'linkedin') === 'published'
+                  "
+                  [class.failed]="
+                    getChannelStatus(article, 'linkedin') === 'failed'
+                  "
+                  [class.skipped]="
+                    getChannelStatus(article, 'linkedin') === 'skipped'
+                  "
                 >
-                  {{ getChannelStatus(article, 'linkedin') === 'published' ? 'Live on LinkedIn' : (getChannelStatus(article, 'linkedin') === 'failed' ? 'Failed' : 'Not Targeted') }}
+                  {{
+                    getChannelStatus(article, "linkedin") === "published"
+                      ? "Live on LinkedIn"
+                      : getChannelStatus(article, "linkedin") === "failed"
+                        ? "Failed"
+                        : "Not Targeted"
+                  }}
                 </span>
               </div>
 
-              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'linkedin') === 'published'">
+              <div
+                class="channel-box-body"
+                *ngIf="getChannelStatus(article, 'linkedin') === 'published'"
+              >
                 <div class="post-id-row" *ngIf="article.linkedin_post_id">
                   <span class="id-label">Post ID:</span>
-                  <code class="id-code" [title]="article.linkedin_post_id">{{ article.linkedin_post_id }}</code>
+                  <code class="id-code" [title]="article.linkedin_post_id">{{
+                    article.linkedin_post_id
+                  }}</code>
                 </div>
                 <div class="channel-actions">
                   <a
@@ -542,7 +710,12 @@
                   <button
                     *ngIf="getLiveUrl(article, 'linkedin')"
                     class="copy-btn"
-                    (click)="copyLink(getLiveUrl(article, 'linkedin'), 'LinkedIn Post Link')"
+                    (click)="
+                      copyLink(
+                        getLiveUrl(article, 'linkedin'),
+                        'LinkedIn Post Link'
+                      )
+                    "
                     title="Copy LinkedIn Post URL"
                   >
                     <i class="pi pi-copy"></i>
@@ -550,9 +723,16 @@
                 </div>
               </div>
 
-              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'linkedin') !== 'published'">
+              <div
+                class="channel-box-body empty-channel"
+                *ngIf="getChannelStatus(article, 'linkedin') !== 'published'"
+              >
                 <span class="channel-msg">
-                  {{ getChannelStatus(article, 'linkedin') === 'failed' ? 'Failed to post on LinkedIn account.' : 'Not distributed to LinkedIn.' }}
+                  {{
+                    getChannelStatus(article, "linkedin") === "failed"
+                      ? "Failed to post on LinkedIn account."
+                      : "Not distributed to LinkedIn."
+                  }}
                 </span>
               </div>
             </div>
@@ -560,8 +740,12 @@
             <!-- WordPress Destination Box -->
             <div
               class="channel-box wordpress-box"
-              [class.is-active]="getChannelStatus(article, 'wordpress') === 'published'"
-              [class.is-failed]="getChannelStatus(article, 'wordpress') === 'failed'"
+              [class.is-active]="
+                getChannelStatus(article, 'wordpress') === 'published'
+              "
+              [class.is-failed]="
+                getChannelStatus(article, 'wordpress') === 'failed'
+              "
             >
               <div class="channel-box-header">
                 <div class="channel-brand">
@@ -570,18 +754,38 @@
                 </div>
                 <span
                   class="channel-status-pill"
-                  [class.success]="getChannelStatus(article, 'wordpress') === 'published'"
-                  [class.failed]="getChannelStatus(article, 'wordpress') === 'failed'"
-                  [class.skipped]="getChannelStatus(article, 'wordpress') === 'skipped'"
+                  [class.success]="
+                    getChannelStatus(article, 'wordpress') === 'published'
+                  "
+                  [class.failed]="
+                    getChannelStatus(article, 'wordpress') === 'failed'
+                  "
+                  [class.skipped]="
+                    getChannelStatus(article, 'wordpress') === 'skipped'
+                  "
                 >
-                  {{ getChannelStatus(article, 'wordpress') === 'published' ? 'Live on Website' : (getChannelStatus(article, 'wordpress') === 'failed' ? 'Failed' : 'Not Targeted') }}
+                  {{
+                    getChannelStatus(article, "wordpress") === "published"
+                      ? "Live on Website"
+                      : getChannelStatus(article, "wordpress") === "failed"
+                        ? "Failed"
+                        : "Not Targeted"
+                  }}
                 </span>
               </div>
 
-              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'wordpress') === 'published'">
+              <div
+                class="channel-box-body"
+                *ngIf="getChannelStatus(article, 'wordpress') === 'published'"
+              >
                 <div class="post-id-row" *ngIf="article.wordpress_post_url">
                   <span class="id-label">Live URL:</span>
-                  <a [href]="article.wordpress_post_url" target="_blank" class="url-code" [title]="article.wordpress_post_url">
+                  <a
+                    [href]="article.wordpress_post_url"
+                    target="_blank"
+                    class="url-code"
+                    [title]="article.wordpress_post_url"
+                  >
                     {{ article.wordpress_post_url }}
                   </a>
                 </div>
@@ -598,7 +802,12 @@
                   <button
                     *ngIf="article.wordpress_post_url"
                     class="copy-btn"
-                    (click)="copyLink(article.wordpress_post_url, 'WordPress Article URL')"
+                    (click)="
+                      copyLink(
+                        article.wordpress_post_url,
+                        'WordPress Article URL'
+                      )
+                    "
                     title="Copy Article URL"
                   >
                     <i class="pi pi-copy"></i>
@@ -606,9 +815,16 @@
                 </div>
               </div>
 
-              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'wordpress') !== 'published'">
+              <div
+                class="channel-box-body empty-channel"
+                *ngIf="getChannelStatus(article, 'wordpress') !== 'published'"
+              >
                 <span class="channel-msg">
-                  {{ getChannelStatus(article, 'wordpress') === 'failed' ? 'Failed to upload to WordPress REST API.' : 'Not distributed to WordPress.' }}
+                  {{
+                    getChannelStatus(article, "wordpress") === "failed"
+                      ? "Failed to upload to WordPress REST API."
+                      : "Not distributed to WordPress."
+                  }}
                 </span>
               </div>
             </div>
@@ -616,8 +832,12 @@
             <!-- Facebook Destination Box -->
             <div
               class="channel-box facebook-box"
-              [class.is-active]="getChannelStatus(article, 'facebook') === 'published'"
-              [class.is-failed]="getChannelStatus(article, 'facebook') === 'failed'"
+              [class.is-active]="
+                getChannelStatus(article, 'facebook') === 'published'
+              "
+              [class.is-failed]="
+                getChannelStatus(article, 'facebook') === 'failed'
+              "
             >
               <div class="channel-box-header">
                 <div class="channel-brand">
@@ -626,26 +846,49 @@
                 </div>
                 <span
                   class="channel-status-pill"
-                  [class.success]="getChannelStatus(article, 'facebook') === 'published'"
-                  [class.failed]="getChannelStatus(article, 'facebook') === 'failed'"
-                  [class.skipped]="getChannelStatus(article, 'facebook') === 'skipped'"
+                  [class.success]="
+                    getChannelStatus(article, 'facebook') === 'published'
+                  "
+                  [class.failed]="
+                    getChannelStatus(article, 'facebook') === 'failed'
+                  "
+                  [class.skipped]="
+                    getChannelStatus(article, 'facebook') === 'skipped'
+                  "
                 >
-                  {{ getChannelStatus(article, 'facebook') === 'published' ? 'Live on Facebook' : 'Not Targeted' }}
+                  {{
+                    getChannelStatus(article, "facebook") === "published"
+                      ? "Live on Facebook"
+                      : "Not Targeted"
+                  }}
                 </span>
               </div>
-              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'facebook') === 'published'">
+              <div
+                class="channel-box-body"
+                *ngIf="getChannelStatus(article, 'facebook') === 'published'"
+              >
                 <div class="post-id-row" *ngIf="article.facebook_post_id">
                   <span class="id-label">Post ID:</span>
                   <code class="id-code">{{ article.facebook_post_id }}</code>
                 </div>
-                <div class="channel-actions" *ngIf="getLiveUrl(article, 'facebook')">
-                  <a [href]="getLiveUrl(article, 'facebook')" target="_blank" class="live-link-btn">
+                <div
+                  class="channel-actions"
+                  *ngIf="getLiveUrl(article, 'facebook')"
+                >
+                  <a
+                    [href]="getLiveUrl(article, 'facebook')"
+                    target="_blank"
+                    class="live-link-btn"
+                  >
                     <i class="pi pi-external-link"></i>
                     <span>Open on Facebook</span>
                   </a>
                 </div>
               </div>
-              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'facebook') !== 'published'">
+              <div
+                class="channel-box-body empty-channel"
+                *ngIf="getChannelStatus(article, 'facebook') !== 'published'"
+              >
                 <span class="channel-msg">Not distributed to Facebook.</span>
               </div>
             </div>
@@ -653,8 +896,12 @@
             <!-- Instagram Destination Box -->
             <div
               class="channel-box instagram-box"
-              [class.is-active]="getChannelStatus(article, 'instagram') === 'published'"
-              [class.is-failed]="getChannelStatus(article, 'instagram') === 'failed'"
+              [class.is-active]="
+                getChannelStatus(article, 'instagram') === 'published'
+              "
+              [class.is-failed]="
+                getChannelStatus(article, 'instagram') === 'failed'
+              "
             >
               <div class="channel-box-header">
                 <div class="channel-brand">
@@ -663,26 +910,49 @@
                 </div>
                 <span
                   class="channel-status-pill"
-                  [class.success]="getChannelStatus(article, 'instagram') === 'published'"
-                  [class.failed]="getChannelStatus(article, 'instagram') === 'failed'"
-                  [class.skipped]="getChannelStatus(article, 'instagram') === 'skipped'"
+                  [class.success]="
+                    getChannelStatus(article, 'instagram') === 'published'
+                  "
+                  [class.failed]="
+                    getChannelStatus(article, 'instagram') === 'failed'
+                  "
+                  [class.skipped]="
+                    getChannelStatus(article, 'instagram') === 'skipped'
+                  "
                 >
-                  {{ getChannelStatus(article, 'instagram') === 'published' ? 'Live on Instagram' : 'Not Targeted' }}
+                  {{
+                    getChannelStatus(article, "instagram") === "published"
+                      ? "Live on Instagram"
+                      : "Not Targeted"
+                  }}
                 </span>
               </div>
-              <div class="channel-box-body" *ngIf="getChannelStatus(article, 'instagram') === 'published'">
+              <div
+                class="channel-box-body"
+                *ngIf="getChannelStatus(article, 'instagram') === 'published'"
+              >
                 <div class="post-id-row" *ngIf="article.instagram_media_id">
                   <span class="id-label">Media ID:</span>
                   <code class="id-code">{{ article.instagram_media_id }}</code>
                 </div>
-                <div class="channel-actions" *ngIf="getLiveUrl(article, 'instagram')">
-                  <a [href]="getLiveUrl(article, 'instagram')" target="_blank" class="live-link-btn">
+                <div
+                  class="channel-actions"
+                  *ngIf="getLiveUrl(article, 'instagram')"
+                >
+                  <a
+                    [href]="getLiveUrl(article, 'instagram')"
+                    target="_blank"
+                    class="live-link-btn"
+                  >
                     <i class="pi pi-external-link"></i>
                     <span>Open on Instagram</span>
                   </a>
                 </div>
               </div>
-              <div class="channel-box-body empty-channel" *ngIf="getChannelStatus(article, 'instagram') !== 'published'">
+              <div
+                class="channel-box-body empty-channel"
+                *ngIf="getChannelStatus(article, 'instagram') !== 'published'"
+              >
                 <span class="channel-msg">Not distributed to Instagram.</span>
               </div>
             </div>
@@ -694,8 +964,13 @@
           <p class="history-summary" *ngIf="article.summary">
             <strong>Executive Summary:</strong> {{ article.summary }}
           </p>
-          <div class="history-tags" *ngIf="article.tags && article.tags.length > 0">
-            <span *ngFor="let tag of article.tags" class="tag-chip">#{{ tag }}</span>
+          <div
+            class="history-tags"
+            *ngIf="article.tags && article.tags.length > 0"
+          >
+            <span *ngFor="let tag of article.tags" class="tag-chip"
+              >#{{ tag }}</span
+            >
           </div>
         </div>
       </div>
@@ -705,17 +980,25 @@
   <!-- ======================================================================= -->
   <!-- TAB 3: AI GENERATOR STUDIO                                              -->
   <!-- ======================================================================= -->
-  <div *ngIf="mainTab === 'generator'" class="tab-content">
+  <div
+    *ngIf="mainTab === 'generator' && loadedTabs.has('generator')"
+    class="tab-content"
+  >
     <div class="custom-generator-card">
       <div class="card-header">
         <h2>✨ AI Blog Generator Studio</h2>
-        <p>Craft bespoke, research-backed blogs with automated image generation and multi-channel publishing.</p>
+        <p>
+          Craft bespoke, research-backed blogs with automated image generation
+          and multi-channel publishing.
+        </p>
       </div>
 
       <div class="generator-form">
         <div class="form-row">
           <div class="form-group full-width">
-            <label>Article Topic / Title Idea <span class="required">*</span></label>
+            <label
+              >Article Topic / Title Idea <span class="required">*</span></label
+            >
             <input
               type="text"
               class="input-field"
@@ -728,8 +1011,13 @@
         <div class="form-row two-cols">
           <div class="form-group">
             <label>Tone of Voice</label>
-            <select class="input-field select-field" [(ngModel)]="customGenForm.tone">
-              <option value="thought_leadership">Thought Leadership & Strategic</option>
+            <select
+              class="input-field select-field"
+              [(ngModel)]="customGenForm.tone"
+            >
+              <option value="thought_leadership">
+                Thought Leadership & Strategic
+              </option>
               <option value="professional">Professional & Technical</option>
               <option value="conversational">Conversational & Engaging</option>
               <option value="persuasive">Persuasive & Growth-Focused</option>
@@ -750,11 +1038,18 @@
         <div class="form-row two-cols">
           <div class="form-group">
             <label>Target Word Count</label>
-            <select class="input-field select-field" [(ngModel)]="customGenForm.target_words">
+            <select
+              class="input-field select-field"
+              [(ngModel)]="customGenForm.target_words"
+            >
               <option [ngValue]="600">Short & Punchy (~600 words)</option>
               <option [ngValue]="1000">Standard Article (~1000 words)</option>
-              <option [ngValue]="1500">In-Depth Strategic Guide (~1500 words)</option>
-              <option [ngValue]="2200">Comprehensive Deep Dive (~2200 words)</option>
+              <option [ngValue]="1500">
+                In-Depth Strategic Guide (~1500 words)
+              </option>
+              <option [ngValue]="2200">
+                Comprehensive Deep Dive (~2200 words)
+              </option>
             </select>
           </div>
 
@@ -794,9 +1089,14 @@
         <div class="form-row">
           <div class="form-group checkbox-group">
             <label class="toggle-container">
-              <input type="checkbox" [(ngModel)]="customGenForm.include_images" />
+              <input
+                type="checkbox"
+                [(ngModel)]="customGenForm.include_images"
+              />
               <span class="toggle-slider"></span>
-              <span class="toggle-text">Generate AI Visual Illustrations / Diagrams</span>
+              <span class="toggle-text"
+                >Generate AI Visual Illustrations / Diagrams</span
+              >
             </label>
           </div>
         </div>
@@ -807,8 +1107,17 @@
             (click)="generateCustomArticle()"
             [disabled]="isGeneratingCustom"
           >
-            <i class="pi" [ngClass]="isGeneratingCustom ? 'pi-spin pi-spinner' : 'pi-sparkles'"></i>
-            <span>{{ isGeneratingCustom ? 'Researching, Writing & Generating Graphics...' : 'Generate & Save Blog Post' }}</span>
+            <i
+              class="pi"
+              [ngClass]="
+                isGeneratingCustom ? 'pi-spin pi-spinner' : 'pi-sparkles'
+              "
+            ></i>
+            <span>{{
+              isGeneratingCustom
+                ? "Researching, Writing & Generating Graphics..."
+                : "Generate & Save Blog Post"
+            }}</span>
           </button>
         </div>
       </div>
@@ -816,13 +1125,19 @@
   </div>
 
   <!-- ======================================================================= -->
-  <!-- TAB 3: COMPANY AUTO-BLOG SETTINGS                                       -->
+  <!-- TAB 4: COMPANY AUTO-BLOG SETTINGS                                       -->
   <!-- ======================================================================= -->
-  <div *ngIf="mainTab === 'settings'" class="tab-content">
+  <div
+    *ngIf="mainTab === 'settings' && loadedTabs.has('settings')"
+    class="tab-content"
+  >
     <div class="settings-card">
       <div class="card-header">
         <h2>⚙️ Company Automated Daily Blog Configuration</h2>
-        <p>Automate your brand's content pipeline with daily trending topic selection, AI generation, and multi-channel publishing.</p>
+        <p>
+          Automate your brand's content pipeline with daily trending topic
+          selection, AI generation, and multi-channel publishing.
+        </p>
       </div>
 
       <div *ngIf="loadingSettings" class="loading-state">
@@ -832,46 +1147,97 @@
 
       <div *ngIf="!loadingSettings" class="settings-form">
         <!-- Currently Active Configuration Overview Banner -->
-        <div class="active-config-banner" [class.enabled]="settings.is_auto_blog_enabled">
+        <div
+          class="active-config-banner"
+          [class.enabled]="settings.is_auto_blog_enabled"
+        >
           <div class="config-banner-header">
-            <div class="banner-status-tag" [class.active]="settings.is_auto_blog_enabled">
+            <div
+              class="banner-status-tag"
+              [class.active]="settings.is_auto_blog_enabled"
+            >
               <span class="pulse-dot"></span>
-              {{ settings.is_auto_blog_enabled ? 'Auto-Blogging Active' : 'Auto-Blogging Paused' }}
+              {{
+                settings.is_auto_blog_enabled
+                  ? "Auto-Blogging Active"
+                  : "Auto-Blogging Paused"
+              }}
             </div>
             <div class="banner-last-run" *ngIf="settings.last_run_at">
-              <i class="pi pi-history"></i> Last Generated: {{ settings.last_run_at | date:'medium' }}
+              <i class="pi pi-history"></i> Last Generated:
+              {{ settings.last_run_at | date: "medium" }}
             </div>
           </div>
 
           <div class="config-banner-grid">
             <div class="config-item">
-              <span class="item-label"><i class="pi pi-clock"></i> Daily Trigger Time</span>
+              <span class="item-label"
+                ><i class="pi pi-clock"></i> Daily Trigger Time</span
+              >
               <span class="item-val">
-                <strong>{{ settings.schedule_time || '09:00' }} UTC</strong>
-                <small class="local-time-tag">({{ getLocalTimeFromUtc(settings.schedule_time || '09:00') }} Local)</small>
+                <strong>{{ settings.schedule_time || "09:00" }} UTC</strong>
+                <small class="local-time-tag"
+                  >({{
+                    getLocalTimeFromUtc(settings.schedule_time || "09:00")
+                  }}
+                  Local)</small
+                >
               </span>
             </div>
 
             <div class="config-item">
-              <span class="item-label"><i class="pi pi-sliders-v"></i> Workflow Mode</span>
+              <span class="item-label"
+                ><i class="pi pi-sliders-v"></i> Workflow Mode</span
+              >
               <span class="item-val">
-                {{ settings.mode === 'automatic' ? '⚡ Direct Auto-Publish' : '📝 Manual Confirmation Required' }}
+                {{
+                  settings.mode === "automatic"
+                    ? "⚡ Direct Auto-Publish"
+                    : "📝 Manual Confirmation Required"
+                }}
               </span>
             </div>
 
             <div class="config-item">
-              <span class="item-label"><i class="pi pi-envelope"></i> Reviewer Email</span>
-              <span class="item-val">{{ settings.admin_notification_email || 'Not configured' }}</span>
+              <span class="item-label"
+                ><i class="pi pi-envelope"></i> Reviewer Email</span
+              >
+              <span class="item-val">{{
+                settings.admin_notification_email || "Not configured"
+              }}</span>
             </div>
 
             <div class="config-item">
-              <span class="item-label"><i class="pi pi-share-alt"></i> Publishing Channels</span>
+              <span class="item-label"
+                ><i class="pi pi-share-alt"></i> Publishing Channels</span
+              >
               <div class="banner-channels-list">
-                <span *ngFor="let ch of settings.target_channels" class="channel-pill">
-                  <i class="pi" [ngClass]="ch === 'linkedin' ? 'pi-linkedin' : (ch === 'wordpress' ? 'pi-globe' : (ch === 'facebook' ? 'pi-facebook' : 'pi-instagram'))"></i>
+                <span
+                  *ngFor="let ch of settings.target_channels"
+                  class="channel-pill"
+                >
+                  <i
+                    class="pi"
+                    [ngClass]="
+                      ch === 'linkedin'
+                        ? 'pi-linkedin'
+                        : ch === 'wordpress'
+                          ? 'pi-globe'
+                          : ch === 'facebook'
+                            ? 'pi-facebook'
+                            : 'pi-instagram'
+                    "
+                  ></i>
                   {{ ch | uppercase }}
                 </span>
-                <span *ngIf="!settings.target_channels || settings.target_channels.length === 0" class="muted-text">None selected</span>
+                <span
+                  *ngIf="
+                    !settings.target_channels ||
+                    settings.target_channels.length === 0
+                  "
+                  class="muted-text"
+                  >None selected</span
+                >
               </div>
             </div>
           </div>
@@ -881,10 +1247,16 @@
         <div class="setting-toggle-box">
           <div class="toggle-info">
             <h3>Daily Automated Blog Creation</h3>
-            <p>When enabled, LeadAI's daily background worker will pick a trending topic every day and execute content generation.</p>
+            <p>
+              When enabled, LeadAI's daily background worker will pick a
+              trending topic every day and execute content generation.
+            </p>
           </div>
           <label class="toggle-container">
-            <input type="checkbox" [(ngModel)]="settings.is_auto_blog_enabled" />
+            <input
+              type="checkbox"
+              [(ngModel)]="settings.is_auto_blog_enabled"
+            />
             <span class="toggle-slider"></span>
           </label>
         </div>
@@ -901,9 +1273,15 @@
               <div class="mode-icon"><i class="pi pi-envelope"></i></div>
               <div class="mode-info">
                 <h4>Manual Admin Confirmation (Recommended)</h4>
-                <p>Generates draft and emails the Admin with a one-click review link. Publishes to channels only upon confirmation.</p>
+                <p>
+                  Generates draft and emails the Admin with a one-click review
+                  link. Publishes to channels only upon confirmation.
+                </p>
               </div>
-              <i *ngIf="settings.mode === 'manual_confirmation'" class="pi pi-check-circle check-active"></i>
+              <i
+                *ngIf="settings.mode === 'manual_confirmation'"
+                class="pi pi-check-circle check-active"
+              ></i>
             </div>
 
             <div
@@ -914,15 +1292,24 @@
               <div class="mode-icon auto-icon"><i class="pi pi-bolt"></i></div>
               <div class="mode-info">
                 <h4>Fully Automatic Publishing</h4>
-                <p>Generates the daily article and immediately publishes to all configured connected channels (LinkedIn, Facebook, WordPress).</p>
+                <p>
+                  Generates the daily article and immediately publishes to all
+                  configured connected channels (LinkedIn, Facebook, WordPress).
+                </p>
               </div>
-              <i *ngIf="settings.mode === 'automatic'" class="pi pi-check-circle check-active"></i>
+              <i
+                *ngIf="settings.mode === 'automatic'"
+                class="pi pi-check-circle check-active"
+              ></i>
             </div>
           </div>
         </div>
 
         <!-- Admin Notification Email -->
-        <div class="form-section" *ngIf="settings.mode === 'manual_confirmation'">
+        <div
+          class="form-section"
+          *ngIf="settings.mode === 'manual_confirmation'"
+        >
           <h3 class="section-title">Admin Review Email</h3>
           <div class="form-group">
             <label>Organization Admin / Editor Email Recipient</label>
@@ -932,35 +1319,65 @@
               placeholder="e.g. admin@yourcompany.com"
               [(ngModel)]="settings.admin_notification_email"
             />
-            <span class="helper-text">Draft preview and 1-click approval/regeneration buttons will be sent to this email address.</span>
+            <span class="helper-text"
+              >Draft preview and 1-click approval/regeneration buttons will be
+              sent to this email address.</span
+            >
           </div>
         </div>
 
         <!-- Target Channels Multi-Select -->
         <div class="form-section">
           <h3 class="section-title">Target Publishing Channels</h3>
-          <p class="section-subtitle">Select which platforms should receive the blog post upon approval or auto-publish:</p>
+          <p class="section-subtitle">
+            Select which platforms should receive the blog post upon approval or
+            auto-publish:
+          </p>
           <div class="channels-checkboxes">
-            <label class="channel-check-box" [class.checked]="settingsChannels['linkedin']">
-              <input type="checkbox" [(ngModel)]="settingsChannels['linkedin']" />
+            <label
+              class="channel-check-box"
+              [class.checked]="settingsChannels['linkedin']"
+            >
+              <input
+                type="checkbox"
+                [(ngModel)]="settingsChannels['linkedin']"
+              />
               <i class="pi pi-linkedin"></i>
               <span>LinkedIn</span>
             </label>
 
-            <label class="channel-check-box" [class.checked]="settingsChannels['wordpress']">
-              <input type="checkbox" [(ngModel)]="settingsChannels['wordpress']" />
+            <label
+              class="channel-check-box"
+              [class.checked]="settingsChannels['wordpress']"
+            >
+              <input
+                type="checkbox"
+                [(ngModel)]="settingsChannels['wordpress']"
+              />
               <i class="pi pi-globe"></i>
               <span>WordPress / Website</span>
             </label>
 
-            <label class="channel-check-box" [class.checked]="settingsChannels['facebook']">
-              <input type="checkbox" [(ngModel)]="settingsChannels['facebook']" />
+            <label
+              class="channel-check-box"
+              [class.checked]="settingsChannels['facebook']"
+            >
+              <input
+                type="checkbox"
+                [(ngModel)]="settingsChannels['facebook']"
+              />
               <i class="pi pi-facebook"></i>
               <span>Facebook Pages</span>
             </label>
 
-            <label class="channel-check-box" [class.checked]="settingsChannels['instagram']">
-              <input type="checkbox" [(ngModel)]="settingsChannels['instagram']" />
+            <label
+              class="channel-check-box"
+              [class.checked]="settingsChannels['instagram']"
+            >
+              <input
+                type="checkbox"
+                [(ngModel)]="settingsChannels['instagram']"
+              />
               <i class="pi pi-instagram"></i>
               <span>Instagram</span>
             </label>
@@ -979,7 +1396,10 @@
                 placeholder="e.g. B2B SaaS, AI Voice Agents, CRM Workflow Automation"
                 [(ngModel)]="settings.topic_niche"
               />
-              <span class="helper-text">The automated trending topic picker will find timely angles inside this niche.</span>
+              <span class="helper-text"
+                >The automated trending topic picker will find timely angles
+                inside this niche.</span
+              >
             </div>
           </div>
 
@@ -1008,8 +1428,13 @@
           <div class="form-row two-cols">
             <div class="form-group">
               <label>Tone of Voice</label>
-              <select class="input-field select-field" [(ngModel)]="settings.tone">
-                <option value="thought_leadership">Thought Leadership & Strategic</option>
+              <select
+                class="input-field select-field"
+                [(ngModel)]="settings.tone"
+              >
+                <option value="thought_leadership">
+                  Thought Leadership & Strategic
+                </option>
                 <option value="professional">Professional & Technical</option>
                 <option value="conversational">Conversational</option>
                 <option value="persuasive">Persuasive</option>
@@ -1024,9 +1449,16 @@
                 placeholder="09:00"
                 [(ngModel)]="settings.schedule_time"
               />
-              <span class="schedule-converted-preview" *ngIf="settings.schedule_time">
+              <span
+                class="schedule-converted-preview"
+                *ngIf="settings.schedule_time"
+              >
                 <i class="pi pi-clock"></i>
-                Equal to <strong>{{ getLocalTimeFromUtc(settings.schedule_time) }}</strong> (Your Local Browser Time)
+                Equal to
+                <strong>{{
+                  getLocalTimeFromUtc(settings.schedule_time)
+                }}</strong>
+                (Your Local Browser Time)
               </span>
             </div>
           </div>
@@ -1034,7 +1466,9 @@
 
         <!-- WordPress Connection (Optional) -->
         <div class="form-section" *ngIf="settingsChannels['wordpress']">
-          <h3 class="section-title">WordPress REST API Credentials (Optional)</h3>
+          <h3 class="section-title">
+            WordPress REST API Credentials (Optional)
+          </h3>
           <div class="form-row">
             <div class="form-group full-width">
               <label>Website / WordPress URL</label>
@@ -1059,7 +1493,14 @@
             </div>
 
             <div class="form-group">
-              <label>Application Password {{ settings.has_wordpress_password ? '(Configured - leave blank to keep)' : '' }}</label>
+              <label
+                >Application Password
+                {{
+                  settings.has_wordpress_password
+                    ? "(Configured - leave blank to keep)"
+                    : ""
+                }}</label
+              >
               <input
                 type="password"
                 class="input-field"
@@ -1077,8 +1518,13 @@
             (click)="saveSettings()"
             [disabled]="savingSettings"
           >
-            <i class="pi" [ngClass]="savingSettings ? 'pi-spin pi-spinner' : 'pi-check'"></i>
-            <span>{{ savingSettings ? 'Saving Settings...' : 'Save Auto-Blog Settings' }}</span>
+            <i
+              class="pi"
+              [ngClass]="savingSettings ? 'pi-spin pi-spinner' : 'pi-check'"
+            ></i>
+            <span>{{
+              savingSettings ? "Saving Settings..." : "Save Auto-Blog Settings"
+            }}</span>
           </button>
         </div>
       </div>
@@ -1088,22 +1534,41 @@
   <!-- ======================================================================= -->
   <!-- MODAL: ARTICLE READER / EDITOR & VERSION COMPARISON                     -->
   <!-- ======================================================================= -->
-  <div *ngIf="showArticleModal && selectedArticle" class="modal-backdrop" (click)="showArticleModal = false">
-    <div class="modal-dialog article-detail-modal" (click)="$event.stopPropagation()">
+  <div
+    *ngIf="showArticleModal && selectedArticle"
+    class="modal-backdrop"
+    (click)="showArticleModal = false"
+  >
+    <div
+      class="modal-dialog article-detail-modal"
+      (click)="$event.stopPropagation()"
+    >
       <div class="modal-header">
         <div class="modal-title-area">
-          <span class="status-badge" [ngClass]="getStatusClass(selectedArticle.status)">
+          <span
+            class="status-badge"
+            [ngClass]="getStatusClass(selectedArticle.status)"
+          >
             {{ getStatusLabel(selectedArticle.status) }}
           </span>
           <h2>{{ selectedArticle.title }}</h2>
           <div class="meta-row">
-            <span>Version: <strong>v{{ selectedArticle.current_version }}</strong></span>
-            <span>Created: {{ selectedArticle.created_at | date:'medium' }}</span>
-            <span *ngIf="selectedArticle.author_name">Author: {{ selectedArticle.author_name }}</span>
+            <span
+              >Version:
+              <strong>v{{ selectedArticle.current_version }}</strong></span
+            >
+            <span
+              >Created: {{ selectedArticle.created_at | date: "medium" }}</span
+            >
+            <span *ngIf="selectedArticle.author_name"
+              >Author: {{ selectedArticle.author_name }}</span
+            >
           </div>
         </div>
 
-        <button class="close-btn" (click)="showArticleModal = false"><i class="pi pi-times"></i></button>
+        <button class="close-btn" (click)="showArticleModal = false">
+          <i class="pi pi-times"></i>
+        </button>
       </div>
 
       <!-- Modal Tabs -->
@@ -1121,7 +1586,9 @@
           [class.active]="activeArticleTab === 'versions'"
           (click)="activeArticleTab = 'versions'"
         >
-          <i class="pi pi-history"></i> Version History ({{ selectedArticle.versions?.length || 1 }})
+          <i class="pi pi-history"></i> Version History ({{
+            selectedArticle.versions?.length || 1
+          }})
         </button>
 
         <button
@@ -1129,7 +1596,9 @@
           [class.active]="activeArticleTab === 'history'"
           (click)="activeArticleTab = 'history'"
         >
-          <i class="pi pi-comments"></i> Review Notes ({{ selectedArticle.review_notes?.length || 0 }})
+          <i class="pi pi-comments"></i> Review Notes ({{
+            selectedArticle.review_notes?.length || 0
+          }})
         </button>
       </div>
 
@@ -1138,10 +1607,18 @@
         <!-- 1. Formatted Preview -->
         <div *ngIf="activeArticleTab === 'preview'" class="preview-container">
           <div *ngIf="selectedArticle.cover_image" class="article-banner-img">
-            <img [src]="selectedArticle.cover_image" alt="Cover Image" />
+            <img
+              [src]="selectedArticle.cover_image"
+              alt="Cover Image"
+              loading="lazy"
+              decoding="async"
+            />
           </div>
 
-          <div class="rendered-article-html" [innerHTML]="selectedArticle.content"></div>
+          <div
+            class="rendered-article-html"
+            [innerHTML]="selectedArticle.content"
+          ></div>
         </div>
 
         <!-- 2. Version Comparison -->
@@ -1150,8 +1627,13 @@
             <div class="version-select">
               <label>Compare Left:</label>
               <select [(ngModel)]="compareVersion1">
-                <option *ngFor="let v of selectedArticle.versions" [ngValue]="v">
-                  Version {{ v.version_number }} ({{ v.created_at | date:'short' }})
+                <option
+                  *ngFor="let v of selectedArticle.versions"
+                  [ngValue]="v"
+                >
+                  Version {{ v.version_number }} ({{
+                    v.created_at | date: "short"
+                  }})
                 </option>
               </select>
             </div>
@@ -1159,8 +1641,13 @@
             <div class="version-select">
               <label>Compare Right:</label>
               <select [(ngModel)]="compareVersion2">
-                <option *ngFor="let v of selectedArticle.versions" [ngValue]="v">
-                  Version {{ v.version_number }} ({{ v.created_at | date:'short' }})
+                <option
+                  *ngFor="let v of selectedArticle.versions"
+                  [ngValue]="v"
+                >
+                  Version {{ v.version_number }} ({{
+                    v.created_at | date: "short"
+                  }})
                 </option>
               </select>
             </div>
@@ -1170,32 +1657,57 @@
             <div class="version-column" *ngIf="compareVersion1">
               <div class="version-col-header">
                 <h3>Version {{ compareVersion1.version_number }}</h3>
-                <span class="prompt-hint">{{ compareVersion1.regeneration_prompt || 'Initial Generation' }}</span>
+                <span class="prompt-hint">{{
+                  compareVersion1.regeneration_prompt || "Initial Generation"
+                }}</span>
               </div>
-              <div class="version-content-box" [innerHTML]="compareVersion1.content"></div>
+              <div
+                class="version-content-box"
+                [innerHTML]="compareVersion1.content"
+              ></div>
             </div>
 
             <div class="version-column" *ngIf="compareVersion2">
               <div class="version-col-header">
                 <h3>Version {{ compareVersion2.version_number }}</h3>
-                <span class="prompt-hint">{{ compareVersion2.regeneration_prompt || 'Initial Generation' }}</span>
+                <span class="prompt-hint">{{
+                  compareVersion2.regeneration_prompt || "Initial Generation"
+                }}</span>
               </div>
-              <div class="version-content-box" [innerHTML]="compareVersion2.content"></div>
+              <div
+                class="version-content-box"
+                [innerHTML]="compareVersion2.content"
+              ></div>
             </div>
           </div>
         </div>
 
         <!-- 3. Review Notes History -->
         <div *ngIf="activeArticleTab === 'history'" class="history-container">
-          <div *ngIf="!selectedArticle.review_notes || selectedArticle.review_notes.length === 0" class="empty-notes">
+          <div
+            *ngIf="
+              !selectedArticle.review_notes ||
+              selectedArticle.review_notes.length === 0
+            "
+            class="empty-notes"
+          >
             <p>No editorial review notes recorded yet.</p>
           </div>
 
-          <div *ngFor="let note of selectedArticle.review_notes" class="note-card">
+          <div
+            *ngFor="let note of selectedArticle.review_notes"
+            class="note-card"
+          >
             <div class="note-header">
-              <span class="note-author"><strong>{{ note.author_name }}</strong> ({{ note.author_role }})</span>
+              <span class="note-author"
+                ><strong>{{ note.author_name }}</strong> ({{
+                  note.author_role
+                }})</span
+              >
               <span class="note-action-tag">{{ note.action_taken }}</span>
-              <span class="note-time">{{ note.created_at | date:'medium' }}</span>
+              <span class="note-time">{{
+                note.created_at | date: "medium"
+              }}</span>
             </div>
             <div class="note-body">{{ note.content }}</div>
           </div>
@@ -1204,10 +1716,15 @@
 
       <!-- Modal Footer Action Buttons -->
       <div class="modal-footer">
-        <button class="btn btn-secondary" (click)="showArticleModal = false">Close</button>
+        <button class="btn btn-secondary" (click)="showArticleModal = false">
+          Close
+        </button>
 
         <button
-          *ngIf="selectedArticle.status === 'pending_approval' || selectedArticle.status === 'changes_requested'"
+          *ngIf="
+            selectedArticle.status === 'pending_approval' ||
+            selectedArticle.status === 'changes_requested'
+          "
           class="btn btn-warning"
           (click)="openReviewModal(selectedArticle, 'regenerate')"
         >
@@ -1216,7 +1733,10 @@
         </button>
 
         <button
-          *ngIf="selectedArticle.status === 'pending_approval' || selectedArticle.status === 'changes_requested'"
+          *ngIf="
+            selectedArticle.status === 'pending_approval' ||
+            selectedArticle.status === 'changes_requested'
+          "
           class="btn btn-primary glow-btn"
           (click)="openReviewModal(selectedArticle, 'approved')"
         >
@@ -1225,7 +1745,10 @@
         </button>
 
         <button
-          *ngIf="selectedArticle.status === 'approved' || selectedArticle.status === 'draft'"
+          *ngIf="
+            selectedArticle.status === 'approved' ||
+            selectedArticle.status === 'draft'
+          "
           class="btn btn-primary"
           (click)="openPublishModal(selectedArticle)"
         >
@@ -1239,11 +1762,17 @@
   <!-- ======================================================================= -->
   <!-- MODAL: REVIEW & ACTION (APPROVE / REGENERATE / REQUEST CHANGES)          -->
   <!-- ======================================================================= -->
-  <div *ngIf="showReviewModal && selectedArticle" class="modal-backdrop" (click)="showReviewModal = false">
+  <div
+    *ngIf="showReviewModal && selectedArticle"
+    class="modal-backdrop"
+    (click)="showReviewModal = false"
+  >
     <div class="modal-dialog review-modal" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>Editorial Review Action</h2>
-        <button class="close-btn" (click)="showReviewModal = false"><i class="pi pi-times"></i></button>
+        <button class="close-btn" (click)="showReviewModal = false">
+          <i class="pi pi-times"></i>
+        </button>
       </div>
 
       <div class="modal-body">
@@ -1316,20 +1845,29 @@
           <label class="toggle-container">
             <input type="checkbox" [(ngModel)]="publishNowOnApprove" />
             <span class="toggle-slider"></span>
-            <span class="toggle-text">Publish immediately to connected channels upon approval</span>
+            <span class="toggle-text"
+              >Publish immediately to connected channels upon approval</span
+            >
           </label>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" (click)="showReviewModal = false">Cancel</button>
+        <button class="btn btn-secondary" (click)="showReviewModal = false">
+          Cancel
+        </button>
         <button
           class="btn btn-primary"
           (click)="submitReview()"
           [disabled]="submittingReview"
         >
-          <i class="pi" [ngClass]="submittingReview ? 'pi-spin pi-spinner' : 'pi-check'"></i>
-          <span>{{ submittingReview ? 'Submitting...' : 'Confirm Action' }}</span>
+          <i
+            class="pi"
+            [ngClass]="submittingReview ? 'pi-spin pi-spinner' : 'pi-check'"
+          ></i>
+          <span>{{
+            submittingReview ? "Submitting..." : "Confirm Action"
+          }}</span>
         </button>
       </div>
     </div>
@@ -1338,18 +1876,30 @@
   <!-- ======================================================================= -->
   <!-- MODAL: DIRECT PUBLISH CHANNELS DIALOG                                   -->
   <!-- ======================================================================= -->
-  <div *ngIf="showPublishModal && publishingArticle" class="modal-backdrop" (click)="showPublishModal = false">
+  <div
+    *ngIf="showPublishModal && publishingArticle"
+    class="modal-backdrop"
+    (click)="showPublishModal = false"
+  >
     <div class="modal-dialog publish-dialog" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>Publish Article to Live Channels</h2>
-        <button class="close-btn" (click)="showPublishModal = false"><i class="pi pi-times"></i></button>
+        <button class="close-btn" (click)="showPublishModal = false">
+          <i class="pi pi-times"></i>
+        </button>
       </div>
 
       <div class="modal-body">
-        <p>Select the connected platforms to publish <strong>"{{ publishingArticle.title }}"</strong>:</p>
+        <p>
+          Select the connected platforms to publish
+          <strong>"{{ publishingArticle.title }}"</strong>:
+        </p>
 
         <div class="publish-channels-list">
-          <label class="channel-publish-item" [class.checked]="publishChannels['linkedin']">
+          <label
+            class="channel-publish-item"
+            [class.checked]="publishChannels['linkedin']"
+          >
             <input type="checkbox" [(ngModel)]="publishChannels['linkedin']" />
             <i class="pi pi-linkedin"></i>
             <div>
@@ -1358,7 +1908,10 @@
             </div>
           </label>
 
-          <label class="channel-publish-item" [class.checked]="publishChannels['wordpress']">
+          <label
+            class="channel-publish-item"
+            [class.checked]="publishChannels['wordpress']"
+          >
             <input type="checkbox" [(ngModel)]="publishChannels['wordpress']" />
             <i class="pi pi-globe"></i>
             <div>
@@ -1367,7 +1920,10 @@
             </div>
           </label>
 
-          <label class="channel-publish-item" [class.checked]="publishChannels['facebook']">
+          <label
+            class="channel-publish-item"
+            [class.checked]="publishChannels['facebook']"
+          >
             <input type="checkbox" [(ngModel)]="publishChannels['facebook']" />
             <i class="pi pi-facebook"></i>
             <div>
@@ -1376,7 +1932,10 @@
             </div>
           </label>
 
-          <label class="channel-publish-item" [class.checked]="publishChannels['instagram']">
+          <label
+            class="channel-publish-item"
+            [class.checked]="publishChannels['instagram']"
+          >
             <input type="checkbox" [(ngModel)]="publishChannels['instagram']" />
             <i class="pi pi-instagram"></i>
             <div>
@@ -1388,14 +1947,23 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" (click)="showPublishModal = false">Cancel</button>
+        <button class="btn btn-secondary" (click)="showPublishModal = false">
+          Cancel
+        </button>
         <button
           class="btn btn-primary glow-btn"
           (click)="confirmPublish()"
           [disabled]="isPublishing"
         >
-          <i class="pi" [ngClass]="isPublishing ? 'pi-spin pi-spinner' : 'pi-send'"></i>
-          <span>{{ isPublishing ? 'Publishing across channels...' : 'Publish to Selected Channels' }}</span>
+          <i
+            class="pi"
+            [ngClass]="isPublishing ? 'pi-spin pi-spinner' : 'pi-send'"
+          ></i>
+          <span>{{
+            isPublishing
+              ? "Publishing across channels..."
+              : "Publish to Selected Channels"
+          }}</span>
         </button>
       </div>
     </div>

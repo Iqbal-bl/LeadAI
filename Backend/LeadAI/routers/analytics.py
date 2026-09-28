@@ -27,6 +27,7 @@ from ..models import (
     LeadKbChunk,
     LeadKbDocument,
     LeadUserRole,
+    LeadClientRecharge,
 )
 from ..rbac import Principal, require, resolve_scope
 from ..schemas import AnalyticsOut
@@ -222,3 +223,186 @@ def funnel(
         "stages": [{"stage": s, "count": int(rows.get(s, 0))} for s in order],
         "total": int(sum(rows.values())),
     }
+
+
+@router.get("/admin-dashboard", summary="Admin user onboarding & subscription analytics")
+def admin_dashboard(
+    time_range: str = Query(default="30d", alias="range"),
+    principal: Principal = Depends(require("analytics.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Aggregates user onboarding velocity and multi-tier plan purchases over time.
+    Supports ranges: 7d, 30d, 3m, 6m, 1y.
+    """
+    days_map = {
+        "7d": 7,
+        "30d": 30,
+        "3m": 90,
+        "6m": 180,
+        "1y": 365,
+    }
+    total_days = days_map.get(time_range, 30)
+
+    now = datetime.now(timezone.utc)
+    start_of_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    range_start = start_of_today - timedelta(days=total_days)
+
+    # 1. Total users and new users from LeadUserRole (and Domain.models.User if any)
+    users_q = db.query(LeadUserRole).filter(LeadUserRole.IsDeleted == False)  # noqa: E712
+    all_users = users_q.all()
+    
+    # If LeadUserRole is empty, also check Domain User table
+    if not all_users:
+        try:
+            from domain.models import User
+            all_users = db.query(User).filter(User.IsDeleted == False).all()  # noqa: E712
+        except Exception:
+            pass
+            
+    total_users_count = len(all_users)
+
+    # 2. Plan purchases and active subscriptions from LeadClientRecharge
+    recharges_q = db.query(LeadClientRecharge).filter(LeadClientRecharge.IsDeleted == False)  # noqa: E712
+    all_recharges = recharges_q.all()
+    total_plan_purchases = len(all_recharges)
+    active_subscriptions = sum(
+        1 for r in all_recharges
+        if r.Status == "active" and (not r.ExpiresAt or _aware(r.ExpiresAt) >= now)
+    )
+
+    # Generate time buckets
+    dates = []
+    display_dates = []
+    full_dates = []
+    onboarding_counts = []
+    cumulative_counts = []
+    plan_purchases = {
+        "Basic": [],
+        "Standard": [],
+        "Premium": [],
+        "Enterprise": [],
+    }
+    totals = []
+
+    if time_range == "1y":
+        # 12 monthly points
+        for i in range(11, -1, -1):
+            d = now - timedelta(days=i * 30)
+            iso = d.strftime("%Y-%m-%d")
+            display = d.strftime("%b %y")
+            full = d.strftime("%B %Y")
+            dates.append(iso)
+            display_dates.append(display)
+            full_dates.append(full)
+
+            m_start = d.replace(day=1, hour=0, minute=0, second=0)
+            m_end = m_start + timedelta(days=32)
+            m_end = m_end.replace(day=1)
+
+            u_count = sum(1 for u in all_users if u.CreatedAt and m_start <= _aware(u.CreatedAt) < m_end)
+            cum_count = sum(1 for u in all_users if u.CreatedAt and _aware(u.CreatedAt) < m_end)
+
+            onboarding_counts.append(u_count)
+            cumulative_counts.append(cum_count)
+
+            b_cnt = sum(1 for r in all_recharges if "basic" in (r.PlanNameSnapshot or "").lower() and r.RechargedAt and m_start <= _aware(r.RechargedAt) < m_end)
+            s_cnt = sum(1 for r in all_recharges if "standard" in (r.PlanNameSnapshot or "").lower() and r.RechargedAt and m_start <= _aware(r.RechargedAt) < m_end)
+            p_cnt = sum(1 for r in all_recharges if "premium" in (r.PlanNameSnapshot or "").lower() and r.RechargedAt and m_start <= _aware(r.RechargedAt) < m_end)
+            e_cnt = sum(1 for r in all_recharges if ("enterprise" in (r.PlanNameSnapshot or "").lower() or "custom" in (r.PlanNameSnapshot or "").lower()) and r.RechargedAt and m_start <= _aware(r.RechargedAt) < m_end)
+
+            plan_purchases["Basic"].append(b_cnt)
+            plan_purchases["Standard"].append(s_cnt)
+            plan_purchases["Premium"].append(p_cnt)
+            plan_purchases["Enterprise"].append(e_cnt)
+            totals.append(b_cnt + s_cnt + p_cnt + e_cnt)
+    else:
+        step = 3 if time_range == "3m" else (7 if time_range == "6m" else 1)
+        iterations = total_days // step
+
+        for i in range(iterations - 1, -1, -1):
+            d = start_of_today - timedelta(days=i * step)
+            nxt = d + timedelta(days=step)
+            iso = d.strftime("%Y-%m-%d")
+            display = d.strftime("%b %d")
+            full = d.strftime("%A, %B %d, %Y")
+            dates.append(iso)
+            display_dates.append(display)
+            full_dates.append(full)
+
+            u_count = sum(1 for u in all_users if u.CreatedAt and d <= _aware(u.CreatedAt) < nxt)
+            cum_count = sum(1 for u in all_users if u.CreatedAt and _aware(u.CreatedAt) < nxt)
+
+            onboarding_counts.append(u_count)
+            cumulative_counts.append(cum_count)
+
+            b_cnt = sum(1 for r in all_recharges if "basic" in (r.PlanNameSnapshot or "").lower() and r.RechargedAt and d <= _aware(r.RechargedAt) < nxt)
+            s_cnt = sum(1 for r in all_recharges if "standard" in (r.PlanNameSnapshot or "").lower() and r.RechargedAt and d <= _aware(r.RechargedAt) < nxt)
+            p_cnt = sum(1 for r in all_recharges if "premium" in (r.PlanNameSnapshot or "").lower() and r.RechargedAt and d <= _aware(r.RechargedAt) < nxt)
+            e_cnt = sum(1 for r in all_recharges if ("enterprise" in (r.PlanNameSnapshot or "").lower() or "custom" in (r.PlanNameSnapshot or "").lower()) and r.RechargedAt and d <= _aware(r.RechargedAt) < nxt)
+
+            plan_purchases["Basic"].append(b_cnt)
+            plan_purchases["Standard"].append(s_cnt)
+            plan_purchases["Premium"].append(p_cnt)
+            plan_purchases["Enterprise"].append(e_cnt)
+            totals.append(b_cnt + s_cnt + p_cnt + e_cnt)
+
+    total_in_range = sum(onboarding_counts)
+    all_purchases_sum = sum(totals)
+
+    # Growth rate comparisons with previous window
+    prev_range_start = range_start - timedelta(days=total_days)
+    prev_new_users = sum(1 for u in all_users if u.CreatedAt and prev_range_start <= _aware(u.CreatedAt) < range_start)
+    new_users_growth = (
+        round(((total_in_range - prev_new_users) / prev_new_users) * 100, 1)
+        if prev_new_users > 0
+        else 0.0
+    )
+
+    prev_purchases = sum(1 for r in all_recharges if r.RechargedAt and prev_range_start <= _aware(r.RechargedAt) < range_start)
+    purchases_growth = (
+        round(((all_purchases_sum - prev_purchases) / prev_purchases) * 100, 1)
+        if prev_purchases > 0
+        else 0.0
+    )
+
+    peak = max(onboarding_counts) if onboarding_counts else 0
+    peak_date = display_dates[onboarding_counts.index(peak)] if peak > 0 and onboarding_counts else "N/A"
+
+    return {
+        "range": time_range,
+        "summary": {
+            "total_users": total_users_count,
+            "total_users_growth_pct": new_users_growth,
+            "new_users": total_in_range,
+            "new_users_growth_pct": new_users_growth,
+            "total_plan_purchases": total_plan_purchases,
+            "total_plan_purchases_growth_pct": purchases_growth,
+            "active_subscriptions": active_subscriptions,
+            "active_subscriptions_growth_pct": 0.0,
+            "total_revenue": round(sum(float(r.PricePaid or 0.0) for r in all_recharges), 2),
+            "conversion_rate": (
+                round((total_plan_purchases / total_users_count) * 100, 1)
+                if total_users_count > 0
+                else 0.0
+            ),
+        },
+        "onboarding": {
+            "dates": dates,
+            "display_dates": display_dates,
+            "full_dates": full_dates,
+            "counts": onboarding_counts,
+            "cumulative": cumulative_counts,
+            "peak_count": peak,
+            "peak_date": peak_date,
+            "avg_daily": round(total_in_range / total_days, 1),
+            "total_in_range": total_in_range,
+        },
+        "plan_purchases": {
+            "dates": dates,
+            "display_dates": display_dates,
+            "full_dates": full_dates,
+            "plans": plan_purchases,
+            "totals": totals,
+        },
+    }
+

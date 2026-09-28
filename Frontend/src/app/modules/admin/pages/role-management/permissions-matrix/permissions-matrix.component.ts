@@ -21,6 +21,8 @@ export class PermissionsMatrixComponent implements OnInit {
   rolePermissions: Record<string, string[]> = {};
   roles: string[] = [];
   permissionKeys: string[] = [];
+  filteredPermissions: string[] = [];
+  formattedRoleNames: Record<string, string> = {};
 
   // Stats
   totalRoles = 0;
@@ -52,16 +54,34 @@ export class PermissionsMatrixComponent implements OnInit {
     this.permissionKeys = Object.keys(this.permissions);
     this.totalRoles = this.roles.length;
     this.totalPermissions = this.permissionKeys.length;
+    this.formattedRoleNames = this.roles.reduce(
+      (acc, r) => {
+        acc[r] = r
+          .split('_')
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+    this.updateFilteredPermissions();
   }
 
-  getFilteredPermissions(): string[] {
-    if (!this.searchQuery) return this.permissionKeys;
+  updateFilteredPermissions(): void {
+    if (!this.searchQuery) {
+      this.filteredPermissions = this.permissionKeys;
+      return;
+    }
     const query = this.searchQuery.toLowerCase();
-    return this.permissionKeys.filter(
+    this.filteredPermissions = this.permissionKeys.filter(
       (key) =>
         key.toLowerCase().includes(query) ||
         this.permissions[key].toLowerCase().includes(query),
     );
+  }
+
+  getFilteredPermissions(): string[] {
+    return this.filteredPermissions;
   }
 
   hasPermission(role: string, permission: string): boolean {

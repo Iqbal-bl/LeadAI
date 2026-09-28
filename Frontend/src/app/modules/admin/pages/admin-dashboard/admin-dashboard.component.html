@@ -1,1 +1,700 @@
-<app-analytics />
+<div
+  class="min-h-screen bg-slate-50/60 dark:bg-slate-950 p-4 sm:p-6 lg:p-8 transition-colors duration-200"
+>
+  <div class="max-w-7xl mx-auto space-y-6">
+    <!-- ======================================================== -->
+    <!-- DASHBOARD HEADER -->
+    <!-- ======================================================== -->
+    <header
+      class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-200/80 dark:border-slate-800"
+    >
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span
+            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide uppercase bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800/60"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+            Platform Workspace
+          </span>
+          <span class="text-xs text-slate-400 dark:text-slate-500">•</span>
+          <span class="text-xs text-slate-500 dark:text-slate-400"
+            >Executive Summary</span
+          >
+        </div>
+        <h1
+          class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white"
+        >
+          Admin Analytics Dashboard
+        </h1>
+        <p
+          class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-2xl"
+        >
+          Real-time visibility into user onboarding velocity, conversion
+          funnels, and subscription tier acquisition metrics.
+        </p>
+      </div>
+
+      <!-- Controls: Date Range, Export & Refresh -->
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+        <!-- Live Status Pill -->
+        <div
+          class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-subtle"
+        >
+          <span class="relative flex h-2 w-2">
+            <span
+              class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+            ></span>
+            <span
+              class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"
+            ></span>
+          </span>
+          <span class="text-[11px]">Synced {{ lastSyncTime }}</span>
+        </div>
+
+        <!-- Date Range Filter Segmented Control -->
+        <div
+          class="inline-flex p-1 rounded-xl bg-slate-200/80 dark:bg-slate-800/90 border border-slate-300/60 dark:border-slate-700/60 shadow-inner"
+        >
+          <button
+            *ngFor="let opt of rangeOptions"
+            type="button"
+            (click)="setRange(opt.value)"
+            [disabled]="isLoading"
+            [class.bg-white]="selectedRange === opt.value"
+            [class.dark:bg-slate-700]="selectedRange === opt.value"
+            [class.text-slate-900]="selectedRange === opt.value"
+            [class.dark:text-white]="selectedRange === opt.value"
+            [class.shadow-sm]="selectedRange === opt.value"
+            [class.text-slate-600]="selectedRange !== opt.value"
+            [class.dark:text-slate-400]="selectedRange !== opt.value"
+            class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150 hover:text-slate-900 dark:hover:text-white disabled:opacity-50"
+            [title]="opt.description"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+
+        <!-- Export CSV Button -->
+        <button
+          *ngIf="dashboardData && !isLoading"
+          type="button"
+          (click)="exportSummaryCsv()"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-800 text-xs font-semibold shadow-subtle hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          title="Export CSV report"
+        >
+          <i class="pi pi-download text-[11px]"></i>
+          <span class="hidden sm:inline">Export</span>
+        </button>
+
+        <!-- Refresh Button -->
+        <button
+          type="button"
+          (click)="loadData()"
+          [disabled]="isLoading"
+          class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 shadow-subtle hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+          title="Refresh analytics"
+        >
+          <i class="pi pi-refresh text-xs" [class.animate-spin]="isLoading"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- ======================================================== -->
+    <!-- LOADING STATE -->
+    <!-- ======================================================== -->
+    <div *ngIf="isLoading" class="space-y-6 animate-pulse">
+      <!-- KPI Skeletons -->
+      <div
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"
+      >
+        <div
+          *ngFor="let i of [1, 2, 3, 4]"
+          class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-subtle space-y-3"
+        >
+          <div class="flex items-center justify-between">
+            <div
+              class="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800"
+            ></div>
+            <div
+              class="w-14 h-5 rounded-full bg-slate-200 dark:bg-slate-800"
+            ></div>
+          </div>
+          <div class="w-24 h-8 rounded bg-slate-200 dark:bg-slate-800"></div>
+          <div class="w-36 h-4 rounded bg-slate-100 dark:bg-slate-800/60"></div>
+        </div>
+      </div>
+
+      <!-- Graph Skeletons -->
+      <div class="grid grid-cols-1 gap-6">
+        <div
+          *ngFor="let i of [1, 2]"
+          class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-subtle space-y-4"
+        >
+          <div class="flex justify-between items-center">
+            <div class="w-48 h-6 rounded bg-slate-200 dark:bg-slate-800"></div>
+            <div
+              class="w-32 h-8 rounded-lg bg-slate-200 dark:bg-slate-800"
+            ></div>
+          </div>
+          <div
+            class="h-80 w-full rounded-xl bg-slate-100 dark:bg-slate-800/40"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- ERROR STATE -->
+    <!-- ======================================================== -->
+    <div
+      *ngIf="hasError && !isLoading"
+      class="p-8 sm:p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-900/60 shadow-subtle"
+    >
+      <div
+        class="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 flex items-center justify-center mx-auto mb-4"
+      >
+        <i class="pi pi-exclamation-triangle text-2xl"></i>
+      </div>
+      <h3 class="text-lg font-bold text-slate-900 dark:text-white">
+        Unable to Load Analytics Data
+      </h3>
+      <p
+        class="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1 mb-6"
+      >
+        {{
+          errorMessage ||
+            "An error occurred while communicating with the analytics server. Please verify your connection."
+        }}
+      </p>
+      <button
+        type="button"
+        (click)="retry()"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition-all"
+      >
+        <i class="pi pi-refresh text-xs"></i>
+        <span>Retry Connection</span>
+      </button>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MAIN DASHBOARD CONTENT -->
+    <!-- ======================================================== -->
+    <div *ngIf="!isLoading && !hasError && dashboardData" class="space-y-6">
+      <!-- ======================================================== -->
+      <!-- SUMMARY KPI CARDS (TOP ROW) -->
+      <!-- ======================================================== -->
+      <section
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5"
+      >
+        <!-- KPI 1: Total Users -->
+        <div
+          class="dashboard-card relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-subtle hover:shadow-card-hover group"
+        >
+          <div
+            class="kpi-accent-glow bg-gradient-to-r from-indigo-500 to-indigo-600"
+          ></div>
+
+          <div class="flex items-center justify-between">
+            <div
+              class="w-11 h-11 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-center text-lg shadow-xs"
+            >
+              <i class="pi pi-users"></i>
+            </div>
+            <span
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/60"
+            >
+              <i class="pi pi-arrow-up-right text-[10px]"></i>
+              {{ dashboardData.summary.totalUsersGrowthPct > 0 ? "+" : ""
+              }}{{ dashboardData.summary.totalUsersGrowthPct }}%
+            </span>
+          </div>
+
+          <div class="mt-4">
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              Total Users
+            </p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <h3
+                class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight"
+              >
+                {{ dashboardData.summary.totalUsers | number }}
+              </h3>
+            </div>
+          </div>
+
+          <div
+            class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400"
+          >
+            <span>Platform Directory</span>
+            <span class="font-medium text-indigo-600 dark:text-indigo-400"
+              >All registered</span
+            >
+          </div>
+        </div>
+
+        <!-- KPI 2: New Users -->
+        <div
+          class="dashboard-card relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-subtle hover:shadow-card-hover group"
+        >
+          <div
+            class="kpi-accent-glow bg-gradient-to-r from-emerald-500 to-teal-500"
+          ></div>
+
+          <div class="flex items-center justify-between">
+            <div
+              class="w-11 h-11 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/60 flex items-center justify-center text-lg shadow-xs"
+            >
+              <i class="pi pi-user-plus"></i>
+            </div>
+            <span
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/60"
+            >
+              <i class="pi pi-arrow-up-right text-[10px]"></i>
+              {{ dashboardData.summary.newUsersGrowthPct > 0 ? "+" : ""
+              }}{{ dashboardData.summary.newUsersGrowthPct }}%
+            </span>
+          </div>
+
+          <div class="mt-4">
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              New Users
+            </p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <h3
+                class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight"
+              >
+                {{ dashboardData.summary.newUsers | number }}
+              </h3>
+            </div>
+          </div>
+
+          <div
+            class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400"
+          >
+            <span>Range: {{ selectedRange }}</span>
+            <span class="font-medium text-emerald-600 dark:text-emerald-400"
+              >{{ dashboardData.onboarding.avgDaily }} / day avg</span
+            >
+          </div>
+        </div>
+
+        <!-- KPI 3: Total Plan Purchases -->
+        <div
+          class="dashboard-card relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-subtle hover:shadow-card-hover group"
+        >
+          <div
+            class="kpi-accent-glow bg-gradient-to-r from-violet-500 to-purple-600"
+          ></div>
+
+          <div class="flex items-center justify-between">
+            <div
+              class="w-11 h-11 rounded-xl bg-violet-50/80 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 border border-violet-100 dark:border-violet-900/60 flex items-center justify-center text-lg shadow-xs"
+            >
+              <i class="pi pi-shopping-bag"></i>
+            </div>
+            <span
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/60"
+            >
+              <i class="pi pi-arrow-up-right text-[10px]"></i>
+              {{
+                dashboardData.summary.totalPlanPurchasesGrowthPct > 0
+                  ? "+"
+                  : ""
+              }}{{ dashboardData.summary.totalPlanPurchasesGrowthPct }}%
+            </span>
+          </div>
+
+          <div class="mt-4">
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              Total Plan Purchases
+            </p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <h3
+                class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight"
+              >
+                {{ dashboardData.summary.totalPlanPurchases | number }}
+              </h3>
+            </div>
+          </div>
+
+          <div
+            class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400"
+          >
+            <span>Conversion Rate</span>
+            <span class="font-medium text-violet-600 dark:text-violet-400"
+              >{{ dashboardData.summary.conversionRate }}%</span
+            >
+          </div>
+        </div>
+
+        <!-- KPI 4: Active Subscriptions -->
+        <div
+          class="dashboard-card relative overflow-hidden bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-subtle hover:shadow-card-hover group"
+        >
+          <div
+            class="kpi-accent-glow bg-gradient-to-r from-amber-500 to-orange-500"
+          ></div>
+
+          <div class="flex items-center justify-between">
+            <div
+              class="w-11 h-11 rounded-xl bg-amber-50/80 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/60 flex items-center justify-center text-lg shadow-xs"
+            >
+              <i class="pi pi-shield"></i>
+            </div>
+            <span
+              class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/80 dark:border-emerald-800/60"
+            >
+              <i class="pi pi-check text-[10px]"></i>
+              Active
+            </span>
+          </div>
+
+          <div class="mt-4">
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              Active Subscriptions
+            </p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <h3
+                class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight"
+              >
+                {{ dashboardData.summary.activeSubscriptions | number }}
+              </h3>
+            </div>
+          </div>
+
+          <div
+            class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400"
+          >
+            <span>Gross Revenue</span>
+            <span class="font-medium text-amber-600 dark:text-amber-400"
+              >₹{{ dashboardData.summary.totalRevenue | number }}</span
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- CARD 1: USER ONBOARDING ANALYTICS GRAPH -->
+      <!-- ======================================================== -->
+      <section
+        class="dashboard-card bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-subtle"
+      >
+        <!-- Card Header -->
+        <div
+          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800"
+        >
+          <div>
+            <div class="flex items-center gap-2">
+              <h2
+                class="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white"
+              >
+                User Onboarding Analytics
+              </h2>
+              <span
+                class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60"
+              >
+                {{ selectedRange | uppercase }} Window
+              </span>
+            </div>
+            <p
+              class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1"
+            >
+              Account onboarding volume over time. Hover over data points to
+              inspect date and user count.
+            </p>
+          </div>
+
+          <!-- View Mode Toggle: Daily vs Cumulative -->
+          <div class="flex items-center gap-2">
+            <span
+              class="text-xs font-medium text-slate-500 dark:text-slate-400 hidden sm:inline"
+              >Aggregation:</span
+            >
+            <div
+              class="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80"
+            >
+              <button
+                type="button"
+                (click)="setOnboardingViewMode('daily')"
+                [class.bg-white]="onboardingViewMode === 'daily'"
+                [class.dark:bg-slate-700]="onboardingViewMode === 'daily'"
+                [class.text-indigo-600]="onboardingViewMode === 'daily'"
+                [class.dark:text-indigo-300]="onboardingViewMode === 'daily'"
+                [class.shadow-xs]="onboardingViewMode === 'daily'"
+                [class.text-slate-600]="onboardingViewMode !== 'daily'"
+                [class.dark:text-slate-400]="onboardingViewMode !== 'daily'"
+                class="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+              >
+                Daily New
+              </button>
+              <button
+                type="button"
+                (click)="setOnboardingViewMode('cumulative')"
+                [class.bg-white]="onboardingViewMode === 'cumulative'"
+                [class.dark:bg-slate-700]="onboardingViewMode === 'cumulative'"
+                [class.text-indigo-600]="onboardingViewMode === 'cumulative'"
+                [class.dark:text-indigo-300]="
+                  onboardingViewMode === 'cumulative'
+                "
+                [class.shadow-xs]="onboardingViewMode === 'cumulative'"
+                [class.text-slate-600]="onboardingViewMode !== 'cumulative'"
+                [class.dark:text-slate-400]="
+                  onboardingViewMode !== 'cumulative'
+                "
+                class="px-3 py-1 rounded-lg text-xs font-semibold transition-all"
+              >
+                Cumulative
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Line Graph Canvas -->
+        <div class="mt-5 relative" style="height: 350px">
+          <p-chart
+            *ngIf="onboardingChartData"
+            type="line"
+            [data]="onboardingChartData"
+            [options]="onboardingChartOptions"
+            [style]="{ height: '100%', width: '100%' }"
+          >
+          </p-chart>
+        </div>
+
+        <!-- Card Footer Statistics -->
+        <div
+          class="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3"
+        >
+          <div
+            class="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800"
+          >
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              Total in Range
+            </p>
+            <p class="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+              {{ dashboardData.onboarding.totalInRange | number }} accounts
+            </p>
+          </div>
+
+          <div
+            class="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800"
+          >
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              Daily Average
+            </p>
+            <p
+              class="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-0.5"
+            >
+              {{ dashboardData.onboarding.avgDaily }} users / day
+            </p>
+          </div>
+
+          <div
+            class="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800"
+          >
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              Peak Volume
+            </p>
+            <p
+              class="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5"
+            >
+              {{ dashboardData.onboarding.peakCount | number }} users
+            </p>
+          </div>
+
+          <div
+            class="p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800"
+          >
+            <p
+              class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+            >
+              Peak Window
+            </p>
+            <p
+              class="text-lg font-bold text-slate-800 dark:text-slate-200 mt-0.5 truncate"
+              [title]="dashboardData.onboarding.peakDate"
+            >
+              {{ dashboardData.onboarding.peakDate }}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- CARD 2: PLAN PURCHASE ANALYTICS MULTI-LINE GRAPH -->
+      <!-- ======================================================== -->
+      <section
+        class="dashboard-card bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-subtle"
+      >
+        <!-- Card Header -->
+        <div
+          class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800"
+        >
+          <div>
+            <div class="flex items-center gap-2">
+              <h2
+                class="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white"
+              >
+                Plan Purchase Analytics
+              </h2>
+              <span
+                class="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200/60 dark:border-violet-800/60"
+              >
+                Multi-Line Comparison
+              </span>
+            </div>
+            <p
+              class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1"
+            >
+              Comparative purchases for each tier over time. Click any plan
+              badge or legend item to toggle its visibility.
+            </p>
+          </div>
+
+          <!-- Interactive Plan Toggle Badges -->
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              *ngFor="let tier of dashboardData.planPurchases.tierSummaries"
+              type="button"
+              (click)="togglePlanVisibility(tier, $event)"
+              [class.opacity-40]="!tier.visible"
+              [class.ring-2]="tier.visible"
+              [class.ring-offset-1]="tier.visible"
+              [class.dark:ring-offset-slate-900]="tier.visible"
+              [style.borderColor]="tier.borderColor"
+              class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border transition-all duration-150 bg-white dark:bg-slate-800 shadow-xs hover:opacity-100"
+            >
+              <span
+                class="w-2.5 h-2.5 rounded-full"
+                [style.backgroundColor]="tier.color"
+              ></span>
+              <span class="text-slate-800 dark:text-slate-200">{{
+                tier.name
+              }}</span>
+              <i
+                class="pi text-[9px] ml-0.5"
+                [class.pi-check]="tier.visible"
+                [class.pi-eye-slash]="!tier.visible"
+                [class.text-slate-400]="!tier.visible"
+              ></i>
+            </button>
+
+            <!-- Toggle All / Show All -->
+            <button
+              type="button"
+              (click)="toggleAllPlans()"
+              class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-1 rounded-lg transition-colors"
+            >
+              {{ isAllPlansVisible ? "Hide All" : "Show All" }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Multi-Line Graph Canvas -->
+        <div class="mt-5 relative" style="height: 360px">
+          <p-chart
+            *ngIf="planPurchasesChartData"
+            type="line"
+            [data]="planPurchasesChartData"
+            [options]="planPurchasesChartOptions"
+            [style]="{ height: '100%', width: '100%' }"
+          >
+          </p-chart>
+        </div>
+
+        <!-- Plan Breakdown Cards (Footer) -->
+        <div class="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div
+              *ngFor="let tier of dashboardData.planPurchases.tierSummaries"
+              class="p-4 rounded-xl border transition-all duration-150 bg-slate-50/80 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800"
+              [class.opacity-50]="!tier.visible"
+              [style.borderLeftColor]="tier.color"
+              style="border-left-width: 4px"
+            >
+              <div class="flex items-center justify-between">
+                <span
+                  class="text-xs font-bold text-slate-800 dark:text-slate-200"
+                  >{{ tier.name }}</span
+                >
+                <span
+                  class="px-2 py-0.5 rounded text-[10px] font-semibold"
+                  [style.color]="tier.color"
+                  [style.backgroundColor]="tier.lightBg"
+                >
+                  {{ tier.sharePercentage }}% share
+                </span>
+              </div>
+              <div class="flex items-baseline justify-between mt-2">
+                <span
+                  class="text-xl font-extrabold text-slate-900 dark:text-white"
+                >
+                  {{ tier.totalPurchases | number }}
+                </span>
+                <span
+                  class="text-xs font-medium text-slate-500 dark:text-slate-400"
+                >
+                  ₹{{ tier.averagePrice | number }}/mo
+                </span>
+              </div>
+              <!-- Progress bar of tier share -->
+              <div
+                class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2.5 overflow-hidden"
+              >
+                <div
+                  class="h-full rounded-full transition-all duration-300"
+                  [style.width.%]="tier.sharePercentage"
+                  [style.backgroundColor]="tier.color"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== -->
+      <!-- EMPTY STATE FALLBACK (If total is 0) -->
+      <!-- ======================================================== -->
+      <div
+        *ngIf="dashboardData.summary.totalUsers === 0"
+        class="p-8 sm:p-12 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-subtle"
+      >
+        <div
+          class="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3 text-slate-400"
+        >
+          <i class="pi pi-chart-bar text-2xl"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">
+          No Analytics Recorded For This Range
+        </h3>
+        <p
+          class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1 mb-4"
+        >
+          Try selecting a broader timeframe such as 6 Months or 1 Year to view
+          historical trends.
+        </p>
+        <button
+          type="button"
+          (click)="setRange('1y')"
+          class="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-all"
+        >
+          Switch to 1 Year View
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
