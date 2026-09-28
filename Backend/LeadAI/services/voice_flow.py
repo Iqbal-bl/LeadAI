@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import logging
 import re
-import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -44,6 +43,13 @@ from ..engine.trace import TurnTrace
 from ..engine.trace import step as trace_step
 from ..models import Lead, LeadCall, LeadConversation, LeadMessage, utcnow
 from . import ai_engine, llm, memory, reply_cleanup, script_engine
+from .language import (  # noqa: F401  (re-exported)
+    _LANGUAGES,
+    detect_language,
+    language_note,
+    resolve_language,
+    same_language,
+)
 from .conversation_flow import _event, apply_threshold
 
 logger = logging.getLogger(__name__)
@@ -56,16 +62,34 @@ TRANSFER_LINE = "Let me bring in a specialist who can help with that — connect
 # human yet, so promising "connecting you now" and then ending the call (as the first version
 # did) leaves the customer with a dropped call. Say what will really happen, and keep the call
 # going: staff are flagged to follow up.
-CALLBACK_LINE = (
-    "Of course. I'll have a specialist from our team call you back shortly. "
-    "Is there anything you'd like me to pass on to them?"
-)
+#
+# Localized like closing_line() below, and for the same reason: a live call caught this fixed
+# English line being spoken to a caller mid-Hindi-conversation. Both this and UNSURE_LINE
+# REPLACE the model's own reply (which may be in any language, or absent), so — unlike a normal
+# answer, where the spoken language follows whatever the model actually wrote — these two must
+# always follow the CALLER's language explicitly; nothing here comes from the model to follow.
+_CALLBACK = {
+    "hi": "ज़रूर। मैं हमारी टीम से किसी विशेषज्ञ से आपको जल्द ही कॉल बैक करवाता हूँ। क्या आप कुछ बताना चाहेंगे जो मैं उन्हें बता दूँ?",
+    "pa": "ਜ਼ਰੂਰ। ਮੈਂ ਸਾਡੀ ਟੀਮ ਦੇ ਕਿਸੇ ਮਾਹਿਰ ਤੋਂ ਤੁਹਾਨੂੰ ਜਲਦੀ ਹੀ ਕਾਲ ਬੈਕ ਕਰਵਾਵਾਂਗਾ। ਕੀ ਤੁਸੀਂ ਕੁਝ ਦੱਸਣਾ ਚਾਹੋਗੇ ਜੋ ਮੈਂ ਉਹਨਾਂ ਨੂੰ ਦੱਸ ਦੇਵਾਂ?",
+    "en": ("Of course. I'll have a specialist from our team call you back shortly. "
+           "Is there anything you'd like me to pass on to them?"),
+}
 # Spoken when the engine refuses a reply because it stated a figure the company's knowledge
 # does not contain: better an honest hand-off than a wrong price on the phone.
-UNSURE_LINE = (
-    "I want to be sure I give you the right details, so I'll have a specialist confirm that "
-    "and call you back. Is there anything else I can help with?"
-)
+_UNSURE = {
+    "hi": "मैं चाहता हूँ कि आपको सही जानकारी मिले, इसलिए एक विशेषज्ञ इसकी पुष्टि करके आपको कॉल करेंगे। क्या मैं किसी और चीज़ में मदद कर सकता हूँ?",
+    "pa": "ਮੈਂ ਚਾਹੁੰਦਾ ਹਾਂ ਕਿ ਤੁਹਾਨੂੰ ਸਹੀ ਜਾਣਕਾਰੀ ਮਿਲੇ, ਇਸ ਲਈ ਇੱਕ ਮਾਹਿਰ ਇਸਦੀ ਪੁਸ਼ਟੀ ਕਰਕੇ ਤੁਹਾਨੂੰ ਕਾਲ ਕਰਨਗੇ। ਕੀ ਮੈਂ ਕਿਸੇ ਹੋਰ ਚੀਜ਼ ਵਿੱਚ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?",
+    "en": ("I want to be sure I give you the right details, so I'll have a specialist confirm that "
+           "and call you back. Is there anything else I can help with?"),
+}
+
+
+def callback_line(language: str | None) -> str:
+    return _CALLBACK.get((language or "").strip().lower().split("-")[0], _CALLBACK["en"])
+
+
+def unsure_line(language: str | None) -> str:
+    return _UNSURE.get((language or "").strip().lower().split("-")[0], _UNSURE["en"])
 
 # Rough per-turn duration, ONLY for the simulated endpoint, so call analytics mean
 # something without a carrier. Real calls use the carrier's measured duration.
@@ -128,106 +152,8 @@ def closing_line(language: str | None) -> str:
 
 
 # ------------------------------------------------------------------------ language
-# Speech-to-text reports the language of every utterance. Nothing told the model, so on the
-# second live call it answered a Hindi caller in Punjabi. The note below is added to every
-# turn, and the pipeline switches the text-to-speech language to match.
-_LANGUAGES = {
-    "hi": ("Hindi", "Devanagari script"),
-    "en": ("English", None),
-    "pa": ("Punjabi", "Gurmukhi script"),
-    "bn": ("Bengali", "Bengali script"),
-    "gu": ("Gujarati", "Gujarati script"),
-    "kn": ("Kannada", "Kannada script"),
-    "ml": ("Malayalam", "Malayalam script"),
-    "mr": ("Marathi", "Devanagari script"),
-    "od": ("Odia", "Odia script"),
-    "or": ("Odia", "Odia script"),
-    "ta": ("Tamil", "Tamil script"),
-    "te": ("Telugu", "Telugu script"),
-}
-
-
-def language_note(code: str | None) -> str:
-    """An instruction naming the language to reply in. "" when the language is unknown."""
-    name, script = _LANGUAGES.get((code or "").strip().lower().split("-")[0], (None, None))
-    if not name:
-        return ""
-    where = f" ({script})" if script else ""
-    return (
-        f"The caller is speaking {name}. Reply in {name}{where}, in short spoken sentences. "
-        "Keep product names and words the caller used in English (such as 'BHK') in English."
-    )
-
-
-# Which language is a piece of text in? Speech-to-text labels each utterance, but a burst arrives
-# as short fragments, and short fragments are labelled unreliably: on the third live call a merged
-# turn that was mostly Hindi ("क्या जी? क्यों नहीं आ रहा? Okay, okay, back end.") carried the label of
-# its last fragment (en-IN), so the model was told English and the voice was switched to English
-# while speaking Hindi. The SCRIPT the words were written in is far more reliable.
-_SCRIPTS = (
-    (0x0900, 0x097F, "hi-IN"),   # Devanagari (Hindi; Marathi shares it, see _SAME_SCRIPT)
-    (0x0980, 0x09FF, "bn-IN"),
-    (0x0A00, 0x0A7F, "pa-IN"),   # Gurmukhi
-    (0x0A80, 0x0AFF, "gu-IN"),
-    (0x0B00, 0x0B7F, "od-IN"),
-    (0x0B80, 0x0BFF, "ta-IN"),
-    (0x0C00, 0x0C7F, "te-IN"),
-    (0x0C80, 0x0CFF, "kn-IN"),
-    (0x0D00, 0x0D7F, "ml-IN"),
-)
-_SAME_SCRIPT = {"mr": "hi", "or": "od"}   # languages that share a script with the one detected
-
-
-def _script_of(ch: str) -> str | None:
-    """The language code for the script of one character, or None for digits, spaces, punctuation.
-
-    Combining marks (Hindi vowel signs, the virama) count: str.isalpha() is False for them, so
-    counting only "letters" under-counted Indic text and made a mostly-Hindi sentence look Latin.
-    """
-    if unicodedata.category(ch)[0] not in ("L", "M"):
-        return None
-    cp = ord(ch)
-    if cp < 0x250:
-        return "en-IN" if ch.isalpha() else None
-    return next((c for lo, hi, c in _SCRIPTS if lo <= cp <= hi), None)
-
-
-def detect_language(text: str | None) -> str | None:
-    """The language of `text` judged by script, or None when it is unclear (no words, or a tie).
-
-    WORDS are counted, each by its own script: "क्या जी? क्यों नहीं आ रहा? Okay, okay, back end."
-    is six Hindi words against four English ones, so Hindi.
-    """
-    counts: dict[str, int] = {}
-    for token in (text or "").split():
-        letters: dict[str, int] = {}
-        for ch in token:
-            code = _script_of(ch)
-            if code:
-                letters[code] = letters.get(code, 0) + 1
-        if letters:
-            word = max(letters, key=letters.get)
-            counts[word] = counts.get(word, 0) + 1
-    if not counts:
-        return None
-    top = max(counts.values())
-    leaders = [c for c, n in counts.items() if n == top]
-    return leaders[0] if len(leaders) == 1 else None
-
-
-def _base(code: str | None) -> str:
-    return _SAME_SCRIPT.get((code or "").lower().split("-")[0], (code or "").lower().split("-")[0])
-
-
-def resolve_language(text: str | None, reported: str | None) -> str | None:
-    """The script wins over the speech-to-text label; the label only refines within a script
-    (Marathi vs Hindi share Devanagari) or fills in when the text has no letters."""
-    detected = detect_language(text)
-    if detected is None:
-        return reported
-    if reported and _base(reported) == _base(detected):
-        return reported
-    return detected
+# Language detection and the reply-language check live in services/language.py (shared with the
+# answering code); re-exported here so callers keep using voice_flow.detect_language etc.
 
 
 def opening_language(db: Session, conversation: LeadConversation) -> str | None:
@@ -418,6 +344,7 @@ def handle_voice_turn(
             script=None, trace=trace, carryover=carryover,
             session_note="\n\n".join(n for n in (state_note, lang_note) if n),
             query_override=english,
+            reply_language=language,
         )
         # The same judge chat uses (grounding + "declined in words"); a no-op unless ENGINE_MODE.
         result = engine_bridge.apply(
@@ -441,17 +368,40 @@ def handle_voice_turn(
         trace_step(trace, "superseded", "the caller spoke again first: reply dropped, nothing saved")
         return VoiceTurnResult("", {}, handed_off=False, superseded=True, history=history, trace=trace)
 
+    # Two different questions get answered here, and they must not be conflated:
+    #   caller_language  what the CALLER is speaking — always correct, used for any line WE
+    #                    write ourselves (callback_line, unsure_line).
+    #   language         what the text actually being SPOKEN is written in — follows the
+    #                    model's own reply when that is what gets spoken, but must NOT be
+    #                    trusted for a fixed line we substitute instead. A live call caught
+    #                    exactly this: the extractive fallback (human-request path) quotes
+    #                    English knowledge-base text, result["language"] correctly reported
+    #                    "en-IN" for THAT text, and callback_line was then spoken in English
+    #                    to a Hindi caller because `language` had been overwritten before the
+    #                    substitution below ever ran.
+    caller_language = language
+    language = result.get("language") or language
+
     handed_off = bool(result["needs_human"])
     if handed_off and live_call:
         # No live transfer exists, so do not pretend and do not hang up. Flag the
         # conversation for staff; keep the call going with something true to say.
         if result.get("wants_human"):
-            reply_text, why = CALLBACK_LINE, "customer asked for a person: promise a callback"
+            reply_text = callback_line(caller_language)
+            language = caller_language
+            why = "customer asked for a person: promise a callback"
         elif (note or {}).get("unsupported_count"):
-            reply_text, why = UNSURE_LINE, "reply stated a figure not in company knowledge: withheld"
+            reply_text = unsure_line(caller_language)
+            language = caller_language
+            why = "reply stated a figure not in company knowledge: withheld"
         else:
-            reply_text = (result["reply"] or "").strip() or CALLBACK_LINE
-            why = "not confident: speaking the model's honest answer"
+            reply_text = (result["reply"] or "").strip()
+            if reply_text:
+                why = "not confident: speaking the model's honest answer"
+            else:
+                reply_text = callback_line(caller_language)
+                language = caller_language
+                why = "not confident and nothing to say: promise a callback"
         trace_step(trace, "voice_handoff", f"flagged for a human follow-up; the call continues ({why})",
                    reason=result["handoff_reason"])
         call.HandedOff = True

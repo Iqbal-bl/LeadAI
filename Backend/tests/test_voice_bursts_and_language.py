@@ -259,7 +259,9 @@ def test_language_notes_for_each_language_and_for_unknown():
 
 
 def test_the_session_passes_the_tracked_language_to_the_brain_and_back_on_the_reply():
-    wire()
+    # The reply is in Hindi, as it should be for a Hindi caller: the language reported for the voice is
+    # the language the reply TEXT is in (an English reply would report English).
+    wire(reply="जी हाँ, मैं आपकी मदद कर सकता हूँ।")
     db, client, conv, call = setup()
     session = CallSession(client_id=client.Id, conversation_id=conv.Id, call_sid="CA910",
                           session_factory=SessionLocalAdmin)
@@ -283,7 +285,9 @@ def test_a_hindi_question_is_searched_and_scored_in_english():
 def test_a_hindi_request_for_a_person_is_recognised():
     wire(translation="I want to talk to a human agent")
     db, conv, out = turn("मुझे किसी इंसान से बात करनी है", language="hi-IN")
-    assert out.reply_text == voice_flow.CALLBACK_LINE and conv.Status == "needs_human"
+    # Spoken in the CALLER's language (Hindi), not voice_flow's English default — see
+    # test_voice_handoff_language.py for the live-call bug this guards against.
+    assert out.reply_text == voice_flow.callback_line("hi-IN") and conv.Status == "needs_human"
 
 
 def test_english_questions_cost_no_translation_call():

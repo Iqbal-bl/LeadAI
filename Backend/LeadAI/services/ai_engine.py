@@ -40,7 +40,7 @@ from ..engine.text import split_sentences
 from ..engine.trace import TurnTrace
 from ..engine.trace import step as trace_step
 from ..models import Lead, LeadCompanySettings, LeadConversation, LeadMessage
-from . import llm, memory, reply_cleanup, script_engine, vectorstore
+from . import language, llm, memory, reply_cleanup, script_engine, vectorstore
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +197,7 @@ def answer(
     session_note: str = "",
     trace: TurnTrace | None = None,
     query_override: str | None = None,
+    reply_language: str | None = None,
 ) -> dict:
     """Answer strictly from this company's knowledge base.
 
@@ -208,6 +209,11 @@ def answer(
     embedding score alone, and nearly every non-English turn was flagged as a hand-off. When
     given, it is used for retrieval, for the confidence score and for spotting a request for
     a human; the model still sees the customer's own words.
+
+    `reply_language` (e.g. "hi-IN") is the language the reply must be in. Earlier assistant replies
+    in ANOTHER language are removed from the history the model sees, the instruction is stated at the
+    end of the prompt, and the reply's script is checked (see services/language.py: the model answered
+    Hindi callers in Punjabi because it imitated its own earlier Punjabi replies).
 
     `session_note` is an optional instruction about the state of THIS conversation
     (e.g. it is already complete), injected as its own system turn.
@@ -335,6 +341,13 @@ def answer(
         # placed…") are excluded rather than being fed back as assistant turns
         # for the model to imitate.
         chat: list[dict] = memory.llm_window(history)
+        if reply_language:
+            before = len(chat)
+            chat = language.drop_other_language_replies(chat, reply_language)
+            if len(chat) != before:
+                trace_step(trace, "language_history",
+                           f"removed {before - len(chat)} earlier reply(ies) not in {reply_language}",
+                           removed=before - len(chat))
 
         if carryover:
             # Ahead of the thread, not merged into it: the model should treat this
@@ -384,6 +397,7 @@ def answer(
                 "content": (
                     f"Company knowledge (the ONLY source you may use):\n{context}\n\n"
                     f"Customer question: {question}{weak_match}"
+                    + (f"\n\n{language.reply_instruction(reply_language)}" if reply_language else "")
                 ),
             }
         )
@@ -396,6 +410,8 @@ def answer(
                    prompt_tokens=meta.get("prompt_tokens"),
                    completion_tokens=meta.get("completion_tokens"),
                    attempts=meta.get("attempts"), error=meta.get("error"))
+        if reply is not None and reply_language:
+            _check_reply_language(reply, reply_language, trace)
 
     if reply is None:
         reason = (
@@ -448,11 +464,26 @@ def answer(
         ],
         "model": meta.get("model"),
         "latency_ms": meta.get("latency_ms", 0),
+        # The language the reply text is really in (by script), for whoever speaks it.
+        "language": language.detect_language(reply_cleanup.strip_control_tokens(reply or "")) or reply_language,
         "script_id": getattr(script, "Id", None),
         # Full retrieved text, for the engine's grounding check. `sources` above only
         # carries 220-char excerpts, which would make true statements look unsupported.
         "context": [h["text"] for h in hits],
     }
+
+
+def _check_reply_language(reply: str, wanted: str, trace) -> None:
+    """Record when the reply is not in the language asked for. Observation only.
+
+    A retry was tried and measured against the real model: it fixed 0 of 6 wrong-language replies,
+    only adding a second model call. Filtering the history (above) is what works. The result's
+    "language" field reports what the text really is, so the voice follows it.
+    """
+    got = language.detect_language(reply_cleanup.strip_control_tokens(reply))
+    if got and not language.same_language(got, wanted):
+        trace_step(trace, "language_guard",
+                   f"reply is in {got} but {wanted} was asked for: the voice will follow the text")
 
 
 def _extractive_reply(

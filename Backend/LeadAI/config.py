@@ -129,6 +129,15 @@ class LeadAISettings:
     exotel_caller_id: str | None = os.getenv("EXOTEL_CALLER_ID") or None
     exotel_subdomain: str = os.getenv("EXOTEL_SUBDOMAIN", "api.exotel.com")
     exotel_flow_app_id: str | None = os.getenv("EXOTEL_FLOW_APP_ID") or None
+    # A SECOND Exotel flow (set up in Exotel's own App Bazaar dashboard — not in this
+    # codebase), whose Voicebot/Stream applet is configured to connect to
+    # /media-stream-pipecat instead of /media-stream. Calls routed to Pipecat
+    # (LeadAI/voice/routing.py) dial this flow instead of exotel_flow_app_id, so the
+    # existing, working legacy flow is never touched. Unset until you create it.
+    exotel_pipecat_flow_app_id: str | None = os.getenv("EXOTEL_PIPECAT_FLOW_APP_ID") or None
+    # Exotel's Voicebot/Stream applet sends raw PCM at whichever rate the applet is set to
+    # (8000/16000/24000 Hz), unlike Twilio's fixed 8 kHz mulaw. Must match that applet setting.
+    exotel_pipecat_sample_rate: int = _i("EXOTEL_PIPECAT_SAMPLE_RATE", 8000)
 
     # Which carrier the lead-AI voice endpoints should use.
     #   "auto"   -> exotel when credentials exist, else the existing twilio leg

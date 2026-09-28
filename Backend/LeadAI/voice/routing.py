@@ -44,3 +44,19 @@ def use_pipecat(call_data: dict | None) -> bool:
 
 def stream_path(call_data: dict | None) -> str:
     return PIPECAT_PATH if use_pipecat(call_data) else LEGACY_PATH
+
+
+def use_pipecat_for(*, client_id: str, conversation_id: str, phone_number: str | None) -> bool:
+    """Same decision as use_pipecat(), built from the fields available at CALL-PLACEMENT time.
+
+    Twilio never needs this: it always hits /outbound-twiml per call, so that handler makes
+    this same decision later, when Twilio asks. Exotel does not hit a per-call HTTP endpoint of
+    ours (its flow is configured once, in Exotel's own dashboard), so for Exotel the decision has
+    to be made HERE, before dialling, to choose which of the two Exotel flows to call (see
+    telephony.place_exotel_call). Same rules either way — one function, so they can never drift
+    apart.
+    """
+    return use_pipecat({
+        "leadai": True, "client_id": client_id, "conversation_id": conversation_id,
+        "phone_number": phone_number,
+    })

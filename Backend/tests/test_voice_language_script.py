@@ -67,7 +67,7 @@ def test_with_no_letters_the_label_is_used():
 
 # ------------------------------------------------------------- inside a live turn
 def test_the_merged_hindi_turn_is_answered_in_hindi_whatever_the_last_fragment_was_labelled():
-    live.wire()
+    live.wire(reply="जी हाँ, बताइए।")            # a Hindi reply: the voice language follows the reply text
     db, conv, call, out = live.turn(MERGED, language="en-IN")           # the label from the log
     assert out.language == "hi-IN"
     system = " ".join(m["content"] for m in live.LLM_CALLS[-1]["messages"] if m["role"] == "system")
@@ -75,7 +75,7 @@ def test_the_merged_hindi_turn_is_answered_in_hindi_whatever_the_last_fragment_w
 
 
 def test_the_session_reports_the_resolved_language_on_the_reply_so_the_voice_matches_the_text():
-    live.wire()
+    live.wire(reply="जी हाँ, बताइए।")
     db, client, conv, call = live.setup()
     session = CallSession(client_id=client.Id, conversation_id=conv.Id, call_sid="CA900",
                           session_factory=live.SessionLocalAdmin)

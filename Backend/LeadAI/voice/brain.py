@@ -55,6 +55,7 @@ class BrainReply:
 Respond = Callable[[str], Awaitable[BrainReply]]
 AfterReply = Callable[[BrainReply], None]
 OnSupersede = Callable[[], None]
+OnUserText = Callable[[str], None]
 LanguageFrame = Callable[[str], "Frame | None"]
 
 
@@ -83,6 +84,7 @@ class LeadAIBrainProcessor(FrameProcessor):
         respond: Respond,
         after_reply: AfterReply | None = None,
         on_supersede: OnSupersede | None = None,
+        on_user_text: OnUserText | None = None,
         language_frame: LanguageFrame | None = None,
         **kwargs,
     ):
@@ -90,6 +92,7 @@ class LeadAIBrainProcessor(FrameProcessor):
         self._respond = respond
         self._after_reply = after_reply
         self._on_supersede = on_supersede
+        self._on_user_text = on_user_text
         self._language_frame = language_frame
         # Bumped whenever the caller (re)starts speaking; a reply prepared under an older
         # generation is stale and is not spoken.
@@ -132,6 +135,14 @@ class LeadAIBrainProcessor(FrameProcessor):
     async def _answer(self, text: str) -> None:
         if not text:
             return
+        if self._on_user_text is not None:
+            # What the caller JUST said, the moment it is recognised (the live transcript), and
+            # before any thinking. Only the new words: a superseded turn's words were already
+            # announced when that turn began, so merging them below must not announce them twice.
+            try:
+                self._on_user_text(text)
+            except Exception:  # noqa: BLE001 — the live view must never disturb the call
+                logger.debug("user-text hook failed", exc_info=True)
         if self._carry:
             # Earlier words of the same thought, from a turn that was superseded.
             text = f"{self._carry} {text}".strip()

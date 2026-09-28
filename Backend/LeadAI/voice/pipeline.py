@@ -1,13 +1,28 @@
 """
-The Pipecat phone pipeline: Twilio websocket in, LeadAI brain in the middle, speech out.
+The Pipecat phone pipeline: Twilio or Exotel websocket in, LeadAI brain in the middle, speech out.
 
-    Twilio audio -> [transport in] -> speech-to-text -> user turn detection (voice activity)
-                 -> LeadAIBrainProcessor -> text-to-speech -> [transport out] -> Twilio audio
+    carrier audio -> [transport in] -> speech-to-text -> user turn detection (voice activity)
+                  -> LeadAIBrainProcessor -> text-to-speech -> [transport out] -> carrier audio
 
-The websocket is public (Twilio cannot carry a user login), so the FIRST thing this does is
-verify the short-lived stream token that /outbound-twiml put in the call's start event, and
-that it belongs to THIS call. An unauthenticated caller would otherwise get a free pipe into
-paid speech and language services. The same rule the legacy /media-stream loop applies.
+Twilio and Exotel share this whole pipeline and the whole brain (services/voice_flow.py, which
+uses OpenAI regardless of carrier). Only the transport in/out (this file's authenticate/build
+serializer logic) is carrier-specific.
+
+The websocket is public (a carrier cannot carry a user login), so the FIRST thing this does is
+authenticate the connection — differently per carrier, because the two carriers hand us
+different guarantees:
+
+  * Twilio calls our own /outbound-twiml FRESH, per call, so we can hand back a short-lived
+    signed token embedded in the stream URL and check it here. Strong: a stray connection
+    cannot forge one.
+  * Exotel's Voicebot/Stream applet is configured once, in Exotel's own dashboard (not in this
+    codebase), with a WSS URL that does not change per call — so there is no per-call token to
+    check. Instead, the CallSid the start event reports is looked up against our OWN database: a
+    LeadCall row we created, for THIS provider, not yet in a terminal state, placed recently. That
+    is weaker than Twilio's signed token (a correctly-guessed live CallSid within the time window
+    would pass), but it is a real, testable check, and it is what Exotel's setup allows without a
+    per-call dynamic URL. If Exotel later confirms the "HTTPS endpoint that returns a fresh WSS
+    URL per call" contract, the same signed-token approach as Twilio could replace this.
 
 Assembly (`assemble`) is separate from the network (`run_call`), so the wiring is tested with
 stand-in services and no audio.
@@ -46,6 +61,12 @@ SMART_TURN_STOP_SECONDS = 1.5
 WS_POLICY_VIOLATION = 1008
 WS_INTERNAL_ERROR = 1011
 
+# A CallSid presented over the Exotel websocket must belong to a call WE placed within this
+# window. Bounds how long a correctly-guessed live CallSid could be replayed for.
+EXOTEL_CALL_MAX_AGE_SECONDS = 600
+# Statuses that mean the call is over: a connection claiming one of these CallSids is stale.
+_TERMINAL_CALL_STATUSES = frozenset({"completed", "failed", "busy", "no-answer", "canceled"})
+
 
 class CallRejected(Exception):
     """The call may not use this pipeline. The message is safe to log, not to send."""
@@ -53,7 +74,7 @@ class CallRejected(Exception):
 
 # --------------------------------------------------------------------------- auth
 def authenticate(call_sid: str | None, token: str | None, decode=None) -> None:
-    """Accept the call only if `token` is a valid, unexpired stream token FOR this call."""
+    """Twilio: accept only if `token` is a valid, unexpired stream token FOR this call."""
     if not call_sid:
         raise CallRejected("no call sid in the start event")
     if not token:
@@ -66,6 +87,38 @@ def authenticate(call_sid: str | None, token: str | None, decode=None) -> None:
         raise CallRejected(f"invalid stream token ({exc.__class__.__name__})") from exc
     if payload.get("sub") != call_sid:
         raise CallRejected("stream token was issued for a different call")
+
+
+def authenticate_exotel(call_sid: str | None, *, db_session_factory=None) -> None:
+    """Exotel: no per-call token exists (see the module docstring), so accept only a CallSid
+    that matches a LeadCall WE placed via Exotel, recently, and that is not yet over."""
+    from ..models import LeadCall, utcnow
+
+    if not call_sid:
+        raise CallRejected("no call sid in the start event")
+    if db_session_factory is None:
+        from ..db import session as db_session_factory
+
+    db = db_session_factory()
+    try:
+        call = (
+            db.query(LeadCall)
+            .filter(LeadCall.CallSid == call_sid, LeadCall.Provider == "exotel", LeadCall.IsDeleted == False)  # noqa: E712
+            .one_or_none()
+        )
+        if call is None:
+            raise CallRejected("no LeadAI Exotel call record for this CallSid")
+        if (call.Status or "").lower() in _TERMINAL_CALL_STATUSES:
+            raise CallRejected(f"call {call_sid} already ended ({call.Status})")
+        # DateTime columns round-trip as naive (no tzinfo) even though utcnow() is aware; compare
+        # naive-to-naive so this does not depend on which DB driver preserves tzinfo.
+        created = call.CreatedAt.replace(tzinfo=None) if call.CreatedAt else None
+        now = utcnow().replace(tzinfo=None)
+        age = (now - created).total_seconds() if created else None
+        if age is None or age > EXOTEL_CALL_MAX_AGE_SECONDS or age < -60:
+            raise CallRejected(f"call {call_sid} is outside the allowed connection window")
+    finally:
+        db.close()
 
 
 def load_call_context(call_sid: str) -> dict:
@@ -163,6 +216,7 @@ def assemble(*, transport_in, transport_out, services: Services, session: CallSe
         respond=session.respond,
         after_reply=session.after_reply,
         on_supersede=session.supersede,
+        on_user_text=session.broadcast_user,
         language_frame=services.language_frame,
     )
     pipeline = Pipeline(
@@ -251,10 +305,13 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
     session: CallSession | None = None
     try:
         transport_type, call_data = await parse_telephony_websocket(websocket)
-        if transport_type != "twilio":
+        if transport_type not in ("twilio", "exotel"):
             raise CallRejected(f"unsupported carrier {transport_type!r}")
         call_sid = call_data.call_id
-        authenticate(call_sid, (call_data.body or {}).get("token"))
+        if transport_type == "twilio":
+            authenticate(call_sid, (call_data.body or {}).get("token"))
+        else:
+            authenticate_exotel(call_sid)
         context = load_call_context(call_sid)
         services = services_factory(context)
     except CallRejected as exc:
@@ -272,19 +329,31 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
         phone_number=context.get("phone_number"),
         **({"session_factory": session_factory} if session_factory else {}),
     )
+    if transport_type == "twilio":
+        serializer = _hangup_aware_serializer()(
+            stream_sid=call_data.stream_id,
+            call_sid=call_sid,
+            account_sid=os.getenv("TWILIO_ACCOUNT_SID", ""),
+            auth_token=os.getenv("TWILIO_AUTH_TOKEN", ""),
+            on_ai_hangup=session.note_ai_hangup,
+        )
+        sample_rate = 8000
+    else:
+        from pipecat.serializers.exotel import ExotelFrameSerializer
+
+        sample_rate = getattr(settings, "exotel_pipecat_sample_rate", 8000)
+        serializer = ExotelFrameSerializer(
+            stream_sid=call_data.stream_id,
+            call_sid=call_sid,
+            params=ExotelFrameSerializer.InputParams(exotel_sample_rate=sample_rate),
+        )
     transport = FastAPIWebsocketTransport(
         websocket,
         FastAPIWebsocketParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
             add_wav_header=False,
-            serializer=_hangup_aware_serializer()(
-                stream_sid=call_data.stream_id,
-                call_sid=call_sid,
-                account_sid=os.getenv("TWILIO_ACCOUNT_SID", ""),
-                auth_token=os.getenv("TWILIO_AUTH_TOKEN", ""),
-                on_ai_hangup=session.note_ai_hangup,
-            ),
+            serializer=serializer,
         ),
     )
     pipeline, _brain, _aggregators = assemble(
@@ -296,7 +365,7 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
     )
     worker = PipelineWorker(
         pipeline,
-        params=PipelineParams(audio_in_sample_rate=8000, audio_out_sample_rate=8000),
+        params=PipelineParams(audio_in_sample_rate=sample_rate, audio_out_sample_rate=sample_rate),
         idle_timeout_secs=IDLE_TIMEOUT_SECONDS,
         enable_rtvi=False,
     )

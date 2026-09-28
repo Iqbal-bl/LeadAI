@@ -218,6 +218,9 @@ def test_smart_turns_fallback_silence_is_1_5_seconds_not_3():
         def supersede(self):
             pass
 
+        def broadcast_user(self, t):
+            pass
+
     _pipe, _brain, aggs = pipeline.assemble(
         transport_in=Pass(), transport_out=Pass(),
         services=pipeline.Services(stt=Pass(), tts=Pass()), session=Session())

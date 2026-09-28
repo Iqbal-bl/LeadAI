@@ -105,7 +105,7 @@ def turn(utterance, live=True, language=None, **setup_kw):
 def test_a_customer_asking_for_a_person_gets_a_true_callback_promise_and_the_call_continues():
     wire()
     db, conv, call, out = turn("I want to talk to a human")
-    assert out.reply_text == voice_flow.CALLBACK_LINE and "call you back" in out.reply_text
+    assert out.reply_text == voice_flow.callback_line(None) and "call you back" in out.reply_text
     assert "connecting you now" not in out.reply_text.lower()
     assert out.ends_call is False and out.handed_off is True
     assert conv.Status == "needs_human" and call.HandedOff is True
@@ -134,8 +134,24 @@ def test_a_reply_with_an_invented_figure_is_withheld_on_a_live_call():
     wire(reply="The processing fee is Rs. 15,000.")
     bridge.settings = _Enforce()
     db, conv, call, out = turn("what is the processing fee")
-    assert out.reply_text == voice_flow.UNSURE_LINE and "15,000" not in out.reply_text
+    assert out.reply_text == voice_flow.unsure_line(None) and "15,000" not in out.reply_text
     assert out.ends_call is False and conv.Status == "needs_human"
+
+
+def test_repeated_handoffs_in_a_row_never_end_a_live_call():
+    # There is no live transfer to a human — a handoff is only a FLAG for staff follow-up, so
+    # the call must keep going through it, even across several low-confidence turns in a row,
+    # not just the first one. Only the model's own end-of-conversation signal (checked in the
+    # next test) or the caller saying goodbye may end a live call.
+    wire(hits=False)                          # every question comes back low-confidence
+    db, client, conv, call = setup()
+    for question in ("what is the rate", "what about fees", "and the tenure", "anything else"):
+        out = voice_flow.handle_voice_turn(db, client, conv, call, question, live_call=True,
+                                           defer_scoring=True, commit=True)
+        assert out.ends_call is False, question
+        assert out.reply_text                 # never silently drops the caller either
+    db.refresh(conv)
+    assert conv.Status == "needs_human" and call.HandedOff is True   # flagged, not ended
 
 
 def test_the_simulated_endpoint_keeps_its_original_transfer_behaviour():

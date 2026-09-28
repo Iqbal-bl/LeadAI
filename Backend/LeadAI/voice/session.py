@@ -56,6 +56,7 @@ class CallSession:
         self.language: str | None = None        # the caller's language, from speech-to-text
         self._token: threading.Event | None = None  # cancels the turn currently being prepared
         self._ai_end_reason: str | None = None      # set when the AI has decided to end the call
+        self._broadcasts: set[asyncio.Task] = set()  # live-transcript pushes still in flight
         self._session_factory = session_factory or _default_session_factory
         self._scoring: asyncio.Queue = asyncio.Queue()
         self._scoring_task: asyncio.Task | None = None
@@ -89,6 +90,40 @@ class CallSession:
             save_transcript_message(self.call_sid, role, text, self.phone_number)
         except Exception:  # noqa: BLE001
             logger.warning("[LeadAI voice] could not write the legacy transcript row", exc_info=True)
+
+    # ----------------------------------------------------------- live transcript
+    def broadcast(self, role: str, text: str) -> None:
+        """Push one spoken line ("user" or "agent") to the live transcript websockets.
+
+        The legacy loop did this for every line through outbound.app.broadcast_transcript, which
+        streams it to the call's transcript socket AND the inbox conversation socket (same
+        message id in both). The Pipecat path only saved lines to the database, so the UI stayed
+        empty until the call was over. Reusing that function keeps the format identical.
+
+        Fire-and-forget, like the legacy loop: it must never delay the audio. Ordering holds
+        because the websocket manager delivers each call's messages in the order they were queued.
+        """
+        text = (text or "").strip()
+        if not text:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(self._push_transcript(role, text))
+        self._broadcasts.add(task)
+        task.add_done_callback(self._broadcasts.discard)
+
+    def broadcast_user(self, text: str) -> None:
+        self.broadcast("user", text)
+
+    async def _push_transcript(self, role: str, text: str) -> None:
+        try:
+            from outbound.app import broadcast_transcript
+
+            await broadcast_transcript(self.call_sid, role, text)
+        except Exception:  # noqa: BLE001
+            logger.debug("[LeadAI voice] live transcript push failed", exc_info=True)
 
     # ------------------------------------------------ language and interruptions
     def set_language(self, code: str | None) -> None:
@@ -148,7 +183,9 @@ class CallSession:
             db.close()
 
     async def opening(self) -> BrainReply:
-        return await asyncio.to_thread(self._opening_sync)
+        reply = await asyncio.to_thread(self._opening_sync)
+        self.broadcast("agent", reply.text)        # legacy showed the greeting as it started
+        return reply
 
     # ------------------------------------------------------------------ scoring
     def start(self) -> None:
@@ -163,6 +200,8 @@ class CallSession:
     def after_reply(self, reply: BrainReply) -> None:
         """Runs once per spoken reply: queue scoring, and remember if the AI is ending the call."""
         self.schedule_scoring(reply)
+        # The reply has just been handed to the voice: show it. Superseded replies never get here.
+        self.broadcast("agent", reply.text)
         if reply.ends_call or reply.skipped:
             self._ai_end_reason = (
                 "AI ended the call (conversation paused or terminated)" if reply.skipped
@@ -210,7 +249,10 @@ class CallSession:
                 self._scoring.task_done()
 
     async def close(self) -> None:
-        """Finish outstanding scoring (bounded), then stop the worker. Call when the call ends."""
+        """Flush the live transcript, finish outstanding scoring (bounded), then stop the worker.
+        Call when the call ends."""
+        if self._broadcasts:
+            await asyncio.wait({*self._broadcasts}, timeout=2.0)     # let the last lines reach the UI
         if self._scoring_task is None:
             return
         self._scoring.put_nowait(None)

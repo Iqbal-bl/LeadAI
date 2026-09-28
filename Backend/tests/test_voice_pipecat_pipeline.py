@@ -236,6 +236,9 @@ class _FakeSession:
     def supersede(self):
         pass
 
+    def broadcast_user(self, text):
+        pass
+
 
 def test_a_finished_sentence_reaches_the_brain_and_the_reply_reaches_the_speech_stage():
     tts, session = _SpeechCollector(), _FakeSession()
