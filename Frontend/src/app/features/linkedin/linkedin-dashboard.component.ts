@@ -84,6 +84,13 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   syncingMessages = false;
   searchConversationText = '';
 
+  // Cached / State Properties (eliminating template function executions)
+  selectedCount = 0;
+  selectedProfiles: LinkedInProfile[] = [];
+  unreadConversationsCount = 0;
+  filteredConversations: LinkedInConversation[] = [];
+  canSendReply = false;
+
   // Comments & AI Replies Automation State
   comments: LinkedInSocialComment[] = [];
   loadingComments = false;
@@ -93,6 +100,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   selectedCommentSentiment: string = 'all';
   showCommentSettingsModal = false;
   savingCommentSettings = false;
+  filteredComments: LinkedInSocialComment[] = [];
+  pendingReviewCommentsCount = 0;
+  capturedLeadsCount = 0;
   commentSettings: LinkedInCommentSettings = {
     is_auto_reply_enabled: false,
     require_approval_for_questions: true,
@@ -937,6 +947,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           isReplying: false,
           isCapturingLead: false,
         }));
+        this.applyCommentFilter();
       },
       error: (err) => {
         this.loadingComments = false;
@@ -992,6 +1003,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         comment.reply_text = textToSend.trim();
         comment.replied_at = Date.now();
         comment.replied_by = 'operator';
+        this.applyCommentFilter();
 
         this.messageService.add({
           severity: 'success',
@@ -1032,6 +1044,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         comment.is_lead_candidate = res.is_lead_candidate;
         comment.draftReply = res.suggested_reply;
         comment.customInstruction = '';
+        this.applyCommentFilter();
 
         this.messageService.add({
           severity: 'info',
@@ -1061,6 +1074,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.linkedinService.ignoreComment(comment.id).subscribe({
           next: () => {
             comment.status = 'ignored';
+            this.applyCommentFilter();
             this.messageService.add({
               severity: 'info',
               summary: 'Comment Ignored',
@@ -1086,6 +1100,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         comment.isCapturingLead = false;
         comment.customer_id = res.customer_id;
         comment.is_lead_candidate = true;
+        this.applyCommentFilter();
         this.messageService.add({
           severity: 'success',
           summary: 'Lead Captured',
@@ -1103,8 +1118,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  getFilteredComments(): LinkedInSocialComment[] {
-    return this.comments.filter((c) => {
+  applyCommentFilter(): void {
+    this.filteredComments = this.comments.filter((c) => {
       // Status filter
       if (this.commentStatusFilter === 'pending_review' && c.status !== 'pending_review') {
         return false;
@@ -1136,14 +1151,24 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
       return true;
     });
+    this.updateCommentCounts();
+  }
+
+  updateCommentCounts(): void {
+    this.pendingReviewCommentsCount = this.comments.filter((c) => c.status === 'pending_review').length;
+    this.capturedLeadsCount = this.comments.filter((c) => c.is_lead_candidate || c.customer_id).length;
+  }
+
+  getFilteredComments(): LinkedInSocialComment[] {
+    return this.filteredComments;
   }
 
   getPendingReviewCommentsCount(): number {
-    return this.comments.filter((c) => c.status === 'pending_review').length;
+    return this.pendingReviewCommentsCount;
   }
 
   getCapturedLeadsCount(): number {
-    return this.comments.filter((c) => c.is_lead_candidate || c.customer_id).length;
+    return this.capturedLeadsCount;
   }
 }
 

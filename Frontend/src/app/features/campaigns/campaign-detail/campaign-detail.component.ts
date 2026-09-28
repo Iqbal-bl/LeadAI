@@ -66,7 +66,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
             replied: c.replied_count || 0,
           },
         };
-        const cnt = this.campaign.counters;
+        const cnt = this.campaign?.counters;
         this.progressPercent =
           cnt && cnt.total > 0
             ? Math.round(
