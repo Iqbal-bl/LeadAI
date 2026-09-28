@@ -1025,6 +1025,23 @@ class BillingSummaryOut(BaseModel):
     is_quota_active: bool = False
 
 
+class CallDetailTranscriptMessage(BaseModel):
+    id: str | None = None
+    sender: str  # 'ai' | 'customer' | 'agent' | 'system'
+    text: str
+    created_at: datetime | str | None = None
+
+
+class CallDetailWithTranscriptOut(BaseModel):
+    call_sid: str
+    conversation_id: str | None = None
+    duration_seconds: int = 0
+    minutes_deducted: float = 0.0
+    recording_url: str | None = None
+    created_at: datetime | str | None = None
+    messages: list[CallDetailTranscriptMessage] = []
+
+
 ConversationDetail.model_rebuild()
 ChatConversationDetail.model_rebuild()
 CallConversationDetail.model_rebuild()

@@ -3,6 +3,8 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 import {
   BillingSummary,
+  CallDetailsResponse,
+  CallTranscriptTurn,
   ClientRecharge,
   PlanTemplateCreatePayload,
   RazorpayOrderResponse,
@@ -79,6 +81,13 @@ export class BillingService {
   public getUsageHistory(limit: number = 50): Observable<UsageLog[]> {
     return this.apiService.get<UsageLog[]>('billing/usage-history', {
       params: { limit },
+      companyScoped: true,
+    });
+  }
+
+  /** Tenant: Get call details (recording audio url & transcript) */
+  public getCallDetails(callSid: string): Observable<CallDetailsResponse> {
+    return this.apiService.get<CallDetailsResponse>(`billing/calls/${callSid}/details`, {
       companyScoped: true,
     });
   }

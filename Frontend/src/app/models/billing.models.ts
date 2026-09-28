@@ -97,3 +97,21 @@ export interface PlanTemplateCreatePayload {
   rate_per_minute?: number;
   description?: string;
 }
+
+export interface CallTranscriptTurn {
+  id?: string | null;
+  sender: 'ai' | 'customer' | 'agent' | 'system';
+  text: string;
+  created_at?: string | null;
+}
+
+export interface CallDetailsResponse {
+  call_sid: string;
+  conversation_id?: string | null;
+  duration_seconds: number;
+  minutes_deducted: number;
+  recording_url?: string | null;
+  created_at?: string | null;
+  messages: CallTranscriptTurn[];
+}
+

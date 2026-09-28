@@ -121,16 +121,17 @@
       [paginator]="true"
       [loading]="loading"
       styleClass="p-datatable-sm"
-      [tableStyle]="{ 'min-width': '55rem' }"
+      [tableStyle]="{ 'min-width': '60rem' }"
     >
       <ng-template pTemplate="header">
         <tr class="bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
-          <th style="width: 15%;" class="py-3.5 px-4">Date & Time</th>
-          <th style="width: 25%;" class="py-3.5 px-4">Call Session SID</th>
-          <th style="width: 16%;" class="py-3.5 px-4">Call Duration</th>
-          <th style="width: 15%;" class="py-3.5 px-4">Minutes Deducted</th>
-          <th style="width: 17%;" class="py-3.5 px-4">Balance Progression</th>
-          <th style="width: 12%;" class="py-3.5 px-4 text-right">Recharge Pool Ref</th>
+          <th style="width: 14%;" class="py-3.5 px-4">Date & Time</th>
+          <th style="width: 22%;" class="py-3.5 px-4">Call Session SID</th>
+          <th style="width: 14%;" class="py-3.5 px-4">Call Duration</th>
+          <th style="width: 14%;" class="py-3.5 px-4">Minutes Deducted</th>
+          <th style="width: 15%;" class="py-3.5 px-4">Balance Progression</th>
+          <th style="width: 11%;" class="py-3.5 px-4">Recharge Pool</th>
+          <th style="width: 10%;" class="py-3.5 px-4 text-right">Actions</th>
         </tr>
       </ng-template>
 
@@ -145,17 +146,17 @@
           <!-- Call SID (Uniform 2 lines) -->
           <td class="py-2.5 px-4 font-mono text-xs align-middle">
             <div class="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-medium leading-snug">
-              <span class="truncate max-w-[150px]" [pTooltip]="log.call_sid">{{ log.call_sid }}</span>
+              <span class="truncate max-w-[140px]" [pTooltip]="log.call_sid">{{ log.call_sid }}</span>
               <button
                 type="button"
                 class="text-slate-400 hover:text-indigo-600 transition-colors"
-                (click)="copyToClipboard(log.call_sid)"
+                (click)="copyToClipboard(log.call_sid, 'Call SID')"
                 pTooltip="Copy Call SID"
               >
                 <i class="pi pi-copy text-[11px]"></i>
               </button>
             </div>
-            <div class="text-[11px] text-slate-400 truncate max-w-[180px] leading-snug">
+            <div class="text-[11px] text-slate-400 truncate max-w-[170px] leading-snug">
               {{ log.conversation_id ? 'Conv: ' + log.conversation_id : 'Voice AI Session' }}
             </div>
           </td>
@@ -186,11 +187,24 @@
           </td>
 
           <!-- Recharge ID -->
-          <td class="py-2.5 px-4 text-right font-mono text-xs text-slate-400 align-middle">
-            <span *ngIf="log.recharge_id" class="truncate max-w-[100px] inline-block" [pTooltip]="'Recharge Batch: ' + log.recharge_id">
+          <td class="py-2.5 px-4 font-mono text-xs text-slate-400 align-middle">
+            <span *ngIf="log.recharge_id" class="truncate max-w-[90px] inline-block" [pTooltip]="'Recharge Batch: ' + log.recharge_id">
               {{ log.recharge_id | slice:0:8 }}...
             </span>
             <span *ngIf="!log.recharge_id">—</span>
+          </td>
+
+          <!-- Actions -->
+          <td class="py-2.5 px-4 text-right whitespace-nowrap align-middle">
+            <button
+              pButton
+              type="button"
+              label="View Call"
+              icon="pi pi-play"
+              class="p-button-outlined p-button-sm text-xs font-semibold p-button-primary rounded-xl"
+              (click)="openCallDetails(log)"
+              pTooltip="Listen to audio recording & view transcript"
+            ></button>
           </td>
         </tr>
       </ng-template>
@@ -198,7 +212,7 @@
       <!-- Empty State -->
       <ng-template pTemplate="emptymessage">
         <tr>
-          <td colspan="6" class="text-center py-12">
+          <td colspan="7" class="text-center py-12">
             <div class="flex flex-col items-center justify-center text-slate-400 space-y-2">
               <i class="pi pi-phone-slash text-4xl text-slate-300 dark:text-slate-600"></i>
               <p class="font-medium text-slate-600 dark:text-slate-300 text-sm">No call deduction logs recorded</p>
@@ -212,3 +226,251 @@
     </p-table>
   </div>
 </div>
+
+<!-- Call Details, Audio Player & Turn-by-Turn Transcript Dialog -->
+<p-dialog
+  [(visible)]="showCallDetailsDialog"
+  [modal]="true"
+  [style]="{ width: '90vw', maxWidth: '780px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [closeOnEscape]="true"
+  [dismissableMask]="true"
+  (onHide)="closeCallDetails()"
+  styleClass="rounded-2xl overflow-hidden shadow-2xl"
+>
+  <!-- Custom Dialog Header -->
+  <ng-template pTemplate="header">
+    <div class="flex items-center justify-between w-full pr-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+          <i class="pi pi-volume-up text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white">Call Session Audit</h3>
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+              Voice AI Turn
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 font-mono mt-0.5 flex items-center gap-1.5">
+            SID: {{ selectedLog?.call_sid }}
+            <button
+              type="button"
+              class="text-slate-400 hover:text-indigo-600"
+              (click)="copyToClipboard(selectedLog?.call_sid, 'Call SID')"
+              pTooltip="Copy SID"
+            >
+              <i class="pi pi-copy text-[11px]"></i>
+            </button>
+          </p>
+        </div>
+      </div>
+    </div>
+  </ng-template>
+
+  <!-- Dialog Body Content -->
+  <div class="py-2 space-y-6">
+    <!-- Call Overview Info Strip -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-900/80 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+      <div>
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Duration</span>
+        <span class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1 mt-0.5">
+          <i class="pi pi-clock text-indigo-500 text-xs"></i>
+          {{ formatDuration(selectedLog?.call_duration_seconds || 0) }}
+          <span class="text-xs font-normal text-slate-400">({{ selectedLog?.call_duration_seconds }}s)</span>
+        </span>
+      </div>
+      <div>
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Deduction</span>
+        <span class="text-sm font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1 mt-0.5">
+          <i class="pi pi-minus-circle text-xs"></i>
+          {{ selectedLog?.minutes_deducted | number:'1.0-2' }} mins
+        </span>
+      </div>
+      <div>
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Date & Time</span>
+        <span class="text-xs font-medium text-slate-800 dark:text-slate-200 block mt-0.5">
+          {{ selectedLog?.deducted_at | date:'mediumDate' }}
+          <span class="text-slate-400 block text-[11px]">{{ selectedLog?.deducted_at | date:'shortTime' }}</span>
+        </span>
+      </div>
+      <div>
+        <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Balance Left</span>
+        <span class="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400 block mt-0.5">
+          {{ selectedLog?.new_balance | number:'1.0-2' }}m
+        </span>
+      </div>
+    </div>
+
+    <!-- Audio Recording Section -->
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+          <i class="pi pi-play text-indigo-600 dark:text-indigo-400"></i>
+          Call Audio Recording
+        </h4>
+        <a
+          *ngIf="activeCallDetails?.recording_url"
+          [href]="activeCallDetails?.recording_url"
+          target="_blank"
+          download
+          class="inline-flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+        >
+          <i class="pi pi-download"></i>
+          Download Audio
+        </a>
+      </div>
+
+      <!-- Loading State for Audio -->
+      <div *ngIf="callDetailsLoading" class="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl flex items-center justify-center gap-2 text-slate-400 text-xs">
+        <i class="pi pi-spin pi-spinner text-sm"></i>
+        <span>Loading recording stream...</span>
+      </div>
+
+      <!-- Audio Player when available -->
+      <div
+        *ngIf="!callDetailsLoading && activeCallDetails?.recording_url"
+        class="p-4 bg-slate-900 text-white rounded-2xl border border-slate-800 shadow-inner flex flex-col gap-2"
+      >
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <span class="flex items-center gap-1.5 font-medium text-slate-300">
+            <i class="pi pi-headphones text-indigo-400"></i>
+            Dual-Channel Audio Playback
+          </span>
+          <span class="text-[11px] bg-slate-800 px-2 py-0.5 rounded text-emerald-400 font-mono">Stream Ready</span>
+        </div>
+        <audio
+          controls
+          class="w-full h-10 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-800"
+          [src]="activeCallDetails?.recording_url"
+          preload="metadata"
+        >
+          Your browser does not support the audio element.
+        </audio>
+      </div>
+
+      <!-- No recording available state -->
+      <div
+        *ngIf="!callDetailsLoading && !activeCallDetails?.recording_url"
+        class="p-4 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl flex items-center gap-3 text-amber-800 dark:text-amber-300"
+      >
+        <i class="pi pi-info-circle text-lg"></i>
+        <div class="text-xs">
+          <p class="font-semibold">No Audio Recording Available</p>
+          <p class="text-slate-500 dark:text-slate-400 mt-0.5">
+            An audio stream recording was not captured or has been purged according to data retention policies.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conversational Speech Transcript Section -->
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+          <i class="pi pi-comments text-indigo-600 dark:text-indigo-400"></i>
+          Speech Transcript
+          <span
+            *ngIf="activeCallDetails?.messages?.length"
+            class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+          >
+            {{ activeCallDetails?.messages?.length }} turns
+          </span>
+        </h4>
+        <button
+          *ngIf="activeCallDetails?.messages?.length"
+          type="button"
+          (click)="copyFullTranscript()"
+          class="inline-flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+        >
+          <i class="pi pi-copy"></i>
+          Copy Full Transcript
+        </button>
+      </div>
+
+      <!-- Loading State for Transcript -->
+      <div *ngIf="callDetailsLoading" class="p-8 bg-slate-50 dark:bg-slate-900 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 text-xs">
+        <i class="pi pi-spin pi-spinner text-2xl text-indigo-600"></i>
+        <span>Fetching conversational turns...</span>
+      </div>
+
+      <!-- Transcript Messages Scroll Container -->
+      <div
+        *ngIf="!callDetailsLoading && activeCallDetails?.messages?.length"
+        class="space-y-3 max-h-[380px] overflow-y-auto p-4 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800"
+      >
+        <div
+          *ngFor="let msg of activeCallDetails?.messages"
+          class="flex flex-col"
+          [ngClass]="{
+            'items-start': msg.sender === 'ai' || msg.sender === 'system',
+            'items-end': msg.sender === 'customer' || msg.sender === 'agent'
+          }"
+        >
+          <!-- Message Bubble Container -->
+          <div
+            class="max-w-[85%] sm:max-w-[75%] rounded-2xl p-3.5 shadow-sm space-y-1"
+            [ngClass]="{
+              'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-tl-sm': msg.sender === 'ai',
+              'bg-indigo-600 text-white rounded-tr-sm': msg.sender === 'customer',
+              'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-200 border border-amber-200 dark:border-amber-800/60': msg.sender === 'system',
+              'bg-purple-600 text-white rounded-tr-sm': msg.sender === 'agent'
+            }"
+          >
+            <!-- Turn Header -->
+            <div
+              class="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider"
+              [ngClass]="{
+                'text-indigo-600 dark:text-indigo-400': msg.sender === 'ai',
+                'text-indigo-100': msg.sender === 'customer',
+                'text-amber-700 dark:text-amber-300': msg.sender === 'system',
+                'text-purple-100': msg.sender === 'agent'
+              }"
+            >
+              <i *ngIf="msg.sender === 'ai'" class="pi pi-android text-xs"></i>
+              <i *ngIf="msg.sender === 'customer'" class="pi pi-user text-xs"></i>
+              <i *ngIf="msg.sender === 'system'" class="pi pi-info-circle text-xs"></i>
+              <i *ngIf="msg.sender === 'agent'" class="pi pi-user-plus text-xs"></i>
+              <span>
+                {{ msg.sender === 'ai' ? 'AI Voice Agent' : msg.sender === 'customer' ? 'Customer' : msg.sender === 'agent' ? 'Human Agent' : 'System Event' }}
+              </span>
+              <span *ngIf="msg.created_at" class="opacity-70 font-normal ml-auto text-[10px] lowercase">
+                {{ msg.created_at | date:'shortTime' }}
+              </span>
+            </div>
+
+            <!-- Message Text -->
+            <p class="text-xs leading-relaxed whitespace-pre-wrap font-normal">
+              {{ msg.text }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- No Transcript State -->
+      <div
+        *ngIf="!callDetailsLoading && (!activeCallDetails?.messages || activeCallDetails?.messages?.length === 0)"
+        class="p-6 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-center text-slate-400 text-xs space-y-1"
+      >
+        <i class="pi pi-comment text-2xl text-slate-300 dark:text-slate-600"></i>
+        <p class="font-medium text-slate-600 dark:text-slate-300">No Transcript Turns Recorded</p>
+        <p class="text-[11px]">Speech-to-text turns were not captured for this call session.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dialog Footer -->
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+      <button
+        pButton
+        type="button"
+        label="Close"
+        icon="pi pi-times"
+        class="p-button-secondary p-button-outlined text-sm font-semibold rounded-xl"
+        (click)="closeCallDetails()"
+      ></button>
+    </div>
+  </ng-template>
+</p-dialog>

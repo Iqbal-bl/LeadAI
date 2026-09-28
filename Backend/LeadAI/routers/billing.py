@@ -20,6 +20,7 @@ from ..models import (
     RECHARGE_STATUS_ACTIVE,
     RECHARGE_STATUS_PENDING,
     LeadClientRecharge,
+    LeadMessage,
     LeadRechargePlanTemplate,
     LeadUsageLog,
     utcnow,
@@ -27,6 +28,8 @@ from ..models import (
 from ..rbac import Principal, require, scoped
 from ..schemas import (
     BillingSummaryOut,
+    CallDetailTranscriptMessage,
+    CallDetailWithTranscriptOut,
     ClientRechargeAllocate,
     ClientRechargeOut,
     Ok,
@@ -316,6 +319,107 @@ def get_usage_history(
         )
         for r in rows
     ]
+
+
+@router.get(
+    "/calls/{call_sid}/details",
+    response_model=CallDetailWithTranscriptOut,
+    summary="Get call recording URL and conversational transcript for a billed call",
+)
+def get_call_details(
+    call_sid: str,
+    scope: tuple[Principal, str] = Depends(scoped("billing.read", "company.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    from Domain.models import Conversation, Recordings
+
+    usage_log = (
+        db.query(LeadUsageLog)
+        .filter(
+            LeadUsageLog.CallSid == call_sid,
+            LeadUsageLog.ClientId == client_id,
+        )
+        .order_by(LeadUsageLog.DeductedAt.desc())
+        .first()
+    )
+
+    # 1. Recording URL
+    rec = (
+        db.query(Recordings)
+        .filter(
+            Recordings.CallSid == call_sid,
+            Recordings.IsDeleted == False,
+        )
+        .order_by(Recordings.CreatedAt.desc())
+        .first()
+    )
+    recording_url = rec.RecordingUrl if rec else None
+
+    # 2. Transcript messages
+    msgs: list[CallDetailTranscriptMessage] = []
+    lead_messages = (
+        db.query(LeadMessage)
+        .filter(
+            LeadMessage.CallSid == call_sid,
+            LeadMessage.IsDeleted == False,
+        )
+        .order_by(LeadMessage.CreatedAt.asc())
+        .all()
+    )
+
+    if lead_messages:
+        for m in lead_messages:
+            msgs.append(
+                CallDetailTranscriptMessage(
+                    id=m.Id,
+                    sender=m.Sender,
+                    text=m.Content,
+                    created_at=m.CreatedAt,
+                )
+            )
+    else:
+        # Fallback to Domain.models.Conversation
+        _RESPONSE_TYPE_TO_SENDER = {
+            "question": "ai",
+            "prompt": "ai",
+            "ai": "ai",
+            "answer": "customer",
+            "customer": "customer",
+            "hangup": "system",
+        }
+        conv_turns = (
+            db.query(Conversation)
+            .filter(
+                Conversation.CallSid == call_sid,
+                Conversation.IsDeleted == False,
+            )
+            .order_by(Conversation.CreatedAt.asc())
+            .all()
+        )
+        for turn in conv_turns:
+            s_type = (turn.ResponseType or "").lower()
+            sender = _RESPONSE_TYPE_TO_SENDER.get(s_type, "customer")
+            text = (turn.ResponseText or "").strip()
+            if text:
+                msgs.append(
+                    CallDetailTranscriptMessage(
+                        id=turn.Id,
+                        sender=sender,
+                        text=text,
+                        created_at=turn.CreatedAt,
+                    )
+                )
+
+    return CallDetailWithTranscriptOut(
+        call_sid=call_sid,
+        conversation_id=usage_log.ConversationId if usage_log else None,
+        duration_seconds=usage_log.CallDurationSeconds if usage_log else 0,
+        minutes_deducted=usage_log.MinutesDeducted if usage_log else 0.0,
+        recording_url=recording_url,
+        created_at=usage_log.DeductedAt if usage_log else None,
+        messages=msgs,
+    )
 
 
 # ===========================================================================

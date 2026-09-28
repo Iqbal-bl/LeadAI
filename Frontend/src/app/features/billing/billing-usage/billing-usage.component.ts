@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { BillingService } from '../../../services/billing.service';
-import { BillingSummary, UsageLog } from '../../../models/billing.models';
+import { BillingSummary, CallDetailsResponse, CallTranscriptTurn, UsageLog } from '../../../models/billing.models';
 import { MessageService } from 'primeng/api';
 
 @Component({
@@ -18,6 +18,12 @@ export class BillingUsageComponent implements OnInit {
   loading = true;
 
   searchTerm = '';
+
+  // Call Details Dialog state
+  showCallDetailsDialog = false;
+  callDetailsLoading = false;
+  selectedLog: UsageLog | null = null;
+  activeCallDetails: CallDetailsResponse | null = null;
 
   constructor(
     private billingService: BillingService,
@@ -77,6 +83,72 @@ export class BillingUsageComponent implements OnInit {
     this.applyFilter();
   }
 
+  // Call Details Modal Handling
+  openCallDetails(log: UsageLog): void {
+    this.selectedLog = log;
+    this.showCallDetailsDialog = true;
+    this.callDetailsLoading = true;
+    this.activeCallDetails = null;
+
+    this.billingService.getCallDetails(log.call_sid).subscribe({
+      next: (details) => {
+        this.activeCallDetails = details;
+        this.callDetailsLoading = false;
+      },
+      error: (err) => {
+        this.callDetailsLoading = false;
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Could Not Load Full Details',
+          detail: err?.error?.detail || 'Loaded basic session info only.',
+        });
+        // Create a fallback object with known usage log info
+        this.activeCallDetails = {
+          call_sid: log.call_sid,
+          conversation_id: log.conversation_id,
+          duration_seconds: log.call_duration_seconds,
+          minutes_deducted: log.minutes_deducted,
+          recording_url: null,
+          created_at: log.deducted_at,
+          messages: [],
+        };
+      },
+    });
+  }
+
+  closeCallDetails(): void {
+    this.showCallDetailsDialog = false;
+    this.selectedLog = null;
+    this.activeCallDetails = null;
+    this.callDetailsLoading = false;
+  }
+
+  copyFullTranscript(): void {
+    if (!this.activeCallDetails?.messages || this.activeCallDetails.messages.length === 0) {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'No Transcript',
+        detail: 'There are no transcript messages to copy.',
+      });
+      return;
+    }
+
+    const formattedTranscript = this.activeCallDetails.messages
+      .map((msg) => {
+        const role = msg.sender === 'ai' ? 'AI Agent' : msg.sender === 'customer' ? 'Customer' : msg.sender.toUpperCase();
+        return `[${role}]: ${msg.text}`;
+      })
+      .join('\n\n');
+
+    navigator.clipboard.writeText(formattedTranscript);
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Transcript Copied',
+      detail: 'Full conversation transcript copied to clipboard.',
+      life: 2500,
+    });
+  }
+
   // Consumption KPIs
   get totalMinutesConsumed(): number {
     return this.usageLogs.reduce((acc, curr) => acc + (Number(curr.minutes_deducted) || 0), 0);
@@ -100,13 +172,13 @@ export class BillingUsageComponent implements OnInit {
     return remainingSecs > 0 ? `${mins}m ${remainingSecs}s` : `${mins}m`;
   }
 
-  copyToClipboard(text?: string | null): void {
+  copyToClipboard(text?: string | null, label: string = 'Call SID'): void {
     if (!text) return;
     navigator.clipboard.writeText(text);
     this.messageService.add({
       severity: 'success',
       summary: 'Copied',
-      detail: 'Call SID copied to clipboard',
+      detail: `${label} copied to clipboard`,
       life: 2000,
     });
   }
