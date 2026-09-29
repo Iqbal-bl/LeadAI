@@ -208,13 +208,6 @@ export const CLIENT_ROUTES: Routes = [
         pathMatch: 'full',
       },
       {
-        path: 'plans-pricing',
-        loadComponent: () =>
-          import('../../features/plans-pricing/plans-pricing.component').then(
-            (m) => m.PlansPricingComponent,
-          ),
-      },
-      {
         path: 'profile',
         loadComponent: () =>
           import('../../features/profile/profile.component').then(
@@ -229,4 +222,3 @@ export const CLIENT_ROUTES: Routes = [
     ],
   },
 ];
-

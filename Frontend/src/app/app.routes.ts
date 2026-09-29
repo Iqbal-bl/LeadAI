@@ -39,6 +39,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'plans',
+    loadComponent: () =>
+      import('./features/plans-pricing/plans-pricing.component').then(
+        (m) => m.PlansPricingComponent,
+      ),
+  },
+  {
     path: '**',
     redirectTo: 'admin/dashboard',
   },

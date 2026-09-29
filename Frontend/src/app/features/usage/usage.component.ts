@@ -810,6 +810,6 @@ export class UsageComponent implements OnInit, OnDestroy {
    * Navigates to the Plans & Pricing purchase funnel.
    */
   public navigateToPricing(): void {
-    this.router.navigate(['/client/plans-pricing']);
+    this.router.navigate(['/plans']);
   }
 }
