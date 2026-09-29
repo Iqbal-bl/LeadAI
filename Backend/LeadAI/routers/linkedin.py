@@ -752,7 +752,10 @@ async def sync_linkedin_messages(
 
     try:
         import asyncio
-        result = await asyncio.to_thread(linkedin_bot.sync_linkedin_conversations, db, row)
+        if asyncio.iscoroutinefunction(linkedin_bot.sync_linkedin_conversations):
+            result = await linkedin_bot.sync_linkedin_conversations(db, row)
+        else:
+            result = await asyncio.to_thread(linkedin_bot.sync_linkedin_conversations, db, row)
         return result
     except Exception as exc:
         logger.error("Failed to sync LinkedIn conversations: %s", exc)
