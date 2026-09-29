@@ -23,12 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE_NAME: my-python-app
-      CONTAINER_NAME: my-python-app
+      CONTAINER_NAME: leadai-backend
       HOST_PORT: 6789
       CONTAINER_PORT: 6789
       # Path on the SERVER (Windows). Secrets file is owned by the server
       # admin; it's never in this repo and never in GitHub Secrets.
-      ENV_FILE: 'C:\ProgramData\my-python-app\.env'
+      ENV_FILE: 'C:\ProgramData\leadai\.env'
 
     steps:
       - name: Checkout source
@@ -116,9 +116,9 @@ jobs:
             docker network create outbound-net 2>$null
             $global:LASTEXITCODE = 0
 
-            # --network-alias backend: lets the frontend's nginx reach this
-            # container as "backend" without renaming it (CONTAINER_NAME stays
-            # my-python-app for anyone/anything already referencing that name).
+            # --network-alias backend: gives this container a second, stable
+            # DNS name on the network so the frontend's nginx.conf never needs
+            # to change even if CONTAINER_NAME does again later.
             docker run -d `
               --name ${{ env.CONTAINER_NAME }} `
               --restart unless-stopped `
@@ -145,7 +145,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE_NAME: my-python-app-frontend
-      CONTAINER_NAME: my-python-app-frontend
+      CONTAINER_NAME: leadai-frontend
       HOST_PORT: 8080
       CONTAINER_PORT: 80
 
