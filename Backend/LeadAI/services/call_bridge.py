@@ -300,6 +300,9 @@ def hangup_call(db: Session, call: LeadCall) -> bool:
     ok = telephony.hangup(call.CallSid, call.Provider)
     if ok:
         call.Status = "completed"
+        if not call.DurationSec and call.CreatedAt:
+            created = call.CreatedAt.replace(tzinfo=None)
+            call.DurationSec = max(0, int((utcnow().replace(tzinfo=None) - created).total_seconds()))
         call.UpdatedAt = utcnow()
     return ok
 

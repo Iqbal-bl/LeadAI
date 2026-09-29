@@ -28,13 +28,16 @@ export interface ContactListCreateRequest {
   column_map: Record<string, string>;
 }
 
+// Flat, matching the backend's ContactListFromLeads schema (schemas_ext.py) exactly —
+// a nested `filters` object here was silently dropped by Pydantic (extra fields are
+// ignored by default), so a request like {filters: {min_score: 50}} built a list from
+// EVERY lead, unfiltered, with no error.
 export interface ContactListFromLeadsRequest {
   name: string;
-  filters: {
-    lead_status?: string;
-    min_score?: number;
-    max_score?: number;
-    channel?: string;
-    assigned_to?: string;
-  };
+  description?: string;
+  status?: string[];
+  min_score?: number;
+  above_threshold?: boolean;
+  channel?: string;
+  created_after?: string;
 }

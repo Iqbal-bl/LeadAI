@@ -49,12 +49,39 @@
         <p-dropdown
           [options]="channelOptions"
           [(ngModel)]="channel"
+          (ngModelChange)="onChannelChange()"
           optionLabel="label"
           optionValue="value"
           class="w-full"
           appendTo="body"
         ></p-dropdown>
       </div>
+    </div>
+
+    <!-- Send from (only for channels with more than one possible connected account) -->
+    <div *ngIf="needsChannelAccount">
+      <label
+        class="block text-sm font-medium mb-1"
+        style="color: var(--app-text)"
+        >Send From</label
+      >
+      <p-dropdown
+        [options]="accountsForChannel"
+        [(ngModel)]="channelAccountId"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Select a connected account"
+        class="w-full"
+        appendTo="body"
+      ></p-dropdown>
+      <small
+        *ngIf="accountsForChannel.length === 0"
+        class="text-xs mt-1 block"
+        style="color: #f59e0b"
+      >
+        <i class="pi pi-info-circle mr-1"></i>No connected {{ channel }}
+        account found. Connect one from the Channels page first.
+      </small>
     </div>
 
     <!-- Purpose -->

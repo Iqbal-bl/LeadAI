@@ -580,8 +580,14 @@ def set_status(
     conversation = _load(db, conversation_id, principal, client_id)
     previous = conversation.Status
 
-    conversation.Status = payload.status
-    conversation.ClosedAt = utcnow() if payload.status == "closed" else None
+    new_status = payload.status
+    # An assignee already means a human owns this conversation, so it can't also
+    # be sitting in the unclaimed needs_human queue.
+    if new_status == "needs_human" and conversation.AssignedUserEmail:
+        new_status = "assigned"
+
+    conversation.Status = new_status
+    conversation.ClosedAt = utcnow() if new_status == "closed" else None
     conversation.UpdatedBy = principal.email
     conversation.UpdatedAt = utcnow()
 
@@ -592,8 +598,8 @@ def set_status(
         client_id=client_id,
         entity_type="conversation",
         entity_id=conversation.Id,
-        message=f"Status {previous} -> {payload.status}",
-        meta={"from": previous, "to": payload.status},
+        message=f"Status {previous} -> {new_status}",
+        meta={"from": previous, "to": new_status},
         request=request,
     )
     db.commit()

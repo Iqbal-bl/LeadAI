@@ -25,7 +25,6 @@ should never be one request away from a typo in a form.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 from fastapi import (
     APIRouter,
@@ -504,6 +503,11 @@ def create_campaign(
     principal, client_id = scope
     _validate(db, client_id, payload)
 
+    campaign_timezone = payload.timezone or settings.default_timezone
+    scheduled_at = payload.scheduled_at
+    if scheduled_at is not None:
+        scheduled_at = campaign_runner.local_to_utc(scheduled_at, campaign_timezone)
+
     row = LeadCampaign(
         ClientId=client_id,
         Name=payload.name,
@@ -523,7 +527,7 @@ def create_campaign(
         ScriptId=payload.script_id,
         Language=payload.language,
         Status="draft",
-        ScheduledAt=payload.scheduled_at,
+        ScheduledAt=scheduled_at,
         Concurrency=payload.concurrency or settings.campaign_default_concurrency,
         RatePerMinute=payload.rate_per_minute or settings.campaign_default_rate_per_minute,
         MaxRetries=payload.max_retries if payload.max_retries is not None else settings.campaign_max_retries,
@@ -531,7 +535,7 @@ def create_campaign(
         DedupeByPhone=payload.dedupe_by_phone,
         QuietHoursStart=payload.quiet_hours_start,
         QuietHoursEnd=payload.quiet_hours_end,
-        TimeZone=payload.timezone or settings.default_timezone,
+        TimeZone=campaign_timezone,
         CreatedBy=principal.email,
     )
     db.add(row)
@@ -617,6 +621,9 @@ def update_campaign(
     for key, column in mapping.items():
         if key in data and data[key] is not None:
             setattr(row, column, data[key])
+    if "scheduled_at" in data and data["scheduled_at"] is not None:
+        # TimeZone may have just changed above too — convert using the final value.
+        row.ScheduledAt = campaign_runner.local_to_utc(row.ScheduledAt, row.TimeZone)
     row.UpdatedBy = principal.email
     row.UpdatedAt = utcnow()
     activity.log_principal(
@@ -754,14 +761,13 @@ def start_campaign(
     if built == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No recipients to send to.")
 
-    run_at = row.ScheduledAt if row.ScheduledAt and row.ScheduledAt > datetime.utcnow() else None
-    row.Status = "scheduled" if run_at else "queued"
-    row.StatusMessage = (
-        f"Scheduled for {run_at:%d %b %H:%M}" if run_at else "Queued — starting shortly"
-    )
+    # /start is the operator pulling the trigger right now — any ScheduledAt was
+    # only ever a plan for an automatic fire, and starting manually overrides it.
+    row.Status = "queued"
+    row.StatusMessage = "Queued — starting shortly"
     jobs.enqueue(
         db, "campaign.run", {"campaign_id": row.Id},
-        client_id=client_id, run_at=run_at, priority=3,
+        client_id=client_id, run_at=None, priority=3,
     )
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_STARTED, client_id=client_id,

@@ -59,6 +59,7 @@ export interface CampaignCreateRequest {
   name: string;
   kind: CampaignKind;
   channel: CampaignChannel;
+  channel_account_id?: string;
   purpose: CampaignPurpose;
   audience_type: AudienceType;
   list_id?: string;
