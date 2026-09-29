@@ -52,6 +52,8 @@ from ..activity import A
 from ..config import settings
 from ..models import (
     CHANNEL_EMAIL,
+    CHANNEL_INSTAGRAM,
+    CHANNEL_MESSENGER,
     CHANNEL_SMS,
     CHANNEL_VOICE,
     Lead,
@@ -71,6 +73,37 @@ from . import audience, channels, crm, jobs
 logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = ("completed", "cancelled", "failed")
+
+# A phone number is never a valid recipient id on these platforms — Meta rejects
+# it. A campaign on one of these channels must resolve and send to the IGSID/PSID
+# behind the contact instead (see _resolve_external_user_id).
+SOCIAL_ID_CHANNELS = {CHANNEL_INSTAGRAM, CHANNEL_MESSENGER}
+
+
+def _resolve_external_user_id(
+    db: Session, client_id: str, customer_id: str | None, channel: str
+) -> str | None:
+    """The IGSID/PSID behind one LeadCustomer, for one specific channel.
+
+    Deliberately keyed by (CustomerId, Channel), not by whatever channel the
+    contact list or lead happened to be built from — the same person can have
+    both an Instagram and a Messenger identity, and a campaign must reach the
+    one that matches ITS OWN channel, never a phone number standing in for it.
+    """
+    if not customer_id or channel not in SOCIAL_ID_CHANNELS:
+        return None
+    identity = (
+        db.query(LeadChannelIdentity)
+        .filter(
+            LeadChannelIdentity.ClientId == client_id,
+            LeadChannelIdentity.CustomerId == customer_id,
+            LeadChannelIdentity.Channel == channel,
+            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
+        )
+        .order_by(LeadChannelIdentity.LastUserMessageAt.desc())
+        .first()
+    )
+    return identity.ExternalUserId if identity else None
 
 
 # =========================================================================== #
@@ -155,14 +188,27 @@ def build_audience(db: Session, campaign: LeadCampaign, actor: str = "system") -
     }
     added = skipped = 0
 
+    needs_social_id = campaign.Channel in SOCIAL_ID_CHANNELS
+
     for candidate in _iter_targets(db, campaign):
         phone = candidate.get("phone")
         email = candidate.get("email")
-        if not phone and not email:
-            skipped += 1
-            continue
+        external_user_id = candidate.get("external_user_id")
 
-        key = phone_fingerprint(phone) or f"e:{(email or '').strip().lower()}"
+        if needs_social_id:
+            # A phone number is never a valid recipient on Instagram/Messenger —
+            # only the resolved platform identity can actually be sent to, no
+            # matter what other contact info this candidate happens to have.
+            if not external_user_id:
+                skipped += 1
+                continue
+            key = f"{campaign.Channel}:{external_user_id}"
+        else:
+            if not phone and not email:
+                skipped += 1
+                continue
+            key = phone_fingerprint(phone) or f"e:{(email or '').strip().lower()}"
+
         if campaign.DedupeByPhone and key in existing:
             skipped += 1
             continue
@@ -179,6 +225,7 @@ def build_audience(db: Session, campaign: LeadCampaign, actor: str = "system") -
                 Name=candidate.get("name"),
                 PhoneEnc=encrypt_pii(phone),
                 PhoneMasked=mask_phone(phone),
+                ExternalUserId=external_user_id,
                 DedupeKey=key[:80],
                 FieldsJson=candidate.get("fields"),
                 Status="queued",
@@ -234,6 +281,9 @@ def _iter_targets(db: Session, campaign: LeadCampaign):
                 "name": item.Name,
                 "phone": decrypt_pii(item.PhoneEnc),
                 "email": decrypt_pii(item.EmailEnc),
+                "external_user_id": _resolve_external_user_id(
+                    db, campaign.ClientId, item.CustomerId, campaign.Channel
+                ),
                 "fields": item.FieldsJson,
             }
         return
@@ -259,6 +309,9 @@ def _iter_targets(db: Session, campaign: LeadCampaign):
                 "name": account.DisplayName,
                 "phone": decrypt_pii(account.PhoneEnc),
                 "email": decrypt_pii(account.EmailEnc),
+                "external_user_id": _resolve_external_user_id(
+                    db, campaign.ClientId, account.CustomerId, campaign.Channel
+                ),
                 "fields": {
                     "name": account.DisplayName,
                     "company": account.CompanyName,
@@ -299,6 +352,9 @@ def _iter_targets(db: Session, campaign: LeadCampaign):
             "name": customer.DisplayName or customer.PublicRef,
             "phone": decrypt_pii(customer.PhoneEnc),
             "email": decrypt_pii(customer.EmailEnc),
+            "external_user_id": _resolve_external_user_id(
+                db, campaign.ClientId, customer.Id, campaign.Channel
+            ),
             "fields": {
                 "name": customer.DisplayName or "there",
                 "product": lead.Product,
@@ -328,6 +384,16 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
     may_send, resume_at = quiet_hours_check(campaign)
     if not may_send:
         campaign.StatusMessage = f"Waiting for quiet hours to end (resumes {resume_at:%H:%M})"
+        activity.log(
+            db,
+            action=A.CAMPAIGN_DEFERRED,
+            client_id=campaign.ClientId,
+            actor_email="system",
+            entity_type="campaign",
+            entity_id=campaign.Id,
+            message=f"Outside quiet hours — resuming at {resume_at:%Y-%m-%d %H:%M} UTC",
+            meta={"resume_at": str(resume_at)},
+        )
         jobs.enqueue(
             db, "campaign.run", {"campaign_id": campaign.Id},
             client_id=campaign.ClientId, run_at=resume_at,
@@ -380,7 +446,6 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
             time.sleep(delay)
 
     _refresh_counters(db, campaign)
-    db.commit()
 
     remaining = (
         db.query(func.count(LeadCampaignRecipient.Id))
@@ -391,6 +456,18 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         .scalar()
         or 0
     )
+    activity.log(
+        db,
+        action=A.CAMPAIGN_BATCH_PROCESSED,
+        client_id=campaign.ClientId,
+        actor_email="system",
+        entity_type="campaign",
+        entity_id=campaign.Id,
+        message=f"Batch: {sent} sent, {failed} failed, {skipped} skipped ({remaining} remaining)",
+        meta={"sent": sent, "failed": failed, "skipped": skipped, "remaining": remaining},
+    )
+    db.commit()
+
     if remaining:
         jobs.enqueue(
             db, "campaign.run", {"campaign_id": campaign.Id}, client_id=campaign.ClientId
@@ -505,6 +582,14 @@ def _send_message(
             recipient.FailureReason = "No phone number"
             return "skipped"
         message_id = channels.send_sms(phone, body)
+    elif campaign.Channel in SOCIAL_ID_CHANNELS:
+        # Never phone here — Instagram/Messenger reject anything but the real
+        # IGSID/PSID, resolved at audience-build time (see build_audience()).
+        if not recipient.ExternalUserId:
+            recipient.Status = "skipped"
+            recipient.FailureReason = f"No {campaign.Channel} identity for this recipient"
+            return "skipped"
+        message_id = channels.send_text(account, campaign.Channel, recipient.ExternalUserId, body)
     else:
         if not phone:
             recipient.Status = "skipped"

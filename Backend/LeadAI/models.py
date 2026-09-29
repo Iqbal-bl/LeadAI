@@ -102,6 +102,7 @@ class LeadUserRole(LeadAIBase):
     UserEmail = Column(String(200), nullable=False)
     UserId = Column(String(36), nullable=True)      # optional link to users.Id
     FullName = Column(String(160), nullable=True)
+    Phone = Column(String(40), nullable=True)
     Role = Column(String(40), nullable=False, default=ROLE_EMPLOYEE)
     ClientId = Column(String(36), nullable=True)    # NULL => all companies
     IsActive = Column(Boolean, default=True)

@@ -877,6 +877,7 @@ class MemberCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=40)
     role: str = Field(
         default="employee",
         description="Role to grant: employee, manager",
@@ -888,9 +889,14 @@ class MemberOut(BaseModel):
     id: str
     email: str
     name: str | None = None
+    phone: str | None = None
     role: str
     client_id: str
     is_active: bool = True
+    # Conversations currently assigned to this person (LeadConversation.AssignedUserEmail),
+    # not a lifetime total — matches what "Team Management" actually needs to show: who's
+    # carrying how much right now.
+    assigned_leads: int = 0
     created_at: datetime | None = None
 
     @field_serializer('created_at')
@@ -904,6 +910,7 @@ class MemberOut(BaseModel):
 
 class MemberUpdate(BaseModel):
     full_name: str | None = None
+    phone: str | None = None
     role: RoleName | None = None
     is_active: bool | None = None
 

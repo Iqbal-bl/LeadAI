@@ -82,11 +82,22 @@ def social_identities_for(db: Session, customer_id: str | None) -> list:
     )
     social = []
     for ident in identities:
-        handle = ident.ProfileName or ident.ExternalUsername
+        # ProfileName is the person's real display name ("Manmeet Kaur"); ExternalUsername
+        # is the resolved @handle ("_man11_10") — a separate lookup, cached once per contact
+        # (see the bot-loop guard in routers/webhooks.py). On Instagram the handle IS the
+        # @username — SocialIdentityOut's own docstring says so — so it must win whenever
+        # it's known, or a real name with a space in it produces a handle that isn't the
+        # handle at all and a profile_url that isn't a valid link. Messenger has no @handle
+        # concept at all (Meta never exposes one), so ProfileName is the only thing to show.
+        if ident.Channel == CHANNEL_INSTAGRAM:
+            handle = ident.ExternalUsername or ident.ProfileName
+        else:
+            handle = ident.ProfileName or ident.ExternalUsername
         profile_url = None
-        if ident.Channel == CHANNEL_INSTAGRAM and handle:
-            # Only a resolved username makes a working link; a raw IGSID does not.
-            profile_url = f"https://instagram.com/{handle.lstrip('@')}"
+        if ident.Channel == CHANNEL_INSTAGRAM and ident.ExternalUsername:
+            # Only a resolved username makes a working link; a raw IGSID (or a real name
+            # with spaces in it) does not.
+            profile_url = f"https://instagram.com/{ident.ExternalUsername.lstrip('@')}"
         elif ident.Channel == CHANNEL_MESSENGER and ident.ExternalUserId:
             profile_url = f"https://m.me/{ident.ExternalUserId}"
         social.append(
