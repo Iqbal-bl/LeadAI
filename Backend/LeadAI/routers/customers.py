@@ -368,6 +368,10 @@ def reveal_contact(
         "phone": decrypt_pii(row.PhoneEnc),
         "email": decrypt_pii(row.EmailEnc),
         "whatsapp": decrypt_pii(row.WhatsAppEnc),
+        # A customer converted from Instagram/Messenger had no handle/IGSID here at
+        # all — this endpoint only ever decrypted phone/email/whatsapp, even though
+        # the social identity behind row.CustomerId was one join away the whole time.
+        "social_identities": ch.social_identities_for(db, row.CustomerId),
     }
 
 

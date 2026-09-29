@@ -34,7 +34,6 @@ from ..db import get_leadai_db
 from ..models import (
     Lead,
     LeadCall,
-    LeadChannelIdentity,
     LeadConversation,
     LeadCustomer,
     LeadMessage,
@@ -53,7 +52,6 @@ from ..schemas import (
     ConversationOut,
     DeliveryOut,
     Ok,
-    SocialIdentityOut,
     StatusRequest,
 )
 from ..security import decrypt_pii
@@ -66,6 +64,7 @@ from ..serializers import (
     resolve_display_name,
 )
 from ..services import ai_engine, conversation_flow
+from ..services import channels as ch
 
 try:
     from core.websocket_manager import manager as ws_manager, _fire_and_forget
@@ -648,36 +647,7 @@ def reveal_contact(
     )
     db.commit()
 
-    identities = (
-        db.query(LeadChannelIdentity)
-        .filter(
-            LeadChannelIdentity.CustomerId == customer.Id,
-            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
-        )
-        .order_by(LeadChannelIdentity.CreatedAt.asc())
-        .all()
-    )
-
-    social = []
-    for ident in identities:
-        handle = ident.ProfileName or ident.ExternalUsername
-        profile_url = None
-        if ident.Channel == "instagram" and handle:
-            # Only a resolved username makes a working link; a raw IGSID does not.
-            profile_url = f"https://instagram.com/{handle.lstrip('@')}"
-        elif ident.Channel == "messenger" and ident.ExternalUserId:
-            profile_url = f"https://m.me/{ident.ExternalUserId}"
-        social.append(
-            SocialIdentityOut(
-                channel=ident.Channel,
-                handle=handle or ident.ExternalUserId,
-                profile_name=ident.ProfileName,
-                external_user_id=ident.ExternalUserId,
-                profile_url=profile_url,
-                opted_out=bool(ident.OptedOut),
-                last_message_at=ident.LastUserMessageAt,
-            )
-        )
+    social = ch.social_identities_for(db, customer.Id)
 
     return ContactReveal(
         phone=customer_number(customer),

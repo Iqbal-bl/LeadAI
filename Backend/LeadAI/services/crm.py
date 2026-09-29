@@ -148,6 +148,11 @@ def convert_lead(
 
     account = find_account_by_phone(db, client_id, phone)
     if account is None:
+        # Carry over what the AI already learned during the conversation (city,
+        # budget, family size, ...) instead of handing the sales rep an account
+        # that remembers nothing. create_account() supports `fields`; nothing
+        # was ever passing it, so every converted customer started blank.
+        stated_facts = [str(f) for f in (lead.FactsJson or []) if str(f).strip()]
         account = create_account(
             db,
             client_id,
@@ -161,6 +166,7 @@ def convert_lead(
             product=lead.Product if lead.Product != "unknown" else None,
             value=value if value is not None else 0.0,
             source=conversation.Channel,
+            fields={"lead_facts": stated_facts} if stated_facts else None,
             actor=actor,
             customer_id=conversation.CustomerId,
         )
