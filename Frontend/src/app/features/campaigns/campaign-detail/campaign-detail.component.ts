@@ -59,11 +59,15 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
         this.campaign = {
           ...c,
           counters: {
-            total: c.total_count || 0,
-            sent: c.sent_count || 0,
-            delivered: c.delivered_count || 0,
-            failed: c.failed_count || 0,
-            replied: c.replied_count || 0,
+            total: c.total_count ?? 0,
+            queued: c.queued_count ?? 0,
+            sent: c.sent_count ?? 0,
+            delivered: c.delivered_count ?? 0,
+            read: c.read_count ?? 0,
+            replied: c.replied_count ?? 0,
+            failed: c.failed_count ?? 0,
+            skipped: c.skipped_count ?? 0,
+            leads_created: c.leads_created ?? 0,
           },
         };
         const cnt = this.campaign?.counters;
@@ -155,11 +159,15 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
           this.campaign = {
             ...c,
             counters: {
-              total: c.total_count || 0,
-              sent: c.sent_count || 0,
-              delivered: c.delivered_count || 0,
-              failed: c.failed_count || 0,
-              replied: c.replied_count || 0,
+              total: c.total_count ?? 0,
+              queued: c.queued_count ?? 0,
+              sent: c.sent_count ?? 0,
+              delivered: c.delivered_count ?? 0,
+              read: c.read_count ?? 0,
+              replied: c.replied_count ?? 0,
+              failed: c.failed_count ?? 0,
+              skipped: c.skipped_count ?? 0,
+              leads_created: c.leads_created ?? 0,
             },
           };
           if (
@@ -207,27 +215,38 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     });
   }
 
+  startingCampaign = false;
+
+  canStartCampaign(): boolean {
+    const s = this.campaign?.status;
+    return s === 'ready' || s === 'scheduled';
+  }
+
   startCampaign(): void {
-    if (!this.campaign) return;
+    if (!this.campaign || this.startingCampaign) return;
     this.confirmationService.confirm({
       message: `Start sending to ${this.campaign.counters?.total || 0} recipients? This action spends money and reaches real people.`,
       header: 'Start Campaign',
       icon: 'pi pi-send',
       accept: () => {
-        this.campaignService.startCampaign(this.campaign!.id).subscribe({
+        if (!this.campaign || this.startingCampaign) return;
+        this.startingCampaign = true;
+        this.campaignService.startCampaign(this.campaign.id).subscribe({
           next: () => {
+            this.startingCampaign = false;
             this.messageService.add({
               severity: 'success',
-              summary: 'Started',
+              summary: 'Campaign Started',
               detail: 'Campaign is now queued and sending.',
             });
             this.loadCampaign(this.campaign!.id);
           },
-          error: () => {
+          error: (err) => {
+            this.startingCampaign = false;
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: 'Failed to start campaign.',
+              detail: err.error?.detail || 'Failed to start campaign.',
             });
           },
         });
@@ -334,5 +353,26 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       info: '#6366f1',
     };
     return map[severity] || map['info'];
+  }
+
+  getStatusSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    switch ((status || '').toLowerCase()) {
+      case 'running':
+      case 'sent':
+      case 'completed':
+        return 'success';
+      case 'scheduled':
+      case 'queued':
+        return 'info';
+      case 'paused':
+      case 'building':
+      case 'draft':
+        return 'warn';
+      case 'cancelled':
+      case 'failed':
+        return 'danger';
+      default:
+        return 'secondary';
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { CustomerService } from '../../../services/customer.service';
@@ -15,22 +15,34 @@ import { CreateCustomerComponent } from '../create-customer/create-customer.comp
   styleUrl: './customer-list.component.scss',
 })
 export class CustomerListComponent implements OnInit {
+  @ViewChild('customerActionMenu') customerActionMenu!: any;
+
   customers: Customer[] = [];
   greetings: CustomerGreeting[] = [];
   loading = true;
   totalItems = 0;
   showCreateDialog = false;
 
-  // Filters
+  // Active filters
   stageFilter = '';
   statusFilter = '';
   searchText = '';
-  followUpDueOnly = false;
 
   hasReadAll = false;
 
+  // Menu action state
+  activeCustomerMenuItems: any[] = [];
+  selectedCustomer: Customer | null = null;
+
+  // Quick message dialog
+  showMessageDialog = false;
+  messageText = '';
+  messageChannel: 'whatsapp' | 'sms' | 'email' | 'voice' = 'whatsapp';
+  sendingMessage = false;
+
   stageOptions = [
     { label: 'All Stages', value: '' },
+    { label: 'Opportunity', value: 'opportunity' },
     { label: 'New', value: 'new' },
     { label: 'Active', value: 'active' },
     { label: 'VIP', value: 'vip' },
@@ -63,8 +75,7 @@ export class CustomerListComponent implements OnInit {
     this.customerService.getCustomers({
       stage: this.stageFilter || undefined,
       status: this.statusFilter || undefined,
-      search: this.searchText || undefined,
-      follow_up_due: this.followUpDueOnly || undefined,
+      search: this.searchText.trim() || undefined,
     }).subscribe({
       next: (res) => {
         this.customers = res.items;
@@ -92,6 +103,17 @@ export class CustomerListComponent implements OnInit {
     this.loadCustomers();
   }
 
+  clearFilters(): void {
+    this.stageFilter = '';
+    this.statusFilter = '';
+    this.searchText = '';
+    this.loadCustomers();
+  }
+
+  hasActiveFilters(): boolean {
+    return !!(this.stageFilter || this.statusFilter || this.searchText.trim());
+  }
+
   viewCustomer(customer: Customer): void {
     this.router.navigate(['/client/customers', customer.id]);
   }
@@ -100,24 +122,111 @@ export class CustomerListComponent implements OnInit {
     this.router.navigate(['/client/campaigns'], { queryParams: { purpose: 'festive' } });
   }
 
-  getStageColor(stage: string): string {
-    const colors: Record<string, string> = {
-      new: '#3b82f6',
-      active: '#22c55e',
-      vip: '#f59e0b',
-      churned: '#ef4444',
-    };
-    return colors[stage] || '#6b7280';
+  openCustomerMenu(event: Event, customer: Customer): void {
+    event.stopPropagation();
+    this.selectedCustomer = customer;
+    this.activeCustomerMenuItems = this.getCustomerMenuItems(customer);
+    this.customerActionMenu.toggle(event);
   }
 
-  getStageSeverity(stage: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  getCustomerMenuItems(customer: Customer): any[] {
+    const items: any[] = [
+      {
+        label: 'View Details',
+        icon: 'pi pi-eye',
+        command: () => this.viewCustomer(customer),
+      },
+    ];
+
+    if (!customer.do_not_disturb) {
+      items.push({
+        label: 'Send Message',
+        icon: 'pi pi-send',
+        command: () => this.openMessageDialog(customer),
+      });
+    }
+
+    return items;
+  }
+
+  openMessageDialog(customer: Customer): void {
+    this.selectedCustomer = customer;
+    this.messageText = '';
+    // Select first opted channel
+    if (customer.opt_in_whatsapp) this.messageChannel = 'whatsapp';
+    else if (customer.opt_in_sms) this.messageChannel = 'sms';
+    else if (customer.opt_in_email) this.messageChannel = 'email';
+    else if (customer.opt_in_call) this.messageChannel = 'voice';
+    else this.messageChannel = 'whatsapp';
+
+    this.showMessageDialog = true;
+  }
+
+  sendMessage(): void {
+    if (!this.selectedCustomer || !this.messageText.trim()) return;
+    this.sendingMessage = true;
+    this.customerService.sendMessage(this.selectedCustomer.id, {
+      channel: this.messageChannel,
+      message: this.messageText.trim(),
+    }).subscribe({
+      next: () => {
+        this.sendingMessage = false;
+        this.showMessageDialog = false;
+        this.messageText = '';
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Message Sent',
+          detail: `Outreach sent via ${this.messageChannel}.`,
+        });
+      },
+      error: (err) => {
+        this.sendingMessage = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Send Failed',
+          detail: err.error?.detail || 'Failed to send outreach message.',
+        });
+      },
+    });
+  }
+
+  getStageSeverity(stage: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    const s = (stage || '').toLowerCase();
     const map: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary'> = {
+      opportunity: 'info',
       new: 'info',
       active: 'success',
+      customer: 'success',
       vip: 'warn',
       churned: 'danger',
     };
-    return map[stage] || 'secondary';
+    return map[s] || 'secondary';
+  }
+
+  getSourceIcon(source: string | null | undefined): string {
+    const s = (source || '').toLowerCase();
+    const icons: Record<string, string> = {
+      instagram: 'pi pi-instagram',
+      facebook: 'pi pi-facebook',
+      messenger: 'pi pi-comments',
+      whatsapp: 'pi pi-whatsapp',
+      linkedin: 'pi pi-linkedin',
+      voice: 'pi pi-phone',
+      call: 'pi pi-phone',
+      web: 'pi pi-globe',
+      email: 'pi pi-envelope',
+      sms: 'pi pi-mobile',
+    };
+    return icons[s] || 'pi pi-share-alt';
+  }
+
+  formatCurrency(val: number | null | undefined, curr: string | null | undefined): string {
+    const amount = Number(val ?? 0).toFixed(2);
+    const currency = curr || 'INR';
+    if (currency === 'INR') {
+      return `₹${amount}`;
+    }
+    return `${amount} ${currency}`;
   }
 
   openCreateCustomerDialog(): void {

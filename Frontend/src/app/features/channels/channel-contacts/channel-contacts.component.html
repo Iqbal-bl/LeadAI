@@ -1,55 +1,115 @@
-<p-dialog [header]="'Contacts — ' + (channel.name || channel.display_name || channel.display_number || channel.channel)" [(visible)]="visible" [modal]="true"
-          [style]="{ width: '720px', maxHeight: '85vh' }" (onHide)="onClose()" [draggable]="false">
+<p-dialog [header]="'Contacts Preview — ' + (channel.name || channel.display_name || channel.display_number || channel.channel)" [(visible)]="visible" [modal]="true"
+          [style]="{ width: '92vw', maxWidth: '1080px', maxHeight: '88vh' }" (onHide)="onClose()" [draggable]="false" [resizable]="false">
 
-  <div class="flex items-center justify-between mb-3 pb-2" style="border-bottom: 1px solid var(--app-border);">
+  <!-- Channel Header & Refresh -->
+  <div class="flex items-center justify-between mb-4 pb-2" style="border-bottom: 1px solid var(--app-border);">
     <div class="text-xs" style="color: var(--app-text-muted);">
       Channel: <strong style="color: var(--app-text);">{{ channel.name || channel.display_name || channel.channel }}</strong>
       <span *ngIf="channel.display_number" class="ml-2">({{ channel.display_number }})</span>
+      <span class="ml-2 uppercase px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+        {{ channel.channel }}
+      </span>
     </div>
-    <p-button icon="pi pi-refresh" [rounded]="true" [text]="true" severity="secondary"
+    <p-button icon="pi pi-refresh" [rounded]="true" [text]="true" severity="secondary" size="small"
               pTooltip="Refresh Contacts" (onClick)="loadContacts(currentPage)"></p-button>
   </div>
 
-  <p-table [value]="contacts" [loading]="loading" [paginator]="true" [rows]="10" [rowHover]="true"
-           [tableStyle]="{ 'min-width': '100%' }">
-    <ng-template pTemplate="header">
-      <tr>
-        <th>Contact ID / Number</th>
-        <th>Name</th>
-        <th>Session Status</th>
-        <th>Last Message</th>
-      </tr>
-    </ng-template>
-    <ng-template pTemplate="body" let-contact>
-      <tr>
-        <td>
-          <span class="text-sm font-mono" style="color: var(--app-text);">{{ contact.identifier_masked || contact.phone || contact.external_id || contact.id || '—' }}</span>
-        </td>
-        <td>
-          <span class="text-sm font-medium" style="color: var(--app-text);">{{ contact.name || '—' }}</span>
-        </td>
-        <td>
-          <p-tag [value]="getSessionBadgeText(contact.in_session_window)"
-                 [severity]="getSessionBadgeSeverity(contact.in_session_window)"
-                 [rounded]="true"></p-tag>
-        </td>
-        <td>
-          <span class="text-xs" style="color: var(--app-text-secondary);">
-            {{ contact.last_message_at ? (contact.last_message_at | date:'short') : '—' }}
-          </span>
-        </td>
-      </tr>
-    </ng-template>
-    <ng-template pTemplate="emptymessage">
-      <tr>
-        <td colspan="4">
-          <div class="flex flex-col items-center justify-center py-8 gap-2">
-            <i class="pi pi-users text-3xl" style="color: var(--app-text-muted);"></i>
-            <p class="text-sm font-medium" style="color: var(--app-text-muted);">No contacts have messaged this channel yet</p>
-          </div>
-        </td>
-      </tr>
-    </ng-template>
-  </p-table>
+  <!-- API-driven Statistics Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+    <div class="p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/40">
+      <span class="text-[11px] uppercase tracking-wider font-semibold" style="color: var(--app-text-muted)">Total Contacts</span>
+      <p class="text-xl font-bold mt-0.5" style="color: var(--app-text)">
+        {{ totalRecords | number }}
+      </p>
+    </div>
+    <div class="p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-emerald-50/30 dark:bg-emerald-950/20">
+      <span class="text-[11px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">In Session Window</span>
+      <p class="text-xl font-bold mt-0.5 text-emerald-600 dark:text-emerald-400">
+        {{ activeSessionCount | number }}
+      </p>
+    </div>
+    <div class="p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/40">
+      <span class="text-[11px] uppercase tracking-wider font-semibold" style="color: var(--app-text-muted)">Opted Out</span>
+      <p class="text-xl font-bold mt-0.5" [ngClass]="optedOutCount > 0 ? 'text-rose-500' : 'text-slate-500'">
+        {{ optedOutCount | number }}
+      </p>
+    </div>
+  </div>
+
+  <!-- Contacts Table -->
+  <div class="card-base overflow-hidden">
+    <p-table [value]="contacts" [loading]="loading" [paginator]="true" [lazy]="true" [totalRecords]="totalRecords"
+             [rows]="pageSize" [rowsPerPageOptions]="[10, 25, 50]" (onLazyLoad)="onPageChange($event)"
+             [rowHover]="true" [tableStyle]="{ 'min-width': '55rem' }">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Profile Name</th>
+          <th>External User ID</th>
+          <th>Conversation ID</th>
+          <th>Customer ID</th>
+          <th>Opt-Out Status</th>
+          <th>Session Window</th>
+          <th>Last User Message</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-contact>
+        <tr>
+          <td>
+            <span class="text-sm font-semibold" style="color: var(--app-text);">
+              {{ contact.profile_name || contact.name || '—' }}
+            </span>
+          </td>
+          <td>
+            <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800" style="color: var(--app-text);">
+              {{ contact.external_user_id || '—' }}
+            </span>
+          </td>
+          <td>
+            <span class="text-xs font-mono truncate max-w-[130px] block" [pTooltip]="contact.conversation_id || undefined" style="color: var(--app-text-muted);">
+              {{ contact.conversation_id || '—' }}
+            </span>
+          </td>
+          <td>
+            <span class="text-xs font-mono truncate max-w-[130px] block" [pTooltip]="contact.customer_id || undefined" style="color: var(--app-text-muted);">
+              {{ contact.customer_id || '—' }}
+            </span>
+          </td>
+          <td>
+            <p-tag
+              [value]="contact.opted_out ? 'Opted Out: Yes' : 'Opted Out: No'"
+              [severity]="contact.opted_out ? 'danger' : 'secondary'"
+              [rounded]="true"
+            ></p-tag>
+          </td>
+          <td>
+            <span *ngIf="contact.in_session_window"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Active (24h)
+            </span>
+            <span *ngIf="!contact.in_session_window"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20">
+              Outside Window
+            </span>
+          </td>
+          <td>
+            <span class="text-xs" style="color: var(--app-text-secondary);">
+              {{ contact.last_user_message_at ? (contact.last_user_message_at | date: 'd MMM y, h:mm a') : '—' }}
+            </span>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7">
+            <div class="flex flex-col items-center justify-center py-10 gap-2">
+              <i class="pi pi-users text-3xl" style="color: var(--app-text-muted);"></i>
+              <p class="text-sm font-medium" style="color: var(--app-text-muted);">No contacts returned by this channel</p>
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
 </p-dialog>
 

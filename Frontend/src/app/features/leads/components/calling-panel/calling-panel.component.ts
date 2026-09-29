@@ -19,7 +19,18 @@ export class CallingPanelComponent implements OnDestroy {
   callStatus = 'Idle';
   callMode: 'ai_voice' | 'agent' = 'ai_voice';
   callTimer = 0;
-  totalCalls = 4;
+  private callCountOffset = 0;
+
+  get totalCalls(): number {
+    const base =
+      this.lead?.calls && Array.isArray(this.lead.calls)
+        ? this.lead.calls.length
+        : typeof this.lead?.call_count === 'number'
+          ? this.lead.call_count
+          : 0;
+    return base + this.callCountOffset;
+  }
+
   lastCallTime: string | null = null;
 
   // Live Subtitles State
@@ -110,7 +121,7 @@ export class CallingPanelComponent implements OnDestroy {
     this.isCallActive = false;
     this.callStatus = 'Idle';
     this.clearTimer();
-    this.totalCalls++;
+    this.callCountOffset++;
     this.lastCallTime = new Date().toISOString();
     this.messageService.add({
       severity: 'info',

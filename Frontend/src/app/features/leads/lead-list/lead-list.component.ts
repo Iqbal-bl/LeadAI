@@ -1,8 +1,9 @@
 import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
-import { Table } from 'primeng/table';
+import { Subject, Subscription } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { Table, TableLazyLoadEvent } from 'primeng/table';
 import { Menu } from 'primeng/menu';
-import { Subscription } from 'rxjs';
 import {
   InboxService,
   InboxQueryParams,
@@ -25,9 +26,11 @@ export class LeadListComponent implements OnInit, OnDestroy {
   @ViewChild('leadActionMenu') leadActionMenu!: Menu;
 
   leads: any[] = [];
-  filteredLeads: any[] = [];
   selectedLeads: any[] = [];
   loading = false;
+  totalRecords = 0;
+  currentPage = 1;
+  pageSize = 10;
 
   // Filters
   selectedChannel = '';
@@ -35,6 +38,8 @@ export class LeadListComponent implements OnInit, OnDestroy {
   selectedPriority = '';
   showAllLeads = true;
   searchText = '';
+
+  private searchSubject = new Subject<string>();
 
   channelOptions = [
     { label: 'All Channels', value: '' },
@@ -49,14 +54,15 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
   statusOptions = [
     { label: 'All Statuses', value: '' },
-    { label: 'New', value: 'New' },
-    { label: 'Assigned', value: 'Assigned' },
-    { label: 'Follow-up', value: 'Follow-up' },
-    { label: 'Interested', value: 'Interested' },
-    { label: 'Negotiation', value: 'Negotiation' },
-    { label: 'Won', value: 'Won' },
-    { label: 'Lost', value: 'Lost' },
-    { label: 'Closed', value: 'Closed' },
+    { label: 'Hot', value: 'hot' },
+    { label: 'Warm', value: 'warm' },
+    { label: 'Cold', value: 'cold' },
+    { label: 'Qualified', value: 'qualified' },
+    { label: 'Needs Human', value: 'needs_human' },
+    { label: 'Assigned', value: 'assigned' },
+    { label: 'Open', value: 'open' },
+    { label: 'Closed', value: 'closed' },
+    { label: 'Lost', value: 'lost' },
   ];
 
   priorityOptions = [
@@ -68,6 +74,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
   private inboxMsgSub?: Subscription;
   private companySub?: Subscription;
+  private searchSub?: Subscription;
 
   constructor(
     private router: Router,
@@ -79,7 +86,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.loading = true;
+    this.setupSearchDebounce();
     this.loadLeads();
     this.setupWebsocket();
   }
@@ -91,6 +98,27 @@ export class LeadListComponent implements OnInit, OnDestroy {
     if (this.companySub) {
       this.companySub.unsubscribe();
     }
+    if (this.searchSub) {
+      this.searchSub.unsubscribe();
+    }
+  }
+
+  setupSearchDebounce(): void {
+    this.searchSub = this.searchSubject
+      .pipe(debounceTime(350), distinctUntilChanged())
+      .subscribe((term) => {
+        this.searchText = term;
+        this.currentPage = 1;
+        if (this.dt) {
+          this.dt.first = 0;
+        }
+        this.loadLeads();
+      });
+  }
+
+  onSearchInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value || '';
+    this.searchSubject.next(value);
   }
 
   setupWebsocket(): void {
@@ -116,16 +144,43 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
   loadLeads(): void {
     this.loading = true;
-    const params: InboxQueryParams = {};
+    const params: InboxQueryParams = {
+      page: this.currentPage,
+      page_size: this.pageSize,
+    };
+
     if (this.selectedChannel) {
       params.channel = this.selectedChannel;
     }
+
+    if (this.selectedStatus) {
+      const st = this.selectedStatus.toLowerCase();
+      if (['cold', 'warm', 'hot', 'qualified', 'lost'].includes(st)) {
+        params.lead_status = st;
+      } else {
+        params.status = st;
+      }
+    }
+
+    if (this.selectedPriority) {
+      if (this.selectedPriority === 'High') {
+        params.min_score = 75;
+      } else if (this.selectedPriority === 'Medium') {
+        params.min_score = 45;
+      }
+    }
+
+    if (this.searchText && this.searchText.trim()) {
+      params.search = this.searchText.trim();
+    }
+
     if (!this.showAllLeads) {
       params.above_threshold = true;
     }
 
     this.inboxService.getInbox(params).subscribe({
       next: (response: any) => {
+        this.totalRecords = response?.total_items || response?.total || 0;
         this.leads = (response?.items || []).map((item: any) => {
           const score = item.lead?.score || 0;
           return {
@@ -140,7 +195,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
             tags: item.lead?.interest ? [item.lead.interest] : [],
             leadScore: score,
             priority: score > 75 ? 'High' : score > 45 ? 'Medium' : 'Low',
-            status: item.lead.status.toUpperCase(),
+            status: item.lead?.status ? item.lead.status.toUpperCase() : (item.status ? item.status.toUpperCase() : 'NEW'),
             source: item.channel || 'web',
             assignedTo: item.assigned_user_email || 'AI Assistant',
             createdAt: item.created_at || '',
@@ -151,48 +206,46 @@ export class LeadListComponent implements OnInit, OnDestroy {
             aboveThreshold: item.above_threshold,
           };
         });
-        this.applyLocalFilters();
         this.loading = false;
       },
       error: () => {
+        this.leads = [];
+        this.totalRecords = 0;
         this.loading = false;
       },
     });
   }
 
   onFilterChange(): void {
-    if (this.selectedChannel || !this.showAllLeads) {
-      this.loadLeads();
-    } else {
-      this.applyLocalFilters();
+    this.currentPage = 1;
+    if (this.dt) {
+      this.dt.first = 0;
     }
+    this.loadLeads();
   }
 
-  applyLocalFilters(): void {
-    let result = [...this.leads];
-
-    if (this.selectedChannel) {
-      result = result.filter(
-        (lead) =>
-          lead.source?.toLowerCase() === this.selectedChannel.toLowerCase(),
-      );
+  clearFilters(): void {
+    this.selectedChannel = '';
+    this.selectedStatus = '';
+    this.selectedPriority = '';
+    this.searchText = '';
+    this.showAllLeads = true;
+    this.currentPage = 1;
+    if (this.dt) {
+      this.dt.first = 0;
     }
+    this.loadLeads();
+  }
 
-    if (this.selectedStatus) {
-      result = result.filter(
-        (lead) =>
-          lead.status?.toLowerCase() === this.selectedStatus.toLowerCase(),
-      );
-    }
+  hasActiveFilters(): boolean {
+    return !!(this.selectedChannel || this.selectedStatus || this.selectedPriority || this.searchText);
+  }
 
-    if (this.selectedPriority) {
-      result = result.filter(
-        (lead) =>
-          lead.priority?.toLowerCase() === this.selectedPriority.toLowerCase(),
-      );
-    }
-
-    this.filteredLeads = result;
+  onLazyLoad(event: TableLazyLoadEvent): void {
+    const page = Math.floor((event.first || 0) / (event.rows || this.pageSize)) + 1;
+    this.currentPage = page;
+    this.pageSize = event.rows || this.pageSize;
+    this.loadLeads();
   }
 
   activeLeadMenuItems: any[] = [];

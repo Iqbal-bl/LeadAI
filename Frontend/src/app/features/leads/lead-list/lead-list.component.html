@@ -35,7 +35,25 @@
       optionLabel="label"
       optionValue="value"
       (onChange)="onFilterChange()"
-      [style]="{ width: '180px' }"
+      [style]="{ width: '170px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
+  <!-- Status Filter -->
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider"
+      style="color: var(--app-text-muted)"
+      >Status</label
+    >
+    <p-dropdown
+      [options]="statusOptions"
+      [(ngModel)]="selectedStatus"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="onFilterChange()"
+      [style]="{ width: '160px' }"
       appendTo="body"
     ></p-dropdown>
   </div>
@@ -53,21 +71,23 @@
       optionLabel="label"
       optionValue="value"
       (onChange)="onFilterChange()"
-      [style]="{ width: '150px' }"
+      [style]="{ width: '140px' }"
       appendTo="body"
     ></p-dropdown>
   </div>
 
-  <!-- Show all leads toggle -->
-  <!-- <div class="flex items-center gap-2 self-end pb-2">
-    <p-inputSwitch
-      [(ngModel)]="showAllLeads"
-      (onChange)="onFilterChange()"
-    ></p-inputSwitch>
-    <label class="text-sm font-medium" style="color: var(--app-text)"
-      >Show all leads (escape hatch)</label
-    >
-  </div> -->
+  <!-- Clear Filters -->
+  <div class="self-end pb-0.5" *ngIf="hasActiveFilters()">
+    <p-button
+      label="Clear"
+      icon="pi pi-filter-slash"
+      [text]="true"
+      severity="secondary"
+      size="small"
+      (onClick)="clearFilters()"
+      pTooltip="Reset all filters"
+    ></p-button>
+  </div>
 
   <!-- Search Input -->
   <div class="flex-1 min-w-[220px] self-end pb-0.5 ml-auto">
@@ -76,8 +96,9 @@
       <input
         pInputText
         type="text"
-        placeholder="Search leads..."
-        (input)="onGlobalFilter($event)"
+        placeholder="Search leads by name, email, phone..."
+        [ngModel]="searchText"
+        (input)="onSearchInput($event)"
         class="text-sm w-full"
       />
     </p-iconfield>
@@ -88,22 +109,13 @@
 <div class="card-base overflow-hidden">
   <p-table
     #dt
-    [value]="filteredLeads"
+    [value]="leads"
+    [lazy]="true"
+    (onLazyLoad)="onLazyLoad($event)"
     [paginator]="true"
-    [rows]="10"
-    [rowsPerPageOptions]="[5, 10, 25, 50]"
-    [globalFilterFields]="[
-      'name',
-      'email',
-      'customerRef',
-      'company',
-      'phone',
-      'status',
-      'priority',
-      'source',
-      'assignedTo',
-      'summary',
-    ]"
+    [rows]="pageSize"
+    [totalRecords]="totalRecords"
+    [rowsPerPageOptions]="[10, 25, 50]"
     [loading]="loading"
     [(selection)]="selectedLeads"
     [rowHover]="true"

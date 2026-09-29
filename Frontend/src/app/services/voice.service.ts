@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { ApiService } from './api.service';
 import {
   CallStatus,
@@ -7,6 +8,7 @@ import {
   CallTranscript,
   VoiceTurnResponse,
   CallSyncResponse,
+  CallRecording,
 } from '../models/voice.models';
 
 @Injectable({
@@ -88,5 +90,21 @@ export class VoiceService {
         companyScoped: true,
       },
     );
+  }
+
+  // GET /voice/recordings/{call_sid}
+  public getCallRecording(callSid: string): Observable<CallRecording | null> {
+    return this.apiService
+      .get<CallRecording>(`voice/recordings/${callSid}`, {
+        companyScoped: true,
+      })
+      .pipe(
+        catchError((err) => {
+          if (err?.status === 404) {
+            return of(null);
+          }
+          return throwError(() => err);
+        }),
+      );
   }
 }

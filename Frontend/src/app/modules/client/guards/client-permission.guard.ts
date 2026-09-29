@@ -17,12 +17,25 @@ export class ClientPermissionGuard implements CanActivate {
       return true;
     }
 
-    const user = this.authService.getCurrentUser();
-    const permissions = user?.permissions || [];
-    console.log(requiredPermission);
-
-    if (this.permissionService.hasPermission(permissions, requiredPermission)) {
+    if (this.authService.hasPermission(requiredPermission)) {
       return true;
+    }
+
+    const user = this.authService.getCurrentUser();
+    if (user) {
+      const role = (user.role || '').toLowerCase();
+      if (
+        role === 'admin' ||
+        role === 'platform_admin' ||
+        role === 'company_admin' ||
+        role === 'companyadmin'
+      ) {
+        return true;
+      }
+      const permissions = user.permissions || [];
+      if (this.permissionService.hasPermission(permissions, requiredPermission, role)) {
+        return true;
+      }
     }
 
     // Redirect to dashboard if unauthorized and not already on the dashboard route
