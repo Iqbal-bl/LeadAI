@@ -213,6 +213,18 @@ async def save_tokens(
     db_cred.IsDeleted = False
     db_cred.IsActive = True
     db_cred.UpdatedAt = utcnow()
+
+    # Soft delete existing comments for this company & channel to avoid cross-account comment bleeding
+    from ..models_blog import LeadSocialComment
+    db.query(LeadSocialComment).filter(
+        LeadSocialComment.ClientId == client_id,
+        LeadSocialComment.Channel == "linkedin",
+        LeadSocialComment.IsDeleted == False
+    ).update(
+        {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
+        synchronize_session=False
+    )
+
     db.commit()
 
 
