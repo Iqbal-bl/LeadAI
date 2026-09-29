@@ -430,13 +430,15 @@ def get_payment_history(
     _, client_id = scope
     rows = (
         db.query(LeadClientRecharge)
-        .filter(LeadClientRecharge.ClientId == client_id)
+        .filter(
+            LeadClientRecharge.ClientId == client_id,
+            LeadClientRecharge.Status != RECHARGE_STATUS_PENDING,
+        )
         .order_by(LeadClientRecharge.CreatedAt.desc())
         .limit(limit)
         .all()
     )
 
-    # Pure read-only query: do not mutate in-flight PENDING or CANCELLED records (Bug #11 fix)
     return [_serialize_recharge(r) for r in rows]
 
 
@@ -641,6 +643,10 @@ def admin_update_plan(
         template.Price = payload.price
     if payload.rate_per_minute is not None:
         template.RatePerMinute = payload.rate_per_minute
+    if payload.plan_category is not None:
+        template.PlanCategory = payload.plan_category.strip()
+    if payload.feature_key is not None:
+        template.FeatureKey = payload.feature_key.strip() if payload.feature_key else None
     if payload.target_client_id is not None:
         template.TargetClientId = payload.target_client_id.strip() if payload.target_client_id else None
     if payload.target_client_ids is not None:
@@ -655,7 +661,6 @@ def admin_update_plan(
         template.Description = payload.description.strip()
 
     template.UpdatedBy = principal.email
-
 
     db.add(template)
     db.commit()
@@ -684,25 +689,31 @@ def admin_delete_plan(
     return Ok(message="Plan template retired successfully. Existing client recharges remain active.")
 
 
-@admin_router.post("/recharge-client", response_model=ClientRechargeOut, summary="Admin: Direct recharge grant to a client account")
+@admin_router.post("/recharge-client", response_model=ClientRechargeOut, summary="Admin: Direct recharge grant to one or multiple client accounts")
 def admin_recharge_client(
     payload: ClientRechargeAllocate,
     principal: Principal = Depends(require("billing.manage_global")),
     db: Session = Depends(get_leadai_db),
 ):
     try:
-        recharge = billing_svc.allocate_recharge(
-            db=db,
-            client_id=payload.client_id,
-            template_id=payload.plan_template_id,
-            custom_minutes=payload.custom_minutes,
-            custom_validity_days=payload.custom_validity_days,
-            custom_price=payload.custom_price,
-            custom_name=payload.custom_name,
-            payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
-            created_by=principal.email,
-        )
-        return _serialize_recharge(recharge)
+        target_ids = payload.client_ids if (payload.client_ids and len(payload.client_ids) > 0) else ([payload.client_id] if payload.client_id else [])
+        if not target_ids:
+            raise ValueError("At least one client company must be selected.")
+
+        last_recharge = None
+        for cid in target_ids:
+            last_recharge = billing_svc.allocate_recharge(
+                db=db,
+                client_id=cid,
+                template_id=payload.plan_template_id,
+                custom_minutes=payload.custom_minutes,
+                custom_validity_days=payload.custom_validity_days,
+                custom_price=payload.custom_price,
+                custom_name=payload.custom_name,
+                payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
+                created_by=principal.email,
+            )
+        return _serialize_recharge(last_recharge)
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
 

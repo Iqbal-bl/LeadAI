@@ -5,6 +5,7 @@ import asyncio
 import audioop
 import time
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional, List, Any
 
@@ -304,6 +305,7 @@ session_language: Dict[str, str] = {}  # session_id -> language code
 
 # Import XML parser
 from outbound.xml_parser import parse_xml_to_sections, sections_to_xml, sections_to_prompt
+from outbound.call_identity import extract_call_identity, has_caller_context
 
 SCRIPTS_DIR = str(_SCRIPTS_DIR)
 if not os.path.exists(SCRIPTS_DIR):
@@ -1484,7 +1486,17 @@ async def outbound_twiml(request: Request):
     token = create_stream_token(call_sid)
     
     base_url = SERVER_URL.replace("https://", "").replace("http://", "")
-    stream_url = f"wss://{base_url}/media-stream"
+    # Legacy loop unless VOICE_PIPELINE routes this LeadAI call to the Pipecat pipeline
+    # (LeadAI/voice/routing.py). Any problem there falls back to the legacy path: a call
+    # must never be lost to a routing error.
+    stream_path = "/media-stream"
+    try:
+        from LeadAI.voice.routing import stream_path as _choose_stream_path
+
+        stream_path = _choose_stream_path(active_calls.get(call_sid))
+    except Exception as exc:
+        logger.warning(f"[voice] stream routing failed, using the legacy pipeline: {exc}")
+    stream_url = f"wss://{base_url}{stream_path}"
     # greeting_url = f"https://{base_url}/static/greeting.wav"
     
     response = VoiceResponse()
@@ -1494,7 +1506,14 @@ async def outbound_twiml(request: Request):
     stream = connect.stream(url=stream_url, name="voice_stream")
     stream.parameter(name='token', value=token)
     response.append(connect)
-    
+
+    # Twilio only accepts this reply if it is labelled as XML. This return was lost when
+    # the billing helper below was pasted into the middle of this function (commit
+    # e95f2d8), so the handler returned an empty body with no Content-Type and every call
+    # died with Twilio error 12300 ("An application error has occurred").
+    return Response(content=str(response), media_type="application/xml")
+
+
 def _deduct_billing_usage_for_call(call_sid: str, call_data: dict):
     client_id = call_data.get("client_id")
     if not client_id:
@@ -1525,6 +1544,21 @@ def _deduct_billing_usage_for_call(call_sid: str, call_data: dict):
         logger.warning(f"[Billing] Failed to deduct usage for call {call_sid}: {exc}")
 
 
+def _is_pipecat_call(call_data) -> bool:
+    """True when this call is routed to the Pipecat pipeline (LeadAI/voice/routing.py).
+
+    Such a call brings its own speech connections, so warming the legacy STT/TTS during
+    ringing would open two paid Sarvam connections that then sit unused (the first live
+    call logged audio_sent_total=0 on the legacy STT for its whole duration).
+    """
+    try:
+        from LeadAI.voice.routing import use_pipecat
+
+        return use_pipecat(call_data)
+    except Exception:
+        return False
+
+
 @app.post("/call-status", include_in_schema=False)
 async def call_status(request: Request):
     """Twilio Webhook: Update call status and pre-warm AI resources"""
@@ -1545,7 +1579,7 @@ async def call_status(request: Request):
         active_calls[call_sid]["status"] = status
     
     # ── Pre-warm Sarvam TTS during ringing so WS is ready when user picks up ──
-    if status == "ringing" and call_sid in active_calls:
+    if status == "ringing" and call_sid in active_calls and not _is_pipecat_call(active_calls[call_sid]):
         call_data = active_calls[call_sid]
         if not call_data.get("tts_manager"):  # don't double-create
             try:
@@ -1574,6 +1608,17 @@ async def call_status(request: Request):
                 logger.info(f"[STT pre-warm] started for {call_sid} (lang: {effective_stt_lang})")
             except Exception as e:
                 logger.error(f"[STT pre-warm] failed: {e}")
+
+    # A Pipecat call brings its own speech connections, so the legacy warm-up above is
+    # skipped. Use the ringing time to open the language-model connection instead: the
+    # greeting is the first thing the caller hears, and should not pay for a TLS handshake.
+    if status == "ringing" and call_sid in active_calls and _is_pipecat_call(active_calls[call_sid]):
+        try:
+            from LeadAI.voice.warmup import warm as _warm_call
+
+            asyncio.create_task(asyncio.to_thread(_warm_call, active_calls[call_sid]))
+        except Exception as e:
+            logger.debug(f"[voice] model connection warm-up not started: {e}")
 
     terminal_statuses = ("completed", "failed", "busy", "no-answer", "canceled")
     is_terminal = status in terminal_statuses
@@ -1665,7 +1710,8 @@ async def call_status(request: Request):
         async def _cleanup_call_ws(sid: str):
             try:
                 await asyncio.sleep(2.0)
-                await manager.cleanup_call_only_connections(sid)
+                await manager.cleanup_call_only_connections(
+                    sid, (active_calls.get(sid) or {}).get("conversation_id"))
             except Exception as e:
                 logger.warning(f"[call-status] WS cleanup failed for {sid}: {e}")
         asyncio.create_task(_cleanup_call_ws(call_sid))
@@ -1866,15 +1912,26 @@ async def broadcast_transcript(call_sid: str, msg_type: str, text: str):
         if msg_type == "status":
             await manager.broadcast_to_call(call_sid, text)
         else:
-            await manager.broadcast_transcript_to_call(
-                call_sid, {"type": msg_type, "text": text})
+            # One id and one start time for the utterance, shared by both channels, so the
+            # call view and the inbox view show the same message in the same place.
+            message = {
+                "id": str(uuid.uuid4()),
+                "type": msg_type,
+                "text": text,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            deliveries = [manager.broadcast_transcript_to_call(call_sid, message)]
+            # Also broadcast to the conversation WebSocket (inbox UI). Its history is not kept:
+            # nothing ever replays or clears it.
+            if conversation_id:
+                deliveries.append(manager.broadcast_transcript_to_call(
+                    conversation_id, message, store_history=False))
+            await asyncio.gather(*deliveries)
+            conversation_id = None  # the status handling below is only for status messages
         # Also broadcast to conversation WebSocket (inbox UI)
         if conversation_id:
             if msg_type == "status":
                 await manager.broadcast_to_call(conversation_id, text)
-            else:
-                await manager.broadcast_transcript_to_call(
-                    conversation_id, {"type": msg_type, "text": text})
     except Exception:
         pass
 
@@ -2458,76 +2515,9 @@ async def media_stream(ws: WebSocket):
                     # exists; this works whether the WS was pre-warmed or fresh.
                     stt_manager.on_transcript = on_transcript
                     
-                    # Extract agent name and company from the sections, in WHATEVER
-                    # shape the client sent them. The old loop only matched a rigid
-                    # type=='identity' + content=[{name,value}] structure and fell
-                    # back to JIN/Bank for anything else. This scans every section
-                    # across all the shapes we actually receive:
-                    #   - rawContent string  ("name: Riya\ncompany: Prime")
-                    #   - content list of {name,value} dicts
-                    #   - content string     ("name: Riya\ncompany: Prime")
-                    #   - field key variants (name / agent_name / agent name)
-                    # and finally falls back to scanning the rendered prompt text.
-                    agent_name = None
-                    company_name = None
-                    call_topic = None
-
-                    def _scan_text_for_identity(text: str):
-                        nonlocal agent_name, company_name, call_topic
-                        if not text:
-                            return
-                        if agent_name is None:
-                            m = re.search(r'(?:agent\s*)?name\s*[:=]\s*([^\n,;]+)', text, re.IGNORECASE)
-                            if m:
-                                agent_name = m.group(1).strip()
-                        if company_name is None:
-                            m = re.search(r'company\s*[:=]\s*([^\n,;]+)', text, re.IGNORECASE)
-                            if m:
-                                company_name = m.group(1).strip()
-                        if call_topic is None:
-                            m = re.search(r'(?:topic|call[_\s]topic|call[_\s]reason|purpose)\s*[:=]\s*([^\n,;]+)', text, re.IGNORECASE)
-                            if m:
-                                call_topic = m.group(1).strip()
-
-                    for section in (xml_sections or []):
-                        if not isinstance(section, dict):
-                            if isinstance(section, str):
-                                _scan_text_for_identity(section)
-                            continue
-
-                        # rawContent (UI-edited) — scan as text.
-                        _scan_text_for_identity(section.get('rawContent') or "")
-
-                        content = section.get('content')
-                        if isinstance(content, str):
-                            _scan_text_for_identity(content)
-                        elif isinstance(content, list):
-                            for field in content:
-                                if not isinstance(field, dict):
-                                    continue
-                                fname = (field.get('name') or field.get('label') or "").strip().lower()
-                                fval = field.get('value')
-                                if not fval:
-                                    continue
-                                if fname in ("name", "agent name", "agent_name", "agentname") and agent_name is None:
-                                    agent_name = str(fval).strip()
-                                elif fname in ("company", "company name", "company_name", "organisation", "organization") and company_name is None:
-                                    company_name = str(fval).strip()
-                                elif fname in ("topic", "call_topic", "call topic", "call_reason", "call reason", "purpose") and call_topic is None:
-                                    call_topic = str(fval).strip()
-
-                    # Last resort: scan the fully-rendered prompt text (this is what
-                    # the LLM sees, so if the name is anywhere usable, it's here).
-                    if agent_name is None or company_name is None or call_topic is None:
-                        try:
-                            _scan_text_for_identity(sections_to_prompt(xml_sections))
-                        except Exception:
-                            pass
-
-                    # Final fallbacks — only agent_name gets a default; company and
-                    # topic remain None so the greeting skips those parts entirely.
-                    agent_name = agent_name or "Agent"
-
+                    # Who the agent is and what the call is about: see outbound/call_identity.py
+                    # (it ignores the returning-customer briefing, which describes the customer).
+                    agent_name, company_name, call_topic = extract_call_identity(xml_sections)
                     logger.info(f"Extracted metadata: Name='{agent_name}', Company='{company_name}', Topic='{call_topic}' for {call_sid}")
                     
                     # Detect gender from call data
@@ -2565,6 +2555,12 @@ async def media_stream(ws: WebSocket):
                     _topic_pa   = f"ਤੁਹਾਡੇ ਨਾਲ {call_topic} ਬਾਰੇ ਗੱਲ ਕਰਨੀ ਸੀ, " if call_topic else ""
                     _topic_od   = f"ଆପଣଙ୍କ ସହିତ {call_topic} ବିଷୟରେ କଥା କହିବାକୁ ଚାହୁଁଥିଲି, " if call_topic else ""
                     _topic_en   = f"I'd like to talk to you about {call_topic} — " if call_topic else ""
+                    # A returning customer (the caller-context briefing is present) is called back
+                    # about the earlier conversation; without a topic of its own the greeting says so.
+                    if not call_topic and has_caller_context(xml_sections):
+                        _topic_en   = "I'm following up on your earlier conversation with us, "
+                        _topic_hi_m = "मैं आपकी पिछली बातचीत के सिलसिले में फ़ोन कर रहा हूँ, "
+                        _topic_hi_f = "मैं आपकी पिछली बातचीत के सिलसिले में फ़ोन कर रही हूँ, "
 
                     if stt_language in ("hi", "multi", "raj"):
                         if gender == "female":

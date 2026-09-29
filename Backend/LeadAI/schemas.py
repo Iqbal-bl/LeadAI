@@ -200,6 +200,13 @@ class MeOut(BaseModel):
     accessible_companies: list[CompanyOut] = []
 
 
+class UserProfileUpdate(BaseModel):
+    """Payload schema for authenticated user self-service profile update."""
+    full_name: str | None = None
+    phone: str | None = None
+    timezone: str | None = None
+
+
 class PermissionCatalogOut(BaseModel):
     permissions: dict[str, str]
     role_permissions: dict[str, list[str]]
@@ -226,6 +233,17 @@ class RolePermissionUpdate(BaseModel):
 
 class RolePermissionsBulkUpdate(BaseModel):
     permissions: list[RolePermissionUpdate]
+
+
+class CompanyRolePermissionOut(BaseModel):
+    role: str
+    permission_key: str
+    is_granted: bool
+
+
+class CompanyRolePermissionUpdate(BaseModel):
+    permission_key: str
+    is_granted: bool
 
 
 # ===========================================================================
@@ -692,6 +710,13 @@ class CallStart(BaseModel):
     )
 
 
+class RecordingLinkOut(BaseModel):
+    call_sid: str
+    url: str
+    # Seconds the link stays valid. Null for a permanent URL that is not signed.
+    expires_in_seconds: int | None = None
+
+
 class CallOut(BaseModel):
     id: str
     conversation_id: str
@@ -706,6 +731,8 @@ class CallOut(BaseModel):
     script_id: str | None = None
     initiated_by_email: str | None = None
     failure_reason: str | None = None
+    # Playable link to the call's audio (signed and time-limited); null if not recorded yet.
+    recording_url: str | None = None
     created_at: datetime | None = None
 
     @field_serializer('created_at')
@@ -898,7 +925,7 @@ class RechargePlanTemplateCreate(BaseModel):
     target_client_id: str | None = None
     target_client_ids: list[str] | None = None
     addon_channels: list[str] | None = None
-    included_minutes: float = Field(gt=0)
+    included_minutes: float = Field(default=0.0, ge=0)
     validity_days: int | None = Field(default=30, ge=0)
     price: float = Field(ge=0)
     rate_per_minute: float = Field(default=4.0)
@@ -953,6 +980,7 @@ class RechargePlanTemplateOut(BaseModel):
 
 class ClientRechargeAllocate(BaseModel):
     client_id: str | None = None
+    client_ids: list[str] | None = None
     plan_template_id: str | None = None
     custom_minutes: float | None = None
     custom_validity_days: int | None = None

@@ -1,0 +1,49 @@
+{
+  "company": "Nexa Finserv",
+  "kb": [
+    {"id": "k1", "text": "Home loan interest rates start at 8.5% per annum for salaried applicants with a strong credit profile. The rate is floating and linked to the repo rate."},
+    {"id": "k2", "text": "A one-time processing fee of Rs. 25,000 plus GST is charged when the loan is sanctioned."},
+    {"id": "k3", "text": "The maximum home loan tenure is 30 years. The minimum tenure is 5 years."},
+    {"id": "k4", "text": "Home loan amounts start at 10 lakh and go up to 5 crore, subject to eligibility."},
+    {"id": "k5", "text": "Documents required: PAN card, Aadhaar card, last 3 months salary slips, last 6 months bank statements and the property papers."},
+    {"id": "k6", "text": "To be eligible, a salaried applicant needs a minimum monthly income of Rs. 30,000 and at least 2 years of work experience."},
+    {"id": "k7", "text": "There are no prepayment charges on floating rate home loans. You can part-pay or foreclose at any time without a penalty."},
+    {"id": "k8", "text": "Applicants must be between 21 and 65 years of age at the end of the loan tenure."},
+    {"id": "k9", "text": "Loan approval typically takes 7 working days after all documents are submitted."},
+    {"id": "k10", "text": "A minimum CIBIL score of 700 is preferred for the best interest rate. Applicants with lower scores may still be considered at a higher rate."},
+    {"id": "k11", "text": "You can transfer an existing home loan from another bank to Nexa Finserv. Balance transfer helps you get a lower interest rate."},
+    {"id": "k12", "text": "Our advisors are available Monday to Saturday, from 9:30 AM to 7:00 PM. Call 1800123456 or visit any branch."}
+  ],
+  "cases": [
+    {"id": "rate", "kind": "answer", "q": "What is the interest rate on a home loan?", "expect_any": ["8.5"]},
+    {"id": "fee", "kind": "answer", "q": "How much is the processing fee?", "expect_any": ["25,000", "25000"]},
+    {"id": "tenure", "kind": "answer", "q": "What is the maximum tenure for a home loan?", "expect_any": ["30 years"]},
+    {"id": "min_amount", "kind": "answer", "q": "What is the minimum home loan amount I can get?", "expect_any": ["10 lakh"]},
+    {"id": "docs", "kind": "answer", "q": "Which documents do I need to apply?", "expect_any": ["PAN", "Aadhaar"]},
+    {"id": "income", "kind": "answer", "q": "What minimum salary do I need to be eligible?", "expect_any": ["30,000"]},
+    {"id": "prepay", "kind": "answer", "q": "Are there any prepayment charges?", "expect_any": ["no prepayment", "without a penalty"]},
+    {"id": "age", "kind": "answer", "q": "What is the age limit for applicants?", "expect_any": ["21", "65"]},
+    {"id": "approval", "kind": "answer", "q": "How long does loan approval take?", "expect_any": ["7 working days"]},
+    {"id": "cibil", "kind": "answer", "q": "What CIBIL score do I need?", "expect_any": ["700"]},
+    {"id": "transfer", "kind": "answer", "q": "Can I transfer my existing loan from another bank?", "expect_any": ["balance transfer", "transfer an existing"]},
+    {"id": "hours", "kind": "answer", "q": "What are your working hours?", "expect_any": ["9:30", "Monday to Saturday"]},
+    {"id": "followup_fee", "kind": "answer", "q": "and what about the processing fee?",
+     "history": [["customer", "What is the interest rate on a home loan?"], ["ai", "Home loan interest rates start at 8.5% per annum."]],
+     "expect_any": ["25,000", "25000"]},
+    {"id": "hinglish_fee", "kind": "answer", "q": "processing fee kitni hai?", "expect_any": ["25,000", "25000"]},
+
+    {"id": "unk_gold", "kind": "unknown", "q": "Do you offer gold loans?"},
+    {"id": "unk_ceo", "kind": "unknown", "q": "Who is the CEO of your company?"},
+    {"id": "unk_dubai", "kind": "unknown", "q": "Can I get a loan for a flat in Dubai?"},
+    {"id": "unk_weather", "kind": "unknown", "q": "What is the weather like today?"},
+    {"id": "unk_cashback", "kind": "unknown", "q": "Do you give cashback of Rs. 5,000 on approval?"},
+    {"id": "unk_car_rate", "kind": "unknown", "q": "What is the interest rate on a car loan?", "forbid": ["8.5"]},
+    {"id": "unk_car_fee", "kind": "unknown", "q": "How much is the processing fee for a personal loan?", "forbid": ["25,000"]},
+
+    {"id": "human_1", "kind": "human", "q": "I want to talk to a human"},
+    {"id": "human_2", "kind": "human", "q": "Please connect me to an agent"},
+
+    {"id": "greet_hi", "kind": "greeting", "q": "hi"},
+    {"id": "greet_hello", "kind": "greeting", "q": "hello there"}
+  ]
+}

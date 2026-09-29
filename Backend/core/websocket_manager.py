@@ -42,6 +42,10 @@ class ConnectionManager:
             },
         }
         self.transcript_history: Dict[str, List[dict]] = {} # {callsid: [msg_dict, ...]}
+        # Live transcripts: one message is streamed at a time per key, in the order queued,
+        # and each payload carries a running `seq` so a client can always sort by it.
+        self._transcript_locks: Dict[str, asyncio.Lock] = {}
+        self._transcript_seq: Dict[str, int] = {}
         self._outbox: Dict[WebSocket, asyncio.Queue[str]] = {}
         self._writers: Dict[WebSocket, asyncio.Task] = {}
         self._lock = asyncio.Lock()
@@ -198,13 +202,30 @@ class ConnectionManager:
         for ws in receivers:
             await self._enqueue_json(ws, data)
 
-        # Also broadcast to LeadAI conversation subscribers (inbox UI)
+        # Also broadcast to LeadAI conversation subscribers (inbox UI), except plain `status`
+        # events: broadcast_to_call() already sends that same change to them as `call_status`,
+        # and the UI handles both, so forwarding it too showed every status change twice.
+        if data.get("type") == "status":
+            return
         leadai_receivers = await self._snapshot_connections("leadai_conversation", callsid)
         for ws in leadai_receivers:
             await self._enqueue_json(ws, data)
 
-    # TRANSCRIPT: EXACT JSON {id, type, text, timestamp} - Chunk-based for scalability
-    async def broadcast_transcript_to_call(self, callsid: str, message: dict, delay: float = 0.03):
+    # TRANSCRIPT: JSON {id, type, text, timestamp, seq, final} - Chunk-based for scalability
+    async def broadcast_transcript_to_call(
+        self, callsid: str, message: dict, delay: float = 0.03, *, store_history: bool = True
+    ):
+        """Stream one transcript message to its subscribers, in 5-word steps.
+
+        Every payload of a message carries the SAME `id` and the SAME `timestamp` (when the
+        message started), so a client that replaces by id keeps it in place instead of moving
+        it later with each update. Partial payloads are `final: false` and each is strictly
+        shorter than the message; the full text is then sent exactly once, `final: true`.
+        (It used to be sent twice: as the last chunk, then again as the "final" copy.)
+
+        Messages are delivered one whole message at a time, in the order they were queued,
+        and each payload has a rising `seq`, so interleaved or reordered display cannot happen.
+        """
         full_text = (message.get("text") or "").strip()
         msg_type  = (message.get("type") or "user").strip()
         msg_id    = message.get("id") or str(uuid.uuid4())
@@ -212,42 +233,38 @@ class ConnectionManager:
         if not words:
             return
 
-        receivers = await self._snapshot_connections("transcript", callsid)
-        leadai_receivers = await self._snapshot_connections("leadai_conversation", callsid)
-        
-        # Store final message in history
-        final_payload = {
-            "id": msg_id,
-            "type": msg_type,
-            "text": full_text,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        self.transcript_history.setdefault(callsid, []).append(final_payload)
+        lock = self._transcript_locks.setdefault(callsid, asyncio.Lock())
+        async with lock:  # asyncio locks are FIFO, so queue order is delivery order
+            receivers = await self._snapshot_connections("transcript", callsid)
+            leadai_receivers = await self._snapshot_connections("leadai_conversation", callsid)
 
-        if not receivers and not leadai_receivers:
-            return
+            started_at = message.get("timestamp") or datetime.now(timezone.utc).isoformat()
+            base = {"id": msg_id, "type": msg_type, "timestamp": started_at}
+            final_payload = {**base, "text": full_text, "final": True}
 
-        # Chunk-based streaming (5 words per chunk) - 5x fewer messages than word-by-word
-        chunk_size = 5
-        for i in range(0, len(words), chunk_size):
-            streamed = " ".join(words[:i + chunk_size])
-            payload = {
-                "id": msg_id,
-                "type": msg_type,
-                "text": streamed,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-            for ws in receivers:
-                await self._enqueue_json(ws, payload)
-            for ws in leadai_receivers:
-                await self._enqueue_json(ws, payload)
-            await asyncio.sleep(delay)
+            # Store the final message in history (replayed to a client that connects later)
+            if store_history:
+                self.transcript_history.setdefault(callsid, []).append(final_payload)
 
-        # Final consolidated send
-        for ws in receivers:
-            await self._enqueue_json(ws, final_payload)
-        for ws in leadai_receivers:
-            await self._enqueue_json(ws, final_payload)
+            if not receivers and not leadai_receivers:
+                return
+
+            async def send(payload: dict):
+                self._transcript_seq[callsid] = self._transcript_seq.get(callsid, 0) + 1
+                payload = {**payload, "seq": self._transcript_seq[callsid]}
+                for ws in receivers:
+                    await self._enqueue_json(ws, payload)
+                for ws in leadai_receivers:
+                    await self._enqueue_json(ws, payload)
+
+            # Partial updates, each strictly shorter than the full text (5 words per step,
+            # 5x fewer messages than word-by-word) ...
+            chunk_size = 5
+            for end in range(chunk_size, len(words), chunk_size):
+                await send({**base, "text": " ".join(words[:end]), "final": False})
+                await asyncio.sleep(delay)
+            # ... then the complete message, once.
+            await send(final_payload)
 
     async def broadcast_active_call_count(self, active_call_count: int):
         """Broadcast real-time active call count to all connected clients"""
@@ -261,9 +278,13 @@ class ConnectionManager:
         for ws in receivers:
             await self._enqueue_json(ws, payload)
 
-    async def cleanup_call_only_connections(self, callsid: str):
-        # Clear history
-        self.transcript_history.pop(callsid, None)
+    async def cleanup_call_only_connections(self, callsid: str, conversation_id: str | None = None):
+        # Clear history and live-transcript ordering state (for the call and its conversation)
+        for key in (callsid, conversation_id):
+            if key:
+                self.transcript_history.pop(key, None)
+                self._transcript_seq.pop(key, None)
+                self._transcript_locks.pop(key, None)
         for bucket in ("general", "transcript"):
             receivers = await self._snapshot_connections(bucket, callsid)
             for ws in receivers:

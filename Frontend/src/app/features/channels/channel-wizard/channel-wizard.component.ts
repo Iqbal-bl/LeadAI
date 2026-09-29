@@ -236,7 +236,7 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
 
   private updatePlatformStates(): void {
     for (const platform of this.availablePlatforms) {
-      if (platform.id === 'facebook' || platform.id === 'whatsapp') {
+      if (platform.id === 'facebook') {
         platform.loading = this._fbOauthLoading;
       } else if (platform.id === 'instagram') {
         platform.loading = this._oauthLoading;
@@ -253,9 +253,23 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     return platform.id;
   }
 
+  selectedPlatform: string | null = null;
+
+  backToPlatforms(): void {
+    this.selectedPlatform = null;
+    this.activeStep = 0;
+    this.step1Error = '';
+  }
+
   onConnectPlatform(id: string): void {
-    if (id === 'facebook' || id === 'whatsapp') {
+    if (id === 'facebook') {
       this.connectWithFacebook();
+    } else if (id === 'whatsapp') {
+      this.selectedPlatform = 'whatsapp';
+      this.channelType = 'whatsapp';
+      this.displayName = 'WhatsApp Business';
+      this.activeStep = 0;
+      this.step1Error = '';
     } else if (id === 'instagram') {
       this.connectWithInstagram();
     } else if (id === 'linkedin') {
@@ -469,6 +483,9 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     if (this.activeOAuthPopup && !this.activeOAuthPopup.closed) {
       this.activeOAuthPopup.close();
     }
+    this.selectedPlatform = null;
+    this.activeStep = 0;
+    this.step1Error = '';
     this.complete.emit();
   }
 
@@ -581,6 +598,9 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     if (this.linkedinPollingInterval) {
       clearInterval(this.linkedinPollingInterval);
     }
+    this.selectedPlatform = null;
+    this.activeStep = 0;
+    this.step1Error = '';
     this.close.emit();
   }
 }

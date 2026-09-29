@@ -102,23 +102,25 @@ def local_embed(text: str) -> list[float]:
 # --------------------------------------------------------------------------- #
 def _openai_embed(texts: list[str]) -> list[list[float]] | None:
     try:
-        import httpx
+        from ..engine import gateway
 
         vectors: list[list[float]] = []
-        with httpx.Client(timeout=settings.openai_timeout) as client:
-            for start in range(0, len(texts), _BATCH):
-                batch = texts[start : start + _BATCH]
-                resp = client.post(
-                    f"{settings.openai_base_url}/embeddings",
-                    headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-                    json={"model": settings.openai_embed_model, "input": batch},
-                )
-                resp.raise_for_status()
-                data = resp.json()["data"]
-                # The API guarantees order, but sort on index to be certain —
-                # a silently mis-paired vector would be a very hard bug.
-                data.sort(key=lambda item: item["index"])
-                vectors.extend(item["embedding"] for item in data)
+        # The shared keep-alive pool, not a fresh connection (and TLS handshake) per call.
+        client = gateway.shared_client()
+        for start in range(0, len(texts), _BATCH):
+            batch = texts[start : start + _BATCH]
+            resp = client.post(
+                f"{settings.openai_base_url}/embeddings",
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                json={"model": settings.openai_embed_model, "input": batch},
+                timeout=settings.openai_timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()["data"]
+            # The API guarantees order, but sort on index to be certain —
+            # a silently mis-paired vector would be a very hard bug.
+            data.sort(key=lambda item: item["index"])
+            vectors.extend(item["embedding"] for item in data)
         return vectors
     except Exception as exc:  # noqa: BLE001
         logger.warning("[LeadAI embeddings] OpenAI call failed (%s) — using local fallback", exc)

@@ -1,0 +1,78 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.card-base {
+  background-color: var(--app-surface, #ffffff);
+  transition: all 0.2s ease-in-out;
+}
+
+:host-context(.dark) .card-base {
+  background-color: var(--app-surface, #0f172a);
+}
+
+/* Custom subtle animations */
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* PrimeNG Slider Customizations */
+:host ::ng-deep {
+  .p-slider {
+    background: #e2e8f0;
+    height: 6px;
+    border-radius: 9999px;
+
+    .p-slider-range {
+      background: #6366f1;
+      border-radius: 9999px;
+    }
+
+    .p-slider-handle {
+      width: 18px;
+      height: 18px;
+      background: #ffffff;
+      border: 2px solid #6366f1;
+      border-radius: 50%;
+      box-shadow: 0 2px 4px rgba(99, 102, 241, 0.25);
+      transition: transform 0.15s ease;
+
+      &:hover {
+        transform: scale(1.15);
+      }
+    }
+  }
+
+  .p-inputnumber-input {
+    font-size: 0.8125rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 0.5rem;
+  }
+}

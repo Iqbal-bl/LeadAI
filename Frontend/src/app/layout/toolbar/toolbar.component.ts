@@ -42,8 +42,22 @@ export class ToolbarComponent implements OnInit, OnDestroy {
   userNameAvatar: string = '';
 
   userMenuItems: MenuItem[] = [
-    { label: 'Profile', icon: 'pi pi-user', command: () => {} },
-    { label: 'Settings', icon: 'pi pi-cog', routerLink: '/settings' },
+    {
+      label: 'Profile',
+      icon: 'pi pi-user',
+      command: () => {
+        const isClient = this.router.url.startsWith('/client');
+        this.router.navigate([isClient ? '/client/profile' : '/admin/profile']);
+      },
+    },
+    {
+      label: 'Settings',
+      icon: 'pi pi-cog',
+      command: () => {
+        const isClient = this.router.url.startsWith('/client');
+        this.router.navigate([isClient ? '/client/settings' : '/admin/dashboard']);
+      },
+    },
     { separator: true },
     {
       label: 'Logout',

@@ -46,6 +46,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..models import Lead, LeadCall, LeadConversation, LeadCustomer, LeadMessage, utcnow
 from ..security import decrypt_pii, mask_phone
+from ..voice.routing import use_pipecat_for
 from . import ai_engine, memory, script_engine, telephony
 
 logger = logging.getLogger(__name__)
@@ -238,8 +239,15 @@ def start_call_for_conversation(
     call.ScriptId = getattr(script, "Id", None)
     call.Language = voice.get("language")
 
+    # Only affects Exotel: which of the two flows to dial (see telephony.place_exotel_call).
+    # Twilio decides this itself, per call, inside /outbound-twiml.
+    route_to_pipecat = use_pipecat_for(
+        client_id=client_id, conversation_id=conversation.Id, phone_number=number,
+    )
     try:
-        call_sid, status, provider = telephony.place_call(number, _server_url())
+        call_sid, status, provider = telephony.place_call(
+            number, _server_url(), use_pipecat=route_to_pipecat
+        )
     except Exception as exc:  # noqa: BLE001
         call.Status = "failed"
         call.Provider = settings.effective_voice_provider

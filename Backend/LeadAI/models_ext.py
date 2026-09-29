@@ -540,6 +540,64 @@ class LeadCompanyPermission(LeadAIBase):
     GrantedBy = Column(String(100), nullable=True)
 
 
+class LeadCompanyRolePermission(LeadAIBase):
+    """A company admin's own grant of one permission to one role, scoped to their
+    company only.
+
+    Different from LeadRolePermission (leadai_role_permissions): that table is
+    global — a platform admin's override there changes a role's permissions for
+    EVERY company, because it has no ClientId column at all. This table exists so
+    "let Managers at Kestrel Homes reveal customer contact details" does not also
+    grant it to Managers everywhere else.
+
+    Deliberately narrow: rbac.COMPANY_GRANTABLE_PERMISSIONS is the only set of
+    PermissionKeys a company admin may write here (today: lead.reveal_pii), so
+    this can never become a way to self-grant a platform-level capability.
+    """
+
+    __tablename__ = "leadai_company_role_permissions"
+    __table_args__ = (
+        UniqueConstraint("ClientId", "Role", "PermissionKey", name="uq_leadai_comp_role_perm"),
+        Index("ix_leadai_comp_role_perm_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    Role = Column(String(40), nullable=False)
+    PermissionKey = Column(String(80), nullable=False)
+    IsGranted = Column(Boolean, nullable=False, default=True)
+    GrantedBy = Column(String(100), nullable=True)
+
+
+# ===========================================================================
+# 6. Engine events (outbox)
+# ===========================================================================
+class LeadEvent(LeadAIBase):
+    """One thing that happened in a conversation, for other components to react to.
+
+    Written in the SAME transaction as the turn that produced it, so an event exists if
+    and only if that turn committed. Consumers (the monitor agent, the lead scorer,
+    analytics) read this table and never reach into the live conversation, which is
+    what keeps them off the customer's reply path. `ProcessedAt` is set by a consumer
+    when it has handled the row. See engine/events.py for the schema and outbox.py for
+    writing.
+    """
+
+    __tablename__ = "leadai_events"
+    __table_args__ = (
+        Index("ix_leadai_event_unprocessed", "ProcessedAt", "CreatedAt"),
+        Index("ix_leadai_event_client_created", "ClientId", "CreatedAt"),
+        Index("ix_leadai_event_conv_created", "ConversationId", "CreatedAt"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    ConversationId = Column(String(36), nullable=True)
+    Type = Column(String(40), nullable=False)        # turn.received, turn.replied, ...
+    Channel = Column(String(20), nullable=True)
+    TurnId = Column(String(80), nullable=True)
+    Speaker = Column(String(16), nullable=True)      # customer | ai | agent | system
+    PayloadJson = Column(JSON, nullable=True)        # the full TurnEvent
+    ProcessedAt = Column(DateTime, nullable=True)
+
 
 ALL_LEADAI_EXT_TABLES = (
     LeadChannelAccount,
@@ -554,5 +612,7 @@ ALL_LEADAI_EXT_TABLES = (
     LeadFile,
     LeadJob,
     LeadCompanyPermission,
+    LeadCompanyRolePermission,
+    LeadEvent,
 )
 

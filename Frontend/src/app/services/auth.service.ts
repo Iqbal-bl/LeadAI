@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap, throwError } from 'rxjs';
-import { UserMe } from '../models/auth.models';
+import { UserMe, UserProfileUpdatePayload } from '../models/auth.models';
 import {
   ROLE_COMPANY_ADMIN,
   ROLE_EMPLOYEE,
@@ -419,7 +419,7 @@ export class AuthService {
 
   // GET /access/me
   public getAccessMe(): Observable<UserMe> {
-    return this.http.get<UserMe>('access/me').pipe(
+    return this.http.get<UserMe>(`${environment.apiPrefix}/access/me`).pipe(
       tap((user) => {
         this.currentUserSubject.next(user);
 
@@ -437,6 +437,25 @@ export class AuthService {
         }
       }),
     );
+  }
+
+  /**
+   * Self-service profile update for the currently authenticated user.
+   * Sends the updated profile payload to PATCH /api/leadai/access/profile,
+   * updates the local currentUserSubject state, and refreshes the userName.
+   *
+   * @param payload UserProfileUpdatePayload containing full_name, phone, and timezone
+   * @returns Observable emitting the updated UserMe profile
+   */
+  public updateProfile(payload: UserProfileUpdatePayload): Observable<UserMe> {
+    return this.http
+      .patch<UserMe>(`${environment.apiPrefix}/access/profile`, payload)
+      .pipe(
+        tap((updatedUser) => {
+          this.currentUserSubject.next(updatedUser);
+          this.userName = updatedUser.full_name;
+        }),
+      );
   }
 
   // Instagram OAuth: Get authorization URL & state

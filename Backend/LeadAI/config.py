@@ -72,6 +72,27 @@ class LeadAISettings:
 
     # ---- RAG tuning -------------------------------------------------------
     retrieval_top_k: int = _i("LEADAI_RETRIEVAL_TOP_K", 5)
+    # Conversation engine (LeadAI/engine): off | observe | enforce. See engine/bridge.py.
+    # "observe" judges every reply and records a verdict without changing anything.
+    engine_mode: str = os.getenv("ENGINE_MODE", "off").strip().lower()
+    # Serialise turns per conversation (MySQL advisory lock). Off by default: it holds one
+    # extra DB connection per in-flight turn, so enable it once the pool is sized for that.
+    # Write a row to leadai_events for every turn (engine/outbox.py). Off by default until
+    # the table exists in the target database and something consumes it.
+    engine_events: bool = _b("ENGINE_EVENTS", "false")
+    # Decision trace (engine/trace.py): a log line per decision (ENGINE_TRACE_LOG) and a JSON
+    # trace stored on the message (ENGINE_TRACE_STORE). Both on: they hold ids, scores and
+    # reasons, never message text.
+    engine_trace_log: bool = _b("ENGINE_TRACE_LOG", "true")
+    engine_trace_store: bool = _b("ENGINE_TRACE_STORE", "true")
+    # Which pipeline drives LeadAI phone calls (LeadAI/voice/routing.py):
+    #   legacy  the existing /media-stream loop in outbound/app.py (default)
+    #   canary  Pipecat only for the numbers in VOICE_PIPECAT_NUMBERS, legacy for the rest
+    #   pipecat Pipecat for every LeadAI call
+    voice_pipeline: str = os.getenv("VOICE_PIPELINE", "legacy").strip().lower()
+    voice_pipecat_numbers: str = os.getenv("VOICE_PIPECAT_NUMBERS", "")
+    conversation_lock: bool = _b("LEADAI_CONVERSATION_LOCK", "false")
+    conversation_lock_timeout: int = _i("LEADAI_CONVERSATION_LOCK_TIMEOUT", 30)
     handoff_confidence_threshold: float = _f("LEADAI_HANDOFF_THRESHOLD", 0.40)
     chunk_max_chars: int = _i("LEADAI_CHUNK_MAX_CHARS", 900)
     chunk_overlap: int = _i("LEADAI_CHUNK_OVERLAP", 150)
@@ -108,6 +129,15 @@ class LeadAISettings:
     exotel_caller_id: str | None = os.getenv("EXOTEL_CALLER_ID") or None
     exotel_subdomain: str = os.getenv("EXOTEL_SUBDOMAIN", "api.exotel.com")
     exotel_flow_app_id: str | None = os.getenv("EXOTEL_FLOW_APP_ID") or None
+    # A SECOND Exotel flow (set up in Exotel's own App Bazaar dashboard — not in this
+    # codebase), whose Voicebot/Stream applet is configured to connect to
+    # /media-stream-pipecat instead of /media-stream. Calls routed to Pipecat
+    # (LeadAI/voice/routing.py) dial this flow instead of exotel_flow_app_id, so the
+    # existing, working legacy flow is never touched. Unset until you create it.
+    exotel_pipecat_flow_app_id: str | None = os.getenv("EXOTEL_PIPECAT_FLOW_APP_ID") or None
+    # Exotel's Voicebot/Stream applet sends raw PCM at whichever rate the applet is set to
+    # (8000/16000/24000 Hz), unlike Twilio's fixed 8 kHz mulaw. Must match that applet setting.
+    exotel_pipecat_sample_rate: int = _i("EXOTEL_PIPECAT_SAMPLE_RATE", 8000)
 
     # Which carrier the lead-AI voice endpoints should use.
     #   "auto"   -> exotel when credentials exist, else the existing twilio leg
@@ -118,6 +148,8 @@ class LeadAISettings:
     # ---- Sarvam (STT/TTS) -------------------------------------------------
     sarvam_api_key: str | None = os.getenv("SARVAM_API_KEY") or None
     default_language: str = os.getenv("LEADAI_DEFAULT_LANGUAGE", "en-IN")
+    # Country assumed for phone numbers customers type without a country code.
+    default_phone_region: str = _env("LEADAI_DEFAULT_PHONE_REGION", "IN").upper()
 
     # ---- Files ------------------------------------------------------------
     max_upload_bytes: int = _i("LEADAI_MAX_UPLOAD_BYTES", 15 * 1024 * 1024)

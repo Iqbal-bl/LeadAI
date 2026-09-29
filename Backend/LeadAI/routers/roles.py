@@ -14,6 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+# pyrefly: ignore [missing-import]
 from domain.models import Client
 
 from .. import activity
@@ -27,6 +28,7 @@ from ..rbac import (
     current_principal,
     require,
     resolve_scope,
+    super_admin,
     visible_roles,
 )
 from ..schemas import (
@@ -37,6 +39,7 @@ from ..schemas import (
     RoleGrant,
     RoleOut,
     RoleUpdate,
+    UserProfileUpdate,
 )
 from ..serializers import company_out, role_out
 
@@ -84,12 +87,75 @@ def me(
     )
 
 
+@router.patch("/profile", response_model=MeOut, summary="Update current user's profile")
+def update_profile(
+    payload: UserProfileUpdate,
+    principal: Principal = Depends(current_principal),
+    db: Session = Depends(get_leadai_db),
+):
+    """Self-service endpoint allowing any authenticated user to update their own profile details.
+
+    Updates FullName across all active LeadUserRole directory records for this user's email,
+    commits the transaction, and returns the refreshed MeOut payload.
+    """
+    updated_name = principal.full_name
+    if payload.full_name is not None and payload.full_name.strip():
+        updated_name = payload.full_name.strip()
+        rows = (
+            db.query(LeadUserRole)
+            .filter(
+                LeadUserRole.UserEmail == principal.email.lower(),
+                LeadUserRole.IsDeleted == False,  # noqa: E712
+            )
+            .all()
+        )
+        for r in rows:
+            r.FullName = updated_name
+            r.UpdatedAt = utcnow()
+            r.UpdatedBy = principal.email
+        db.commit()
+
+    # Re-fetch company details to construct updated MeOut
+    client_name = None
+    if principal.client_id:
+        client = db.get(Client, principal.client_id)
+        client_name = client.Name if client else None
+
+    companies: list[CompanyOut] = []
+    if principal.is_platform_admin:
+        rows = (
+            db.query(Client)
+            .filter(Client.IsDeleted == False, Client.IsActive == True)  # noqa: E712
+            .order_by(Client.Name.asc())
+            .all()
+        )
+        companies = [company_out(db, c, with_counts=False) for c in rows]
+    elif principal.accessible_client_ids:
+        rows = (
+            db.query(Client)
+            .filter(Client.Id.in_(principal.accessible_client_ids))
+            .order_by(Client.Name.asc())
+            .all()
+        )
+        companies = [company_out(db, c, with_counts=False) for c in rows]
+
+    return MeOut(
+        email=principal.email,
+        full_name=updated_name,
+        role=principal.role,
+        client_id=principal.client_id,
+        client_name=client_name,
+        permissions=sorted(principal.permissions),
+        accessible_companies=companies,
+    )
+
+
 @router.get(
     "/permissions",
     response_model=PermissionCatalogOut,
     summary="Permission catalogue and the role matrix",
 )
-def permission_catalogue(principal: Principal = Depends(current_principal)):
+def permission_catalogue(principal: Principal = Depends(super_admin())):
     """Static reference so a frontend can render an accurate permissions screen
     without hardcoding the matrix."""
     return PermissionCatalogOut(
@@ -101,7 +167,7 @@ def permission_catalogue(principal: Principal = Depends(current_principal)):
 @router.get("/roles", response_model=list[RoleOut], summary="List role grants")
 def list_roles(
     company_id: str | None = Query(default=None, alias="for_company"),
-    principal: Principal = Depends(require("role.read")),
+    principal: Principal = Depends(super_admin("role.read")),
     db: Session = Depends(get_leadai_db),
 ):
     query = db.query(LeadUserRole).filter(LeadUserRole.IsDeleted == False)  # noqa: E712
@@ -127,7 +193,7 @@ def list_roles(
 def grant_role(
     payload: RoleGrant,
     request: Request,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     email = payload.user_email.lower()
@@ -217,7 +283,7 @@ def update_role(
     grant_id: str,
     payload: RoleUpdate,
     request: Request,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     row = db.get(LeadUserRole, grant_id)

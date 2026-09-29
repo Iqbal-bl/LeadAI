@@ -56,19 +56,45 @@ def _exotel_base() -> str:
     )
 
 
+def _clean_exotel_number(number: str | None) -> str | None:
+    """Strip everything but digits and a leading '+' from a phone number.
+
+    A 400 from `Calls/connect` traced back to EXOTEL_CALLER_ID being stored in a
+    human-readable form (spaces/dashes, e.g. from a copy-paste) rather than the bare
+    digit string the API expects. Normalising here means how the env var happens to
+    be formatted can never break a real call again — this runs on every call, not
+    just as a one-time fix to the .env value.
+    """
+    if not number:
+        return number
+    cleaned = "".join(ch for ch in number if ch.isdigit() or ch == "+")
+    if cleaned != number:
+        logger.info("[LeadAI exotel] normalised a phone number for the Exotel API (formatting only)")
+    return cleaned
+
+
 def place_exotel_call(
     to_number: str,
     server_url: str,
     call_type: str = "trans",
+    *,
+    use_pipecat: bool = False,
 ) -> tuple[str, str]:
     """Originate a call via Exotel. Returns (call_sid, status).
 
-    Two shapes, chosen by config:
+    Three shapes, chosen by config:
 
-    * EXOTEL_FLOW_APP_ID set -> `Calls/connect` with `Url` pointing at the Exotel
-      *flow* (App Bazaar applet chain). The flow contains the Voicebot/Stream
-      applet that connects the caller's audio to our `/media-stream` WebSocket.
-      This is the production shape for an AI-answered call.
+    * `use_pipecat=True` and EXOTEL_PIPECAT_FLOW_APP_ID set -> `Calls/connect` with
+      `Url` pointing at a SECOND Exotel flow, whose Voicebot/Stream applet is
+      configured (in Exotel's own App Bazaar dashboard — not in this codebase) to
+      connect to `/media-stream-pipecat` instead of `/media-stream`. That is what
+      routes the call onto the shared LeadAI brain (LeadAI/voice/pipeline.py),
+      the same one chat uses, with OpenAI writing the replies.
+
+    * EXOTEL_FLOW_APP_ID set (the existing, working flow) -> `Calls/connect` with
+      `Url` pointing at that flow. Its Voicebot/Stream applet connects the caller's
+      audio to our `/media-stream` WebSocket. This is the pre-Pipecat, currently
+      live production shape, and it is unchanged.
 
     * no flow id -> `Calls/connect` bridging To <-> CallerId, i.e. a plain
       agent-to-customer call with no bot in the middle. Useful for the "agent
@@ -80,25 +106,55 @@ def place_exotel_call(
     import httpx
 
     data = {
-        "From": to_number,                      # the customer we are calling
-        "CallerId": settings.exotel_caller_id,  # our DLT-registered ExoPhone
+        "From": _clean_exotel_number(to_number),                      # the customer we are calling
+        "CallerId": _clean_exotel_number(settings.exotel_caller_id),  # our DLT-registered ExoPhone
         "CallType": call_type,
-        # Exotel posts terminal call state here. We map it onto the same status
-        # vocabulary the existing /call-status handler already uses.
-        "StatusCallback": f"{server_url.rstrip('/')}/api/leadai/voice/exotel/status",
-        "StatusCallbackEvents[0]": "terminal",
     }
-    if settings.exotel_flow_app_id:
+    flow_app_id = settings.exotel_flow_app_id
+    if use_pipecat:
+        if settings.exotel_pipecat_flow_app_id:
+            flow_app_id = settings.exotel_pipecat_flow_app_id
+        else:
+            # Routing asked for the new pipeline, but the second Exotel flow has not been
+            # configured yet (EXOTEL_PIPECAT_FLOW_APP_ID). Falling back to the existing,
+            # working flow is safer than failing the call outright — but it silently means
+            # this call runs on the legacy loop, not Pipecat, so it must be visible in the logs.
+            logger.warning(
+                "[LeadAI exotel] EXOTEL_PIPECAT_FLOW_APP_ID is not set; call is routed to the "
+                "legacy flow instead of Pipecat"
+            )
+    if flow_app_id:
         data["Url"] = (
-            f"http://my.exotel.com/{settings.exotel_sid}/exoml/start_voice/"
-            f"{settings.exotel_flow_app_id}"
+            f"http://my.exotel.com/{settings.exotel_sid}/exoml/start_voice/{flow_app_id}"
         )
+        # NOT sending StatusCallback/StatusCallbackEvents here. Exotel's own docs list
+        # StatusCallbackEvents[0]=terminal as valid, in exactly this array form, but a live
+        # call with BOTH that and a flow `Url` set was rejected outright: 400 "Invalid Call
+        # Parameters: Invalid 'StatusCallbackEvents' specified". Whether that combination is
+        # simply unsupported on this account, or something else, is unconfirmed — but it
+        # blocks the call from being placed at all, which is worse than not getting this
+        # webhook. Consequence: a LeadCall placed through a flow will not receive Exotel's
+        # terminal-status push, so its Status field will not update from this webhook path;
+        # LeadAI/voice/pipeline.py's own CallSid/time-window check does not depend on it, so
+        # the call itself still works. If Exotel confirms the right way to combine the two,
+        # add StatusCallback back here.
     else:
-        data["To"] = settings.exotel_caller_id
+        data["To"] = _clean_exotel_number(settings.exotel_caller_id)
+        # Only sent for the plain bridge-call shape (no flow, no bot): Exotel posts terminal
+        # call state here, mapped onto the vocabulary /call-status already uses.
+        data["StatusCallback"] = f"{server_url.rstrip('/')}/api/leadai/voice/exotel/status"
+        data["StatusCallbackEvents[0]"] = "terminal"
 
     try:
         resp = httpx.post(f"{_exotel_base()}/Calls/connect.json", data=data, timeout=25)
         resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        # Exotel's error body (the actual reason — bad CallerId, bad flow Url, quota,
+        # DLT rejection...) is far more useful than the bare status code raise_for_status()
+        # gives you. httpx does not include the response body in str(exc).
+        detail = exc.response.text[:500] if exc.response is not None else ""
+        logger.error("[LeadAI exotel] Calls/connect rejected: %s | body: %s", exc, detail)
+        raise CallPlacementError(f"Exotel rejected the call: {exc} | {detail}") from exc
     except Exception as exc:  # noqa: BLE001
         raise CallPlacementError(f"Exotel rejected the call: {exc}") from exc
 
@@ -186,8 +242,13 @@ def hangup_twilio_call(call_sid: str) -> bool:
 # --------------------------------------------------------------------------- #
 # unified interface
 # --------------------------------------------------------------------------- #
-def place_call(to_number: str, server_url: str) -> tuple[str, str, str]:
+def place_call(to_number: str, server_url: str, *, use_pipecat: bool = False) -> tuple[str, str, str]:
     """Place a call with whichever carrier is configured.
+
+    `use_pipecat` only affects Exotel (it picks which flow app id to dial — see
+    place_exotel_call). Twilio ignores it: a Twilio call always hits our own
+    /outbound-twiml per call, so THAT decides Pipecat vs. legacy at TwiML-generation
+    time, not here (see LeadAI/voice/routing.py).
 
     Returns (call_sid, status, provider).
     """
@@ -195,7 +256,7 @@ def place_call(to_number: str, server_url: str) -> tuple[str, str, str]:
 
     if provider == "exotel":
         try:
-            sid, status = place_exotel_call(to_number, server_url)
+            sid, status = place_exotel_call(to_number, server_url, use_pipecat=use_pipecat)
             return sid, status, "exotel"
         except CallPlacementError as exc:
             # Falling back rather than failing: an Exotel outage should not take

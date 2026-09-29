@@ -166,6 +166,45 @@ def _register_worker(app: FastAPI) -> None:
             pass
 
 
+def _register_voice_pipecat(app: FastAPI) -> None:
+    """The Pipecat phone pipeline's Twilio websocket (LeadAI/voice/pipeline.py).
+
+    Always registered, but inert: Twilio is only pointed at it when VOICE_PIPELINE routes a
+    call there, and the handler authenticates every connection with the call's stream token.
+    Pipecat is imported inside the handler, so a deployment without it still starts.
+    """
+    from fastapi import WebSocket
+
+    from .voice.routing import PIPECAT_PATH
+
+    @app.on_event("startup")
+    async def _warm_pipecat():  # pragma: no cover - lifecycle
+        """Pipecat loads a batch of heavy imports on the FIRST pipeline in a process, about
+        1.5 s of dead air for whichever caller happens to be first after a restart. Do it now,
+        in a thread, so no caller waits for it."""
+        if settings.voice_pipeline not in ("canary", "pipecat"):
+            return
+        try:
+            import asyncio
+
+            from pipecat.utils.prewarm import warm_deferred_imports
+
+            asyncio.create_task(asyncio.to_thread(warm_deferred_imports))
+        except Exception:  # noqa: BLE001
+            logger.debug("[LeadAI voice] could not pre-warm pipecat imports", exc_info=True)
+
+    @app.websocket(PIPECAT_PATH)
+    async def _pipecat_media_stream(websocket: WebSocket):
+        try:
+            from .voice.pipeline import run_call
+        except ImportError:
+            logger.error("[LeadAI voice] Pipecat is not installed; rejecting the stream")
+            await websocket.accept()
+            await websocket.close(code=1011)
+            return
+        await run_call(websocket)
+
+
 def register(app: FastAPI) -> FastAPI:
     """Attach LeadAI to an existing FastAPI app. Safe to call once at startup."""
     # 1. tables (same engine, same Base — see LeadAI/db.py)
@@ -193,6 +232,7 @@ def register(app: FastAPI) -> FastAPI:
 
     # 4. websockets
     _register_websockets(app)
+    _register_voice_pipecat(app)
 
     # 5. background worker for campaigns and other long-running jobs.
     #

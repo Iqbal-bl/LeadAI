@@ -148,26 +148,37 @@ async def save_tokens(
 ) -> None:
     from datetime import datetime, timezone
     
-    # Check if an account already exists for this channel and ExternalId
+    # Check if an account already exists for this channel and ExternalId — reconnecting
+    # the SAME LinkedIn person is a token refresh, not a new account, and reuses this row.
     db_cred = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.Channel == "linkedin",
             LeadChannelAccount.ExternalId == person_urn,
+            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .first()
     )
 
     if not db_cred:
-        # Fallback to checking by ClientId and Channel
-        db_cred = (
+        # A DIFFERENT LinkedIn person connecting for this company: a company may have at
+        # most one LinkedIn account, so this used to silently repoint the existing row at
+        # the new person (losing the old one's connection with no warning). Now it is
+        # refused — the old account must be disconnected first, same as every other channel.
+        other = (
             db.query(LeadChannelAccount)
             .filter(
                 LeadChannelAccount.ClientId == client_id,
                 LeadChannelAccount.Channel == "linkedin",
+                LeadChannelAccount.IsDeleted == False,  # noqa: E712
             )
             .first()
         )
+        if other is not None:
+            raise ValueError(
+                f"This company already has a LinkedIn account connected ('{other.Name}'). "
+                "Disconnect it first before connecting a different one."
+            )
 
     now = time.time()
     access_expires_at = datetime.fromtimestamp(now + expires_in_seconds, tz=timezone.utc).replace(tzinfo=None)

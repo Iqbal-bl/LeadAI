@@ -20,6 +20,7 @@ from ..rbac import (
     ROLE_PERMISSIONS,
     current_principal,
     require,
+    super_admin,
 )
 from ..schemas import (
     Ok,
@@ -66,7 +67,7 @@ def effective_permissions(db: Session, role: str) -> set[str]:
     summary="List effective permissions for all roles",
 )
 def list_all_role_permissions(
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     results = []
@@ -103,7 +104,7 @@ def list_all_role_permissions(
 )
 def get_role_permissions(
     role: str,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     if role not in ALL_ROLES:
@@ -143,7 +144,7 @@ def set_role_permissions(
     role: str,
     payload: RolePermissionsBulkUpdate,
     request: Request,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     """Replace all custom permissions for a role. Only the permissions in the
@@ -243,7 +244,7 @@ def patch_role_permission(
     role: str,
     payload: RolePermissionUpdate,
     request: Request,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     """Toggle a single permission for a role without replacing the entire set."""
@@ -348,7 +349,7 @@ def patch_role_permission(
 def reset_role_permissions(
     role: str,
     request: Request,
-    principal: Principal = Depends(require("role.manage")),
+    principal: Principal = Depends(super_admin("role.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     """Remove all custom overrides for a role, reverting to the hardcoded defaults."""
