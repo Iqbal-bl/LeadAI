@@ -124,3 +124,32 @@ export interface CampaignRecipient {
   failure_reason?: string;
   sent_at?: string;
 }
+
+export interface CampaignBatchMeta {
+  sent?: number;
+  failed?: number;
+  skipped?: number;
+  remaining?: number;
+  resume_at?: string;
+  reason?: string;
+  added?: number;
+  audience?: string;
+  [key: string]: any;
+}
+
+export interface CampaignHistoryItem {
+  id: string;
+  action: string;
+  message: string;
+  meta?: CampaignBatchMeta | null;
+  created_at: string;
+  actor_email?: string | null;
+  log_type?: string | null;
+}
+
+export interface CampaignHistoryResponse {
+  total_items: number;
+  page: number;
+  page_size: number;
+  items: CampaignHistoryItem[];
+}

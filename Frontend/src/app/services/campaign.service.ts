@@ -4,6 +4,7 @@ import { ApiService } from './api.service';
 import {
   Campaign,
   CampaignCreateRequest,
+  CampaignHistoryResponse,
   CampaignPreview,
   CampaignRecipient,
 } from '../models/campaign.models';
@@ -97,6 +98,24 @@ export class CampaignService {
       `campaigns/${id}/recipients`,
       {
         params,
+        companyScoped: true,
+      },
+    );
+  }
+
+  /** GET /campaigns/{id}/history — paginated, newest-first list of run events */
+  public getHistory(
+    id: string,
+    page: number = 1,
+    pageSize: number = 50,
+  ): Observable<CampaignHistoryResponse> {
+    return this.apiService.get<CampaignHistoryResponse>(
+      `campaigns/${id}/history`,
+      {
+        params: {
+          page: page.toString(),
+          page_size: pageSize.toString(),
+        },
         companyScoped: true,
       },
     );
