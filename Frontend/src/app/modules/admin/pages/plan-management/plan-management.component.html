@@ -1,6 +1,6 @@
-<div class="p-6 space-y-8">
+<div class="p-6 space-y-6 animate-fade-in">
   <!-- Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
     <div>
       <div class="flex items-center gap-2">
         <span class="px-2.5 py-1 bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 text-xs font-bold rounded-md uppercase tracking-wider">
@@ -9,63 +9,165 @@
       </div>
       <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2 mt-1">
         <i class="pi pi-key text-purple-600"></i>
-        Master Recharge Plan Management
+        Master Recharge & Plan Management
       </h1>
       <p class="text-slate-500 text-sm mt-1">
-        Define global standard plan templates and build custom client-specific plans.
+        Dynamically create and manage Base Voice Plans, Minute Top-Up Boosters, Omni-Channel Add-on pricing, and manual multi-company recharge grants.
       </p>
     </div>
-    <div class="flex items-center gap-3">
+
+    <!-- Quick Action Buttons -->
+    <div class="flex flex-wrap items-center gap-2.5">
       <button
         pButton
         type="button"
-        label="Create Custom Plan"
-        icon="pi pi-user-edit"
-        class="p-button-outlined p-button-purple"
-        (click)="openCreatePlanModal('custom')"
+        label="Grant Recharge"
+        icon="pi pi-gift"
+        class="p-button-outlined p-button-success p-button-sm font-bold"
+        (click)="openGrantModal()"
+        pTooltip="Manually credit minutes to one or multiple client companies"
       ></button>
+
       <button
         pButton
         type="button"
-        label="New Standard Plan"
+        label="New Booster"
+        icon="pi pi-bolt"
+        class="p-button-outlined p-button-warning p-button-sm font-bold"
+        (click)="openCreatePlanModal('voice_topup')"
+        pTooltip="Create a one-time minute top-up booster pack"
+      ></button>
+
+      <button
+        pButton
+        type="button"
+        label="Channel Add-on"
+        icon="pi pi-comments"
+        class="p-button-outlined p-button-info p-button-sm font-bold"
+        (click)="openCreatePlanModal('channel_addon')"
+        pTooltip="Set or update monthly pricing for WhatsApp, Instagram, FB, or LinkedIn"
+      ></button>
+
+      <button
+        pButton
+        type="button"
+        label="Custom Plan"
+        icon="pi pi-user-edit"
+        class="p-button-outlined p-button-purple p-button-sm font-bold"
+        (click)="openCreatePlanModal('voice_standard', 'custom')"
+        pTooltip="Build a custom monthly plan assigned to specific client companies"
+      ></button>
+
+      <button
+        pButton
+        type="button"
+        label="New Base Plan"
         icon="pi pi-plus"
-        class="p-button-primary"
-        (click)="openCreatePlanModal('standard')"
+        class="p-button-primary p-button-sm font-bold"
+        (click)="openCreatePlanModal('voice_standard', 'standard')"
+        pTooltip="Create a global 30-day base voice plan"
       ></button>
     </div>
+  </div>
+
+  <!-- Category Filter Pill Tabs -->
+  <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+    <button
+      type="button"
+      (click)="selectedCategoryTab = 'all'"
+      [ngClass]="selectedCategoryTab === 'all' ? 'bg-purple-600 text-white font-bold shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'"
+      class="px-3.5 py-1.5 rounded-xl text-xs transition flex items-center gap-1.5"
+    >
+      <span>All Plans</span>
+      <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20 font-bold">{{ plans.length }}</span>
+    </button>
+
+    <button
+      type="button"
+      (click)="selectedCategoryTab = 'voice_standard'"
+      [ngClass]="selectedCategoryTab === 'voice_standard' ? 'bg-blue-600 text-white font-bold shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'"
+      class="px-3.5 py-1.5 rounded-xl text-xs transition flex items-center gap-1.5"
+    >
+      <i class="pi pi-phone text-xs"></i>
+      <span>Base Voice Plans</span>
+    </button>
+
+    <button
+      type="button"
+      (click)="selectedCategoryTab = 'voice_topup'"
+      [ngClass]="selectedCategoryTab === 'voice_topup' ? 'bg-amber-600 text-white font-bold shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'"
+      class="px-3.5 py-1.5 rounded-xl text-xs transition flex items-center gap-1.5"
+    >
+      <i class="pi pi-bolt text-xs"></i>
+      <span>Minute Top-Up Boosters</span>
+    </button>
+
+    <button
+      type="button"
+      (click)="selectedCategoryTab = 'channel_addon'"
+      [ngClass]="selectedCategoryTab === 'channel_addon' ? 'bg-emerald-600 text-white font-bold shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'"
+      class="px-3.5 py-1.5 rounded-xl text-xs transition flex items-center gap-1.5"
+    >
+      <i class="pi pi-comments text-xs"></i>
+      <span>Omni-Channel Add-ons</span>
+    </button>
   </div>
 
   <!-- Master Plan Templates Table -->
   <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
     <div class="flex items-center justify-between mb-4">
       <div>
-        <h2 class="text-lg font-bold text-slate-900 dark:text-white">Master Plan Templates</h2>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white">Active Plan & Template Registry</h2>
         <p class="text-xs text-slate-500 mt-0.5">
-          Edits to master templates apply to future recharges only (Immutable to active plans).
+          Modifications update live offerings immediately. Existing active client subscriptions remain locked to their snapshot.
         </p>
       </div>
     </div>
 
-    <p-table [value]="plans" [loading]="loading" styleClass="p-datatable-sm">
+    <p-table [value]="filteredPlans" [loading]="loading" styleClass="p-datatable-sm" [paginator]="true" [rows]="10">
       <ng-template pTemplate="header">
         <tr>
           <th>Plan Name</th>
+          <th>Category</th>
           <th>Type</th>
-          <th>Target Client</th>
-          <th>Minutes Included</th>
-          <th>Validity (Days)</th>
+          <th>Target Clients</th>
+          <th>Calling Mins</th>
+          <th>Validity</th>
           <th>Price (₹)</th>
+          <th>AutoPay</th>
           <th>Status</th>
           <th class="text-right">Actions</th>
         </tr>
       </ng-template>
       <ng-template pTemplate="body" let-plan>
         <tr>
-          <td class="font-bold text-slate-900 dark:text-white">{{ plan.name }}</td>
+          <td>
+            <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <i *ngIf="plan.plan_category === 'voice_topup'" class="pi pi-bolt text-amber-500 text-xs"></i>
+              <i *ngIf="plan.plan_category === 'channel_addon'" class="pi pi-comments text-emerald-500 text-xs"></i>
+              <i *ngIf="!plan.plan_category || plan.plan_category === 'voice_standard'" class="pi pi-phone text-blue-500 text-xs"></i>
+              <span>{{ plan.name }}</span>
+            </div>
+            <span *ngIf="plan.description" class="text-[11px] text-slate-400 block line-clamp-1">
+              {{ plan.description }}
+            </span>
+          </td>
           <td>
             <span
               class="px-2 py-0.5 text-xs font-semibold rounded-full"
-              [ngClass]="plan.plan_type === 'custom' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'"
+              [ngClass]="{
+                'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300': plan.plan_category === 'voice_topup',
+                'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300': plan.plan_category === 'channel_addon',
+                'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300': !plan.plan_category || plan.plan_category === 'voice_standard'
+              }"
+            >
+              {{ plan.plan_category === 'voice_topup' ? 'Top-Up Booster' : (plan.plan_category === 'channel_addon' ? 'Channel Add-on' : 'Base Voice Plan') }}
+            </span>
+          </td>
+          <td>
+            <span
+              class="px-2 py-0.5 text-xs font-semibold rounded-full"
+              [ngClass]="plan.plan_type === 'custom' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300' : 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300'"
             >
               {{ plan.plan_type | uppercase }}
             </span>
@@ -83,11 +185,25 @@
               Global (All Clients)
             </span>
           </td>
-          <td class="font-bold text-indigo-600 dark:text-indigo-400">{{ plan.included_minutes | number }} m</td>
-          <td>{{ plan.validity_days }} Days</td>
-          <td class="font-bold">₹{{ plan.price | number }}</td>
+          <td class="font-bold text-indigo-600 dark:text-indigo-400">
+            {{ plan.included_minutes > 0 ? (plan.included_minutes | number) + ' m' : '—' }}
+          </td>
+          <td class="text-xs">
+            {{ plan.validity_days > 0 ? plan.validity_days + ' Days' : 'No Expiry (Instant)' }}
+          </td>
+          <td class="font-bold text-slate-800 dark:text-slate-200">
+            ₹{{ plan.price | number }}
+          </td>
           <td>
-            <span [class]="plan.is_active ? 'text-emerald-600 font-semibold' : 'text-red-500'">
+            <span *ngIf="plan.auto_pay_by_default" class="text-emerald-500 font-bold text-xs flex items-center gap-1">
+              <i class="pi pi-sync text-[10px]"></i> Recurring
+            </span>
+            <span *ngIf="!plan.auto_pay_by_default" class="text-slate-400 text-xs">
+              One-Time
+            </span>
+          </td>
+          <td>
+            <span [class]="plan.is_active ? 'text-emerald-600 font-semibold text-xs' : 'text-red-500 text-xs'">
               {{ plan.is_active ? 'Active' : 'Inactive' }}
             </span>
           </td>
@@ -117,42 +233,79 @@
   </div>
 </div>
 
-<!-- Modal: Create / Edit Master Plan Template -->
+<!-- ======================================================== -->
+<!-- MODAL: CREATE / EDIT MASTER PLAN TEMPLATE                -->
+<!-- ======================================================== -->
 <p-dialog
   [(visible)]="showPlanDialog"
-  [header]="editingPlan ? 'Edit Master Plan Template' : 'Create Plan Template'"
+  [header]="editingPlan ? 'Edit Plan Template' : 'Create Plan Template'"
   [modal]="true"
-  [style]="{ width: '500px' }"
+  [style]="{ width: '560px' }"
 >
   <div class="space-y-4 pt-2">
-    <div>
-      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Plan Name *</label>
-      <input pInputText type="text" [(ngModel)]="planForm.name" class="w-full" placeholder="e.g. Enterprise Custom Plan" />
-    </div>
-
+    <!-- Category & Type Selector -->
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Plan Type</label>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Plan Category *</label>
+        <p-dropdown
+          [(ngModel)]="planForm.plan_category"
+          [options]="[
+            { label: 'Base Voice Plan (30-day recurring)', value: 'voice_standard' },
+            { label: 'Minute Top-Up Booster (Instant credit)', value: 'voice_topup' },
+            { label: 'Omni-Channel Add-on (WhatsApp, IG, etc.)', value: 'channel_addon' }
+          ]"
+          optionLabel="label"
+          optionValue="value"
+          (onChange)="onCategoryChange()"
+          styleClass="w-full"
+        ></p-dropdown>
+      </div>
+
+      <div *ngIf="planForm.plan_category === 'voice_standard'">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Audience</label>
         <p-dropdown
           [(ngModel)]="planForm.plan_type"
-          [options]="[{label: 'Standard (Global)', value: 'standard'}, {label: 'Custom (Client Specific)', value: 'custom'}, {label: 'Minute Top-Up Booster', value: 'topup'}]"
+          [options]="[
+            { label: 'Standard (Global / All Clients)', value: 'standard' },
+            { label: 'Custom (Assigned Companies)', value: 'custom' }
+          ]"
           optionLabel="label"
           optionValue="value"
           styleClass="w-full"
         ></p-dropdown>
       </div>
 
-      <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
-        <div>
-          <span class="text-xs font-bold text-slate-800 dark:text-slate-200 block">AutoPay by Default</span>
-          <span class="text-[10px] text-slate-500">Recurring e-Mandate</span>
-        </div>
-        <p-inputSwitch [(ngModel)]="planForm.auto_pay_by_default"></p-inputSwitch>
+      <div *ngIf="planForm.plan_category === 'channel_addon'">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Channel Platform *</label>
+        <p-dropdown
+          [(ngModel)]="planForm.feature_key"
+          [options]="[
+            { label: 'WhatsApp Business API', value: 'whatsapp' },
+            { label: 'Instagram DM Automation', value: 'instagram' },
+            { label: 'Facebook Messenger', value: 'facebook' },
+            { label: 'LinkedIn Lead Automation', value: 'linkedin' }
+          ]"
+          optionLabel="label"
+          optionValue="value"
+          styleClass="w-full"
+        ></p-dropdown>
+      </div>
+
+      <div *ngIf="planForm.plan_category === 'voice_topup'" class="flex items-center p-3 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800/40">
+        <span class="text-xs text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1.5">
+          <i class="pi pi-bolt"></i> One-time instant booster
+        </span>
       </div>
     </div>
 
+    <!-- Plan Display Name -->
+    <div>
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Plan Display Name *</label>
+      <input pInputText type="text" [(ngModel)]="planForm.name" class="w-full" placeholder="e.g. 500 Min Booster or Monthly Basic (500 Mins)" />
+    </div>
+
     <!-- Multi-Company Selection for Custom Plans -->
-    <div *ngIf="planForm.plan_type === 'custom'" class="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 rounded-xl">
+    <div *ngIf="planForm.plan_category === 'voice_standard' && planForm.plan_type === 'custom'" class="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 rounded-xl">
       <label class="block text-xs font-semibold text-indigo-900 dark:text-indigo-200 mb-1 flex items-center justify-between">
         <span>Target Client Companies (Multi-Company Assignment)</span>
         <span class="text-[10px] font-normal text-indigo-600 dark:text-indigo-400">Assign to 1 or more companies</span>
@@ -172,37 +325,161 @@
       </span>
     </div>
 
-
-    <div class="grid grid-cols-2 gap-4">
+    <!-- Minutes & Validity Inputs (Hidden for channel add-ons) -->
+    <div class="grid grid-cols-2 gap-4" *ngIf="planForm.plan_category !== 'channel_addon'">
       <div>
-        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Included Minutes *</label>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+          Included Calling Minutes *
+        </label>
         <input pInputText type="number" [(ngModel)]="planForm.included_minutes" class="w-full" placeholder="500" />
       </div>
-      <div>
+
+      <div *ngIf="planForm.plan_category === 'voice_standard'">
         <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Validity (Days) *</label>
         <input pInputText type="number" [(ngModel)]="planForm.validity_days" class="w-full" placeholder="30" />
       </div>
+
+      <div *ngIf="planForm.plan_category === 'voice_topup'">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Validity</label>
+        <input pInputText type="text" value="No Expiry (Synced to Active Plan)" disabled class="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs" />
+      </div>
     </div>
 
+    <!-- Price & Benchmark -->
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Price (₹) *</label>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Price (₹ INR) *</label>
         <input pInputText type="number" [(ngModel)]="planForm.price" class="w-full" placeholder="2000" />
       </div>
-      <div>
+
+      <div *ngIf="planForm.plan_category !== 'channel_addon'">
         <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Rate Benchmark (₹/min)</label>
         <input pInputText type="number" [(ngModel)]="planForm.rate_per_minute" class="w-full" placeholder="4.0" />
       </div>
+
+      <div *ngIf="planForm.plan_category === 'channel_addon'">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Billing Cycle</label>
+        <input pInputText type="text" value="30 Days Recurring" disabled class="w-full bg-slate-100 dark:bg-slate-800 text-slate-500 text-xs" />
+      </div>
     </div>
 
+    <!-- Recurring Toggle -->
+    <div *ngIf="planForm.plan_category !== 'voice_topup'" class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">
+      <div>
+        <span class="text-xs font-bold text-slate-800 dark:text-slate-200 block">AutoPay by Default</span>
+        <span class="text-[10px] text-slate-500">Recurring 30-day mandate via Razorpay</span>
+      </div>
+      <p-inputSwitch [(ngModel)]="planForm.auto_pay_by_default"></p-inputSwitch>
+    </div>
+
+    <!-- Description -->
     <div>
-      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Description</label>
-      <textarea pInputTextarea [(ngModel)]="planForm.description" rows="3" class="w-full" placeholder="Plan details and features..."></textarea>
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Marketing Description</label>
+      <textarea pInputTextarea [(ngModel)]="planForm.description" rows="2" class="w-full" placeholder="Plan details, features, and limits..."></textarea>
     </div>
   </div>
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="Cancel" class="p-button-text" (click)="showPlanDialog = false"></button>
-    <button pButton type="button" label="Save Plan" icon="pi pi-check" [loading]="saving" (click)="savePlan()"></button>
+    <button pButton type="button" label="Save Plan Template" icon="pi pi-check" [loading]="saving" (click)="savePlan()"></button>
+  </ng-template>
+</p-dialog>
+
+<!-- ======================================================== -->
+<!-- MODAL: MANUAL MULTI-COMPANY RECHARGE GRANT               -->
+<!-- ======================================================== -->
+<p-dialog
+  [(visible)]="showGrantDialog"
+  header="Direct Client Recharge Grant (Single or Multi-Company)"
+  [modal]="true"
+  [style]="{ width: '560px' }"
+>
+  <div class="space-y-4 pt-2">
+    <!-- Multi-Company Selection -->
+    <div>
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+        <span>Target Companies *</span>
+        <span class="text-[10px] font-normal text-purple-600 dark:text-purple-400">Select 1 or multiple companies</span>
+      </label>
+      <p-multiSelect
+        [(ngModel)]="grantClientIds"
+        [options]="companies"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Select Companies to Grant Minutes"
+        styleClass="w-full"
+        display="chip"
+        [filter]="true"
+      ></p-multiSelect>
+      <span class="text-[11px] text-slate-500 mt-1 block">
+        Minutes and validity will be directly credited to each selected company account.
+      </span>
+    </div>
+
+    <!-- Grant Type Toggle -->
+    <div class="flex items-center gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+      <button
+        type="button"
+        (click)="grantType = 'template'"
+        [ngClass]="grantType === 'template' ? 'bg-white dark:bg-slate-900 shadow-sm text-purple-600 font-bold' : 'text-slate-500'"
+        class="flex-1 py-1.5 rounded-lg text-xs transition text-center"
+      >
+        From Master Template
+      </button>
+      <button
+        type="button"
+        (click)="grantType = 'custom'"
+        [ngClass]="grantType === 'custom' ? 'bg-white dark:bg-slate-900 shadow-sm text-purple-600 font-bold' : 'text-slate-500'"
+        class="flex-1 py-1.5 rounded-lg text-xs transition text-center"
+      >
+        Custom Minutes & Validity
+      </button>
+    </div>
+
+    <!-- Option A: From Plan Template -->
+    <div *ngIf="grantType === 'template'">
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Plan Template *</label>
+      <p-dropdown
+        [(ngModel)]="grantForm.plan_template_id"
+        [options]="plans"
+        optionLabel="name"
+        optionValue="id"
+        placeholder="Choose Plan to Allocate"
+        styleClass="w-full"
+      ></p-dropdown>
+    </div>
+
+    <!-- Option B: Custom Values -->
+    <div *ngIf="grantType === 'custom'" class="space-y-3">
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Grant Label</label>
+        <input pInputText type="text" [(ngModel)]="grantForm.custom_name" class="w-full" placeholder="e.g. VIP Enterprise Trial Grant" />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Minutes to Credit *</label>
+          <input pInputText type="number" [(ngModel)]="grantForm.custom_minutes" class="w-full" placeholder="1000" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Validity (Days) *</label>
+          <input pInputText type="number" [(ngModel)]="grantForm.custom_validity_days" class="w-full" placeholder="60" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Notional Value (₹)</label>
+        <input pInputText type="number" [(ngModel)]="grantForm.custom_price" class="w-full" placeholder="0" />
+      </div>
+    </div>
+
+    <!-- Reference / Reason -->
+    <div>
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Reference / Note</label>
+      <input pInputText type="text" [(ngModel)]="grantForm.payment_reference" class="w-full" placeholder="e.g. Onboarding Promo / Service SLA Compensation" />
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <button pButton type="button" label="Cancel" class="p-button-text" (click)="showGrantDialog = false"></button>
+    <button pButton type="button" label="Grant Recharges" icon="pi pi-check" [loading]="saving" (click)="submitGrant()"></button>
   </ng-template>
 </p-dialog>

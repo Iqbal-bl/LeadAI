@@ -1,0 +1,805 @@
+<div class="space-y-6 animate-fade-in w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 mx-auto pb-24">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl lg:text-3xl font-extrabold tracking-tight" style="color: var(--app-text)">
+        Plan Usage, Ledger & Invoices
+      </h1>
+      <p class="text-xs sm:text-sm mt-1" style="color: var(--app-text-muted)">
+        Real-time call balance ledger, downloadable PDF tax invoices, and mid-cycle omni-channel add-ons.
+      </p>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="flex items-center gap-2">
+      <p-button
+        label="Explore Plans"
+        icon="pi pi-sparkles"
+        size="small"
+        (click)="navigateToPricing()"
+        styleClass="border-slate-300 dark:border-slate-700"
+        [outlined]="true"
+      ></p-button>
+      <p-button
+        icon="pi pi-refresh"
+        size="small"
+        [outlined]="true"
+        (click)="loadSummary(); loadPaymentHistory(); loadUsageLogs()"
+        pTooltip="Refresh Ledger Data"
+        tooltipPosition="bottom"
+      ></p-button>
+    </div>
+  </div>
+
+  <!-- KPI Overview Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" *ngIf="summary?.active_recharge as active">
+    <!-- Card 1: Available Minutes -->
+    <div class="card-base p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
+            <i class="pi pi-phone text-xs"></i> Call Quota Balance
+          </span>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400">
+            {{ getQuotaPercentage() }}%
+          </span>
+        </div>
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="text-3xl font-extrabold" style="color: var(--app-text)">
+            {{ active.remaining_minutes | number:'1.0-1' }}
+          </span>
+          <span class="text-xs font-medium" style="color: var(--app-text-muted)">
+            / {{ active.purchased_minutes }} mins
+          </span>
+        </div>
+      </div>
+      <p-progressbar [value]="getQuotaPercentage()" [showValue]="false" styleClass="h-2 rounded-full"></p-progressbar>
+    </div>
+
+    <!-- Card 2: Active Plan -->
+    <div class="card-base p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+          <i class="pi pi-bolt text-xs"></i> Active Plan
+        </span>
+        <p-tag
+          *ngIf="active.is_auto_renew"
+          value="AutoPay"
+          severity="success"
+          [rounded]="true"
+          styleClass="text-[10px] font-bold uppercase"
+        ></p-tag>
+        <p-tag
+          *ngIf="!active.is_auto_renew"
+          value="Manual"
+          severity="warn"
+          [rounded]="true"
+          styleClass="text-[10px] font-bold uppercase"
+        ></p-tag>
+      </div>
+      <div>
+        <h4 class="text-base font-bold truncate mb-1" style="color: var(--app-text)">
+          {{ active.plan_name_snapshot || 'Voice & Chat Automation' }}
+        </h4>
+        <p class="text-xs font-extrabold text-brand-600 dark:text-brand-400">
+          ₹{{ active.price_paid | number:'1.0-0' }} <span class="text-[11px] font-normal text-slate-400">/ 30 days</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- Card 3: Omni-channel Automation -->
+    <div class="card-base p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+          <i class="pi pi-link text-xs"></i> Omni-Channels
+        </span>
+        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400">
+          {{ active.active_channels?.length || 0 }} Active
+        </span>
+      </div>
+      <div class="flex items-center gap-2 pt-1">
+        <span class="p-2 rounded-lg border text-sm" [ngClass]="isChannelActive('whatsapp') ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'opacity-40 text-slate-400'" pTooltip="WhatsApp" tooltipPosition="top">
+          <i class="pi pi-whatsapp"></i>
+        </span>
+        <span class="p-2 rounded-lg border text-sm" [ngClass]="isChannelActive('instagram') ? 'bg-purple-500/10 border-purple-500/30 text-purple-500' : 'opacity-40 text-slate-400'" pTooltip="Instagram" tooltipPosition="top">
+          <i class="pi pi-instagram"></i>
+        </span>
+        <span class="p-2 rounded-lg border text-sm" [ngClass]="isChannelActive('facebook') ? 'bg-blue-500/10 border-blue-500/30 text-blue-500' : 'opacity-40 text-slate-400'" pTooltip="Facebook" tooltipPosition="top">
+          <i class="pi pi-facebook"></i>
+        </span>
+        <span class="p-2 rounded-lg border text-sm" [ngClass]="isChannelActive('linkedin') ? 'bg-sky-500/10 border-sky-500/30 text-sky-600' : 'opacity-40 text-slate-400'" pTooltip="LinkedIn" tooltipPosition="top">
+          <i class="pi pi-linkedin"></i>
+        </span>
+      </div>
+    </div>
+
+    <!-- Card 4: 30-Day Billing Cycle -->
+    <div class="card-base p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+          <i class="pi pi-calendar text-xs"></i> 30-Day Cycle
+        </span>
+      </div>
+      <div>
+        <p class="text-xs text-slate-400 mb-1">Cycle Renewal / Expiry:</p>
+        <p class="text-sm font-bold" style="color: var(--app-text)">
+          {{ active.expires_at | date:'mediumDate' }}
+        </p>
+        <p class="text-[11px] text-slate-400 mt-1">
+          {{ active.is_auto_renew ? 'Automatic recurring AutoPay' : 'Manual recharge required' }}
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab Navigation Selector -->
+  <div class="flex items-center p-1.5 rounded-2xl border bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 max-w-xl">
+    <button
+      type="button"
+      (click)="activeTab = 'invoices'"
+      class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+      [ngClass]="activeTab === 'invoices' ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+    >
+      <i class="pi pi-receipt text-xs"></i>
+      <span>Invoices & Recharges</span>
+    </button>
+
+    <button
+      type="button"
+      (click)="activeTab = 'ledger'"
+      class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+      [ngClass]="activeTab === 'ledger' ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+    >
+      <i class="pi pi-history text-xs"></i>
+      <span>Minute Balance Ledger</span>
+    </button>
+
+    <button
+      type="button"
+      (click)="activeTab = 'addons'"
+      class="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+      [ngClass]="activeTab === 'addons' ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+    >
+      <i class="pi pi-sparkles text-xs"></i>
+      <span>Top-Up & Add-Ons</span>
+    </button>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 1: INVOICES & RECHARGE TRANSACTION HISTORY (Matching Screenshot 3)    -->
+  <!-- ========================================================================= -->
+  <div *ngIf="activeTab === 'invoices'" class="card-base rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+    <!-- Header -->
+    <div class="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <div class="flex items-center gap-2.5 mb-1">
+          <i class="pi pi-file-check text-brand-500 text-lg"></i>
+          <h2 class="text-base sm:text-lg font-bold" style="color: var(--app-text)">
+            Invoices & Recharge Transaction History
+          </h2>
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-brand-500/10 text-brand-600 dark:text-brand-400">
+            Tax Invoices & Receipts
+          </span>
+        </div>
+        <p class="text-xs" style="color: var(--app-text-muted)">
+          Complete ledger of all client company recharge transactions, success/failure attempts, and downloadable PDF tax invoices.
+        </p>
+      </div>
+
+      <button
+        (click)="loadPaymentHistory()"
+        class="p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
+        pTooltip="Refresh Invoices"
+        tooltipPosition="left"
+      >
+        <i class="pi pi-sync" [ngClass]="{ 'pi-spin': loadingHistory }"></i>
+      </button>
+    </div>
+
+    <!-- Table -->
+    <p-table
+      [value]="paymentHistory"
+      [paginator]="true"
+      [rows]="10"
+      [loading]="loadingHistory"
+      [rowHover]="true"
+      styleClass="p-datatable-sm"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr class="text-xs uppercase tracking-wider font-semibold bg-slate-50 dark:bg-slate-900/60" style="color: var(--app-text-muted)">
+          <th style="min-width: 13rem">Date & Time</th>
+          <th style="min-width: 16rem">Plan Name</th>
+          <th style="min-width: 7rem">Minutes</th>
+          <th style="min-width: 8rem">Amount Paid</th>
+          <th style="min-width: 14rem">Mandate / Order ID</th>
+          <th style="min-width: 9rem">Status</th>
+          <th style="width: 7rem; text-align: center">Invoice</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-tx>
+        <tr class="text-xs sm:text-sm border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+          <!-- Date & Time -->
+          <td class="font-medium whitespace-nowrap" style="color: var(--app-text)">
+            {{ tx.created_at || tx.recharged_at | date:'medium' }}
+          </td>
+
+          <!-- Plan Name -->
+          <td>
+            <div class="flex flex-col gap-1">
+              <span class="font-semibold" style="color: var(--app-text)">
+                {{ tx.plan_name_snapshot }}
+              </span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span *ngIf="tx.is_auto_renew" class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-500">
+                  AutoPay
+                </span>
+                <span *ngIf="tx.plan_name_snapshot?.toLowerCase()?.includes('prorated')" class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-500/10 text-purple-500">
+                  Prorated Add-On
+                </span>
+              </div>
+            </div>
+          </td>
+
+          <!-- Minutes -->
+          <td class="font-semibold whitespace-nowrap" style="color: var(--app-text)">
+            {{ tx.purchased_minutes || 0 }} Mins
+          </td>
+
+          <!-- Amount Paid -->
+          <td class="font-bold text-sm whitespace-nowrap" style="color: var(--app-text)">
+            ₹{{ tx.price_paid | number:'1.2-2' }}
+          </td>
+
+          <!-- Mandate / Order ID -->
+          <td class="font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            <div *ngIf="tx.razorpay_subscription_id" class="text-indigo-400 truncate max-w-[180px]" [pTooltip]="tx.razorpay_subscription_id">
+              {{ tx.razorpay_subscription_id }}
+            </div>
+            <div *ngIf="tx.payment_reference || tx.razorpay_order_id" class="truncate max-w-[180px]" [pTooltip]="tx.payment_reference || tx.razorpay_order_id">
+              {{ tx.payment_reference || tx.razorpay_order_id }}
+            </div>
+          </td>
+
+          <!-- Status (Strictly Success or Failed) -->
+          <td>
+            <div *ngIf="tx.status === 'active' || tx.status === 'success' || tx.status === 'superseded'" class="flex items-center gap-1.5 text-emerald-500 font-semibold">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm"></span>
+              <span>Success</span>
+            </div>
+            <div *ngIf="tx.status !== 'active' && tx.status !== 'success' && tx.status !== 'superseded'" class="flex flex-col gap-0.5">
+              <span class="flex items-center gap-1.5 text-rose-500 font-semibold">
+                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                <span>Failed</span>
+              </span>
+              <span *ngIf="tx.failure_reason" class="text-[10px] text-slate-400 truncate max-w-[180px]" [pTooltip]="tx.failure_reason">
+                {{ tx.failure_reason }}
+              </span>
+            </div>
+          </td>
+
+          <!-- Invoice Download Button -->
+          <td class="text-center">
+            <button
+              *ngIf="tx.status === 'active' || tx.status === 'success' || tx.status === 'superseded'"
+              (click)="downloadInvoice(tx)"
+              class="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              <i class="pi pi-file-pdf text-rose-500 text-xs"></i>
+              <span>Invoice</span>
+            </button>
+            <span *ngIf="tx.status !== 'active' && tx.status !== 'success' && tx.status !== 'superseded'" class="text-slate-400">
+              —
+            </span>
+          </td>
+        </tr>
+      </ng-template>
+
+      <!-- Empty State -->
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7" class="py-12 text-center text-slate-400 text-sm">
+            <i class="pi pi-receipt text-3xl mb-2 block opacity-40"></i>
+            <span>No recharge transactions or tax invoices recorded yet.</span>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 2: MINUTE BALANCE LEDGER (Matching Screenshot 4)                      -->
+  <!-- ========================================================================= -->
+  <div *ngIf="activeTab === 'ledger'" class="card-base rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+    <!-- Header -->
+    <div class="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <div class="flex items-center gap-2.5 mb-1">
+          <i class="pi pi-history text-brand-500 text-lg"></i>
+          <h2 class="text-base sm:text-lg font-bold" style="color: var(--app-text)">
+            Minute Balance Ledger (Calls & Credits)
+          </h2>
+        </div>
+        <p class="text-xs" style="color: var(--app-text-muted)">
+          Real-time ledger tracking every minute deduction from calls and every top-up/rollover credit.
+        </p>
+      </div>
+
+      <button
+        (click)="loadUsageLogs()"
+        class="p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
+        pTooltip="Refresh Ledger"
+        tooltipPosition="left"
+      >
+        <i class="pi pi-sync" [ngClass]="{ 'pi-spin': loadingLogs }"></i>
+      </button>
+    </div>
+
+    <!-- Table -->
+    <p-table
+      [value]="usageLogs"
+      [paginator]="true"
+      [rows]="10"
+      [loading]="loadingLogs"
+      [rowHover]="true"
+      styleClass="p-datatable-sm"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr class="text-xs uppercase tracking-wider font-semibold bg-slate-50 dark:bg-slate-900/60" style="color: var(--app-text-muted)">
+          <th style="min-width: 13rem">Date & Time</th>
+          <th style="min-width: 20rem">Activity / Call SID</th>
+          <th style="min-width: 8rem">Duration</th>
+          <th style="min-width: 9rem">Minutes Impact</th>
+          <th style="min-width: 8rem">Prev Balance</th>
+          <th style="min-width: 8rem">New Balance</th>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="body" let-log>
+        <tr class="text-xs sm:text-sm border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+          <!-- Date & Time -->
+          <td class="font-medium whitespace-nowrap" style="color: var(--app-text)">
+            {{ log.deducted_at | date:'medium' }}
+          </td>
+
+          <!-- Activity / Call SID -->
+          <td>
+            <div *ngIf="log.minutes_deducted > 0" class="flex items-center gap-2">
+              <span class="font-mono text-xs text-sky-500 truncate max-w-[260px]" [pTooltip]="log.call_sid">
+                {{ log.call_sid }}
+              </span>
+            </div>
+            <div *ngIf="log.minutes_deducted <= 0" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+              <i class="pi pi-bolt text-xs"></i>
+              <span>Minute Booster Top-Up</span>
+            </div>
+          </td>
+
+          <!-- Duration -->
+          <td class="text-slate-400 font-medium">
+            {{ log.call_duration_seconds ? log.call_duration_seconds + 's' : '—' }}
+          </td>
+
+          <!-- Minutes Impact -->
+          <td class="font-bold">
+            <span *ngIf="log.minutes_deducted > 0" class="text-rose-500 font-mono">
+              -{{ log.minutes_deducted }} m
+            </span>
+            <span *ngIf="log.minutes_deducted <= 0" class="text-emerald-500 font-mono">
+              +{{ -log.minutes_deducted }} m
+            </span>
+          </td>
+
+          <!-- Prev Balance -->
+          <td class="font-mono text-slate-400">
+            {{ log.previous_balance | number:'1.0-1' }} m
+          </td>
+
+          <!-- New Balance -->
+          <td class="font-mono font-bold text-sm" style="color: var(--app-text)">
+            {{ log.new_balance | number:'1.0-1' }} m
+          </td>
+        </tr>
+      </ng-template>
+
+      <!-- Empty State -->
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6" class="py-12 text-center text-slate-400 text-sm">
+            <i class="pi pi-phone-slash text-3xl mb-2 block opacity-40"></i>
+            <span>No call deductions or minute credits logged yet.</span>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 3: TOP-UP & MODULAR CHANNEL ADDONS                                    -->
+  <!-- ========================================================================= -->
+  <div *ngIf="activeTab === 'addons'" class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+    
+    <!-- Left Column: Boosters & Modular Channels (xl:col-span-8) -->
+    <div class="xl:col-span-8 space-y-8">
+
+      <!-- Explainer Alert Banner -->
+      <div class="p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/80 dark:from-indigo-950/40 dark:via-slate-900/40 dark:to-purple-950/30 flex items-start gap-4 shadow-xs">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+          <i class="pi pi-sync text-lg"></i>
+        </div>
+        <div class="text-xs sm:text-sm">
+          <h3 class="font-bold text-slate-900 dark:text-slate-100 mb-0.5">Mid-Cycle Proration & Synchronized AutoPay</h3>
+          <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+            Expand your omni-channel automation mid-cycle. You are only charged a prorated amount for the remaining days of your active cycle. On your next anniversary, the channel syncs seamlessly into your recurring AutoPay bundle.
+          </p>
+        </div>
+      </div>
+
+      <!-- Section A: Minute Booster Top-Ups -->
+      <div class="space-y-4">
+        <div>
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold flex items-center gap-2" style="color: var(--app-text)">
+              <i class="pi pi-bolt text-brand-500"></i>
+              Instant Minute Booster Top-Ups
+            </h2>
+            <span class="text-[11px] font-semibold text-slate-400">Select one booster at a time</span>
+          </div>
+          <p class="text-xs" style="color: var(--app-text-muted)">
+            Low on call minutes? Recharge instantly without altering your monthly recurring cycle. Minutes never expire while your plan is active.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div
+            *ngFor="let booster of activeBoosters"
+            class="card-base p-6 rounded-2xl border transition-all relative flex flex-col justify-between"
+            [ngClass]="isBoosterSelected(booster.id)
+              ? 'border-brand-500 ring-2 ring-brand-500/20 bg-brand-50/15 dark:bg-brand-950/20 shadow-md'
+              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'"
+          >
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <span *ngIf="booster.badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-brand-500 text-white shadow-xs">
+                  {{ booster.badge }}
+                </span>
+                <span *ngIf="!booster.badge" class="text-xs font-semibold uppercase text-slate-400">
+                  Top-Up
+                </span>
+                <div
+                  class="w-5 h-5 rounded-full border flex items-center justify-center transition-all cursor-pointer"
+                  [ngClass]="isBoosterSelected(booster.id) ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300 dark:border-slate-600 text-transparent'"
+                  (click)="selectBooster(booster)"
+                >
+                  <i class="pi pi-check text-[9px]"></i>
+                </div>
+              </div>
+
+              <h3 class="text-xl font-bold mb-1" style="color: var(--app-text)">{{ booster.name }}</h3>
+              <p class="text-xs mb-4" style="color: var(--app-text-muted)">{{ booster.description }}</p>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <div class="flex items-baseline justify-between">
+                <div>
+                  <span class="text-2xl font-extrabold" style="color: var(--app-text)">₹{{ booster.price | number:'1.0-0' }}</span>
+                  <span class="text-[11px] block text-slate-400">₹{{ booster.ratePerMinute }}/min</span>
+                </div>
+                <span class="text-xs font-bold text-brand-600 dark:text-brand-400">
+                  {{ booster.minutes }} Mins
+                </span>
+              </div>
+
+              <button
+                type="button"
+                (click)="selectBooster(booster)"
+                class="w-full py-2.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                [ngClass]="isBoosterSelected(booster.id)
+                  ? 'bg-brand-600 hover:bg-brand-700 text-white shadow-md'
+                  : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'"
+              >
+                <i [class]="isBoosterSelected(booster.id) ? 'pi pi-check' : 'pi pi-plus'" class="text-xs"></i>
+                <span>{{ isBoosterSelected(booster.id) ? 'Selected' : 'Select Booster' }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section B: Omni-Channel Modular Add-Ons -->
+      <div class="space-y-4 pt-2">
+        <div>
+          <h2 class="text-lg font-bold flex items-center gap-2" style="color: var(--app-text)">
+            <i class="pi pi-link text-purple-500"></i>
+            Omni-Channel Modular Add-Ons
+          </h2>
+          <p class="text-xs" style="color: var(--app-text-muted)">
+            Unlock new automated lead channels on your active plan. Only pay for the remaining days of your cycle.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div
+            *ngFor="let channel of CHANNEL_METADATA"
+            class="card-base p-6 rounded-2xl border transition-all relative flex flex-col justify-between"
+            [ngClass]="isChannelSelected(channel.key)
+              ? 'border-brand-500 ring-2 ring-brand-500/20 bg-brand-50/15 dark:bg-brand-950/20 shadow-md'
+              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'"
+          >
+            <div>
+              <!-- Card Header -->
+              <div class="flex items-center justify-between mb-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white" [style.background]="channel.color">
+                  <i [class]="channel.icon" class="text-lg"></i>
+                </div>
+
+                <!-- Active Status or Selection Indicator -->
+                <div *ngIf="isChannelActive(channel.key)">
+                  <p-tag
+                    *ngIf="isChannelRenewing(channel.key)"
+                    value="Active in Plan"
+                    severity="success"
+                    [rounded]="true"
+                    styleClass="text-[10px] font-bold uppercase"
+                  ></p-tag>
+                  <p-tag
+                    *ngIf="!isChannelRenewing(channel.key)"
+                    value="Cancels at Cycle End"
+                    severity="warn"
+                    [rounded]="true"
+                    styleClass="text-[10px] font-bold uppercase"
+                  ></p-tag>
+                </div>
+                <div *ngIf="!isChannelActive(channel.key)">
+                  <div
+                    class="w-5 h-5 rounded-full border flex items-center justify-center transition-all cursor-pointer"
+                    [ngClass]="isChannelSelected(channel.key) ? 'bg-brand-600 border-brand-600 text-white' : 'border-slate-300 dark:border-slate-600 text-transparent'"
+                    (click)="toggleChannelSelection(channel.key)"
+                  >
+                    <i class="pi pi-check text-[9px]"></i>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Title & Description -->
+              <h3 class="text-lg font-bold mb-1" style="color: var(--app-text)">{{ channel.name }}</h3>
+              <p class="text-xs mb-3" style="color: var(--app-text-muted)">{{ channel.description }}</p>
+
+              <!-- Feature Bullets -->
+              <ul class="space-y-1.5 mb-4 text-xs" style="color: var(--app-text-secondary)">
+                <li *ngFor="let feat of channel.features" class="flex items-center gap-2">
+                  <i class="pi pi-check text-emerald-500 text-[10px]"></i>
+                  <span>{{ feat }}</span>
+                </li>
+              </ul>
+            </div>
+
+            <!-- Price & Action -->
+            <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+              <div class="flex items-baseline justify-between">
+                <!-- Consistent Text Color: var(--app-text) -->
+                <div>
+                  <div *ngIf="!isChannelActive(channel.key) && channelQuotes[channel.key] as quote">
+                    <div class="flex items-baseline gap-1.5">
+                      <span class="text-2xl font-extrabold" style="color: var(--app-text)">
+                        ₹{{ quote.prorated_price | number:'1.2-2' }}
+                      </span>
+                      <span class="text-xs text-slate-400 line-through">₹{{ channel.monthlyPrice }}</span>
+                    </div>
+                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">
+                      Prorated for remaining {{ quote.remaining_days }} days
+                    </span>
+                  </div>
+                  <div *ngIf="isChannelActive(channel.key) || !channelQuotes[channel.key]">
+                    <span class="text-2xl font-extrabold" style="color: var(--app-text)">₹{{ channel.monthlyPrice }}</span>
+                    <span class="text-[11px] block text-slate-400">{{ isChannelActive(channel.key) ? 'Active renewal rate / mo' : 'Regular / month' }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action: Toggle Selection (if not active) or Cancel / Restore (if active) -->
+              <div *ngIf="!isChannelActive(channel.key)">
+                <button
+                  type="button"
+                  (click)="toggleChannelSelection(channel.key)"
+                  class="w-full py-2.5 px-4 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  [ngClass]="isChannelSelected(channel.key)
+                    ? 'bg-brand-600 hover:bg-brand-700 text-white shadow-md'
+                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'"
+                >
+                  <i [class]="isChannelSelected(channel.key) ? 'pi pi-check' : 'pi pi-plus'" class="text-xs"></i>
+                  <span>{{ isChannelSelected(channel.key) ? 'Selected' : 'Select Channel' }}</span>
+                </button>
+              </div>
+
+              <!-- Channel Lifecycle Actions (When already active in plan) -->
+              <div *ngIf="isChannelActive(channel.key)">
+                <!-- If renewing next cycle, show Cancel option -->
+                <button
+                  *ngIf="isChannelRenewing(channel.key)"
+                  type="button"
+                  (click)="cancelChannelForNextCycle(channel.key)"
+                  [disabled]="isProcessingPayment"
+                  class="w-full py-2 px-3 rounded-xl text-xs font-semibold border border-amber-300 dark:border-amber-700/60 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  pTooltip="Removes channel from next month's AutoPay renewal. Remains fully active until current cycle ends."
+                  tooltipPosition="top"
+                >
+                  <i class="pi pi-times-circle text-xs"></i>
+                  <span>Cancel for Next Cycle</span>
+                </button>
+
+                <!-- If cancelled for next cycle, show Restore option -->
+                <button
+                  *ngIf="!isChannelRenewing(channel.key)"
+                  type="button"
+                  (click)="resumeChannelForNextCycle(channel.key)"
+                  [disabled]="isProcessingPayment"
+                  class="w-full py-2 px-3 rounded-xl text-xs font-semibold border border-emerald-300 dark:border-emerald-700/60 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  pTooltip="Restores automatic renewal for next month cycle at ₹0 extra charge."
+                  tooltipPosition="top"
+                >
+                  <i class="pi pi-refresh text-xs"></i>
+                  <span>Restore Renewal (₹0)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Sticky Summary & Checkout Calculator (xl:col-span-4) -->
+    <div class="xl:col-span-4 sticky top-6 space-y-4">
+      <div class="card-base rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-md space-y-5">
+        
+        <!-- Calculator Header -->
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div>
+            <h3 class="text-base font-bold flex items-center gap-2" style="color: var(--app-text)">
+              <i class="pi pi-calculator text-brand-500"></i>
+              Summary & Checkout
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Top-up and add-on cost breakdown</p>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 uppercase tracking-wider">
+            Live
+          </span>
+        </div>
+
+        <!-- Selected Items Breakdown -->
+        <div class="space-y-3">
+          <!-- Booster Row -->
+          <div *ngIf="selectedBooster" class="p-3 rounded-xl border border-brand-200 dark:border-brand-900/50 bg-brand-50/30 dark:bg-brand-950/20 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg bg-brand-500/10 text-brand-600 flex items-center justify-center">
+                <i class="pi pi-bolt text-xs"></i>
+              </div>
+              <div>
+                <span class="text-xs font-bold block" style="color: var(--app-text)">{{ selectedBooster.name }}</span>
+                <span class="text-[10px] text-slate-400">{{ selectedBooster.minutes }} call minutes</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold" style="color: var(--app-text)">₹{{ selectedBooster.price }}</span>
+              <button
+                type="button"
+                (click)="selectBooster(selectedBooster)"
+                class="text-slate-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"
+                pTooltip="Remove booster"
+                tooltipPosition="left"
+              >
+                <i class="pi pi-times text-xs"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Channel Rows -->
+          <div *ngFor="let ch of getSelectedChannelsList()" class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs" [style.background]="ch.color">
+                <i [class]="ch.icon"></i>
+              </div>
+              <div>
+                <span class="text-xs font-bold block" style="color: var(--app-text)">{{ ch.name }}</span>
+                <span *ngIf="ch.remainingDays" class="text-[10px] text-emerald-500 font-medium">Prorated ({{ ch.remainingDays }}d left)</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold" style="color: var(--app-text)">₹{{ ch.proratedPrice | number:'1.2-2' }}</span>
+              <button
+                type="button"
+                (click)="toggleChannelSelection(ch.key)"
+                class="text-slate-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"
+                pTooltip="Remove channel"
+                tooltipPosition="left"
+              >
+                <i class="pi pi-times text-xs"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Empty State (No items selected) -->
+          <div *ngIf="!hasCheckoutItems()" class="py-8 px-4 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800">
+            <i class="pi pi-shopping-bag text-2xl text-slate-300 dark:text-slate-600 mb-2 block"></i>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              No booster or channel selected. Select an option from the cards to calculate checkout total.
+            </p>
+          </div>
+        </div>
+
+        <!-- Price Calculations -->
+        <div class="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+          <div class="flex items-center justify-between text-slate-500">
+            <span>Subtotal</span>
+            <span class="font-medium" style="color: var(--app-text)">₹{{ getSubtotal() | number:'1.2-2' }}</span>
+          </div>
+
+          <div class="flex items-center justify-between text-slate-500">
+            <span>GST (18%)</span>
+            <span class="font-medium" style="color: var(--app-text)">₹{{ getGstAmount() | number:'1.2-2' }}</span>
+          </div>
+
+          <div class="flex items-baseline justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
+            <div>
+              <span class="text-sm font-bold block" style="color: var(--app-text)">Total Payable</span>
+              <span class="text-[10px] text-slate-400">One-time instant checkout</span>
+            </div>
+            <span class="text-2xl font-extrabold" style="color: var(--app-text)">
+              ₹{{ getGrandTotal() | number:'1.2-2' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Checkout Action Button -->
+        <button
+          type="button"
+          (click)="initiateSelectedCheckout()"
+          [disabled]="!hasCheckoutItems() || isProcessingPayment"
+          class="w-full py-3.5 px-4 rounded-xl font-bold text-sm text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          [style.background]="hasCheckoutItems() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : 'var(--slate-400)'"
+        >
+          <i class="pi pi-credit-card"></i>
+          <span>Proceed to Pay ₹{{ getGrandTotal() | number:'1.2-2' }}</span>
+        </button>
+
+        <!-- Trust Badges -->
+        <div class="pt-1 flex items-center justify-center gap-3 text-[11px] text-slate-400">
+          <span class="flex items-center gap-1">
+            <i class="pi pi-shield text-emerald-500 text-xs"></i> 256-Bit Razorpay
+          </span>
+          <span>•</span>
+          <span class="flex items-center gap-1">
+            <i class="pi pi-bolt text-brand-500 text-xs"></i> Instant Activation
+          </span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Fullscreen Payment Processing Overlay Modal -->
+<p-dialog
+  [(visible)]="isProcessingPayment"
+  [modal]="true"
+  [closable]="false"
+  [showHeader]="false"
+  [style]="{ width: '420px', 'max-width': '90vw' }"
+  styleClass="rounded-2xl overflow-hidden shadow-2xl"
+>
+  <div class="p-8 text-center space-y-4" style="background: var(--card-bg)">
+    <p-progressSpinner styleClass="w-12 h-12" strokeWidth="4" animationDuration=".6s"></p-progressSpinner>
+    <div>
+      <h3 class="text-base font-bold" style="color: var(--app-text)">Processing Transaction</h3>
+      <p class="text-xs mt-1 text-slate-400 leading-relaxed">
+        {{ paymentStepMessage || 'Contacting Razorpay and verifying payment signature...' }}
+      </p>
+    </div>
+    <span class="text-[11px] text-slate-500 font-medium block">
+      Please do not close or refresh this browser tab.
+    </span>
+  </div>
+</p-dialog>

@@ -107,9 +107,9 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     title: 'Management',
     items: [
       {
-        label: 'Billing & Recharges',
-        icon: 'pi pi-credit-card',
-        routerLink: '/client/billing',
+        label: 'Usage & Invoices',
+        icon: 'pi pi-receipt',
+        routerLink: '/client/usage',
       },
       {
         label: 'Settings',
