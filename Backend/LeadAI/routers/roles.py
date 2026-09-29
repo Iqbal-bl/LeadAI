@@ -14,6 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+# pyrefly: ignore [missing-import]
 from domain.models import Client
 
 from .. import activity
@@ -37,6 +38,7 @@ from ..schemas import (
     RoleGrant,
     RoleOut,
     RoleUpdate,
+    UserProfileUpdate,
 )
 from ..serializers import company_out, role_out
 
@@ -76,6 +78,69 @@ def me(
     return MeOut(
         email=principal.email,
         full_name=principal.full_name,
+        role=principal.role,
+        client_id=principal.client_id,
+        client_name=client_name,
+        permissions=sorted(principal.permissions),
+        accessible_companies=companies,
+    )
+
+
+@router.patch("/profile", response_model=MeOut, summary="Update current user's profile")
+def update_profile(
+    payload: UserProfileUpdate,
+    principal: Principal = Depends(current_principal),
+    db: Session = Depends(get_leadai_db),
+):
+    """Self-service endpoint allowing any authenticated user to update their own profile details.
+
+    Updates FullName across all active LeadUserRole directory records for this user's email,
+    commits the transaction, and returns the refreshed MeOut payload.
+    """
+    updated_name = principal.full_name
+    if payload.full_name is not None and payload.full_name.strip():
+        updated_name = payload.full_name.strip()
+        rows = (
+            db.query(LeadUserRole)
+            .filter(
+                LeadUserRole.UserEmail == principal.email.lower(),
+                LeadUserRole.IsDeleted == False,  # noqa: E712
+            )
+            .all()
+        )
+        for r in rows:
+            r.FullName = updated_name
+            r.UpdatedAt = utcnow()
+            r.UpdatedBy = principal.email
+        db.commit()
+
+    # Re-fetch company details to construct updated MeOut
+    client_name = None
+    if principal.client_id:
+        client = db.get(Client, principal.client_id)
+        client_name = client.Name if client else None
+
+    companies: list[CompanyOut] = []
+    if principal.is_platform_admin:
+        rows = (
+            db.query(Client)
+            .filter(Client.IsDeleted == False, Client.IsActive == True)  # noqa: E712
+            .order_by(Client.Name.asc())
+            .all()
+        )
+        companies = [company_out(db, c, with_counts=False) for c in rows]
+    elif principal.accessible_client_ids:
+        rows = (
+            db.query(Client)
+            .filter(Client.Id.in_(principal.accessible_client_ids))
+            .order_by(Client.Name.asc())
+            .all()
+        )
+        companies = [company_out(db, c, with_counts=False) for c in rows]
+
+    return MeOut(
+        email=principal.email,
+        full_name=updated_name,
         role=principal.role,
         client_id=principal.client_id,
         client_name=client_name,

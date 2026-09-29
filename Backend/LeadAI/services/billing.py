@@ -41,46 +41,57 @@ logger = logging.getLogger(__name__)
 
 # Standard industry benchmarks for modular channel add-ons
 ADDON_BENCHMARKS = {
-    "whatsapp": 1499.0,
-    "instagram": 799.0,
-    "facebook": 799.0,
-    "linkedin": 1999.0,
+    "whatsapp": 2000.0,
+    "instagram": 2000.0,
+    "facebook": 2000.0,
+    "linkedin": 3000.0,
 }
 
 
-# Standard Default Plans (Seeded if missing)
+# ---------------------------------------------------------------------------
+# Initial Database Bootstrap Seed
+# Used ONLY on a fresh installation if the plan templates table is empty.
+# All live pricing, channels, and limits are managed dynamically in the DB.
+# ---------------------------------------------------------------------------
 DEFAULT_PLANS = [
-    {
-        "name": "Monthly Standard (500 Mins)",
-        "plan_type": PLAN_TYPE_STANDARD,
-        "included_minutes": 500.0,
-        "validity_days": 30,
-        "price": 2000.0,
-        "rate_per_minute": 4.0,
-        "description": "30 days validity with 500 minutes of AI voice calling.",
-    },
-    {
-        "name": "Yearly Standard (6000 Mins)",
-        "plan_type": PLAN_TYPE_STANDARD,
-        "included_minutes": 6000.0,
-        "validity_days": 365,
-        "price": 24000.0,
-        "rate_per_minute": 4.0,
-        "description": "365 days validity with 6,000 minutes of AI voice calling.",
-    },
+    # Base Voice Plans
+    {"name": "Monthly Basic (500 Mins)", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_VOICE_STANDARD, "included_minutes": 500.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 4.0, "auto_pay_by_default": True, "description": "30 days validity with 500 minutes of AI voice calling."},
+    {"name": "Monthly Pro (1000 Mins)", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_VOICE_STANDARD, "included_minutes": 1000.0, "validity_days": 30, "price": 4000.0, "rate_per_minute": 4.0, "auto_pay_by_default": True, "description": "30 days validity with 1,000 minutes of AI voice calling."},
+    # Minute Top-Up Boosters
+    {"name": "100 Min Booster", "plan_type": PLAN_TYPE_TOPUP, "plan_category": PLAN_CATEGORY_VOICE_TOPUP, "included_minutes": 100.0, "validity_days": 0, "price": 400.0, "rate_per_minute": 4.0, "auto_pay_by_default": False, "description": "Instant credit of 100 call minutes with zero expiration while plan is active."},
+    {"name": "250 Min Booster", "plan_type": PLAN_TYPE_TOPUP, "plan_category": PLAN_CATEGORY_VOICE_TOPUP, "included_minutes": 250.0, "validity_days": 0, "price": 1000.0, "rate_per_minute": 4.0, "auto_pay_by_default": False, "description": "Recommended for high call volume campaigns and active sales sprints."},
+    {"name": "500 Min Booster", "plan_type": PLAN_TYPE_TOPUP, "plan_category": PLAN_CATEGORY_VOICE_TOPUP, "included_minutes": 500.0, "validity_days": 0, "price": 2000.0, "rate_per_minute": 4.0, "auto_pay_by_default": False, "description": "Maximum booster capacity for enterprise calling and outbound batches."},
+    # Omni-Channel Modular Add-ons
+    {"name": "WhatsApp Business API", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "whatsapp", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Official Meta Cloud API integration for automated 24/7 lead chats and appointment scheduling."},
+    {"name": "Instagram DM Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "instagram", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Turn comments and DMs into high-intent inbound customers instantly."},
+    {"name": "Facebook Messenger", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "facebook", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Engage visitors contacting your Facebook business page around the clock."},
+    {"name": "LinkedIn Lead Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "linkedin", "included_minutes": 0.0, "validity_days": 30, "price": 3000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Automate connection messaging, B2B lead qualification, and CRM syncing on LinkedIn."},
 ]
 
 
 def ensure_default_templates(db: Session) -> None:
-    """Ensure standard 1-month and 1-year templates exist in DB."""
+    """Bootstrap initial standard templates, boosters, and channel add-ons IF missing from DB.
+    
+    CRITICAL: Does NOT overwrite existing prices, minutes, or configurations set dynamically
+    by the Super Admin in the database. The database is the single source of truth.
+    """
     try:
+        from sqlalchemy import or_
+
+        # Deactivate all legacy templates (Yearly Standard, Monthly Standard)
+        db.query(LeadRechargePlanTemplate).filter(
+            or_(
+                LeadRechargePlanTemplate.Name.like("%Yearly Standard%"),
+                LeadRechargePlanTemplate.Name.like("%Monthly Standard%"),
+            )
+        ).update({"IsActive": False, "IsDeleted": True}, synchronize_session=False)
+
         for plan_def in DEFAULT_PLANS:
             existing = (
                 db.query(LeadRechargePlanTemplate)
                 .filter(
                     LeadRechargePlanTemplate.Name == plan_def["name"],
-                    LeadRechargePlanTemplate.PlanType == PLAN_TYPE_STANDARD,
-                    LeadRechargePlanTemplate.TargetClientId == None,  # noqa: E711
+                    LeadRechargePlanTemplate.PlanCategory == plan_def["plan_category"],
                 )
                 .first()
             )
@@ -88,23 +99,58 @@ def ensure_default_templates(db: Session) -> None:
                 template = LeadRechargePlanTemplate(
                     Name=plan_def["name"],
                     PlanType=plan_def["plan_type"],
-                    PlanCategory=PLAN_CATEGORY_VOICE_STANDARD,
+                    PlanCategory=plan_def["plan_category"],
+                    FeatureKey=plan_def.get("feature_key"),
                     TargetClientId=None,
                     IncludedMinutes=plan_def["included_minutes"],
                     ValidityDays=plan_def["validity_days"],
                     Price=plan_def["price"],
                     RatePerMinute=plan_def["rate_per_minute"],
                     Description=plan_def["description"],
+                    AutoPayByDefault=plan_def.get("auto_pay_by_default", True),
                     IsActive=True,
                 )
                 db.add(template)
-            elif not existing.PlanCategory:
-                existing.PlanCategory = PLAN_CATEGORY_VOICE_STANDARD
-                db.add(existing)
+
         db.commit()
     except Exception as exc:
         db.rollback()
         logger.warning(f"[Billing] Could not seed default templates: {exc}")
+
+
+def get_channel_price_from_db(db: Session, channel_key: str) -> float:
+    """Fetches the live monthly price for a channel add-on directly from active DB plan templates.
+    Fallback to ADDON_BENCHMARKS only if no active template exists in DB.
+    """
+    k = (channel_key or "").lower().strip()
+    template = (
+        db.query(LeadRechargePlanTemplate)
+        .filter(
+            LeadRechargePlanTemplate.PlanCategory == PLAN_CATEGORY_CHANNEL_ADDON,
+            LeadRechargePlanTemplate.FeatureKey == k,
+            LeadRechargePlanTemplate.IsActive == True,
+            LeadRechargePlanTemplate.IsDeleted == False,
+        )
+        .first()
+    )
+    if template and template.Price is not None:
+        return float(template.Price)
+    return ADDON_BENCHMARKS.get(k, 2000.0)
+
+
+def get_valid_channel_keys(db: Session) -> list[str]:
+    """Returns all currently active channel add-on keys defined dynamically in the database."""
+    templates = (
+        db.query(LeadRechargePlanTemplate)
+        .filter(
+            LeadRechargePlanTemplate.PlanCategory == PLAN_CATEGORY_CHANNEL_ADDON,
+            LeadRechargePlanTemplate.IsActive == True,
+            LeadRechargePlanTemplate.IsDeleted == False,
+        )
+        .all()
+    )
+    keys = [t.FeatureKey.lower().strip() for t in templates if t.FeatureKey]
+    return keys if keys else list(ADDON_BENCHMARKS.keys())
 
 
 def _is_expired(expires_at: Optional[datetime], now: datetime) -> bool:
@@ -1407,7 +1453,7 @@ def create_custom_bundle_subscription(
 
     raw_channels = payload.get("channels") or []
     addons = [ch.lower().strip() for ch in raw_channels if isinstance(ch, str)]
-    addon_total = sum(ADDON_BENCHMARKS.get(ch, 799.0) for ch in addons)
+    addon_total = sum(get_channel_price_from_db(db, ch) for ch in addons)
 
     billing_cycle = str(payload.get("billing_cycle", "monthly")).lower()
     is_yearly = billing_cycle == "yearly"
@@ -1459,8 +1505,9 @@ def create_custom_bundle_subscription(
 def get_channel_addon_quote(db: Session, client_id: str, channel: str) -> dict:
     """Calculates mid-cycle prorated charge for adding a channel to an active plan."""
     ch_key = channel.lower().strip()
-    if ch_key not in ADDON_BENCHMARKS:
-        raise ValueError(f"Unknown channel add-on '{channel}'. Valid options: {list(ADDON_BENCHMARKS.keys())}")
+    valid_channels = get_valid_channel_keys(db)
+    if ch_key not in valid_channels and ch_key not in ADDON_BENCHMARKS:
+        raise ValueError(f"Unknown channel add-on '{channel}'. Valid options: {valid_channels}")
 
     active_plan = get_active_recharge(db, client_id)
     if not active_plan:
@@ -1470,7 +1517,12 @@ def get_channel_addon_quote(db: Session, client_id: str, channel: str) -> dict:
     if active_plan.ExpiresAt and _is_expired(active_plan.ExpiresAt, now):
         raise ValueError("Your current plan has expired. Please renew your plan before adding channels.")
 
-    monthly_price = ADDON_BENCHMARKS[ch_key]
+    curr_active = [c.lower().strip() for c in (active_plan.ActiveChannels or [])]
+    if ch_key in curr_active:
+        raise ValueError(f"{ch_key.title()} is already active on your current plan.")
+
+    # Dynamic price lookup directly from DB template
+    monthly_price = get_channel_price_from_db(db, ch_key)
     total_cycle_days = active_plan.ValidityDaysSnapshot or 30
 
     if active_plan.ExpiresAt:
@@ -1480,8 +1532,7 @@ def get_channel_addon_quote(db: Session, client_id: str, channel: str) -> dict:
     else:
         remaining_days = total_cycle_days
 
-    # Daily-rate proration: monthly benchmark rate covers 30 days.
-    # Prorated price = daily_rate * remaining_days (Bug #8 fix)
+    # Daily-rate proration: monthly rate covers 30 days
     daily_rate = monthly_price / 30.0
     prorated_price = max(1.0, round(daily_rate * remaining_days, 2))
 
@@ -1494,7 +1545,7 @@ def get_channel_addon_quote(db: Session, client_id: str, channel: str) -> dict:
     else:
         combined_channels = existing_next_channels
 
-    addon_sum = sum(ADDON_BENCHMARKS.get(c, 0.0) for c in combined_channels)
+    addon_sum = sum(get_channel_price_from_db(db, c) for c in combined_channels)
     next_cycle_bundle_price = round(base_voice_price + addon_sum, 2)
 
     return {
@@ -1542,7 +1593,7 @@ def cancel_channel_for_next_cycle(
     # Recompute next cycle bundle price
     template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
     base_voice_price = template.Price if template else active_plan.PricePaid
-    addon_sum = sum(ADDON_BENCHMARKS.get(c, 0.0) for c in curr_next)
+    addon_sum = sum(get_channel_price_from_db(db, c) for c in curr_next)
     next_cycle_price = round(base_voice_price + addon_sum, 2)
 
     # Sync updated lower bundle price with Razorpay AutoPay subscription schedule
@@ -1621,7 +1672,7 @@ def resume_channel_for_next_cycle(
     # 2. Recompute next cycle bundle price
     template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
     base_voice_price = template.Price if template else active_plan.PricePaid
-    addon_sum = sum(ADDON_BENCHMARKS.get(c, 0.0) for c in curr_next)
+    addon_sum = sum(get_channel_price_from_db(db, c) for c in curr_next)
     next_cycle_price = round(base_voice_price + addon_sum, 2)
     db.add(active_plan)
     db.commit()
@@ -1752,7 +1803,7 @@ def verify_channel_addon_payment(
         try:
             template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
             base_voice_price = template.Price if template else active_plan.PricePaid
-            addon_sum = sum(ADDON_BENCHMARKS.get(c, 0.0) for c in curr_next)
+            addon_sum = sum(get_channel_price_from_db(db, c) for c in curr_next)
             next_cycle_price = round(base_voice_price + addon_sum, 2)
 
             new_plan_id = ensure_bundle_razorpay_plan(db, next_cycle_price, curr_next, template)
