@@ -385,6 +385,18 @@ class LeadConversation(LeadAIBase):
     # if the customer comes back with a real question.
     AiCompletedAt = Column(DateTime, nullable=True)
 
+    # ---- control plane ------------------------------------------------------
+    # Set from OUTSIDE the conversation, by staff or the monitor agent, and checked
+    # at the start of every turn (engine/control.py). Separate from `Status` on
+    # purpose: Status is the sales workflow (open / needs_human / assigned / closed),
+    # this is "may the AI keep talking at all". NULL means active, so the additive
+    # migration needs no backfill.
+    #   active | paused | terminated
+    ControlStatus = Column(String(16), nullable=True)
+    ControlReason = Column(String(300), nullable=True)
+    ControlAt = Column(DateTime, nullable=True)
+    ControlBy = Column(String(200), nullable=True)
+
 
 class LeadMessage(LeadAIBase):
     """A single turn. `Sender` is customer | ai | agent | system."""
@@ -406,6 +418,10 @@ class LeadMessage(LeadAIBase):
     ModelUsed = Column(String(120), nullable=True)
     # For voice turns: which CallSid this line came from.
     CallSid = Column(String(100), nullable=True, index=True)
+    # Why the AI did what it did on the turn this message ended: every step and decision
+    # (retrieval, confidence, model vs fallback, handoff, scoring...), with evidence but no
+    # message text. Written by engine/trace.py. NULL on messages that predate tracing.
+    TraceJson = Column(JSON, nullable=True)
 
     # ---- outbound delivery tracking ------------------------------------- #
     # Populated for messages we PUSH to a social channel (WhatsApp, Messenger,
@@ -448,6 +464,10 @@ class Lead(LeadAIBase):
     Product = Column(String(200), default="unknown")
     Sentiment = Column(String(24), default="neutral")
     ScoreBreakdown = Column(JSON, nullable=True)   # explainability for the UI
+    # Durable facts the CUSTOMER stated (name, city, income, deadlines...), maintained
+    # incrementally by ai_engine.qualify() so they survive after the raw turns fall
+    # out of the LLM's window. A JSON list of short strings; see memory.thread_state_note.
+    FactsJson = Column(JSON, nullable=True)
     QualifiedAt = Column(DateTime, nullable=True)
     # Threshold bookkeeping. Denormalised onto the lead so the dashboard query is
     # a single indexed WHERE instead of a join to settings per row.

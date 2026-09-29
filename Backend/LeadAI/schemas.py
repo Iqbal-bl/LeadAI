@@ -235,6 +235,17 @@ class RolePermissionsBulkUpdate(BaseModel):
     permissions: list[RolePermissionUpdate]
 
 
+class CompanyRolePermissionOut(BaseModel):
+    role: str
+    permission_key: str
+    is_granted: bool
+
+
+class CompanyRolePermissionUpdate(BaseModel):
+    permission_key: str
+    is_granted: bool
+
+
 # ===========================================================================
 # knowledge base
 # ===========================================================================
@@ -699,6 +710,13 @@ class CallStart(BaseModel):
     )
 
 
+class RecordingLinkOut(BaseModel):
+    call_sid: str
+    url: str
+    # Seconds the link stays valid. Null for a permanent URL that is not signed.
+    expires_in_seconds: int | None = None
+
+
 class CallOut(BaseModel):
     id: str
     conversation_id: str
@@ -713,6 +731,8 @@ class CallOut(BaseModel):
     script_id: str | None = None
     initiated_by_email: str | None = None
     failure_reason: str | None = None
+    # Playable link to the call's audio (signed and time-limited); null if not recorded yet.
+    recording_url: str | None = None
     created_at: datetime | None = None
 
     @field_serializer('created_at')

@@ -6,6 +6,7 @@ here, adds the batch routes, then registers LeadAI on top.
     app.py             FastAPI app: /api/make-call, Twilio webhooks, /media-stream
                        (live audio <-> Sarvam speech <-> LLM), transcripts, scripts API
     batching.py        batch-calling engine and /api/batches routes
+    call_identity.py   works out the agent's name, company and call topic from the script
     batch_responses.py response helpers for the batch routes
     call_state.py      process-wide call state (hangup reasons)
     call_store.py      call data access: users, transcripts, call logs, recordings

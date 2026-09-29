@@ -411,6 +411,8 @@ Which backing services are live vs in fallback. Use this to verify a deployment.
 #### `GET /access/permissions`
 Full catalogue + role matrix. Renders an accurate permissions screen without hardcoding the matrix.
 
+> **Super admin only:** `GET /access/permissions`, `GET/POST/PATCH /access/roles` and everything under `/access/role-permissions` return `403 Only a super admin can do this.` to any other role. Still open to company staff: `GET /access/me`, `GET /access/assignable-users`, and `DELETE /access/roles/{id}` (used by the client Team page to remove a member).
+
 #### `GET /access/roles` · `role.read`
 Query: `for_company` (platform admin only). Company admins see only their own company's grants.
 
@@ -433,6 +435,8 @@ Users a conversation can be assigned to (active `agent`/`manager`/`company_admin
 ---
 
 ### 4.2 Companies
+
+> **Super admin only.** Every `/companies` endpoint except `GET/PUT /companies/{id}/settings` (a company's own AI settings) returns `403 Only a super admin can do this.` to company admins, managers and employees. Companies are created and managed by the platform team.
 
 #### `GET /companies` · `company.read`
 Query: `include_inactive`. Company-scoped users see only companies they hold a grant in.
@@ -748,6 +752,11 @@ Lets the UI show "Exotel connected / simulated" instead of failing a call for a 
 Provider selection: Exotel if configured → falls back to your Twilio leg → falls back to `simulated` (synthetic CallSid) so the lead/qualify/handoff flow still demos offline.
 
 #### `GET /voice/conversations/{id}/calls` · `call.read`
+
+#### Call recordings · `call.read`
+Every call object (`calls[]` in `GET /inbox/{id}`, `GET /voice/conversations/{id}/calls`, and the call-transcript views) carries `recording_url`: a **signed link that expires** (`MINIO_PRESIGN_SECONDS`, 15 minutes here) to the call's audio, or `null` when the call has no recording. Roles without `call.read` always get `null`.
+`GET /voice/recordings/{call_sid}` returns a fresh link when one has expired: `{"call_sid": "...", "url": "...", "expires_in_seconds": 900}`. It answers 404 for a call that is not yours or has no recording.
+Play it with a plain `<audio src="{recording_url}">`: the signature is in the link, so no auth header is needed.
 
 #### `POST /voice/calls/{id}/hangup` · `call.initiate`
 Records the reason in your existing `globals.call_hangup_reasons` so your transcript annotation stays accurate.

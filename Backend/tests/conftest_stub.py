@@ -4,10 +4,15 @@ the social code under test is the real thing."""
 import sys, types
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 # --- base.Base / database.* (normally MySQL) -> in-memory SQLite ---
 Base = declarative_base()
-engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+# StaticPool: one shared connection, so requests served on other threads (FastAPI runs
+# sync endpoints in a thread pool) see the same in-memory database.
+engine = create_engine(
+    "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
 SessionLocalAdmin = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 import core  # the real package; only its base/database/auth submodules are stubbed

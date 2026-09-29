@@ -31,6 +31,7 @@ from ..rbac import (
     current_principal,
     require,
     resolve_scope,
+    super_admin,
 )
 from ..schemas import (
     CompanyCreate,
@@ -58,7 +59,7 @@ router = APIRouter(prefix="/companies", tags=["LeadAI • Companies"])
 @router.get("", response_model=list[CompanyOut], summary="List companies I can access")
 def list_companies(
     include_inactive: bool = Query(default=False),
-    principal: Principal = Depends(require("company.read")),
+    principal: Principal = Depends(super_admin("company.read")),
     db: Session = Depends(get_leadai_db),
 ):
     query = db.query(Client).filter(Client.IsDeleted == False)  # noqa: E712
@@ -86,7 +87,7 @@ def list_companies(
 def create_company(
     payload: CompanyCreate,
     request: Request,
-    principal: Principal = Depends(require("company.manage")),
+    principal: Principal = Depends(super_admin("company.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     existing = (
@@ -179,7 +180,7 @@ def create_company(
 @router.get("/{company_id}", response_model=CompanyOut, summary="Get one company")
 def get_company(
     company_id: str,
-    principal: Principal = Depends(require("company.read")),
+    principal: Principal = Depends(super_admin("company.read")),
     db: Session = Depends(get_leadai_db),
 ):
     if not principal.is_platform_admin:
@@ -203,7 +204,7 @@ def get_company(
 def list_company_users(
     company_id: str,
     include_inactive: bool = Query(default=False),
-    principal: Principal = Depends(require("role.read")),
+    principal: Principal = Depends(super_admin("role.read")),
     db: Session = Depends(get_leadai_db),
 ):
     """The company's people, grouped so a details screen can render them directly.
@@ -279,7 +280,7 @@ def update_company(
     company_id: str,
     payload: CompanyUpdate,
     request: Request,
-    principal: Principal = Depends(require("company.manage")),
+    principal: Principal = Depends(super_admin("company.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     client = db.get(Client, company_id)
@@ -321,7 +322,7 @@ def update_company(
 def deactivate_company(
     company_id: str,
     request: Request,
-    principal: Principal = Depends(require("company.manage")),
+    principal: Principal = Depends(super_admin("company.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     """Soft-deactivate only. Hard deletion is never exposed: a company's
@@ -462,7 +463,7 @@ def update_settings(
 )
 def get_company_permissions(
     company_id: str,
-    principal: Principal = Depends(require("company.read")),
+    principal: Principal = Depends(super_admin("company.read")),
     db: Session = Depends(get_leadai_db),
 ):
     if not principal.is_platform_admin:
@@ -507,7 +508,7 @@ def patch_company_permissions(
     company_id: str,
     payload: CompanyPermissionsPatchIn,
     request: Request,
-    principal: Principal = Depends(require("company.manage")),
+    principal: Principal = Depends(super_admin("company.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     client = db.get(Client, company_id)

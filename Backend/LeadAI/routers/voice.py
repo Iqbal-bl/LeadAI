@@ -44,11 +44,13 @@ from ..schemas import (
     CallSyncOut,
     CallTranscriptOut,
     Ok,
+    RecordingLinkOut,
     VoiceTurnIn,
     VoiceTurnOut,
 )
 from ..serializers import call_out
-from ..services import ai_engine, call_bridge, telephony
+from ..services import call_bridge, telephony, voice_flow
+from ..services import recordings as recording_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/voice", tags=["LeadAI • Voice"])
@@ -188,7 +190,42 @@ def list_calls(
         .order_by(LeadCall.CreatedAt.desc())
         .all()
     )
-    return [call_out(r) for r in rows]
+    recordings = recording_service.playable_urls(db, [r.CallSid for r in rows])
+    return [call_out(r, recordings.get(r.CallSid)) for r in rows]
+
+
+@router.get(
+    "/recordings/{call_sid}",
+    response_model=RecordingLinkOut,
+    summary="A fresh playable link to a call's recording",
+)
+def get_recording(
+    call_sid: str,
+    principal: Principal = Depends(require("call.read")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Links in the call lists expire (MINIO_PRESIGN_SECONDS); call this for a new one.
+
+    Same visibility as the conversation: an agent gets it only for a lead they may open.
+    """
+    client_id = resolve_scope(principal)
+    call = (
+        db.query(LeadCall)
+        .filter(LeadCall.CallSid == call_sid, LeadCall.ClientId == client_id,
+                LeadCall.IsDeleted == False)  # noqa: E712
+        .first()
+    )
+    if call is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Call not found")
+    _conversation(db, call.ConversationId, principal, client_id)     # row-level access, 404 if not theirs
+    url = recording_service.playable_urls(db, [call_sid]).get(call_sid)
+    if not url:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This call has no recording")
+    signed = "X-Amz-Signature" in url
+    return RecordingLinkOut(
+        call_sid=call_sid, url=url,
+        expires_in_seconds=settings.minio_presign_seconds if signed else None,
+    )
 
 
 @router.get(
@@ -254,7 +291,7 @@ def get_call_transcript_by_sid(
 
     from ..serializers import message_out
 
-    recording_url = f"/api/leadai/voice/recordings/{call_sid}" if call.Status == "completed" else None
+    recording_url = recording_service.playable_urls(db, [call_sid]).get(call_sid)
 
     def _msg(m):
         if isinstance(m, dict):
@@ -369,80 +406,15 @@ def voice_turn(
     call = _call(db, call_id, client_id)
     conversation = _conversation(db, call.ConversationId, principal, client_id)
 
-    history = (
-        db.query(LeadMessage)
-        .filter(
-            LeadMessage.ConversationId == conversation.Id,
-            LeadMessage.IsDeleted == False,  # noqa: E712
-        )
-        .order_by(LeadMessage.CreatedAt.asc())
-        .all()
+    # The whole turn (persist, retrieve, answer, handoff decision, decision trace, scoring)
+    # lives in services/voice_flow.py, shared with the Pipecat phone pipeline, so this
+    # simulation exercises exactly what a real call runs.
+    turn = voice_flow.handle_voice_turn(
+        db, client, conversation, call, payload.utterance,
+        simulate_duration=True, request=request,
     )
-
-    inbound = LeadMessage(
-        ClientId=client_id,
-        ConversationId=conversation.Id,
-        Sender="customer",
-        Content=payload.utterance.strip(),
-        CallSid=call.CallSid,
-        CreatedBy="voice",
-    )
-    db.add(inbound)
-    db.flush()
-    history.append(inbound)
-
-    # channel="voice" selects the voice prompt template and the tighter token cap.
-    result = ai_engine.answer(
-        db,
-        client_id,
-        client.Name,
-        payload.utterance,
-        history=history,
-        channel="voice",
-        script=None,
-    )
-
-    if result["needs_human"]:
-        reply_text = (
-            "Let me bring in a specialist who can help with that — connecting you now."
-        )
-        call.HandedOff = True
-        call.Status = "transferred"
-        conversation.Status = "needs_human"
-        conversation.HandoffReason = (result["handoff_reason"] or "")[:300]
-    else:
-        reply_text = result["reply"]
-
-    outbound = LeadMessage(
-        ClientId=client_id,
-        ConversationId=conversation.Id,
-        Sender="ai",
-        Content=reply_text,
-        Confidence=result["confidence"],
-        SourcesJson=result["sources"],
-        ModelUsed=result["model"],
-        LatencyMs=result["latency_ms"],
-        CallSid=call.CallSid,
-        CreatedBy="voice",
-    )
-    db.add(outbound)
-    db.flush()
-    history.append(outbound)
-
-    # Rough per-turn duration so call analytics are meaningful in simulation.
-    call.DurationSec = (call.DurationSec or 0) + 18
-
-    lead = db.query(Lead).filter(Lead.ConversationId == conversation.Id).one_or_none()
-    if lead is None:
-        lead = Lead(ClientId=client_id, ConversationId=conversation.Id, CreatedBy="voice")
-        db.add(lead)
-        db.flush()
-    ai_engine.qualify(db, client_id, lead, history)
-    conversation.Summary, conversation.NextStep = ai_engine.summarize(
-        db, client_id, client.Name, lead, history
-    )
-    conversation.MessageCount = len(history)
-    conversation.LastMessageAt = utcnow()
+    result, reply_text = turn.result, turn.reply_text
+    lead = db.query(Lead).filter(Lead.ConversationId == conversation.Id).one()
 
     activity.log_principal(
         db,

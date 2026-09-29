@@ -23,6 +23,7 @@ from .routers import (
     channels,
     chat,
     companies,
+    company_role_permissions,
     customers,
     files,
     inbox,
@@ -54,6 +55,7 @@ api_router.include_router(webhooks.router)
 # ---------------------------------------------------------------------------
 api_router.include_router(roles.router)
 api_router.include_router(role_permissions.router)
+api_router.include_router(company_role_permissions.router)
 api_router.include_router(companies.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(scripts.router)

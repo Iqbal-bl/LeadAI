@@ -62,6 +62,7 @@ class A:
     CHAT_MESSAGE = "chat.customer_message"
     AI_REPLIED = "chat.ai_replied"
     AI_HANDOFF = "chat.ai_requested_human"
+    CONTROL_CHANGED = "chat.control_changed"
     AGENT_REPLIED = "chat.agent_replied"
     LEAD_QUALIFIED = "lead.qualified"
     LEAD_ASSIGNED = "lead.assigned"
@@ -69,6 +70,7 @@ class A:
     LEAD_STATUS_CHANGED = "lead.status_changed"
     LEAD_EXPORTED = "lead.exported"
     PII_REVEALED = "lead.pii_revealed"
+    PHONE_CAPTURED = "lead.phone_captured"
 
     # user management
     USER_CREATED = "user.created"

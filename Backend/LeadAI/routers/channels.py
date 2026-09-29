@@ -116,6 +116,36 @@ def channel_status(
     )
 
 
+def _assert_single_account_per_channel(
+    db: Session, client_id: str, channel: str, external_id: str
+) -> None:
+    """A company may have at most one connected account per channel (whatsapp,
+    messenger, instagram, linkedin, ...).
+
+    Reconnecting the SAME account (identical ExternalId) is always fine — that is a
+    token refresh or re-authorisation, not a second account, so callers only run this
+    check when they are about to create a genuinely NEW row. A different account of
+    the same channel type is refused until the existing one is disconnected, rather
+    than silently added alongside it or silently replacing it.
+    """
+    other = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == client_id,
+            LeadChannelAccount.Channel == channel,
+            LeadChannelAccount.ExternalId != external_id,
+            LeadChannelAccount.IsDeleted == False,  # noqa: E712
+        )
+        .first()
+    )
+    if other is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"This company already has a {channel} account connected ('{other.Name}'). "
+            "Disconnect it first before connecting a different one.",
+        )
+
+
 @router.post(
     "",
     response_model=ChannelAccountOut,
@@ -156,6 +186,7 @@ def create_account(
             "That account is already connected"
             + (" to this company." if clash.ClientId == client_id else " to another company."),
         )
+    _assert_single_account_per_channel(db, client_id, payload.channel, payload.external_id)
 
     row = LeadChannelAccount(
         ClientId=client_id,
@@ -559,6 +590,8 @@ def _upsert_fb_account(
             status.HTTP_409_CONFLICT,
             f"{name} is already connected to a different company.",
         )
+    if existing is None:
+        _assert_single_account_per_channel(db, client_id, channel, external_id)
 
     account = existing or LeadChannelAccount(
         ClientId=client_id,
@@ -672,6 +705,8 @@ def instagram_callback(
             status.HTTP_409_CONFLICT,
             f"@{username} is already connected to a different company.",
         )
+    if existing is None:
+        _assert_single_account_per_channel(db, client_id, "instagram", external_id)
 
     account = existing or LeadChannelAccount(
         ClientId=client_id,
