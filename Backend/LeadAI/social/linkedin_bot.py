@@ -1174,31 +1174,16 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                 });
             """)
 
-            # 1. Collect published articles with LinkedInPostId
+            # 1. Discover all live posts from recent activity tabs
             posts_to_scan = []
-            db_articles = db.query(LeadArticle).filter(
-                LeadArticle.ClientId == account.ClientId,
-                LeadArticle.LinkedInPostId != None,
-                LeadArticle.IsDeleted == False
-            ).order_by(LeadArticle.CreatedAt.desc()).limit(limit_posts).all()
+            existing_urns = set()
 
-            for art in db_articles:
-                p_urn = art.LinkedInPostId
-                p_url = f"https://www.linkedin.com/feed/update/{p_urn}" if not p_urn.startswith("http") else p_urn
-                posts_to_scan.append({
-                    "post_urn": p_urn,
-                    "post_url": p_url,
-                    "title": art.Title,
-                    "article_id": art.Id,
-                })
-
-            # 2. Also visit recent activity tabs to discover native posts made outside LeadAI
             try:
                 for act_tab in ["recent-activity/all/", "recent-activity/comments/", "recent-activity/shares/"]:
                     if len(posts_to_scan) >= limit_posts:
                         break
                     try:
-                        await page.goto(f"https://www.linkedin.com/in/me/{act_tab}", wait_until="domcontentloaded", timeout=20000)
+                        await page.goto(f"https://www.linkedin.com/in/me/{act_tab}", wait_until="commit", timeout=20000)
                         await asyncio.sleep(2.5)
 
                         activity_urns = await page.evaluate('''() => {
@@ -1206,20 +1191,19 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                             const items = document.querySelectorAll('.feed-shared-update-v2, .profile-creator-shared-feed-update__container, [data-urn*="urn:li:activity"], [data-urn*="urn:li:share"]');
                             items.forEach(el => {
                                 const u = el.getAttribute('data-urn') || el.getAttribute('data-id');
-                                if (u && (u.includes('urn:li:activity') || u.includes('urn:li:share') || u.includes('urn:li:ugcPost'))) {
+                                if (u && (u.includes('urn:li:activity') || u.includes('urn:li:ugcPost'))) {
                                     if (!urns.includes(u)) urns.push(u);
                                 }
                                 const links = el.querySelectorAll('a[href*="/feed/update/"], a[href*="/analytics/post-summary/"]');
                                 links.forEach(l => {
                                     const href = l.href;
-                                    const match = href.match(/urn:li:[a-zA-Z]+:[0-9]+/);
+                                    const match = href.match(/urn:li:(activity|ugcPost):[0-9]+/);
                                     if (match && !urns.includes(match[0])) urns.push(match[0]);
                                 });
                             });
                             return urns;
                         }''')
 
-                        existing_urns = {p["post_urn"] for p in posts_to_scan}
                         for act_urn in activity_urns:
                             if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
                                 p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
@@ -1235,12 +1219,30 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
             except Exception as act_exc:
                 logger.info("Recent activity feed scan notice: %s", act_exc)
 
+            # 2. Correlate with published DB articles if any match
+            db_articles = db.query(LeadArticle).filter(
+                LeadArticle.ClientId == account.ClientId,
+                LeadArticle.LinkedInPostId != None,
+                LeadArticle.IsDeleted == False
+            ).order_by(LeadArticle.CreatedAt.desc()).limit(limit_posts).all()
+
+            for art in db_articles:
+                if art.LinkedInPostId and art.LinkedInPostId.startswith("urn:li:activity:"):
+                    if art.LinkedInPostId not in existing_urns and len(posts_to_scan) < limit_posts:
+                        posts_to_scan.append({
+                            "post_urn": art.LinkedInPostId,
+                            "post_url": f"https://www.linkedin.com/feed/update/{art.LinkedInPostId}/",
+                            "title": art.Title,
+                            "article_id": art.Id,
+                        })
+                        existing_urns.add(art.LinkedInPostId)
+
             # 3. For each post, visit direct post URL to extract full comments and replies
             extracted_posts = []
             for p_info in posts_to_scan:
                 target_url = p_info["post_url"]
                 try:
-                    await page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
+                    await page.goto(target_url, wait_until="commit", timeout=20000)
                     await asyncio.sleep(3)
 
                     post_data = await page.evaluate('''() => {

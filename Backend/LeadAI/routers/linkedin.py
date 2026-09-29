@@ -837,6 +837,29 @@ async def update_linkedin_comment_settings(
     return {"ok": True, "message": "Comment automation settings saved successfully"}
 
 
+import time
+
+_LAST_COMMENT_SYNC_BY_CLIENT: dict[str, float] = {}
+
+async def _bg_auto_sync_comments(company_id: str):
+    from core.database import SessionLocalAdmin
+    from ..social import linkedin_bot
+    from ..models_ext import LeadChannelAccount
+    db_bg = SessionLocalAdmin()
+    try:
+        account = db_bg.query(LeadChannelAccount).filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False
+        ).first()
+        if account and (account.LinkedinCookieEnc or (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):
+            await linkedin_bot.fetch_recent_posts_and_comments_browser(db_bg, account)
+    except Exception as exc:
+        logger.debug("[LinkedIn Auto-Sync] Background refresh notice for client %s: %s", company_id, exc)
+    finally:
+        db_bg.close()
+
+
 @router.get(
     "/comments",
     summary="List LinkedIn post comments with AI reply suggestions & lead intent",
@@ -846,11 +869,19 @@ async def get_linkedin_comments(
     sentiment: Optional[str] = None,
     is_lead_only: bool = False,
     limit: int = 50,
+    background_tasks: BackgroundTasks = None,
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
     from ..models_blog import LeadSocialComment
+
+    # Automatically trigger non-blocking background sync if last sync was > 30 minutes ago
+    last_sync = _LAST_COMMENT_SYNC_BY_CLIENT.get(company_id, 0)
+    if time.time() - last_sync > 1800:
+        _LAST_COMMENT_SYNC_BY_CLIENT[company_id] = time.time()
+        if background_tasks is not None:
+            background_tasks.add_task(_bg_auto_sync_comments, company_id)
 
     q = db.query(LeadSocialComment).filter(
         LeadSocialComment.ClientId == company_id,
