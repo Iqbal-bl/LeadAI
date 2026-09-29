@@ -149,18 +149,17 @@ async def save_tokens(
     from datetime import datetime, timezone
     
     # Check if an account already exists for this channel and ExternalId — reconnecting
-    # the SAME LinkedIn person is a token refresh, not a new account, and reuses this row.
+    # the SAME LinkedIn person is a token refresh or reactivation, not a new account, and reuses this row.
     db_cred = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.Channel == "linkedin",
             LeadChannelAccount.ExternalId == person_urn,
-            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .first()
     )
 
-    if not db_cred:
+    if not db_cred or db_cred.ClientId != client_id:
         # A DIFFERENT LinkedIn person connecting for this company: a company may have at
         # most one LinkedIn account, so this used to silently repoint the existing row at
         # the new person (losing the old one's connection with no warning). Now it is
@@ -174,7 +173,7 @@ async def save_tokens(
             )
             .first()
         )
-        if other is not None:
+        if other is not None and other.ExternalId != person_urn:
             raise ValueError(
                 f"This company already has a LinkedIn account connected ('{other.Name}'). "
                 "Disconnect it first before connecting a different one."
@@ -214,6 +213,18 @@ async def save_tokens(
     db_cred.IsDeleted = False
     db_cred.IsActive = True
     db_cred.UpdatedAt = utcnow()
+
+    # Soft delete existing comments for this company & channel to avoid cross-account comment bleeding
+    from ..models_blog import LeadSocialComment
+    db.query(LeadSocialComment).filter(
+        LeadSocialComment.ClientId == client_id,
+        LeadSocialComment.Channel == "linkedin",
+        LeadSocialComment.IsDeleted == False
+    ).update(
+        {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
+        synchronize_session=False
+    )
+
     db.commit()
 
 
