@@ -1192,49 +1192,55 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                     "article_id": art.Id,
                 })
 
-            # 2. Also visit recent activity to discover native posts made outside LeadAI
+            # 2. Also visit recent activity tabs to discover native posts made outside LeadAI
             try:
-                await page.goto("https://www.linkedin.com/in/me/recent-activity/all/", wait_until="domcontentloaded", timeout=25000)
-                await asyncio.sleep(3)
+                for act_tab in ["recent-activity/all/", "recent-activity/comments/", "recent-activity/shares/"]:
+                    if len(posts_to_scan) >= limit_posts:
+                        break
+                    try:
+                        await page.goto(f"https://www.linkedin.com/in/me/{act_tab}", wait_until="domcontentloaded", timeout=20000)
+                        await asyncio.sleep(2.5)
 
-                activity_urns = await page.evaluate('''() => {
-                    const urns = [];
-                    const items = document.querySelectorAll('.feed-shared-update-v2, .profile-creator-shared-feed-update__container, [data-urn*="urn:li:activity"], [data-urn*="urn:li:share"]');
-                    items.forEach(el => {
-                        const u = el.getAttribute('data-urn') || el.getAttribute('data-id');
-                        if (u && (u.includes('urn:li:activity') || u.includes('urn:li:share') || u.includes('urn:li:ugcPost'))) {
-                            if (!urns.includes(u)) urns.push(u);
-                        }
-                        const links = el.querySelectorAll('a[href*="/feed/update/"]');
-                        links.forEach(l => {
-                            const href = l.href;
-                            const match = href.match(/urn:li:[a-zA-Z]+:[0-9]+/);
-                            if (match && !urns.includes(match[0])) urns.push(match[0]);
-                        });
-                    });
-                    return urns.slice(0, 5);
-                }''')
+                        activity_urns = await page.evaluate('''() => {
+                            const urns = [];
+                            const items = document.querySelectorAll('.feed-shared-update-v2, .profile-creator-shared-feed-update__container, [data-urn*="urn:li:activity"], [data-urn*="urn:li:share"]');
+                            items.forEach(el => {
+                                const u = el.getAttribute('data-urn') || el.getAttribute('data-id');
+                                if (u && (u.includes('urn:li:activity') || u.includes('urn:li:share') || u.includes('urn:li:ugcPost'))) {
+                                    if (!urns.includes(u)) urns.push(u);
+                                }
+                                const links = el.querySelectorAll('a[href*="/feed/update/"], a[href*="/analytics/post-summary/"]');
+                                links.forEach(l => {
+                                    const href = l.href;
+                                    const match = href.match(/urn:li:[a-zA-Z]+:[0-9]+/);
+                                    if (match && !urns.includes(match[0])) urns.push(match[0]);
+                                });
+                            });
+                            return urns;
+                        }''')
 
-                existing_urns = {p["post_urn"] for p in posts_to_scan}
-                for act_urn in activity_urns:
-                    if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
-                        p_url = f"https://www.linkedin.com/feed/update/{act_urn}" if not act_urn.startswith("http") else act_urn
-                        posts_to_scan.append({
-                            "post_urn": act_urn,
-                            "post_url": p_url,
-                            "title": None,
-                            "article_id": None,
-                        })
-                        existing_urns.add(act_urn)
+                        existing_urns = {p["post_urn"] for p in posts_to_scan}
+                        for act_urn in activity_urns:
+                            if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
+                                p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
+                                posts_to_scan.append({
+                                    "post_urn": act_urn,
+                                    "post_url": p_url,
+                                    "title": None,
+                                    "article_id": None,
+                                })
+                                existing_urns.add(act_urn)
+                    except Exception as tab_err:
+                        logger.debug("Failed checking activity tab %s: %s", act_tab, tab_err)
             except Exception as act_exc:
-                logger.info(f"Recent activity feed scan notice: {act_exc}")
+                logger.info("Recent activity feed scan notice: %s", act_exc)
 
             # 3. For each post, visit direct post URL to extract full comments and replies
             extracted_posts = []
             for p_info in posts_to_scan:
                 target_url = p_info["post_url"]
                 try:
-                    await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
+                    await page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
                     await asyncio.sleep(3)
 
                     post_data = await page.evaluate('''() => {
@@ -1242,8 +1248,10 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         const postText = textEl ? textEl.innerText.trim() : '';
 
                         const comments = [];
-                        const commentNodes = document.querySelectorAll('article.comments-comment-item, .comments-comments-list__comment-item, article.comments-comment-entity, .comments-comment-item');
+                        const seenTexts = new Set();
 
+                        // Strategy A: Standard classic LinkedIn comment items
+                        const commentNodes = document.querySelectorAll('article.comments-comment-item, .comments-comments-list__comment-item, article.comments-comment-entity, .comments-comment-item');
                         commentNodes.forEach((el, idx) => {
                             const cUrn = el.getAttribute('data-id') || el.getAttribute('id') || `comment-${idx}`;
                             const authorEl = el.querySelector('.comments-post-meta__name-text, .comments-comment-meta__description-title, a[href*="/in/"] span[dir="ltr"], a[href*="/in/"] strong, a[href*="/in/"]');
@@ -1253,7 +1261,8 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                             const linkEl = el.querySelector('a[href*="/in/"]');
 
                             const commentText = bodyEl ? bodyEl.innerText.trim() : el.innerText.trim();
-                            if (!commentText) return;
+                            if (!commentText || seenTexts.has(commentText)) return;
+                            seenTexts.add(commentText);
 
                             comments.push({
                                 comment_urn: cUrn,
@@ -1264,6 +1273,45 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                 comment_text: commentText,
                             });
                         });
+
+                        // Strategy B: Modern React/Ember comment cards
+                        if (comments.length === 0) {
+                            const textSpans = Array.from(document.querySelectorAll('span[class*="_42430e90"], span[dir="ltr"], div.update-components-text, .comments-comment-item__main-content'));
+                            textSpans.forEach((s, idx) => {
+                                const text = s.innerText.trim();
+                                if (!text || text === postText || seenTexts.has(text)) return;
+
+                                let card = s.parentElement;
+                                let authorName = '';
+                                let authorUrl = '';
+                                let authorAvatar = null;
+                                let depth = 0;
+                                while (card && depth < 8) {
+                                    const a = card.querySelector('a[href*="/in/"]');
+                                    if (a) {
+                                        authorName = a.innerText.split('\\n')[0].replace('You', '').replace(/Verified Profile.*/, '').trim();
+                                        authorUrl = a.href;
+                                        const img = card.querySelector('img');
+                                        if (img) authorAvatar = img.src;
+                                        break;
+                                    }
+                                    card = card.parentElement;
+                                    depth++;
+                                }
+
+                                if (text.length >= 1 && !seenTexts.has(text)) {
+                                    seenTexts.add(text);
+                                    comments.push({
+                                        comment_urn: `c-modern-${idx}-${text.slice(0, 15)}`,
+                                        author_name: authorName || 'LinkedIn Member',
+                                        author_headline: '',
+                                        author_profile_url: authorUrl || '',
+                                        author_avatar: authorAvatar,
+                                        comment_text: text,
+                                    });
+                                }
+                            });
+                        }
 
                         return {
                             post_text: postText,
@@ -1279,7 +1327,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         "comments": post_data.get("comments", [])
                     })
                 except Exception as p_exc:
-                    logger.warning(f"Failed scanning post {target_url}: {p_exc}")
+                    logger.warning("Failed scanning post %s: %s", target_url, p_exc)
 
             await browser.close()
 

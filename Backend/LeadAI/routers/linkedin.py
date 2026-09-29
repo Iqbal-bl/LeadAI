@@ -1108,11 +1108,22 @@ async def sync_linkedin_comments(
 
     try:
         result = await linkedin_bot.fetch_recent_posts_and_comments_browser(db, account)
+        if result.get("error"):
+            err_str = result.get("error", "")
+            if "ERR_TOO_MANY_REDIRECTS" in err_str or "auth" in err_str.lower() or "login" in err_str.lower():
+                raise HTTPException(
+                    status.HTTP_401_UNAUTHORIZED,
+                    "LinkedIn session token (li_at) is expired or invalid. Please copy a fresh session cookie from your browser and paste it in the Connection tab."
+                )
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Comment sync failed: {err_str}")
+
         return {
             "ok": True,
             "message": f"Scanned recent posts. Synced {result.get('synced_comments', 0)} new comments, identified {result.get('new_leads', 0)} high-intent leads.",
             "data": result,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error(f"Failed to sync LinkedIn comments: {exc}")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Comment sync failed: {exc}")
