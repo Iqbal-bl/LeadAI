@@ -405,7 +405,11 @@ def handle_voice_turn(
         trace_step(trace, "voice_handoff", f"flagged for a human follow-up; the call continues ({why})",
                    reason=result["handoff_reason"])
         call.HandedOff = True
-        conversation.Status = "needs_human"
+        # An assignee already means a human owns this conversation (same invariant
+        # inbox.set_status enforces) — a low-confidence turn on a live call must not
+        # knock it back into the unclaimed needs_human queue out from under them.
+        if conversation.Status != "assigned":
+            conversation.Status = "needs_human"
         conversation.HandoffReason = (result["handoff_reason"] or "")[:300]
         _event(db, "handoff.requested", conversation, speaker="ai",
                reason=conversation.HandoffReason, confidence=result["confidence"])
@@ -416,7 +420,8 @@ def handle_voice_turn(
         reply_text = TRANSFER_LINE
         call.HandedOff = True
         call.Status = "transferred"
-        conversation.Status = "needs_human"
+        if conversation.Status != "assigned":
+            conversation.Status = "needs_human"
         conversation.HandoffReason = (result["handoff_reason"] or "")[:300]
         _event(db, "handoff.requested", conversation, speaker="ai",
                reason=conversation.HandoffReason, confidence=result["confidence"])

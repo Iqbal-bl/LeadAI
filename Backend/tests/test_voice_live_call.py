@@ -153,6 +153,30 @@ def test_only_the_models_own_end_of_conversation_signal_ends_a_live_call():
     assert conv.Status == "needs_human" and "advisor follow-up" in conv.HandoffReason
 
 
+def test_a_handoff_on_a_live_call_never_knocks_an_assigned_conversation_back_to_the_queue():
+    # Found in production: an agent assigns a conversation (Status -> "assigned"), then a
+    # later live call on that same conversation hits a low-confidence turn. voice_flow used
+    # to unconditionally overwrite Status back to "needs_human", silently un-assigning it
+    # from the agent's point of view even though AssignedUserEmail never changed — exactly
+    # the inconsistent state inbox.set_status's own comment says should be impossible.
+    wire(reply="I don't have that detail with me, but a specialist will confirm it.", hits=False)
+    db, client, conv, call = setup()
+    conv.Status = "assigned"
+    conv.AssignedUserEmail = "agent@kestrel.test"
+    db.commit()
+
+    out = voice_flow.handle_voice_turn(
+        db, client, conv, call, "did you schedule anything for me",
+        live_call=True, defer_scoring=True, commit=True,
+    )
+    db.refresh(conv)
+
+    assert out.handed_off is True                       # the handoff itself still happened
+    assert conv.Status == "assigned"                     # but the agent still owns it
+    assert conv.AssignedUserEmail == "agent@kestrel.test"
+    assert "below threshold" in conv.HandoffReason        # the reason is still recorded
+
+
 def test_a_reply_with_an_invented_figure_is_withheld_on_a_live_call():
     wire(reply="The processing fee is Rs. 15,000.")
     bridge.settings = _Enforce()

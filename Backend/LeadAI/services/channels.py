@@ -58,6 +58,50 @@ from ..security import decrypt_pii
 
 logger = logging.getLogger(__name__)
 
+
+def social_identities_for(db: Session, customer_id: str | None) -> list:
+    """Every social identity (Instagram, Messenger, ...) behind one LeadCustomer,
+    as SocialIdentityOut. Shared by the two reveal endpoints (inbox conversations
+    and CRM customers) so a customer converted from a social channel shows the
+    same handle/profile link either way, and a future change to how the profile
+    URL is built only needs to happen once.
+    """
+    from ..models import LeadChannelIdentity
+    from ..schemas import SocialIdentityOut
+
+    if not customer_id:
+        return []
+    identities = (
+        db.query(LeadChannelIdentity)
+        .filter(
+            LeadChannelIdentity.CustomerId == customer_id,
+            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
+        )
+        .order_by(LeadChannelIdentity.CreatedAt.asc())
+        .all()
+    )
+    social = []
+    for ident in identities:
+        handle = ident.ProfileName or ident.ExternalUsername
+        profile_url = None
+        if ident.Channel == CHANNEL_INSTAGRAM and handle:
+            # Only a resolved username makes a working link; a raw IGSID does not.
+            profile_url = f"https://instagram.com/{handle.lstrip('@')}"
+        elif ident.Channel == CHANNEL_MESSENGER and ident.ExternalUserId:
+            profile_url = f"https://m.me/{ident.ExternalUserId}"
+        social.append(
+            SocialIdentityOut(
+                channel=ident.Channel,
+                handle=handle or ident.ExternalUserId,
+                profile_name=ident.ProfileName,
+                external_user_id=ident.ExternalUserId,
+                profile_url=profile_url,
+                opted_out=bool(ident.OptedOut),
+                last_message_at=ident.LastUserMessageAt,
+            )
+        )
+    return social
+
 META_CHANNELS = (CHANNEL_WHATSAPP, CHANNEL_MESSENGER, CHANNEL_INSTAGRAM)
 
 
