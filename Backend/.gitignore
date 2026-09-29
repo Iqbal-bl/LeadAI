@@ -1,11 +1,33 @@
-env
-venv
-vscode/
-temp_scipts/
-temp/
-__pycache__/
-.venv
-.vnev
+# Virtual Envs
+.venv/
+.vnev/
+venv/
+env/
+
+# Secrets
 .env
+.env.*
+*.env
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary & Demo Scripts
+temp/
+temp_scipts/
+scratch/
 prepaid_credit_demo.html
 prepaid_credit_demo.py
+
+# LinkedIn Bot Browser Cache & Storage
+.linkedin_browser_profile/
+.linkedin_cookies/
+*.session
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

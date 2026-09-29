@@ -58,6 +58,10 @@ async def request_with_retry(method: str, url: str, **kwargs) -> httpx.Response:
 async def build_authorize_url(db, client_id: str) -> str:
     from urllib.parse import urlencode
     from ..services import cache
+
+    if not settings.linkedin_client_id:
+        raise ValueError("LinkedIn OAuth App credentials (LINKEDIN_CLIENT_ID & LINKEDIN_CLIENT_SECRET) are missing in Backend/.env.")
+
     state = secrets.token_urlsafe(24)
     
     # Save the OAuth state mapping to cache (expires in 10 minutes)
@@ -498,3 +502,106 @@ async def post_to_linkedin(
         return await create_text_post(access_token, person_urn, caption)
 
     raise ValueError(f"LinkedIn does not support media shape: {media_shape}")
+
+
+# ===========================================================================
+# LinkedIn Comments & Social Actions API
+# ===========================================================================
+
+async def fetch_post_comments(access_token: str, post_urn: str, count: int = 50) -> list[dict]:
+    """Fetch comments on a LinkedIn post via official Community Management / Social Actions API."""
+    from urllib.parse import quote
+    encoded_urn = quote(post_urn, safe="")
+    url = f"https://api.linkedin.com/rest/socialActions/{encoded_urn}/comments?count={count}"
+    
+    resp = await request_with_retry(
+        "GET",
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "LinkedIn-Version": settings.linkedin_api_version,
+            "X-Restli-Protocol-Version": "2.0.0",
+        },
+    )
+    if resp.status_code != 200:
+        logger.warning(f"[LinkedIn] Failed to fetch comments for {post_urn}: {resp.status_code} {resp.text}")
+        return []
+    
+    data = resp.json()
+    elements = data.get("elements", [])
+    results = []
+    
+    for el in elements:
+        comment_urn = el.get("object") or el.get("$URN") or el.get("urn")
+        actor_urn = el.get("actor")
+        created = el.get("created", {})
+        created_time = created.get("time")
+        message_obj = el.get("message", {})
+        comment_text = message_obj.get("text", "")
+        parent_comment = el.get("parentComment")
+        
+        results.append({
+            "comment_urn": comment_urn,
+            "parent_comment_urn": parent_comment,
+            "author_urn": actor_urn,
+            "author_name": "LinkedIn Member",
+            "author_headline": "",
+            "comment_text": comment_text,
+            "created_time": created_time,
+        })
+    return results
+
+
+async def reply_to_post_comment(
+    access_token: str,
+    person_urn: str,
+    post_urn: str,
+    reply_text: str,
+    parent_comment_urn: Optional[str] = None,
+) -> dict:
+    """Post a reply to a LinkedIn post or existing comment."""
+    from urllib.parse import quote
+    encoded_urn = quote(post_urn, safe="")
+    url = f"https://api.linkedin.com/rest/socialActions/{encoded_urn}/comments"
+    
+    actor_urn = person_urn if person_urn.startswith("urn:li:") else f"urn:li:person:{person_urn}"
+    body = {
+        "actor": actor_urn,
+        "message": {"text": reply_text},
+    }
+    if parent_comment_urn:
+        body["parentComment"] = parent_comment_urn
+        
+    resp = await request_with_retry(
+        "POST",
+        url,
+        json=body,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "LinkedIn-Version": settings.linkedin_api_version,
+            "X-Restli-Protocol-Version": "2.0.0",
+        },
+    )
+    if resp.status_code == 426:
+        # Fallback to current active LinkedIn version
+        resp = await request_with_retry(
+            "POST",
+            url,
+            json=body,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "LinkedIn-Version": "202503",
+                "X-Restli-Protocol-Version": "2.0.0",
+            },
+        )
+    if resp.status_code not in (200, 201):
+        raise Exception(f"Failed to post comment reply: {resp.status_code} {resp.text}")
+    
+    return {
+        "success": True,
+        "reply_urn": resp.headers.get("x-restli-id", ""),
+        "status_code": resp.status_code,
+    }
+

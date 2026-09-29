@@ -15,13 +15,13 @@
     >
       <i class="pi pi-microchip-ai"></i> Call via AI
     </button>
-    <button
+    <!-- <button
       (click)="placeCall('agent')"
       class="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl text-white text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer"
       style="background: linear-gradient(135deg, #22c55e, #16a34a)"
     >
       <i class="pi pi-phone"></i> Call via Human
-    </button>
+    </button> -->
     <!-- <button class="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl text-sm font-semibold transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer border"
             style="background: var(--card-bg); color: var(--app-text); border-color: var(--card-border);">
       <i class="pi pi-calendar"></i> Schedule Call
@@ -38,10 +38,14 @@
     "
   >
     <div
-      class="flex items-center justify-center gap-2 text-sm font-semibold"
-      style="color: var(--app-text)"
+      class="flex items-center justify-center gap-2 text-sm font-semibold transition-colors"
+      [style.color]="getCallStatusConfig(callStatus).labelColor"
     >
-      <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping"></span>
+      <span
+        class="w-2.5 h-2.5 rounded-full"
+        [class.animate-ping]="getCallStatusConfig(callStatus).pulse"
+        [style.background-color]="getCallStatusConfig(callStatus).dotColor"
+      ></span>
       <span>{{ callStatus }}</span>
     </div>
     <div class="text-3xl font-mono font-bold" style="color: var(--app-text)">
@@ -98,7 +102,10 @@
     </div>
     <div class="flex items-center justify-between">
       <span style="color: var(--app-text-muted)">Last Call</span>
-      <span style="color: var(--app-text-secondary)">Today, 2:30 PM</span>
+      <span style="color: var(--app-text-secondary)">{{
+        lastCallTime || lead?.last_message_at || lead?.created_at
+          | date: "shortTime"
+      }}</span>
     </div>
     <div class="flex items-center justify-between">
       <span style="color: var(--app-text-muted)">Total Calls</span>

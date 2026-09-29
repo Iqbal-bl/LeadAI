@@ -95,6 +95,34 @@ export class LeadConversationsComponent implements OnChanges {
     return 'AI Assistant';
   }
 
+  isAi(msg: any): boolean {
+    if (!msg) return false;
+    return (
+      !this.isCustomer(msg) &&
+      !this.isAgent(msg) &&
+      msg.sender !== 'system'
+    );
+  }
+
+  getConfidencePercent(val: any): number | null {
+    if (val === null || val === undefined || val === '') return null;
+    const num = Number(val);
+    if (isNaN(num)) return null;
+    return num <= 1 ? Math.round(num * 100) : Math.round(num);
+  }
+
+  getConfidenceBadgeClass(val: any): string {
+    const pct = this.getConfidencePercent(val);
+    if (pct === null) return '';
+    if (pct >= 75) {
+      return 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
+    }
+    if (pct >= 40) {
+      return 'text-amber-700 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
+    }
+    return 'text-rose-700 bg-rose-50 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800';
+  }
+
   scrollToBottom(): void {
     try {
       setTimeout(() => {
@@ -104,5 +132,36 @@ export class LeadConversationsComponent implements OnChanges {
         }
       }, 100);
     } catch (err) {}
+  }
+
+  getStatusColor(summary: string): string {
+    const text = (summary || '').toLowerCase();
+    if (
+      text.includes('completed') ||
+      text.includes('connected') ||
+      text.includes('answered') ||
+      text.includes('in progress')
+    ) {
+      return '#10b981'; // Green
+    }
+    if (text.includes('ringing')) {
+      return '#f59e0b'; // Amber
+    }
+    if (
+      text.includes('initiated') ||
+      text.includes('calling') ||
+      text.includes('dialing')
+    ) {
+      return '#3b82f6'; // Blue
+    }
+    if (
+      text.includes('failed') ||
+      text.includes('busy') ||
+      text.includes('unanswered') ||
+      text.includes('no-answer')
+    ) {
+      return '#ef4444'; // Red
+    }
+    return '#6366f1'; // Indigo
   }
 }

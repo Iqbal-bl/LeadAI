@@ -1,37 +1,37 @@
-<div class="lead-gen-container flex flex-col min-h-screen bg-slate-950 text-slate-100 font-sans antialiased overflow-y-auto">
+<div class="lead-gen-container flex flex-col min-h-screen bg-slate-50 text-slate-800 font-sans antialiased overflow-y-auto">
   <!-- Header Bar -->
-  <header class="flex items-center justify-between px-6 py-4 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
+  <header class="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 bg-white/80 backdrop-blur-md sticky top-0 z-50">
     <div class="flex items-center gap-3">
       <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-tr from-violet-600 to-indigo-600 shadow-md">
         <i class="pi pi-comments text-white text-sm"></i>
       </div>
       <div>
-        <h1 class="text-sm font-bold tracking-wide uppercase text-slate-200">LeadAI Outbound</h1>
-        <p class="text-[10px] text-violet-400 font-medium tracking-wider uppercase animate-pulse-soft">Demo Chat Widget</p>
+        <h1 class="text-sm font-bold tracking-wide uppercase text-slate-800">LeadAI Outbound</h1>
+        <p class="text-[10px] text-violet-600 font-medium tracking-wider uppercase animate-pulse-soft">Demo Chat Widget</p>
       </div>
     </div>
     <div class="flex items-center gap-2">
-      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-emerald-500/20"></span>
-      <span class="text-xs font-semibold text-slate-400">System Live</span>
+      <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/20"></span>
+      <span class="text-xs font-semibold text-slate-500">System Live</span>
     </div>
   </header>
 
   <!-- Step 1: Welcome & Setup Form -->
-  <main *ngIf="!chatStarted && !chatEnded" class="flex-1 flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950/40 via-slate-950 to-slate-950">
-    <div class="w-full max-w-xl glass-card rounded-2xl border border-slate-800/80 shadow-2xl p-6 lg:p-8 animate-fade-in space-y-6">
+  <main *ngIf="!chatStarted && !chatEnded" class="flex-1 flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-50/70 via-slate-50 to-slate-100">
+    <div class="w-full max-w-xl glass-card rounded-2xl border border-slate-200/80 shadow-xl p-6 lg:p-8 animate-fade-in space-y-6">
       <div class="text-center space-y-2">
-        <div class="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-violet-500/10">
+        <div class="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-violet-500/20">
           <i class="pi pi-user-plus text-white text-3xl"></i>
         </div>
-        <h2 class="text-2xl font-bold tracking-tight text-slate-100">Qualify Your Lead</h2>
-        <p class="text-sm text-slate-400">Enter your details and start chatting with the automated AI specialist.</p>
+        <h2 class="text-2xl font-bold tracking-tight text-slate-800">Qualify Your Lead</h2>
+        <p class="text-sm text-slate-500">Enter your details and start chatting with the automated AI specialist.</p>
       </div>
 
       <div class="space-y-4">
         <!-- Target Company Dropdown -->
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Target Assistant Company</label>
-          <div *ngIf="loadingCompanies" class="flex items-center gap-2 text-sm text-slate-400 py-2">
+          <label class="text-xs font-bold uppercase tracking-wider text-slate-600">Target Assistant Company</label>
+          <div *ngIf="loadingCompanies" class="flex items-center gap-2 text-sm text-slate-500 py-2">
             <p-progressSpinner styleClass="w-5 h-5" strokeWidth="4" animationDuration=".5s" />
             <span>Loading target assistants...</span>
           </div>
@@ -41,12 +41,12 @@
             [(ngModel)]="selectedCompany"
             optionLabel="name"
             placeholder="Select assistant company"
-            [style]="{ width: '100%', background: 'rgba(30, 41, 59, 0.4)', 'border-color': '#334155', color: '#f1f5f9' }"
+            [style]="{ width: '100%', background: '#ffffff', 'border-color': '#cbd5e1', color: '#0f172a' }"
             panelStyleClass="glass-dropdown-panel">
             <ng-template let-company pTemplate="item">
               <div class="flex flex-col py-1">
-                <span class="font-semibold text-slate-200 text-sm">{{ company.name }}</span>
-                <span class="text-xs text-slate-400">{{ company.description }}</span>
+                <span class="font-semibold text-slate-800 text-sm">{{ company.name }}</span>
+                <span class="text-xs text-slate-500">{{ company.description }}</span>
               </div>
             </ng-template>
           </p-dropdown>
@@ -55,19 +55,19 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <!-- Display Name -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Your Full Name</label>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-600">Your Full Name</label>
             <p-inputgroup>
-              <p-inputgroup-addon class="bg-slate-900 border-slate-700 text-slate-400"><i class="pi pi-user"></i></p-inputgroup-addon>
-              <input pInputText [(ngModel)]="displayName" placeholder="e.g. Priya Sharma" class="w-full text-slate-200 bg-slate-900/50 border-slate-700 focus:border-violet-500" />
+              <p-inputgroup-addon class="bg-slate-100 border-slate-300 text-slate-500"><i class="pi pi-user"></i></p-inputgroup-addon>
+              <input pInputText [(ngModel)]="displayName" placeholder="e.g. Priya Sharma" class="w-full text-slate-800 bg-white border-slate-300 focus:border-violet-500" />
             </p-inputgroup>
           </div>
 
           <!-- Phone Number -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Phone Number</label>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-600">Phone Number</label>
             <p-inputgroup>
-              <p-inputgroup-addon class="bg-slate-900 border-slate-700 text-slate-400"><i class="pi pi-phone"></i></p-inputgroup-addon>
-              <input pInputText [(ngModel)]="phone" placeholder="e.g. +91 98765 43210" class="w-full text-slate-200 bg-slate-900/50 border-slate-700 focus:border-violet-500" />
+              <p-inputgroup-addon class="bg-slate-100 border-slate-300 text-slate-500"><i class="pi pi-phone"></i></p-inputgroup-addon>
+              <input pInputText [(ngModel)]="phone" placeholder="e.g. +91 98765 43210" class="w-full text-slate-800 bg-white border-slate-300 focus:border-violet-500" />
             </p-inputgroup>
           </div>
         </div>
@@ -75,29 +75,29 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <!-- Email Address -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Email Address</label>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-600">Email Address</label>
             <p-inputgroup>
-              <p-inputgroup-addon class="bg-slate-900 border-slate-700 text-slate-400"><i class="pi pi-envelope"></i></p-inputgroup-addon>
-              <input pInputText type="email" [(ngModel)]="email" placeholder="e.g. priya@techcorp.com" class="w-full text-slate-200 bg-slate-900/50 border-slate-700 focus:border-violet-500" />
+              <p-inputgroup-addon class="bg-slate-100 border-slate-300 text-slate-500"><i class="pi pi-envelope"></i></p-inputgroup-addon>
+              <input pInputText type="email" [(ngModel)]="email" placeholder="e.g. priya@techcorp.com" class="w-full text-slate-800 bg-white border-slate-300 focus:border-violet-500" />
             </p-inputgroup>
           </div>
 
           <!-- Language Selector -->
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-bold uppercase tracking-wider text-slate-400">Preferred Language</label>
+            <label class="text-xs font-bold uppercase tracking-wider text-slate-600">Preferred Language</label>
             <p-dropdown
               [options]="languages"
               [(ngModel)]="selectedLanguage"
               optionLabel="label"
               optionValue="value"
-              [style]="{ width: '100%', background: 'rgba(30, 41, 59, 0.4)', 'border-color': '#334155', color: '#f1f5f9' }"
+              [style]="{ width: '100%', background: '#ffffff', 'border-color': '#cbd5e1', color: '#0f172a' }"
               panelStyleClass="glass-dropdown-panel">
             </p-dropdown>
           </div>
         </div>
 
-        <p-divider align="center" styleClass="border-slate-800/80 my-2">
-          <span class="text-[9px] uppercase tracking-widest text-slate-500 font-bold">Optional Social Links</span>
+        <p-divider align="center" styleClass="border-slate-200 my-2">
+          <span class="text-[9px] uppercase tracking-widest text-slate-400 font-bold">Optional Social Links</span>
         </p-divider>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -105,8 +105,8 @@
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-bold uppercase tracking-wider text-slate-500">WhatsApp Number</label>
             <p-inputgroup>
-              <p-inputgroup-addon class="bg-slate-900 border-slate-700 text-slate-400"><i class="pi pi-whatsapp"></i></p-inputgroup-addon>
-              <input pInputText [(ngModel)]="whatsapp" placeholder="WhatsApp handle or phone" class="w-full text-slate-200 bg-slate-900/50 border-slate-700 focus:border-violet-500" />
+              <p-inputgroup-addon class="bg-slate-100 border-slate-300 text-slate-500"><i class="pi pi-whatsapp"></i></p-inputgroup-addon>
+              <input pInputText [(ngModel)]="whatsapp" placeholder="WhatsApp handle or phone" class="w-full text-slate-800 bg-white border-slate-300 focus:border-violet-500" />
             </p-inputgroup>
           </div>
 
@@ -114,8 +114,8 @@
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Instagram Handle</label>
             <p-inputgroup>
-              <p-inputgroup-addon class="bg-slate-900 border-slate-700 text-slate-400"><i class="pi pi-instagram"></i></p-inputgroup-addon>
-              <input pInputText [(ngModel)]="instagram" placeholder="@instagram_handle" class="w-full text-slate-200 bg-slate-900/50 border-slate-700 focus:border-violet-500" />
+              <p-inputgroup-addon class="bg-slate-100 border-slate-300 text-slate-500"><i class="pi pi-instagram"></i></p-inputgroup-addon>
+              <input pInputText [(ngModel)]="instagram" placeholder="@instagram_handle" class="w-full text-slate-800 bg-white border-slate-300 focus:border-violet-500" />
             </p-inputgroup>
           </div>
         </div>
@@ -125,7 +125,7 @@
       <button
         [disabled]="!isFormValid || startingChat"
         (click)="startConversation()"
-        class="w-full py-3.5 rounded-xl text-white text-sm font-bold tracking-wide transition-all duration-200 cursor-pointer select-none bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed hover:-translate-y-0.5"
+        class="w-full py-3.5 rounded-xl text-white text-sm font-bold tracking-wide transition-all duration-200 cursor-pointer select-none bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-md hover:shadow-lg hover:shadow-violet-500/25 disabled:opacity-40 disabled:cursor-not-allowed hover:-translate-y-0.5"
       >
         <span *ngIf="!startingChat" class="flex items-center justify-center gap-2">
           Start Conversation <i class="pi pi-chevron-right text-xs"></i>
@@ -138,23 +138,23 @@
   </main>
 
   <!-- Step 2: Active Chat Interface -->
-  <main *ngIf="chatStarted && !chatEnded" class="flex-1 flex flex-col lg:flex-row min-h-0 bg-slate-950">
+  <main *ngIf="chatStarted && !chatEnded" class="flex-1 flex flex-col lg:flex-row min-h-0 bg-slate-50">
     <!-- Left Column: Lead Quality Scoreboard -->
-    <section class="lg:w-[320px] border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-slate-900/40 p-5 flex flex-col gap-6 flex-shrink-0">
+    <section class="lg:w-[320px] border-b lg:border-b-0 lg:border-r border-slate-200 bg-white p-5 flex flex-col gap-6 flex-shrink-0">
       <!-- Connected Assistant Header -->
       <div class="space-y-2">
-        <span class="text-[9px] font-bold uppercase tracking-widest text-slate-500">Connected Assistant</span>
-        <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/60 space-y-1">
-          <h4 class="text-sm font-bold text-slate-100 flex items-center gap-2">
-            <i class="pi pi-building text-violet-400"></i> {{ selectedCompany?.name }}
+        <span class="text-[9px] font-bold uppercase tracking-widest text-slate-400">Connected Assistant</span>
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
+          <h4 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <i class="pi pi-building text-violet-600"></i> {{ selectedCompany?.name }}
           </h4>
-          <p class="text-xs text-slate-400 leading-relaxed">{{ selectedCompany?.description }}</p>
+          <p class="text-xs text-slate-500 leading-relaxed">{{ selectedCompany?.description }}</p>
         </div>
       </div>
 
       <!-- Lead Score Gauge -->
-      <div class="flex flex-col items-center justify-center text-center p-5 rounded-2xl bg-gradient-to-b from-slate-900/40 to-slate-900/80 border border-slate-800/50 shadow-inner">
-        <span class="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-4">Lead Quality Score</span>
+      <div class="flex flex-col items-center justify-center text-center p-5 rounded-2xl bg-gradient-to-b from-slate-50 to-white border border-slate-200 shadow-sm">
+        <span class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Lead Quality Score</span>
         <div class="relative flex items-center justify-center py-2">
           <p-knob
             [(ngModel)]="leadScore"
@@ -162,7 +162,7 @@
             [size]="130"
             [strokeWidth]="10"
             valueColor="#8b5cf6"
-            rangeColor="#1e293b"
+            rangeColor="#e2e8f0"
             [valueTemplate]="'{value}%'">
           </p-knob>
           <!-- Score Glow Ring -->
@@ -177,64 +177,55 @@
       </div>
 
       <!-- Outbound Campaign Info -->
-      <div class="mt-auto p-4 rounded-xl bg-slate-900/20 border border-slate-800/40 text-xs space-y-3">
-        <h5 class="font-bold text-slate-400 flex items-center gap-1.5">
-          <i class="pi pi-info-circle text-violet-400"></i> OUTBOUND LOGS
+      <div class="mt-auto p-4 rounded-xl bg-slate-50 border border-slate-200/80 text-xs space-y-3">
+        <h5 class="font-bold text-slate-600 flex items-center gap-1.5">
+          <i class="pi pi-info-circle text-violet-600"></i> OUTBOUND LOGS
         </h5>
         <div class="space-y-2 text-slate-500">
-          <div class="flex justify-between"><span>User:</span><span class="text-slate-400 font-semibold">{{ displayName }}</span></div>
-          <div class="flex justify-between"><span>Language:</span><span class="text-slate-400">{{ selectedLanguage }}</span></div>
-          <div class="flex justify-between"><span>Session:</span><span class="text-slate-400 font-mono text-[9px] uppercase">Active</span></div>
+          <div class="flex justify-between"><span>User:</span><span class="text-slate-800 font-semibold">{{ displayName }}</span></div>
+          <div class="flex justify-between"><span>Language:</span><span class="text-slate-800">{{ selectedLanguage }}</span></div>
+          <div class="flex justify-between"><span>Session:</span><span class="text-emerald-600 font-mono text-[9px] uppercase font-bold">Active</span></div>
         </div>
-        <button (click)="endChat()" class="w-full mt-2 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 text-xs font-bold transition-all duration-200 cursor-pointer">
+        <button (click)="endChat()" class="w-full mt-2 py-2 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-xs font-bold transition-all duration-200 cursor-pointer">
           <i class="pi pi-sign-out mr-1"></i> Disconnect Chat
         </button>
       </div>
     </section>
 
     <!-- Right Column: Interactive Chat Feed -->
-    <section class="flex-1 flex flex-col min-h-0 relative">
+    <section class="flex-1 flex flex-col min-h-0 relative bg-slate-50/50">
       <!-- Chat Header -->
-      <div class="px-5 py-3 border-b border-slate-800/60 bg-slate-950/60 backdrop-blur flex items-center justify-between flex-shrink-0">
+      <div class="px-5 py-3 border-b border-slate-200 bg-white/90 backdrop-blur flex items-center justify-between flex-shrink-0">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-full flex items-center justify-center bg-slate-900 border border-slate-800 relative">
-            <i class="pi pi-microchip-ai text-violet-400 text-base"></i>
-            <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-slate-950"></span>
+          <div class="w-9 h-9 rounded-full flex items-center justify-center bg-violet-50 border border-violet-200 relative">
+            <i class="pi pi-microchip-ai text-violet-600 text-base"></i>
+            <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white"></span>
           </div>
           <div>
-            <div class="text-sm font-bold text-slate-200">AI Assistant Bot</div>
-            <div class="text-[10px] text-slate-500">Online · Processing Lead Data</div>
+            <div class="text-sm font-bold text-slate-800">AI Assistant Bot</div>
+            <div class="text-[10px] text-slate-400">Online · Processing Lead Data</div>
           </div>
         </div>
       </div>
 
       <!-- Messages Feed (Scrollable) -->
-      <div class="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-950/30 messages-feed">
+      <div class="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-100/40 messages-feed">
         <div *ngFor="let msg of messages" class="flex flex-col" [ngClass]="msg.sender === 'customer' ? 'items-end' : 'items-start'">
           <div class="flex items-end gap-2 max-w-[85%] md:max-w-[70%]">
             <!-- AI Avatar -->
-            <div *ngIf="msg.sender !== 'customer'" class="w-7 h-7 rounded-full flex items-center justify-center bg-slate-900 border border-slate-800/80 flex-shrink-0 mb-1">
-              <i class="pi" [ngClass]="msg.sender === 'agent' ? 'pi-user text-emerald-400' : 'pi-microchip-ai text-violet-400'" style="font-size: 0.75rem;"></i>
+            <div *ngIf="msg.sender !== 'customer'" class="w-7 h-7 rounded-full flex items-center justify-center bg-white border border-slate-200 flex-shrink-0 mb-1 shadow-xs">
+              <i class="pi" [ngClass]="msg.sender === 'agent' ? 'pi-user text-emerald-600' : 'pi-microchip-ai text-violet-600'" style="font-size: 0.75rem;"></i>
             </div>
 
             <!-- Message Bubble -->
             <div class="flex flex-col gap-1.5">
               <div class="p-3.5 rounded-2xl text-sm leading-relaxed"
                    [ngClass]="msg.sender === 'customer'
-                     ? 'bg-gradient-to-tr from-violet-600 to-indigo-600 text-white rounded-br-none shadow-md shadow-violet-600/5'
-                     : 'bg-slate-900 border border-slate-800/80 text-slate-200 rounded-bl-none'">
+                     ? 'bg-gradient-to-tr from-violet-600 to-indigo-600 text-white rounded-br-none shadow-md shadow-violet-600/10'
+                     : 'bg-white border border-slate-200/90 text-slate-800 rounded-bl-none shadow-xs'">
                 {{ msg.text }}
-
-                <!-- Message Sources / Citations -->
-                <!-- <div *ngIf="msg.sources && msg.sources.length > 0" class="mt-2.5 pt-2 border-t border-slate-800/60 text-[10px] text-slate-500 space-y-1">
-                  <span class="font-bold uppercase tracking-wider text-slate-400">Sources:</span>
-                  <div *ngFor="let src of msg.sources" class="flex items-center gap-1">
-                    <i class="pi pi-file text-[8px] text-violet-400"></i>
-                    <span class="truncate">{{ src.excerpt || src }}</span>
-                  </div>
-                </div> -->
               </div>
-              <span class="text-[9px] text-slate-500 px-1" [ngClass]="msg.sender === 'customer' ? 'text-right' : 'text-left'">
+              <span class="text-[9px] text-slate-400 px-1" [ngClass]="msg.sender === 'customer' ? 'text-right' : 'text-left'">
                 {{ msg.sender === 'customer' ? 'You' : msg.sender === 'agent' ? 'Agent' : 'AI' }} · {{ msg.time }}
               </span>
             </div>
@@ -243,10 +234,10 @@
 
         <!-- Typing Bubble Animation -->
         <div *ngIf="isTyping" class="flex items-end gap-2 animate-fade-in">
-          <div class="w-7 h-7 rounded-full flex items-center justify-center bg-slate-900 border border-slate-800/80 flex-shrink-0 mb-1">
-            <i class="pi pi-microchip-ai text-violet-400" style="font-size: 0.75rem;"></i>
+          <div class="w-7 h-7 rounded-full flex items-center justify-center bg-white border border-slate-200 flex-shrink-0 mb-1 shadow-xs">
+            <i class="pi pi-microchip-ai text-violet-600" style="font-size: 0.75rem;"></i>
           </div>
-          <div class="p-4 rounded-2xl rounded-bl-none bg-slate-900 border border-slate-800/80 flex items-center gap-1.5">
+          <div class="p-4 rounded-2xl rounded-bl-none bg-white border border-slate-200/90 shadow-xs flex items-center gap-1.5">
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>
@@ -255,7 +246,7 @@
       </div>
 
       <!-- Message Input -->
-      <div class="p-4 border-t border-slate-800/60 bg-slate-950 flex-shrink-0">
+      <div class="p-4 border-t border-slate-200 bg-white flex-shrink-0">
         <div class="flex items-center gap-3 relative max-w-5xl mx-auto">
           <input
             pInputText
@@ -263,14 +254,14 @@
             (keydown.enter)="sendMessage()"
             placeholder="Type your message here..."
             [disabled]="isTyping"
-            class="flex-1 py-3 px-4 rounded-xl bg-slate-900/60 border-slate-800 text-slate-200 placeholder-slate-500 text-sm focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+            class="flex-1 py-3 px-4 rounded-xl bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400 text-sm focus:border-violet-500 focus:ring-1 focus:ring-violet-500 focus:bg-white"
           />
           <button
             pButton
             icon="pi pi-send"
             (click)="sendMessage()"
             [disabled]="!currentMessage.trim() || isTyping"
-            class="p-button-rounded bg-gradient-to-tr from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 border-none text-white w-10 h-10 flex items-center justify-center cursor-pointer disabled:opacity-40"
+            class="p-button-rounded bg-gradient-to-tr from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 border-none text-white w-10 h-10 flex items-center justify-center cursor-pointer shadow-sm disabled:opacity-40"
           ></button>
         </div>
       </div>
@@ -278,38 +269,38 @@
   </main>
 
   <!-- Step 3: Completion Screen -->
-  <main *ngIf="chatEnded" class="flex-1 flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-indigo-950/40 via-slate-950 to-slate-950">
-    <div class="w-full max-w-md glass-card rounded-2xl border border-slate-800/80 shadow-2xl p-6 lg:p-8 animate-fade-in text-center space-y-6">
-      <div class="w-20 h-20 mx-auto rounded-full flex items-center justify-center bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 relative">
+  <main *ngIf="chatEnded" class="flex-1 flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_bottom,_var(--tw-gradient-stops))] from-violet-50/70 via-slate-50 to-slate-100">
+    <div class="w-full max-w-md glass-card rounded-2xl border border-slate-200/80 shadow-xl p-6 lg:p-8 animate-fade-in text-center space-y-6">
+      <div class="w-20 h-20 mx-auto rounded-full flex items-center justify-center bg-emerald-50 border border-emerald-200 text-emerald-600 relative">
         <i class="pi pi-check text-4xl"></i>
         <!-- Success ring glow -->
-        <span class="absolute inset-0 rounded-full bg-emerald-500/5 animate-ping"></span>
+        <span class="absolute inset-0 rounded-full bg-emerald-500/10 animate-ping"></span>
       </div>
 
       <div class="space-y-2">
-        <h2 class="text-2xl font-bold tracking-tight text-slate-100">Conversation Recorded!</h2>
-        <p class="text-sm text-slate-400">Thank you for chatting. Your profile is qualified and synced into the campaign queue.</p>
+        <h2 class="text-2xl font-bold tracking-tight text-slate-800">Conversation Recorded!</h2>
+        <p class="text-sm text-slate-500">Thank you for chatting. Your profile is qualified and synced into the campaign queue.</p>
       </div>
 
       <!-- Lead Summary details -->
-      <div class="p-4 rounded-xl bg-slate-900/40 border border-slate-800/60 text-left space-y-3">
-        <div class="text-center font-bold text-xs uppercase tracking-wider text-slate-500 mb-1">Final Analysis Results</div>
-        <div class="flex items-center justify-between text-sm py-1 border-b border-slate-800/40">
-          <span class="text-slate-400">Lead Status:</span>
+      <div class="p-4 rounded-xl bg-slate-50 border border-slate-200/80 text-left space-y-3">
+        <div class="text-center font-bold text-xs uppercase tracking-wider text-slate-400 mb-1">Final Analysis Results</div>
+        <div class="flex items-center justify-between text-sm py-1 border-b border-slate-200/60">
+          <span class="text-slate-500">Lead Status:</span>
           <p-tag [value]="leadStatus" [severity]="getStatusSeverity(leadStatus)" [rounded]="true" styleClass="px-2.5 py-0.5 text-[10px] font-bold"></p-tag>
         </div>
-        <div class="flex items-center justify-between text-sm py-1 border-b border-slate-800/40">
-          <span class="text-slate-400">Lead Score:</span>
-          <span class="font-bold text-violet-400">{{ leadScore }} / 100</span>
+        <div class="flex items-center justify-between text-sm py-1 border-b border-slate-200/60">
+          <span class="text-slate-500">Lead Score:</span>
+          <span class="font-bold text-violet-600">{{ leadScore }} / 100</span>
         </div>
         <div class="flex items-center justify-between text-sm py-1">
-          <span class="text-slate-400">Total Interchanged Messages:</span>
-          <span class="font-bold text-slate-300">{{ messages.length }}</span>
+          <span class="text-slate-500">Total Interchanged Messages:</span>
+          <span class="font-bold text-slate-800">{{ messages.length }}</span>
         </div>
       </div>
 
       <!-- Primary Action -->
-      <button (click)="resetChat()" class="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-sm font-bold tracking-wide transition-all duration-200 cursor-pointer shadow-lg hover:shadow-violet-600/10">
+      <button (click)="resetChat()" class="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-sm font-bold tracking-wide transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg hover:shadow-violet-600/20">
         <i class="pi pi-refresh mr-1 text-xs"></i> Start New Qualification Session
       </button>
     </div>

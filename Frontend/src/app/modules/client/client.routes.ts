@@ -196,17 +196,22 @@ export const CLIENT_ROUTES: Routes = [
         pathMatch: 'full',
       },
       {
-        path: 'social-analytics',
+        path: 'usage',
         loadComponent: () =>
-          import('../../features/campaigns/pages/analytics-layout/analytics-layout').then(
-            (m) => m.AnalyticsLayoutComponent,
+          import('../../features/usage/usage.component').then(
+            (m) => m.UsageComponent,
           ),
       },
       {
         path: 'billing',
+        redirectTo: 'usage',
+        pathMatch: 'full',
+      },
+      {
+        path: 'profile',
         loadComponent: () =>
-          import('./pages/billing-dashboard/billing-dashboard.component').then(
-            (m) => m.BillingDashboardComponent,
+          import('../../features/profile/profile.component').then(
+            (m) => m.ProfileComponent,
           ),
       },
       {
@@ -217,4 +222,3 @@ export const CLIENT_ROUTES: Routes = [
     ],
   },
 ];
-

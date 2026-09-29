@@ -14,6 +14,30 @@ export interface UserMe {
   accessible_companies: AccessibleCompany[];
 }
 
+/**
+ * Payload interface for updating the authenticated user's profile details.
+ */
+export interface UserProfileUpdatePayload {
+  full_name: string;
+  phone?: string;
+  timezone?: string;
+}
+
+/**
+ * Extended model for presenting the full user profile including preferences and company context.
+ */
+export interface UserProfileDetails {
+  email: string;
+  full_name: string;
+  role: string;
+  client_id: string;
+  client_name: string;
+  phone?: string;
+  timezone?: string;
+  permissions: string[];
+  accessible_companies: AccessibleCompany[];
+}
+
 export interface RoleGrant {
   id?: string;
   user_email: string;

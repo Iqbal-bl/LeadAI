@@ -373,20 +373,56 @@ def handle_linkedin_invitations(db, payload: dict) -> dict:
     }
 
 
-def calculate_next_periodic_run(base_minutes: int = 120, jitter_minutes: int = 15) -> datetime:
-    """Calculate the datetime (UTC, tz-naive) for the next run (~2 hours with randomized human-like jitter)."""
+def calculate_next_periodic_run(base_minutes: int = 60, jitter_minutes: int = 15, min_minutes: int = 30) -> datetime:
+    """Calculate the datetime (UTC, tz-naive) for the next run with randomized human-like jitter."""
     import random
     offset_seconds = (base_minutes * 60) + random.randint(-jitter_minutes * 60, jitter_minutes * 60)
-    # Ensure minimum delay is at least 60 minutes
-    offset_seconds = max(3600, offset_seconds)
+    # Ensure minimum delay threshold
+    offset_seconds = max(min_minutes * 60, offset_seconds)
     now_utc = datetime.now(timezone.utc)
     target_utc = now_utc + timedelta(seconds=offset_seconds)
     return target_utc.replace(tzinfo=None)
 
 
+@register("linkedin.sync_comments")
+def handle_linkedin_sync_comments(db: Session, payload: dict) -> dict:
+    """Recurring job handler to scan LinkedIn posts for comments and generate AI replies safely."""
+    from ..social.linkedin_bot import fetch_recent_posts_and_comments_browser
+    from ..models_ext import LeadChannelAccount
+    import asyncio
+
+    company_id = payload.get("company_id")
+    query = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsActive == True,
+        LeadChannelAccount.IsDeleted == False
+    )
+    if company_id:
+        query = query.filter(LeadChannelAccount.ClientId == company_id)
+
+    accounts = query.all()
+    results = {}
+    for account in accounts:
+        try:
+            res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account))
+            results[account.ClientId] = res
+        except Exception as exc:
+            logger.warning("[LeadAI jobs] LinkedIn comment sync error for client %s: %s", account.ClientId, exc)
+            results[account.ClientId] = {"error": str(exc)}
+
+    # Schedule next check in ~45-60 minutes with human jitter (safe anti-bot cadence)
+    if not company_id:
+        run_at = calculate_next_periodic_run(base_minutes=50, jitter_minutes=15, min_minutes=35)
+        enqueue(db, "linkedin.sync_comments", run_at=run_at)
+        logger.info("[LeadAI jobs] Scheduled next periodic linkedin.sync_comments at %s", run_at)
+
+    return {"synced_accounts": len(accounts), "details": results}
+
+
 def bootstrap_linkedin_job(db) -> None:
-    """Ensure that the recurring LinkedIn connection request job exists."""
-    existing = (
+    """Ensure that the recurring LinkedIn connection request and comment sync jobs exist."""
+    # 1. Connection requests sync (~2 hours)
+    existing_invites = (
         db.query(LeadJob)
         .filter(
             LeadJob.Kind == "linkedin.process_invitations",
@@ -395,10 +431,27 @@ def bootstrap_linkedin_job(db) -> None:
         )
         .first()
     )
-    if not existing:
-        run_at = calculate_next_periodic_run(base_minutes=120, jitter_minutes=15)
+    if not existing_invites:
+        run_at = calculate_next_periodic_run(base_minutes=120, jitter_minutes=15, min_minutes=60)
         enqueue(db, "linkedin.process_invitations", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.process_invitations at %s", run_at)
+
+    # 2. Comments & AI Replies scanner (~45-60 mins, safe anti-bot cadence)
+    existing_comments = (
+        db.query(LeadJob)
+        .filter(
+            LeadJob.Kind == "linkedin.sync_comments",
+            LeadJob.Status.in_(("queued", "claimed")),
+            LeadJob.IsDeleted == False
+        )
+        .first()
+    )
+    if not existing_comments:
+        run_at = calculate_next_periodic_run(base_minutes=50, jitter_minutes=15, min_minutes=35)
+        enqueue(db, "linkedin.sync_comments", run_at=run_at)
+        logger.info("[LeadAI jobs] Enqueued first run of linkedin.sync_comments at %s", run_at)
+
+
 
 
 # ===========================================================================

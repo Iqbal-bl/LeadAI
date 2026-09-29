@@ -1,29 +1,29 @@
 .lead-gen-container {
   position: relative;
-  background-color: #020617; /* Slate-950 */
+  background-color: #f8fafc; /* Slate-50 */
   overflow: hidden;
 
   /* Ambient glowing background blobs */
   &::before, &::after {
     content: '';
     position: absolute;
-    width: 400px;
-    height: 400px;
+    width: 450px;
+    height: 450px;
     border-radius: 50%;
-    filter: blur(150px);
+    filter: blur(140px);
     z-index: 1;
     pointer-events: none;
-    opacity: 0.25;
+    opacity: 0.4;
   }
   &::before {
     top: -100px;
     left: -100px;
-    background: radial-gradient(circle, #8b5cf6, #6366f1);
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.25), rgba(99, 102, 241, 0.12));
   }
   &::after {
     bottom: -100px;
     right: -100px;
-    background: radial-gradient(circle, #ec4899, #8b5cf6);
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.18), rgba(139, 92, 246, 0.12));
   }
 
   /* Make sure main content stands above ambient lights */
@@ -41,21 +41,21 @@
       background: transparent;
     }
     &::-webkit-scrollbar-thumb {
-      background: rgba(148, 163, 184, 0.15);
+      background: rgba(148, 163, 184, 0.3);
       border-radius: 4px;
       &:hover {
-        background: rgba(148, 163, 184, 0.3);
+        background: rgba(148, 163, 184, 0.5);
       }
     }
   }
 
   /* Glassmorphism Card Style */
   .glass-card {
-    background: rgba(15, 23, 42, 0.5);
+    background: rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(51, 65, 85, 0.5) !important;
-    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(226, 232, 240, 0.9) !important;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.08);
   }
 
   /* Target all PrimeNG input text boxes inside the container */
@@ -63,33 +63,33 @@
     .p-inputgroup {
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
 
       .p-inputgroup-addon {
-        background: rgba(15, 23, 42, 0.6) !important;
-        border: 1px solid rgba(51, 65, 85, 0.8) !important;
+        background: #f1f5f9 !important;
+        border: 1px solid #cbd5e1 !important;
         border-right: none !important;
-        color: #94a3b8 !important;
+        color: #64748b !important;
       }
     }
 
     input.p-inputtext {
-      background: rgba(15, 23, 42, 0.4) !important;
-      border: 1px solid rgba(51, 65, 85, 0.8) !important;
-      color: #f1f5f9 !important;
+      background: #ffffff !important;
+      border: 1px solid #cbd5e1 !important;
+      color: #0f172a !important;
       font-size: 0.875rem !important;
       padding: 0.75rem 1rem !important;
       border-radius: 0 12px 12px 0 !important;
       transition: all 0.2s ease-in-out !important;
 
       &::placeholder {
-        color: #64748b !important;
+        color: #94a3b8 !important;
         opacity: 1 !important;
       }
 
       &:focus {
         border-color: #8b5cf6 !important;
-        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3) !important;
+        box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15) !important;
         outline: none !important;
       }
     }
@@ -101,35 +101,35 @@
 
     /* PrimeNG Dropdown styling */
     .p-dropdown {
-      background: rgba(15, 23, 42, 0.4) !important;
-      border: 1px solid rgba(51, 65, 85, 0.8) !important;
+      background: #ffffff !important;
+      border: 1px solid #cbd5e1 !important;
       border-radius: 12px !important;
-      color: #f1f5f9 !important;
+      color: #0f172a !important;
       transition: all 0.2s ease-in-out !important;
 
       &:not(.p-disabled):hover {
-        border-color: rgba(139, 92, 246, 0.5) !important;
+        border-color: #8b5cf6 !important;
       }
 
       &.p-focus {
         border-color: #8b5cf6 !important;
-        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.3) !important;
+        box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15) !important;
       }
 
       .p-dropdown-label {
-        color: #f1f5f9 !important;
+        color: #0f172a !important;
         padding: 0.75rem 1rem !important;
         font-size: 0.875rem !important;
       }
 
       .p-dropdown-trigger {
-        color: #94a3b8 !important;
+        color: #64748b !important;
       }
     }
 
     /* PrimeNG Divider style adjustments */
     .p-divider-horizontal:before {
-      border-top: 1px solid rgba(51, 65, 85, 0.4) !important;
+      border-top: 1px solid #e2e8f0 !important;
     }
   }
 
@@ -168,7 +168,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background-color: #94a3b8;
+    background-color: #8b5cf6;
     animation: bounceDot 1.4s infinite ease-in-out both;
 
     &:nth-child(1) {
@@ -191,11 +191,11 @@
 
 /* PrimeNG Dropdown panel styling */
 ::ng-deep .glass-dropdown-panel {
-  background: rgba(15, 23, 42, 0.95) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
   backdrop-filter: blur(24px) !important;
-  border: 1px solid rgba(51, 65, 85, 0.6) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
   border-radius: 14px !important;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6) !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05) !important;
   margin-top: 4px !important;
 
   .p-dropdown-items {
@@ -206,12 +206,13 @@
     border-radius: 8px !important;
     margin: 2px 0 !important;
     padding: 8px 12px !important;
-    color: #cbd5e1 !important;
+    color: #334155 !important;
     transition: all 0.2s ease !important;
 
     &:hover, &.p-highlight {
-      background: rgba(139, 92, 246, 0.15) !important;
-      color: #a78bfa !important;
+      background: rgba(139, 92, 246, 0.1) !important;
+      color: #7c3aed !important;
     }
   }
 }
+

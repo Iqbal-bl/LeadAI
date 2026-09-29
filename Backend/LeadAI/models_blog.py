@@ -194,9 +194,92 @@ class LeadBlogReviewNote(LeadAIBase):
     ActionTaken = Column(String(50), nullable=False, default="draft")  # submit_approval, approved, changes_requested, rejected, regenerated, published
 
 
+class LeadSocialComment(LeadAIBase):
+    """Social media comment on a company post with AI reply analysis and lead capture."""
+
+    __tablename__ = "leadai_social_comments"
+    __table_args__ = (
+        Index("ix_leadai_soccomm_client_channel", "ClientId", "Channel"),
+        Index("ix_leadai_soccomm_post", "PostUrn"),
+        Index("ix_leadai_soccomm_status", "Status"),
+        Index("ix_leadai_soccomm_client_created", "ClientId", "CreatedAt"),
+    )
+
+    ClientId = Column(String(36), nullable=False, index=True)
+    Channel = Column(String(30), nullable=False, default="linkedin")  # linkedin | facebook | instagram
+    
+    # Post Context
+    PostUrn = Column(String(200), nullable=False, index=True)        # e.g., urn:li:ugcPost:123 or post url/id
+    PostTitle = Column(String(500), nullable=True)                  # Post title or article title
+    PostSnippet = Column(Text, nullable=True)                       # Caption / text excerpt of original post
+    ArticleId = Column(String(36), nullable=True, index=True)       # Linked LeadArticle.Id if published from studio
+
+    # Comment Details
+    CommentUrn = Column(String(250), nullable=False, index=True)     # Unique LinkedIn comment URN or ID
+    ParentCommentUrn = Column(String(250), nullable=True)           # Parent comment URN if thread reply
+    AuthorName = Column(String(200), nullable=False, default="LinkedIn User")
+    AuthorHeadline = Column(String(300), nullable=True)             # Job title / headline
+    AuthorProfileUrl = Column(String(500), nullable=True)           # Profile URL
+    AuthorUrn = Column(String(200), nullable=True)                  # LinkedIn member URN
+    AuthorAvatar = Column(String(1000), nullable=True)              # Avatar image URL
+    CommentText = Column(Text, nullable=False)                      # Exact comment content
+    CommentCreatedAt = Column(DateTime, nullable=True)
+
+    # AI Analysis & Intent Classification
+    Sentiment = Column(String(30), nullable=True, default="neutral")  # positive | question | lead_inquiry | praise | critical | neutral
+    IntentScore = Column(Float, nullable=True, default=0.0)         # 0.0 - 1.0 (buying / partnership intent)
+    IsQuestion = Column(Boolean, default=False)
+    IsLeadCandidate = Column(Boolean, default=False)
+    
+    # AI Reply Suggestion
+    SuggestedReply = Column(Text, nullable=True)                    # AI-drafted reply
+    SuggestedReplyRationale = Column(Text, nullable=True)           # Why AI formulated this answer
+    ContextUsedJson = Column(JSON, nullable=True, default=dict)     # Snapshot of company & post context used
+    
+    # Status & Actual Reply
+    Status = Column(String(40), nullable=False, default="pending_review")  # pending_review | approved | auto_replied | replied | ignored
+    ReplyText = Column(Text, nullable=True)                         # The final text sent
+    ReplyUrn = Column(String(250), nullable=True)                   # Published reply URN
+    RepliedAt = Column(DateTime, nullable=True)
+    RepliedBy = Column(String(100), nullable=True)                  # "ai_auto" | "operator"
+
+    # CRM Lead Integration
+    CustomerId = Column(String(36), nullable=True, index=True)      # Linked LeadCustomer.Id if captured
+    IdentityId = Column(String(36), nullable=True)                  # Linked LeadChannelIdentity.Id
+
+
+class LeadCommentSettings(LeadAIBase):
+    """Company-level preferences for AI comment reply generation and auto-pilot."""
+
+    __tablename__ = "leadai_comment_settings"
+    __table_args__ = (
+        UniqueConstraint("ClientId", "Channel", name="uq_leadai_comment_settings_client_chan"),
+        Index("ix_leadai_commset_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    Channel = Column(String(30), nullable=False, default="linkedin")
+    
+    # Operation Mode
+    IsAutoReplyEnabled = Column(Boolean, default=False, nullable=False)
+    RequireApprovalForQuestions = Column(Boolean, default=True, nullable=False)
+    
+    # Tone & Personality
+    ReplyTone = Column(String(50), default="thought_leadership", nullable=False)  # thought_leadership | friendly_professional | consultative | conversational | direct
+    CustomInstructions = Column(Text, nullable=True)                # Custom prompt instructions e.g. "Mention free consultation"
+    SignatureText = Column(String(100), nullable=True)              # e.g. "- LeadAI Team"
+    
+    # Safety & Filters
+    AutoCaptureLeads = Column(Boolean, default=True, nullable=False)
+    MinLeadIntentThreshold = Column(Float, default=0.6, nullable=False)
+    ExcludeKeywords = Column(JSON, nullable=True, default=list)     # Words to skip auto-reply (e.g. spam, refund, scam)
+
+
 ALL_LEADAI_BLOG_TABLES = (
     LeadBlogSettings,
     LeadArticle,
     LeadArticleVersion,
     LeadBlogReviewNote,
+    LeadSocialComment,
+    LeadCommentSettings,
 )

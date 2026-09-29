@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap, throwError } from 'rxjs';
-import { UserMe } from '../models/auth.models';
+import { UserMe, UserProfileUpdatePayload } from '../models/auth.models';
 import {
   ROLE_COMPANY_ADMIN,
   ROLE_EMPLOYEE,
@@ -112,12 +112,9 @@ export class AuthService {
   }
 
   // Check if admin user
-  public isAdmin(): boolean {
-    const role = this.getUserRole();
-    return (
-      role?.toLowerCase() === 'admin' ||
-      role?.toLowerCase() === 'platform_admin'
-    );
+  public isSuperAdmin(): boolean {
+    const role = this.getUserRole()?.toLowerCase();
+    return role === 'admin';
   }
 
   // Initiate OIDC login flow using redirect
@@ -132,9 +129,7 @@ export class AuthService {
     // generateCodeChallenge automatically generates, saves, and returns the challenge
     const code_challenge = await this.commonLibService.generateCodeChallenge();
 
-    const path = environment.production
-      ? 'oauth/authorize'
-      : 'connect/authorize';
+    const path = 'connect/authorize';
     const baseUrl = `${authConfig.issuer}/${path}?client_id=${authConfig.clientId}&redirect_uri=${encodeURIComponent(authConfig.loginRedirectUri)}&response_type=code&state=${stateIn}&identityToken=&version=v2.0`;
 
     return !authConfig.pkce
@@ -171,7 +166,7 @@ export class AuthService {
       params.set('code_verifier', codeVerifier);
     }
 
-    const path = environment.production ? 'oauth/token' : 'connect/token';
+    const path = 'connect/token';
 
     return await this.http
       .post<any>(`${authConfig.issuer}/${path}`, params.toString(), {
@@ -234,7 +229,7 @@ export class AuthService {
       params.append('grant_type', 'refresh_token');
       params.append('refresh_token', refreshToken);
 
-      const path = environment.production ? 'oauth/token' : 'connect/token';
+      const path = 'connect/token';
 
       return this.http
         .post(
@@ -353,9 +348,7 @@ export class AuthService {
   // OIDC Redirect logout
   public logoutRedirect() {
     const idToken = this.getValue('id_token') || '';
-    const endsessionPath = environment.production
-      ? 'oauth/endsession'
-      : 'connect/endsession';
+    const endsessionPath = 'connect/endsession';
     // this.logout();
     window.location.href = `${
       environment.authConfig.issuer
@@ -426,7 +419,7 @@ export class AuthService {
 
   // GET /access/me
   public getAccessMe(): Observable<UserMe> {
-    return this.http.get<UserMe>('access/me').pipe(
+    return this.http.get<UserMe>(`${environment.apiPrefix}/access/me`).pipe(
       tap((user) => {
         this.currentUserSubject.next(user);
 
@@ -444,6 +437,25 @@ export class AuthService {
         }
       }),
     );
+  }
+
+  /**
+   * Self-service profile update for the currently authenticated user.
+   * Sends the updated profile payload to PATCH /api/leadai/access/profile,
+   * updates the local currentUserSubject state, and refreshes the userName.
+   *
+   * @param payload UserProfileUpdatePayload containing full_name, phone, and timezone
+   * @returns Observable emitting the updated UserMe profile
+   */
+  public updateProfile(payload: UserProfileUpdatePayload): Observable<UserMe> {
+    return this.http
+      .patch<UserMe>(`${environment.apiPrefix}/access/profile`, payload)
+      .pipe(
+        tap((updatedUser) => {
+          this.currentUserSubject.next(updatedUser);
+          this.userName = updatedUser.full_name;
+        }),
+      );
   }
 
   // Instagram OAuth: Get authorization URL & state

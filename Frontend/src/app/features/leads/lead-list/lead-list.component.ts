@@ -3,7 +3,10 @@ import { Router } from '@angular/router';
 import { Table } from 'primeng/table';
 import { Menu } from 'primeng/menu';
 import { Subscription } from 'rxjs';
-import { InboxService, InboxQueryParams } from '../../../services/inbox.service';
+import {
+  InboxService,
+  InboxQueryParams,
+} from '../../../services/inbox.service';
 import { AuthService } from '../../../services/auth.service';
 import { LeadService } from '../../../services/lead.service';
 import { CustomerService } from '../../../services/customer.service';
@@ -15,7 +18,7 @@ import { SharedModule } from '../../../shared/shared.module';
   standalone: true,
   imports: [SharedModule],
   templateUrl: './lead-list.component.html',
-  styleUrl: './lead-list.component.scss'
+  styleUrl: './lead-list.component.scss',
 })
 export class LeadListComponent implements OnInit, OnDestroy {
   @ViewChild('dt') dt!: Table;
@@ -104,10 +107,10 @@ export class LeadListComponent implements OnInit, OnDestroy {
             },
             error: (err: any) => {
               console.warn('Inbox WS error:', err);
-            }
+            },
           });
         }
-      }
+      },
     });
   }
 
@@ -137,14 +140,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
             tags: item.lead?.interest ? [item.lead.interest] : [],
             leadScore: score,
             priority: score > 75 ? 'High' : score > 45 ? 'Medium' : 'Low',
-            status:
-              item.status === 'needs_human'
-                ? 'Assigned'
-                : item.status === 'open'
-                ? 'New'
-                : item.status === 'closed'
-                ? 'Closed'
-                : 'New',
+            status: item.lead.status.toUpperCase(),
             source: item.channel || 'web',
             assignedTo: item.assigned_user_email || 'AI Assistant',
             createdAt: item.created_at || '',
@@ -160,7 +156,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.loading = false;
-      }
+      },
     });
   }
 
@@ -177,19 +173,22 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
     if (this.selectedChannel) {
       result = result.filter(
-        (lead) => lead.source?.toLowerCase() === this.selectedChannel.toLowerCase()
+        (lead) =>
+          lead.source?.toLowerCase() === this.selectedChannel.toLowerCase(),
       );
     }
 
     if (this.selectedStatus) {
       result = result.filter(
-        (lead) => lead.status?.toLowerCase() === this.selectedStatus.toLowerCase()
+        (lead) =>
+          lead.status?.toLowerCase() === this.selectedStatus.toLowerCase(),
       );
     }
 
     if (this.selectedPriority) {
       result = result.filter(
-        (lead) => lead.priority?.toLowerCase() === this.selectedPriority.toLowerCase()
+        (lead) =>
+          lead.priority?.toLowerCase() === this.selectedPriority.toLowerCase(),
       );
     }
 
@@ -213,30 +212,106 @@ export class LeadListComponent implements OnInit, OnDestroy {
       },
     ];
 
-    if (lead.leadStatus === 'qualified') {
+    const isQualified =
+      (lead.leadStatus || lead.status || '').toLowerCase() === 'qualified';
+    if (isQualified) {
       items.push({
         label: 'Convert to Customer',
         icon: 'pi pi-user-plus',
-        command: () => this.convertToCustomer(lead),
+        command: () => this.openConvertDialog(lead),
       });
     }
 
     return items;
   }
 
-  convertToCustomer(lead: any): void {
-    this.customerService.convertLead({ lead_id: lead.id }).subscribe({
+  showConvertDialog = false;
+  converting = false;
+  convertPayload: {
+    conversation_id: string;
+    lead_id: string;
+    owner_email: string;
+    stage: string;
+    value: number | null;
+    notes: string;
+    leadName?: string;
+  } = {
+    conversation_id: '',
+    lead_id: '',
+    owner_email: '',
+    stage: 'customer',
+    value: null,
+    notes: '',
+  };
+
+  stageOptions = [
+    { label: 'Customer', value: 'customer' },
+    { label: 'Opportunity', value: 'opportunity' },
+    { label: 'Lead', value: 'lead' },
+    { label: 'Won', value: 'won' },
+  ];
+
+  openConvertDialog(lead: any): void {
+    if (!lead) return;
+    const convId = String(lead.id || lead.conversation_id || '');
+
+    let numericValue: number | null = null;
+    if (lead.budget) {
+      const match = String(lead.budget).match(/[\d,.]+/);
+      if (match) {
+        const val = parseFloat(match[0].replace(/,/g, ''));
+        if (!isNaN(val)) numericValue = val;
+      }
+    }
+
+    this.convertPayload = {
+      conversation_id: convId,
+      lead_id: convId,
+      owner_email: lead.assignedTo || lead.assigned_user_email || '',
+      stage: 'customer',
+      value: numericValue,
+      notes: lead.summary ? `Summary: ${lead.summary.slice(0, 150)}...` : '',
+      leadName: lead.name || 'Lead',
+    };
+    this.showConvertDialog = true;
+  }
+
+  submitConvert(): void {
+    if (!this.convertPayload.conversation_id) return;
+    this.converting = true;
+
+    const payload = {
+      conversation_id: this.convertPayload.conversation_id,
+      lead_id: this.convertPayload.lead_id,
+      owner_email: this.convertPayload.owner_email
+        ? this.convertPayload.owner_email.trim()
+        : null,
+      stage: this.convertPayload.stage || 'customer',
+      value:
+        this.convertPayload.value != null
+          ? Number(this.convertPayload.value)
+          : null,
+      notes: this.convertPayload.notes
+        ? this.convertPayload.notes.trim()
+        : null,
+    };
+
+    this.customerService.convertLead(payload).subscribe({
       next: () => {
+        this.converting = false;
+        this.showConvertDialog = false;
         this.toastService.success(
-          `${lead.name} has been promoted to a Customer.`,
+          `${this.convertPayload.leadName || 'Lead'} has been successfully promoted to a Customer.`,
           'Lead Converted',
         );
-        lead.leadStatus = 'converted';
         this.loadLeads();
       },
       error: (err) => {
+        this.converting = false;
         this.toastService.error(
-          err?.error?.detail || 'Failed to convert lead to customer.',
+          err?.error?.detail ||
+            err?.message ||
+            'Failed to convert lead to customer.',
           'Conversion Failed',
         );
       },
@@ -256,23 +331,37 @@ export class LeadListComponent implements OnInit, OnDestroy {
     }
   }
 
-  getStatusSeverity(status: string): 'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast' | undefined {
-    const map: Record<string, 'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'> = {
-      'New': 'info',
-      'Assigned': 'secondary',
+  getStatusSeverity(
+    status: string,
+  ):
+    | 'success'
+    | 'secondary'
+    | 'info'
+    | 'warn'
+    | 'danger'
+    | 'contrast'
+    | undefined {
+    const map: Record<
+      string,
+      'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'
+    > = {
+      New: 'info',
+      Assigned: 'secondary',
       'Follow-up': 'warn',
-      'Interested': 'success',
-      'Negotiation': 'contrast',
-      'Won': 'success',
-      'Lost': 'danger',
-      'Closed': 'secondary',
-      'Completed': 'success',
+      Interested: 'success',
+      Negotiation: 'contrast',
+      Won: 'success',
+      Lost: 'danger',
+      Closed: 'secondary',
+      Completed: 'success',
       'In Progress': 'info',
     };
     return map[status] || 'info';
   }
 
-  getPrioritySeverity(priority: string): 'danger' | 'warn' | 'info' | 'secondary' {
+  getPrioritySeverity(
+    priority: string,
+  ): 'danger' | 'warn' | 'info' | 'secondary' {
     const map: Record<string, 'danger' | 'warn' | 'info' | 'secondary'> = {
       High: 'danger',
       Medium: 'warn',
@@ -329,7 +418,8 @@ export class LeadListComponent implements OnInit, OnDestroy {
       '#06b6d4',
       '#3b82f6',
     ];
-    const numId = typeof id === 'number' ? id : (id?.toString().charCodeAt(0) || 0);
+    const numId =
+      typeof id === 'number' ? id : id?.toString().charCodeAt(0) || 0;
     return colors[numId % colors.length];
   }
 

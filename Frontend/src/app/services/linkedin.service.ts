@@ -14,7 +14,15 @@ import {
   LinkedInReplyInvitationPayload,
   BatchAcceptResponse,
   LinkedInSettingsPayload,
+  GetConversationsResponse,
+  GetConversationMessagesResponse,
+  SendMessageResponse,
+  SyncMessagesResponse,
+  LinkedInCommentSettings,
+  GetCommentsResponse,
+  SyncCommentsResponse,
 } from '../models/linkedin.models';
+
 
 
 @Injectable({
@@ -61,6 +69,17 @@ export class LinkedinService {
     return this.apiService.post<{ ok: boolean }>(
       'linkedin/credentials',
       payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Disconnect / remove personal session cookie and credentials
+   */
+  public disconnectCredentials(): Observable<{ ok: boolean; message?: string }> {
+    return this.apiService.post<{ ok: boolean; message?: string }>(
+      'linkedin/credentials/disconnect',
+      {},
       { companyScoped: true }
     );
   }
@@ -162,5 +181,177 @@ export class LinkedinService {
       { companyScoped: true }
     );
   }
+
+  /**
+   * Fetch recent LinkedIn conversation threads
+   */
+  public getConversations(limit: number = 25): Observable<GetConversationsResponse> {
+    return this.apiService.get<GetConversationsResponse>('linkedin/conversations', {
+      params: { limit: limit.toString() },
+      companyScoped: true,
+    });
+  }
+
+  /**
+   * Fetch message history for a specific LinkedIn thread
+   */
+  public getConversationMessages(
+    conversationUrnId: string
+  ): Observable<GetConversationMessagesResponse> {
+    return this.apiService.get<GetConversationMessagesResponse>(
+      `linkedin/conversations/${encodeURIComponent(conversationUrnId)}/messages`,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Send a direct message to a LinkedIn conversation thread
+   */
+  public sendMessage(
+    conversationUrnId: string,
+    message: string
+  ): Observable<SendMessageResponse> {
+    return this.apiService.post<SendMessageResponse>(
+      `linkedin/conversations/${encodeURIComponent(conversationUrnId)}/send`,
+      { message },
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Sync LinkedIn conversations and messages to database
+   */
+  public syncMessages(): Observable<SyncMessagesResponse> {
+    return this.apiService.post<SyncMessagesResponse>(
+      'linkedin/sync-messages',
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  // =========================================================================
+  // Comments & AI Replies Automation
+  // =========================================================================
+
+  /**
+   * Fetch company's comment automation settings
+   */
+  public getCommentSettings(): Observable<LinkedInCommentSettings> {
+    return this.apiService.get<LinkedInCommentSettings>('linkedin/comments/settings', {
+      companyScoped: true,
+    });
+  }
+
+  /**
+   * Update comment automation settings
+   */
+  public updateCommentSettings(
+    settings: LinkedInCommentSettings
+  ): Observable<{ ok: boolean; message: string }> {
+    return this.apiService.post<{ ok: boolean; message: string }>(
+      'linkedin/comments/settings',
+      settings,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * List comments with optional status or intent filtering
+   */
+  public getComments(filters?: {
+    status_filter?: string;
+    sentiment?: string;
+    is_lead_only?: boolean;
+    limit?: number;
+  }): Observable<GetCommentsResponse> {
+    const params: Record<string, string> = {};
+    if (filters?.status_filter) params['status_filter'] = filters.status_filter;
+    if (filters?.sentiment) params['sentiment'] = filters.sentiment;
+    if (filters?.is_lead_only) params['is_lead_only'] = 'true';
+    if (filters?.limit) params['limit'] = filters.limit.toString();
+
+    return this.apiService.get<GetCommentsResponse>('linkedin/comments', {
+      params,
+      companyScoped: true,
+    });
+  }
+
+  /**
+   * Generate or regenerate AI reply for a comment
+   */
+  public generateCommentReply(
+    commentId: string,
+    customInstruction?: string
+  ): Observable<{
+    ok: boolean;
+    suggested_reply: string;
+    rationale: string;
+    sentiment: string;
+    intent_score: number;
+    is_lead_candidate: boolean;
+  }> {
+    return this.apiService.post<{
+      ok: boolean;
+      suggested_reply: string;
+      rationale: string;
+      sentiment: string;
+      intent_score: number;
+      is_lead_candidate: boolean;
+    }>(
+      `linkedin/comments/${encodeURIComponent(commentId)}/generate-reply`,
+      { custom_instruction: customInstruction || null },
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Approve and post reply to LinkedIn
+   */
+  public postCommentReply(
+    commentId: string,
+    replyText: string
+  ): Observable<{ ok: boolean; message: string; reply_urn?: string }> {
+    return this.apiService.post<{ ok: boolean; message: string; reply_urn?: string }>(
+      `linkedin/comments/${encodeURIComponent(commentId)}/reply`,
+      { reply_text: replyText },
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Ignore a comment
+   */
+  public ignoreComment(commentId: string): Observable<{ ok: boolean; message: string }> {
+    return this.apiService.post<{ ok: boolean; message: string }>(
+      `linkedin/comments/${encodeURIComponent(commentId)}/ignore`,
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Convert commenter into CRM Lead
+   */
+  public captureCommentLead(
+    commentId: string
+  ): Observable<{ ok: boolean; message: string; customer_id?: string; display_name?: string }> {
+    return this.apiService.post<{ ok: boolean; message: string; customer_id?: string; display_name?: string }>(
+      `linkedin/comments/${encodeURIComponent(commentId)}/capture-lead`,
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Poll LinkedIn for latest post comments and trigger AI reply generation
+   */
+  public syncComments(): Observable<SyncCommentsResponse> {
+    return this.apiService.post<SyncCommentsResponse>(
+      'linkedin/comments/sync',
+      {},
+      { companyScoped: true }
+    );
+  }
 }
+
 

@@ -12,6 +12,7 @@ export interface KbDocument {
   tags: string;
   created_at: string;
   created_by: string;
+  raw_text?: string;
 }
 
 export interface KbChunk {
@@ -61,13 +62,14 @@ export interface KbTestResult {
 }
 
 export interface KnowledgeBaseDoc {
-  id: number;
+  id: string | number;
   fileName: string;
   fileType: string;
   chunks: number;
   uploadDate: string;
   uploadedBy: string;
   status: 'Processed' | 'Processing' | 'Failed';
+  rawDoc?: KbDocument;
 }
 
 export interface Faq {
@@ -77,4 +79,3 @@ export interface Faq {
   category: string;
   updatedDate: string;
 }
-

@@ -127,7 +127,7 @@ export class CallbackComponent implements OnInit {
           //     this.router.navigate([path]);
           //   },
           // });
-          if (this.authService.isAdmin()) {
+          if (this.authService.isSuperAdmin()) {
             this.router.navigate(['/admin/dashboard']);
           } else {
             this.router.navigate(['/client/dashboard']);

@@ -1,0 +1,365 @@
+<div class="space-y-6 animate-fade-in max-w-7xl mx-auto pb-12">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl lg:text-3xl font-extrabold tracking-tight" style="color: var(--app-text)">
+        My Profile & Account
+      </h1>
+      <p class="text-xs sm:text-sm mt-1" style="color: var(--app-text-muted)">
+        Manage your personal information, role permissions, and view your organization's active plan.
+      </p>
+    </div>
+
+    <!-- Quick Action -->
+    <div class="flex items-center gap-2">
+      <p-button
+        label="View Plan & Invoices"
+        icon="pi pi-credit-card"
+        [outlined]="true"
+        size="small"
+        (click)="navigateToUsage()"
+        styleClass="border-slate-300 dark:border-slate-700"
+      ></p-button>
+    </div>
+  </div>
+
+  <!-- Loading Skeletons -->
+  <div *ngIf="isLoadingProfile" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card-base p-6 space-y-4">
+        <p-skeleton width="100%" height="120px" styleClass="rounded-xl"></p-skeleton>
+        <p-skeleton width="60%" height="2rem"></p-skeleton>
+      </div>
+      <div class="card-base p-6 space-y-4">
+        <p-skeleton width="40%" height="1.5rem"></p-skeleton>
+        <p-skeleton width="100%" height="200px" styleClass="rounded-xl"></p-skeleton>
+      </div>
+    </div>
+    <div class="card-base p-6 space-y-4">
+      <p-skeleton width="50%" height="1.5rem"></p-skeleton>
+      <p-skeleton width="100%" height="300px" styleClass="rounded-xl"></p-skeleton>
+    </div>
+  </div>
+
+  <!-- Main Content Layout -->
+  <div *ngIf="!isLoadingProfile && currentUser" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    
+    <!-- Left Column: Personal Identity & Edit Form (7 cols) -->
+    <div class="lg:col-span-7 space-y-6">
+      
+      <!-- Hero Identity Card -->
+      <div class="card-base p-6 relative overflow-hidden bg-gradient-to-br from-slate-900/5 via-transparent to-brand-500/5 dark:from-slate-900/60 dark:via-slate-900/40 dark:to-brand-950/30 border border-slate-200 dark:border-slate-800 rounded-2xl">
+        <div class="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+          <!-- Avatar with Gradient Border -->
+          <div class="relative flex-shrink-0">
+            <div class="w-20 h-20 rounded-2xl p-1 bg-gradient-to-tr from-brand-600 via-indigo-500 to-purple-500 shadow-lg shadow-brand-500/20 flex items-center justify-center">
+              <div class="w-full h-full rounded-xl bg-slate-900 flex items-center justify-center text-white text-2xl font-bold tracking-wider">
+                {{ getInitials(currentUser.full_name) }}
+              </div>
+            </div>
+            <span class="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900 shadow-sm flex items-center justify-center" pTooltip="Account Active" tooltipPosition="top">
+              <i class="pi pi-check text-[10px] text-white font-bold"></i>
+            </span>
+          </div>
+
+          <!-- User Title & Badges -->
+          <div class="flex-1 text-center sm:text-left min-w-0">
+            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1.5">
+              <h2 class="text-xl sm:text-2xl font-bold truncate" style="color: var(--app-text)">
+                {{ currentUser.full_name || 'LeadAI Member' }}
+              </h2>
+              <p-tag
+                [value]="formatRole(currentUser.role)"
+                [severity]="getRoleSeverity(currentUser.role)"
+                [rounded]="true"
+                styleClass="text-xs px-2.5 py-0.5 font-bold uppercase tracking-wider"
+              ></p-tag>
+            </div>
+
+            <p class="text-xs sm:text-sm font-medium flex items-center justify-center sm:justify-start gap-1.5 mb-3" style="color: var(--app-text-muted)">
+              <i class="pi pi-envelope text-xs"></i>
+              <span>{{ currentUser.email }}</span>
+            </p>
+
+            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs" style="color: var(--app-text-secondary)">
+              <span class="flex items-center gap-1.5">
+                <i class="pi pi-building text-brand-500"></i>
+                <span class="font-semibold" style="color: var(--app-text)">{{ currentUser.client_name || 'Primary Workspace' }}</span>
+              </span>
+              <span *ngIf="currentUser.accessible_companies?.length" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] font-medium">
+                <i class="pi pi-th-large text-[10px] text-slate-400"></i>
+                {{ currentUser.accessible_companies.length }} Companies Accessible
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Profile Form Card -->
+      <div class="card-base p-6 rounded-2xl space-y-6">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 class="text-base font-bold flex items-center gap-2" style="color: var(--app-text)">
+              <i class="pi pi-user-edit text-brand-500"></i>
+              Edit Profile Information
+            </h3>
+            <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+              Update your display name and contact preferences across LeadAI.
+            </p>
+          </div>
+        </div>
+
+        <form (ngSubmit)="onSaveProfile()" class="space-y-4">
+          <!-- Full Name -->
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-secondary)">
+              Full Name <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <input
+                pInputText
+                type="text"
+                [(ngModel)]="form.fullName"
+                name="fullName"
+                placeholder="Enter your full name"
+                class="w-full text-sm py-2.5 px-3 rounded-xl border"
+                required
+              />
+            </div>
+          </div>
+
+          <!-- Email (Identity Server Managed) -->
+          <div class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-secondary)">
+                Email Address
+              </label>
+              <span class="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                <i class="pi pi-lock text-[9px]"></i> Managed by Identity Provider
+              </span>
+            </div>
+            <input
+              pInputText
+              type="email"
+              [value]="form.email"
+              [disabled]="true"
+              class="w-full text-sm py-2.5 px-3 rounded-xl border bg-slate-100 dark:bg-slate-800/60 cursor-not-allowed text-slate-500 dark:text-slate-400"
+            />
+          </div>
+
+          <!-- Phone & Timezone Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Phone Number -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-secondary)">
+                Contact Phone
+              </label>
+              <input
+                pInputText
+                type="tel"
+                [(ngModel)]="form.phone"
+                name="phone"
+                placeholder="+91 98765 43210"
+                class="w-full text-sm py-2.5 px-3 rounded-xl border"
+              />
+            </div>
+
+            <!-- Timezone -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-secondary)">
+                Timezone
+              </label>
+              <input
+                pInputText
+                type="text"
+                [(ngModel)]="form.timezone"
+                name="timezone"
+                placeholder="e.g. IST (UTC+05:30)"
+                class="w-full text-sm py-2.5 px-3 rounded-xl border"
+              />
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2 flex items-center justify-end gap-3">
+            <p-button
+              type="submit"
+              label="{{ isSavingProfile ? 'Saving Changes...' : 'Save Profile Changes' }}"
+              icon="{{ isSavingProfile ? 'pi pi-spin pi-spinner' : 'pi pi-check' }}"
+              [loading]="isSavingProfile"
+              [disabled]="isSavingProfile"
+              size="small"
+              [style]="{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }"
+              styleClass="px-5 py-2.5 font-semibold rounded-xl shadow-md hover:shadow-lg transition-all"
+            ></p-button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Active Company Plan & Role Capabilities (5 cols) -->
+    <div class="lg:col-span-5 space-y-6">
+
+      <!-- Active Plan Card -->
+      <div class="card-base p-6 rounded-2xl relative overflow-hidden border border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-brand-500/10 text-brand-600 dark:text-brand-400">
+              <i class="pi pi-bolt text-lg"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">Active Company Plan</h3>
+              <p class="text-xs" style="color: var(--app-text-muted)">Current subscription & quota entitlements</p>
+            </div>
+          </div>
+          
+          <p-tag
+            *ngIf="billingSummary?.active_recharge?.is_auto_renew"
+            value="AutoPay Active"
+            severity="success"
+            [rounded]="true"
+            styleClass="text-[11px] font-semibold"
+          ></p-tag>
+          <p-tag
+            *ngIf="billingSummary?.active_recharge && !billingSummary?.active_recharge?.is_auto_renew"
+            value="Manual Renewal"
+            severity="warn"
+            [rounded]="true"
+            styleClass="text-[11px] font-semibold"
+          ></p-tag>
+        </div>
+
+        <!-- Plan Loaded Content -->
+        <div *ngIf="billingSummary?.active_recharge as active" class="space-y-4">
+          <!-- Plan Name & Price -->
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-base font-bold" style="color: var(--app-text)">
+                {{ active.plan_name_snapshot || 'Standard Voice & Chat' }}
+              </span>
+              <span class="text-sm font-extrabold text-brand-600 dark:text-brand-400">
+                ₹{{ active.price_paid | number:'1.0-0' }} / mo
+              </span>
+            </div>
+            <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+              Cycle Valid Until: <strong style="color: var(--app-text)">{{ active.expires_at | date:'mediumDate' }}</strong>
+            </p>
+          </div>
+
+          <!-- Minutes Balance Meter -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-medium" style="color: var(--app-text-secondary)">Available Call Minutes:</span>
+              <span class="font-bold text-sm" style="color: var(--app-text)">
+                {{ active.remaining_minutes | number:'1.0-1' }} <span class="text-xs font-normal" style="color: var(--app-text-muted)">/ {{ active.purchased_minutes }} mins</span>
+              </span>
+            </div>
+            <p-progressbar [value]="getMinutesPercentage()" [showValue]="false" styleClass="h-2.5 rounded-full"></p-progressbar>
+            <p class="text-[11px] text-right font-medium" style="color: var(--app-text-muted)">
+              {{ getMinutesPercentage() }}% quota remaining
+            </p>
+          </div>
+
+          <p-divider styleClass="my-3 border-slate-100 dark:border-slate-800"></p-divider>
+
+          <!-- Omni-channel Automation Badges -->
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider block mb-2" style="color: var(--app-text-muted)">
+              Omni-Channel Coverage
+            </span>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <!-- WhatsApp -->
+              <div class="flex items-center justify-between p-2 rounded-lg border border-slate-100 dark:border-slate-800" [ngClass]="isChannelActive('whatsapp') ? 'bg-emerald-500/5 border-emerald-500/30' : 'opacity-60'">
+                <span class="flex items-center gap-1.5 font-medium">
+                  <i class="pi pi-whatsapp text-emerald-500 text-sm"></i> WhatsApp
+                </span>
+                <span class="w-2 h-2 rounded-full" [ngClass]="isChannelActive('whatsapp') ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'"></span>
+              </div>
+
+              <!-- Instagram -->
+              <div class="flex items-center justify-between p-2 rounded-lg border border-slate-100 dark:border-slate-800" [ngClass]="isChannelActive('instagram') ? 'bg-purple-500/5 border-purple-500/30' : 'opacity-60'">
+                <span class="flex items-center gap-1.5 font-medium">
+                  <i class="pi pi-instagram text-purple-500 text-sm"></i> Instagram
+                </span>
+                <span class="w-2 h-2 rounded-full" [ngClass]="isChannelActive('instagram') ? 'bg-purple-500' : 'bg-slate-300 dark:bg-slate-600'"></span>
+              </div>
+
+              <!-- Facebook -->
+              <div class="flex items-center justify-between p-2 rounded-lg border border-slate-100 dark:border-slate-800" [ngClass]="isChannelActive('facebook') ? 'bg-blue-500/5 border-blue-500/30' : 'opacity-60'">
+                <span class="flex items-center gap-1.5 font-medium">
+                  <i class="pi pi-facebook text-blue-500 text-sm"></i> Facebook
+                </span>
+                <span class="w-2 h-2 rounded-full" [ngClass]="isChannelActive('facebook') ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'"></span>
+              </div>
+
+              <!-- LinkedIn -->
+              <div class="flex items-center justify-between p-2 rounded-lg border border-slate-100 dark:border-slate-800" [ngClass]="isChannelActive('linkedin') ? 'bg-sky-500/5 border-sky-500/30' : 'opacity-60'">
+                <span class="flex items-center gap-1.5 font-medium">
+                  <i class="pi pi-linkedin text-sky-600 text-sm"></i> LinkedIn
+                </span>
+                <span class="w-2 h-2 rounded-full" [ngClass]="isChannelActive('linkedin') ? 'bg-sky-600' : 'bg-slate-300 dark:bg-slate-600'"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manage Plan Link -->
+          <div class="pt-2">
+            <button
+              (click)="navigateToUsage()"
+              class="w-full py-2.5 rounded-xl border border-brand-200 dark:border-brand-800/60 bg-brand-50/50 dark:bg-brand-950/20 text-brand-600 dark:text-brand-300 hover:bg-brand-100/50 dark:hover:bg-brand-900/30 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Manage AutoPay & Channel Addons</span>
+              <i class="pi pi-arrow-right text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- No Active Plan Empty State -->
+        <div *ngIf="!isLoadingBilling && !billingSummary?.active_recharge" class="py-8 text-center space-y-3">
+          <div class="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+            <i class="pi pi-exclamation-circle text-xl"></i>
+          </div>
+          <h4 class="text-sm font-bold" style="color: var(--app-text)">No Active Subscription</h4>
+          <p class="text-xs max-w-xs mx-auto" style="color: var(--app-text-muted)">
+            Your company currently does not have an active monthly plan or prepaid recharge.
+          </p>
+          <p-button
+            label="Explore Plans & Pricing"
+            icon="pi pi-sparkles"
+            size="small"
+            (click)="navigateToUsage()"
+            [style]="{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }"
+            styleClass="rounded-xl font-semibold text-xs"
+          ></p-button>
+        </div>
+      </div>
+
+      <!-- Role Capabilities Card -->
+      <div class="card-base p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style="color: var(--app-text-secondary)">
+            <i class="pi pi-shield text-brand-500"></i> Role Capabilities
+          </h4>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800" style="color: var(--app-text-muted)">
+            {{ currentUser.permissions.length }} Permissions
+          </span>
+        </div>
+        <p class="text-xs" style="color: var(--app-text-muted)">
+          Your account is granted capabilities defined by the LeadAI enterprise role matrix.
+        </p>
+
+        <div class="flex flex-wrap gap-1.5 pt-2">
+          <span *ngFor="let perm of currentUser.permissions.slice(0, 10)" class="px-2 py-1 rounded-md text-[11px] font-mono bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
+            {{ perm }}
+          </span>
+          <span *ngIf="currentUser.permissions.length > 10" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-brand-500/10 text-brand-600 dark:text-brand-400">
+            +{{ currentUser.permissions.length - 10 }} more
+          </span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>

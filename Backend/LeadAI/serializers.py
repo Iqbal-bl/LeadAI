@@ -39,6 +39,7 @@ from .schemas import (
     CompanyOut,
     ConversationDetail,
     ConversationOut,
+    DocumentDetailOut,
     DocumentOut,
     LeadOut,
     MessageOut,
@@ -126,6 +127,14 @@ def document_out(row: LeadKbDocument) -> DocumentOut:
         tags=row.Tags,
         created_at=row.CreatedAt,
         created_by=row.CreatedBy,
+    )
+
+
+def document_detail_out(row: LeadKbDocument, raw_text: str | None = None) -> DocumentDetailOut:
+    base = document_out(row)
+    return DocumentDetailOut(
+        **base.model_dump(),
+        raw_text=raw_text if raw_text is not None else row.RawText,
     )
 
 

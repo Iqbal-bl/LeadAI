@@ -34,7 +34,12 @@ export interface CustomerRevealResponse {
 }
 
 export interface CustomerConvertRequest {
-  lead_id: string;
+  conversation_id: string;
+  lead_id?: string;
+  owner_email?: string | null;
+  stage?: string;
+  value?: number | null;
+  notes?: string | null;
 }
 
 export interface CustomerMessageRequest {

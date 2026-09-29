@@ -200,6 +200,13 @@ class MeOut(BaseModel):
     accessible_companies: list[CompanyOut] = []
 
 
+class UserProfileUpdate(BaseModel):
+    """Payload schema for authenticated user self-service profile update."""
+    full_name: str | None = None
+    phone: str | None = None
+    timezone: str | None = None
+
+
 class PermissionCatalogOut(BaseModel):
     permissions: dict[str, str]
     role_permissions: dict[str, list[str]]
@@ -266,6 +273,10 @@ class DocumentOut(BaseModel):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
+
+
+class DocumentDetailOut(DocumentOut):
+    raw_text: str | None = None
 
 
 class FaqCreate(BaseModel):
@@ -914,7 +925,7 @@ class RechargePlanTemplateCreate(BaseModel):
     target_client_id: str | None = None
     target_client_ids: list[str] | None = None
     addon_channels: list[str] | None = None
-    included_minutes: float = Field(gt=0)
+    included_minutes: float = Field(default=0.0, ge=0)
     validity_days: int | None = Field(default=30, ge=0)
     price: float = Field(ge=0)
     rate_per_minute: float = Field(default=4.0)
@@ -969,6 +980,7 @@ class RechargePlanTemplateOut(BaseModel):
 
 class ClientRechargeAllocate(BaseModel):
     client_id: str | None = None
+    client_ids: list[str] | None = None
     plan_template_id: str | None = None
     custom_minutes: float | None = None
     custom_validity_days: int | None = None

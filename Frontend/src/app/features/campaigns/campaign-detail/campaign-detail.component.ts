@@ -24,6 +24,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   failedRecipients: CampaignRecipient[] = [];
   loading = true;
   previewLoading = false;
+  progressPercent = 0;
 
   canSend = false;
   private pollTimer: any = null;
@@ -62,15 +63,28 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
             sent: c.sent_count || 0,
             delivered: c.delivered_count || 0,
             failed: c.failed_count || 0,
-            replied: c.replied_count || 0
-          }
+            replied: c.replied_count || 0,
+          },
         };
+        const cnt = this.campaign?.counters;
+        this.progressPercent =
+          cnt && cnt.total > 0
+            ? Math.round(
+                ((cnt.sent + cnt.delivered + cnt.failed) / cnt.total) * 100,
+              )
+            : 0;
         this.loading = false;
 
-        if (this.campaign?.status === 'running' || this.campaign?.status === 'building') {
+        if (
+          this.campaign?.status === 'running' ||
+          this.campaign?.status === 'building'
+        ) {
           this.startPolling(id);
         }
-        if (this.campaign?.status === 'ready' || this.campaign?.status === 'running') {
+        if (
+          this.campaign?.status === 'ready' ||
+          this.campaign?.status === 'running'
+        ) {
           this.loadPreview(id);
         }
         if (this.campaign?.counters && this.campaign.counters.failed > 0) {
@@ -93,8 +107,12 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
           warnings: (res.warnings || []).map((w: any) => {
             if (typeof w === 'string') {
               return {
-                severity: w.toLowerCase().includes('reject') || w.toLowerCase().includes('error') ? 'error' : 'warning',
-                message: w
+                severity:
+                  w.toLowerCase().includes('reject') ||
+                  w.toLowerCase().includes('error')
+                    ? 'error'
+                    : 'warning',
+                message: w,
               };
             }
             return w;
@@ -103,11 +121,11 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
             if (typeof msg === 'string') {
               return {
                 recipient: 'Sample Recipient',
-                rendered_body: msg
+                rendered_body: msg,
               };
             }
             return msg;
-          })
+          }),
         };
         this.previewLoading = false;
       },
@@ -120,7 +138,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   loadFailedRecipients(id: string): void {
     this.campaignService.getRecipients(id, 'failed').subscribe({
       next: (res: any) => {
-        this.failedRecipients = Array.isArray(res) ? res : (res?.items || []);
+        this.failedRecipients = Array.isArray(res) ? res : res?.items || [];
       },
       error: () => {
         this.failedRecipients = [];
@@ -141,10 +159,13 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
               sent: c.sent_count || 0,
               delivered: c.delivered_count || 0,
               failed: c.failed_count || 0,
-              replied: c.replied_count || 0
-            }
+              replied: c.replied_count || 0,
+            },
           };
-          if (this.campaign?.status !== 'running' && this.campaign?.status !== 'building') {
+          if (
+            this.campaign?.status !== 'running' &&
+            this.campaign?.status !== 'building'
+          ) {
             this.stopPolling();
             if (this.campaign?.status === 'ready') {
               this.loadPreview(id);
@@ -169,11 +190,19 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     if (!this.campaign) return;
     this.campaignService.buildCampaign(this.campaign.id).subscribe({
       next: () => {
-        this.messageService.add({ severity: 'info', summary: 'Building', detail: 'Materialising recipient rows...' });
+        this.messageService.add({
+          severity: 'info',
+          summary: 'Building',
+          detail: 'Materialising recipient rows...',
+        });
         this.loadCampaign(this.campaign!.id);
       },
       error: () => {
-        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Build failed.' });
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Build failed.',
+        });
       },
     });
   }
@@ -187,11 +216,19 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       accept: () => {
         this.campaignService.startCampaign(this.campaign!.id).subscribe({
           next: () => {
-            this.messageService.add({ severity: 'success', summary: 'Started', detail: 'Campaign is now queued and sending.' });
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Started',
+              detail: 'Campaign is now queued and sending.',
+            });
             this.loadCampaign(this.campaign!.id);
           },
           error: () => {
-            this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to start campaign.' });
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to start campaign.',
+            });
           },
         });
       },
@@ -202,7 +239,11 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     if (!this.campaign) return;
     this.campaignService.pauseCampaign(this.campaign.id).subscribe({
       next: () => {
-        this.messageService.add({ severity: 'warn', summary: 'Paused', detail: 'Campaign has been paused.' });
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Paused',
+          detail: 'Campaign has been paused.',
+        });
         this.loadCampaign(this.campaign!.id);
       },
     });
@@ -212,7 +253,11 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     if (!this.campaign) return;
     this.campaignService.resumeCampaign(this.campaign.id).subscribe({
       next: () => {
-        this.messageService.add({ severity: 'success', summary: 'Resumed', detail: 'Campaign is sending again.' });
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Resumed',
+          detail: 'Campaign is sending again.',
+        });
         this.loadCampaign(this.campaign!.id);
       },
     });
@@ -228,7 +273,11 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       accept: () => {
         this.campaignService.cancelCampaign(this.campaign!.id).subscribe({
           next: () => {
-            this.messageService.add({ severity: 'info', summary: 'Cancelled', detail: 'Campaign has been cancelled.' });
+            this.messageService.add({
+              severity: 'info',
+              summary: 'Cancelled',
+              detail: 'Campaign has been cancelled.',
+            });
             this.loadCampaign(this.campaign!.id);
           },
         });
@@ -239,13 +288,18 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   retryFailed(): void {
     if (!this.campaign) return;
     this.confirmationService.confirm({
-      message: 'Retry all permanently failed recipients? This will NOT re-send to people who already received the message.',
+      message:
+        'Retry all permanently failed recipients? This will NOT re-send to people who already received the message.',
       header: 'Retry Failed',
       icon: 'pi pi-replay',
       accept: () => {
         this.campaignService.retryFailed(this.campaign!.id).subscribe({
           next: () => {
-            this.messageService.add({ severity: 'info', summary: 'Retrying', detail: 'Failed recipients are being retried.' });
+            this.messageService.add({
+              severity: 'info',
+              summary: 'Retrying',
+              detail: 'Failed recipients are being retried.',
+            });
             this.loadCampaign(this.campaign!.id);
           },
         });
@@ -258,7 +312,8 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   }
 
   getProgressPercent(): number {
-    if (!this.campaign?.counters || this.campaign.counters.total === 0) return 0;
+    if (!this.campaign?.counters || this.campaign.counters.total === 0)
+      return 0;
     const c = this.campaign.counters;
     return Math.round(((c.sent + c.delivered + c.failed) / c.total) * 100);
   }

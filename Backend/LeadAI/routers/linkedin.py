@@ -4,6 +4,7 @@ LinkedIn integration router for LeadAI.
 from __future__ import annotations
 
 import logging
+from typing import Optional, Any, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -285,17 +286,84 @@ async def save_linkedin_credentials(
 
     # Encrypt and save the credentials
     if payload.cookie_li_at:
-        row.LinkedinCookieEnc = encrypt_pii(payload.cookie_li_at)
+        import re
+        raw_cookie = payload.cookie_li_at.strip()
+        li_at_match = re.search(r'li_at=([^;]+)', raw_cookie)
+        jsessionid_match = re.search(r'JSESSIONID="?([^";]+)"?', raw_cookie)
+        
+        li_at = (li_at_match.group(1) if li_at_match else raw_cookie).strip('"; \t\r\n')
+        jsessionid = (jsessionid_match.group(1) if jsessionid_match else "").strip('"; \t\r\n')
+        
+        if jsessionid:
+            row.LinkedinCookieEnc = encrypt_pii(f"{li_at}|||{jsessionid}")
+        else:
+            row.LinkedinCookieEnc = encrypt_pii(li_at)
+            
         row.LinkedinUsernameEnc = None
         row.LinkedinPasswordEnc = None
-    else:
-        row.LinkedinCookieEnc = None
-        row.LinkedinUsernameEnc = encrypt_pii(payload.username)
-        row.LinkedinPasswordEnc = encrypt_pii(payload.password)
+    elif payload.username and payload.password:
+        row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
+        row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
+        
+        # Attempt automated headless browser session extraction
+        from ..social import linkedin_bot
+        extracted_cookie = await linkedin_bot.extract_session_cookie_via_browser(payload.username.strip(), payload.password.strip())
+        if extracted_cookie:
+            row.LinkedinCookieEnc = encrypt_pii(extracted_cookie)
+        else:
+            # Wipe stale expired cookie so it is not used
+            row.LinkedinCookieEnc = None
+            row.UpdatedAt = utcnow()
+            db.commit()
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "LinkedIn triggered a security check (CAPTCHA / 2FA code) or invalid login. Please switch to 'Mode B: Session Token (li_at)' and paste your li_at token directly."
+            )
 
     row.UpdatedAt = utcnow()
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+
+
+@router.delete(
+    "/credentials",
+    summary="Remove personal LinkedIn session cookie and credentials",
+)
+@router.post(
+    "/credentials/disconnect",
+    summary="Remove personal LinkedIn session cookie and credentials",
+)
+async def disconnect_linkedin_credentials(
+    request: Request,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == client_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False
+    ).first()
+
+    if row:
+        row.LinkedinCookieEnc = None
+        row.LinkedinUsernameEnc = None
+        row.LinkedinPasswordEnc = None
+        row.UpdatedAt = utcnow()
+        
+        activity.log_principal(
+            db,
+            principal,
+            action=A.CHANNEL_UPDATED,
+            client_id=client_id,
+            entity_type="channel_account",
+            entity_id=row.Id,
+            message="Removed personal LinkedIn session cookie and credentials",
+            request=request,
+        )
+        db.commit()
+
+    return {"ok": True, "message": "Personal LinkedIn credentials and session cookie removed successfully"}
 
 
 @router.post(
@@ -481,6 +549,8 @@ async def get_linkedin_invitations(
     try:
         invitations = await linkedin_bot.fetch_received_invitations_api(row, limit=limit)
         return {"invitations": invitations}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     except Exception as exc:
         logger.error("Failed to fetch received LinkedIn invitations: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to retrieve invitations: {str(exc)}")
@@ -522,6 +592,8 @@ async def reply_linkedin_invitation(
         return result
     except HTTPException:
         raise
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     except Exception as exc:
         logger.error("Failed to reply to LinkedIn invitation: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LinkedIn reply failed: {str(exc)}")
@@ -549,7 +621,512 @@ async def accept_all_linkedin_invitations(
     try:
         result = await linkedin_bot.accept_all_invitations_api(db, row)
         return result
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     except Exception as exc:
         logger.error("Failed to accept all LinkedIn invitations: %s", exc)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Batch accept failed: {str(exc)}")
+
+
+# ===========================================================================
+# LinkedIn Direct Messages & InMail
+# ===========================================================================
+
+class LinkedInSendMessageInput(BaseModel):
+    message: str = Field(min_length=1, max_length=5000)
+
+
+@router.get(
+    "/conversations",
+    summary="Get list of recent LinkedIn conversation threads",
+)
+async def get_linkedin_conversations(
+    limit: int = 25,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        conversations = await linkedin_bot.fetch_conversations_api(row, limit=limit)
+        return {"conversations": conversations}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except Exception as exc:
+        logger.error("Failed to fetch LinkedIn conversations: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to retrieve conversations: {str(exc)}")
+
+
+@router.get(
+    "/conversations/{conversation_urn_id}/messages",
+    summary="Get message history for a specific LinkedIn conversation thread",
+)
+async def get_linkedin_conversation_messages(
+    conversation_urn_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        messages = await linkedin_bot.fetch_conversation_messages_api(row, conversation_urn_id)
+        return {"messages": messages}
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except Exception as exc:
+        logger.error("Failed to fetch LinkedIn messages for thread %s: %s", conversation_urn_id, exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to retrieve messages: {str(exc)}")
+
+
+@router.post(
+    "/conversations/{conversation_urn_id}/send",
+    summary="Send a message reply to a LinkedIn conversation thread",
+)
+async def send_linkedin_conversation_message(
+    conversation_urn_id: str,
+    payload: LinkedInSendMessageInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        result = await linkedin_bot.send_conversation_message_api(
+            account=row,
+            conversation_urn_id=conversation_urn_id,
+            message_body=payload.message
+        )
+        return result
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+    except Exception as exc:
+        logger.error("Failed to send LinkedIn message to thread %s: %s", conversation_urn_id, exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to send message: {str(exc)}")
+
+
+@router.post(
+    "/sync-messages",
+    summary="Sync LinkedIn conversations & messages to LeadAI database",
+)
+async def sync_linkedin_messages(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin"
+    ).first()
+
+    if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        import asyncio
+        result = await asyncio.to_thread(linkedin_bot.sync_linkedin_conversations, db, row)
+        return result
+    except Exception as exc:
+        logger.error("Failed to sync LinkedIn conversations: %s", exc)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Failed to sync messages: {str(exc)}")
+
+
+# ===========================================================================
+# LinkedIn Comments & AI Replies Automation
+# ===========================================================================
+
+class LinkedInCommentSettingsInput(BaseModel):
+    is_auto_reply_enabled: bool = False
+    require_approval_for_questions: bool = True
+    reply_tone: str = "thought_leadership"
+    custom_instructions: Optional[str] = None
+    signature_text: Optional[str] = None
+    auto_capture_leads: bool = True
+    min_lead_intent_threshold: float = 0.6
+    exclude_keywords: list[str] = Field(default_factory=list)
+
+
+class LinkedInGenerateReplyInput(BaseModel):
+    custom_instruction: Optional[str] = None
+
+
+class LinkedInPostReplyInput(BaseModel):
+    reply_text: str = Field(min_length=1, max_length=2000)
+
+
+LinkedInCommentSettingsInput.model_rebuild()
+LinkedInGenerateReplyInput.model_rebuild()
+LinkedInPostReplyInput.model_rebuild()
+
+
+@router.get(
+    "/comments/settings",
+    summary="Get company's LinkedIn comment automation & AI reply settings",
+)
+async def get_linkedin_comment_settings(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..services.comment_reply_ai import CommentReplyAIService
+    settings = CommentReplyAIService.get_or_create_settings(db, company_id, "linkedin")
+    return {
+        "is_auto_reply_enabled": settings.IsAutoReplyEnabled,
+        "require_approval_for_questions": settings.RequireApprovalForQuestions,
+        "reply_tone": settings.ReplyTone,
+        "custom_instructions": settings.CustomInstructions,
+        "signature_text": settings.SignatureText,
+        "auto_capture_leads": settings.AutoCaptureLeads,
+        "min_lead_intent_threshold": settings.MinLeadIntentThreshold,
+        "exclude_keywords": settings.ExcludeKeywords or [],
+    }
+
+
+@router.post(
+    "/comments/settings",
+    summary="Update company's LinkedIn comment automation & AI reply settings",
+)
+async def update_linkedin_comment_settings(
+    payload: LinkedInCommentSettingsInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..services.comment_reply_ai import CommentReplyAIService
+    settings = CommentReplyAIService.get_or_create_settings(db, company_id, "linkedin")
+    
+    settings.IsAutoReplyEnabled = payload.is_auto_reply_enabled
+    settings.RequireApprovalForQuestions = payload.require_approval_for_questions
+    settings.ReplyTone = payload.reply_tone
+    settings.CustomInstructions = payload.custom_instructions
+    settings.SignatureText = payload.signature_text
+    settings.AutoCaptureLeads = payload.auto_capture_leads
+    settings.MinLeadIntentThreshold = payload.min_lead_intent_threshold
+    settings.ExcludeKeywords = payload.exclude_keywords
+    settings.UpdatedAt = utcnow()
+    
+    db.commit()
+    return {"ok": True, "message": "Comment automation settings saved successfully"}
+
+
+@router.get(
+    "/comments",
+    summary="List LinkedIn post comments with AI reply suggestions & lead intent",
+)
+async def get_linkedin_comments(
+    status_filter: Optional[str] = None,
+    sentiment: Optional[str] = None,
+    is_lead_only: bool = False,
+    limit: int = 50,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..models_blog import LeadSocialComment
+
+    q = db.query(LeadSocialComment).filter(
+        LeadSocialComment.ClientId == company_id,
+        LeadSocialComment.Channel == "linkedin",
+        LeadSocialComment.IsDeleted == False,
+    )
+
+    if status_filter:
+        q = q.filter(LeadSocialComment.Status == status_filter)
+    if sentiment:
+        q = q.filter(LeadSocialComment.Sentiment == sentiment)
+    if is_lead_only:
+        q = q.filter(LeadSocialComment.IsLeadCandidate == True)
+
+    comments = q.order_by(LeadSocialComment.CreatedAt.desc()).limit(limit).all()
+
+    return {
+        "comments": [
+            {
+                "id": c.Id,
+                "post_urn": c.PostUrn,
+                "post_title": c.PostTitle,
+                "post_snippet": c.PostSnippet,
+                "comment_urn": c.CommentUrn,
+                "parent_comment_urn": c.ParentCommentUrn,
+                "author_name": c.AuthorName,
+                "author_headline": c.AuthorHeadline,
+                "author_avatar": c.AuthorAvatar,
+                "author_profile_url": c.AuthorProfileUrl,
+                "comment_text": c.CommentText,
+                "comment_created_at": c.CommentCreatedAt or c.CreatedAt,
+                "sentiment": c.Sentiment,
+                "intent_score": c.IntentScore,
+                "is_question": c.IsQuestion,
+                "is_lead_candidate": c.IsLeadCandidate,
+                "suggested_reply": c.SuggestedReply,
+                "suggested_reply_rationale": c.SuggestedReplyRationale,
+                "status": c.Status,
+                "reply_text": c.ReplyText,
+                "reply_urn": c.ReplyUrn,
+                "replied_at": c.RepliedAt,
+                "replied_by": c.RepliedBy,
+                "customer_id": c.CustomerId,
+            }
+            for c in comments
+        ],
+        "total": len(comments),
+    }
+
+
+@router.post(
+    "/comments/{comment_id}/generate-reply",
+    summary="Generate or regenerate AI contextual reply for a comment",
+)
+async def generate_linkedin_comment_reply(
+    comment_id: str,
+    payload: LinkedInGenerateReplyInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..models_blog import LeadSocialComment
+    from ..services.comment_reply_ai import CommentReplyAIService
+
+    comment = db.query(LeadSocialComment).filter(
+        LeadSocialComment.Id == comment_id,
+        LeadSocialComment.ClientId == company_id,
+        LeadSocialComment.IsDeleted == False,
+    ).first()
+
+    if not comment:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comment not found")
+
+    result = CommentReplyAIService.generate_reply_for_comment(
+        db=db,
+        comment=comment,
+        custom_instruction_override=payload.custom_instruction,
+    )
+    return {
+        "ok": True,
+        "suggested_reply": comment.SuggestedReply,
+        "rationale": comment.SuggestedReplyRationale,
+        "sentiment": comment.Sentiment,
+        "intent_score": comment.IntentScore,
+        "is_lead_candidate": comment.IsLeadCandidate,
+    }
+
+
+@router.post(
+    "/comments/{comment_id}/reply",
+    summary="Approve and post a reply to a LinkedIn comment",
+)
+async def post_linkedin_comment_reply(
+    comment_id: str,
+    payload: LinkedInPostReplyInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..models_blog import LeadSocialComment
+    from ..social import linkedin as linkedin_oauth, linkedin_bot
+
+    comment = db.query(LeadSocialComment).filter(
+        LeadSocialComment.Id == comment_id,
+        LeadSocialComment.ClientId == company_id,
+        LeadSocialComment.IsDeleted == False,
+    ).first()
+
+    if not comment:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comment not found")
+
+    account = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+    ).first()
+
+    if not account:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "LinkedIn account not connected")
+
+    reply_text = payload.reply_text.strip()
+    reply_success = False
+    reply_urn = None
+
+    # Try Official OAuth API first if access token available
+    if account.AccessTokenEnc:
+        try:
+            from ..security import decrypt_pii
+            token = decrypt_pii(account.AccessTokenEnc)
+            person_urn = account.ExternalId
+            if token and person_urn:
+                res = await linkedin_oauth.reply_to_post_comment(
+                    access_token=token,
+                    person_urn=person_urn,
+                    post_urn=comment.PostUrn,
+                    reply_text=reply_text,
+                    parent_comment_urn=comment.CommentUrn if comment.CommentUrn and comment.CommentUrn.startswith("urn:") else None,
+                )
+                if res.get("success"):
+                    reply_success = True
+                    reply_urn = res.get("reply_urn")
+        except Exception as oauth_exc:
+            logger.info(f"OAuth comment reply fallback to browser automation: {oauth_exc}")
+
+    # Fallback to browser session automation if cookie configured
+    if not reply_success and (account.LinkedinCookieEnc or (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):
+        try:
+            bot_res = await linkedin_bot.post_comment_reply_browser(
+                account=account,
+                post_urn_or_url=comment.PostUrn,
+                comment_urn=comment.CommentUrn,
+                reply_text=reply_text,
+            )
+            if bot_res.get("success"):
+                reply_success = True
+                reply_urn = bot_res.get("reply_urn") or f"reply-{comment.CommentUrn}"
+            else:
+                err_msg = bot_res.get("error") or "Failed to post comment reply via browser."
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, err_msg)
+        except HTTPException:
+            raise
+        except Exception as bot_exc:
+            logger.error(f"Browser comment reply failed: {bot_exc}")
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Comment reply failed: {bot_exc}")
+
+    if not reply_success:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Could not post reply. Verify LinkedIn connection credentials.")
+
+    comment.Status = "replied"
+    comment.ReplyText = reply_text
+    comment.ReplyUrn = reply_urn
+    comment.RepliedAt = utcnow()
+    comment.RepliedBy = "operator"
+    comment.UpdatedAt = utcnow()
+    db.commit()
+
+    return {"ok": True, "message": "Reply posted successfully to LinkedIn", "reply_urn": reply_urn}
+
+
+@router.post(
+    "/comments/{comment_id}/ignore",
+    summary="Ignore a comment from the review queue",
+)
+async def ignore_linkedin_comment(
+    comment_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..models_blog import LeadSocialComment
+
+    comment = db.query(LeadSocialComment).filter(
+        LeadSocialComment.Id == comment_id,
+        LeadSocialComment.ClientId == company_id,
+        LeadSocialComment.IsDeleted == False,
+    ).first()
+
+    if not comment:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comment not found")
+
+    comment.Status = "ignored"
+    comment.UpdatedAt = utcnow()
+    db.commit()
+    return {"ok": True, "message": "Comment marked as ignored"}
+
+
+@router.post(
+    "/comments/{comment_id}/capture-lead",
+    summary="Convert commenter into a CRM LeadCustomer",
+)
+async def capture_comment_lead(
+    comment_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..models_blog import LeadSocialComment
+    from ..services.comment_reply_ai import CommentReplyAIService
+
+    comment = db.query(LeadSocialComment).filter(
+        LeadSocialComment.Id == comment_id,
+        LeadSocialComment.ClientId == company_id,
+        LeadSocialComment.IsDeleted == False,
+    ).first()
+
+    if not comment:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comment not found")
+
+    customer = CommentReplyAIService.capture_commenter_as_lead(db, comment)
+    return {
+        "ok": True,
+        "message": f"Successfully captured {comment.AuthorName} as a CRM Lead",
+        "customer_id": customer.Id if customer else None,
+        "display_name": customer.DisplayName if customer else comment.AuthorName,
+    }
+
+
+@router.post(
+    "/comments/sync",
+    summary="Poll LinkedIn for new comments on posts and generate AI replies",
+)
+async def sync_linkedin_comments(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..social import linkedin_bot
+
+    account = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+    ).first()
+
+    if not account or (not account.LinkedinCookieEnc and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
+
+    try:
+        result = await linkedin_bot.fetch_recent_posts_and_comments_browser(db, account)
+        if result.get("error"):
+            err_str = result.get("error", "")
+            if "ERR_TOO_MANY_REDIRECTS" in err_str or "auth" in err_str.lower() or "login" in err_str.lower():
+                raise HTTPException(
+                    status.HTTP_401_UNAUTHORIZED,
+                    "LinkedIn session token (li_at) is expired or invalid. Please copy a fresh session cookie from your browser and paste it in the Connection tab."
+                )
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Comment sync failed: {err_str}")
+
+        return {
+            "ok": True,
+            "message": f"Scanned recent posts. Synced {result.get('synced_comments', 0)} new comments, identified {result.get('new_leads', 0)} high-intent leads.",
+            "data": result,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Failed to sync LinkedIn comments: {exc}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Comment sync failed: {exc}")
+
+
 

@@ -20,6 +20,7 @@ export class CallingPanelComponent implements OnDestroy {
   callMode: 'ai_voice' | 'agent' = 'ai_voice';
   callTimer = 0;
   totalCalls = 4;
+  lastCallTime: string | null = null;
 
   // Live Subtitles State
   liveSubtitle = '';
@@ -110,6 +111,7 @@ export class CallingPanelComponent implements OnDestroy {
     this.callStatus = 'Idle';
     this.clearTimer();
     this.totalCalls++;
+    this.lastCallTime = new Date().toISOString();
     this.messageService.add({
       severity: 'info',
       summary: 'Call Ended',
@@ -216,5 +218,39 @@ export class CallingPanelComponent implements OnDestroy {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  getCallStatusConfig(status: string): {
+    labelColor: string;
+    dotColor: string;
+    pulse: boolean;
+  } {
+    const s = (status || '').toLowerCase();
+    if (
+      s.includes('connected') ||
+      s.includes('answered') ||
+      s.includes('in progress')
+    ) {
+      return { labelColor: '#10b981', dotColor: '#10b981', pulse: true };
+    }
+    if (s.includes('ringing')) {
+      return { labelColor: '#f59e0b', dotColor: '#f59e0b', pulse: true };
+    }
+    if (
+      s.includes('initiat') ||
+      s.includes('calling') ||
+      s.includes('dialing')
+    ) {
+      return { labelColor: '#6366f1', dotColor: '#6366f1', pulse: true };
+    }
+    if (
+      s.includes('ended') ||
+      s.includes('fail') ||
+      s.includes('busy') ||
+      s.includes('no-answer')
+    ) {
+      return { labelColor: '#f43f5e', dotColor: '#f43f5e', pulse: false };
+    }
+    return { labelColor: 'var(--app-text)', dotColor: '#94a3b8', pulse: false };
   }
 }

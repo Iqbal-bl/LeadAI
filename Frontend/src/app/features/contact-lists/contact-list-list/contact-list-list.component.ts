@@ -2,7 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { ContactListService } from '../../../services/contact-list.service';
-import { ContactList, ContactListPreview } from '../../../models/contact-list.models';
+import {
+  ContactList,
+  ContactListPreview,
+} from '../../../models/contact-list.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { ContactListUploadComponent } from '../contact-list-upload/contact-list-upload.component';
@@ -25,6 +28,7 @@ export class ContactListListComponent implements OnInit {
   showItemsDialog = false;
   activeList: ContactList | null = null;
   listItems: any[] = [];
+  displayedColumns: string[] = [];
   itemsLoading = false;
   totalItemsCount = 0;
   currentPage = 1;
@@ -52,7 +56,7 @@ export class ContactListListComponent implements OnInit {
     this.loading = true;
     this.contactListService.getLists().subscribe({
       next: (res: any) => {
-        this.lists = Array.isArray(res) ? res : (res?.items || []);
+        this.lists = Array.isArray(res) ? res : res?.items || [];
         this.loading = false;
       },
       error: () => {
@@ -135,26 +139,30 @@ export class ContactListListComponent implements OnInit {
     if (!this.activeList) return;
     this.itemsLoading = true;
     this.currentPage = page;
-    this.contactListService.getListItems(this.activeList.id, {
-      page: this.currentPage,
-      page_size: this.pageSize,
-      only_invalid: this.onlyInvalid
-    }).subscribe({
-      next: (res: any) => {
-        this.listItems = res.items || [];
-        this.totalItemsCount = res.total_items || 0;
-        this.itemsLoading = false;
-      },
-      error: () => {
-        this.listItems = [];
-        this.totalItemsCount = 0;
-        this.itemsLoading = false;
-      }
-    });
+    this.contactListService
+      .getListItems(this.activeList.id, {
+        page: this.currentPage,
+        page_size: this.pageSize,
+        only_invalid: this.onlyInvalid,
+      })
+      .subscribe({
+        next: (res: any) => {
+          this.listItems = res.items || [];
+          this.totalItemsCount = res.total_items || 0;
+          this.updateColumns();
+          this.itemsLoading = false;
+        },
+        error: () => {
+          this.listItems = [];
+          this.totalItemsCount = 0;
+          this.displayedColumns = [];
+          this.itemsLoading = false;
+        },
+      });
   }
 
   onPageChange(event: any): void {
-    const newPage = (event.first / event.rows) + 1;
+    const newPage = event.first / event.rows + 1;
     this.loadListItems(newPage);
   }
 
@@ -162,21 +170,30 @@ export class ContactListListComponent implements OnInit {
     this.loadListItems(1);
   }
 
-  getColumns(): string[] {
-    if (!this.activeList) return [];
+  updateColumns(): void {
+    if (!this.activeList) {
+      this.displayedColumns = [];
+      return;
+    }
     if (this.activeList.columns && this.activeList.columns.length > 0) {
-      // Filter out empty columns if any
-      return this.activeList.columns.filter(c => c && c.trim() !== '');
+      this.displayedColumns = this.activeList.columns.filter(
+        (c) => c && c.trim() !== '',
+      );
+      return;
     }
     const cols = new Set<string>();
     cols.add('name');
     cols.add('phone_masked');
     for (const item of this.listItems) {
       if (item.fields) {
-        Object.keys(item.fields).forEach(key => cols.add(key));
+        Object.keys(item.fields).forEach((key) => cols.add(key));
       }
     }
-    return Array.from(cols);
+    this.displayedColumns = Array.from(cols);
+  }
+
+  getColumns(): string[] {
+    return this.displayedColumns;
   }
 
   getColValue(item: any, col: string): string {
@@ -194,7 +211,11 @@ export class ContactListListComponent implements OnInit {
     if (colLower === 'row_number') {
       return item.row_number || '—';
     }
-    if (item.fields && item.fields[col] !== undefined && item.fields[col] !== null) {
+    if (
+      item.fields &&
+      item.fields[col] !== undefined &&
+      item.fields[col] !== null
+    ) {
       return String(item.fields[col]) || '—';
     }
     if (item[col] !== undefined && item[col] !== null) {

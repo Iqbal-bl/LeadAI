@@ -2,42 +2,84 @@
 <p-toast position="top-right"></p-toast>
 
 <!-- Header -->
-<div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div
+  class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4"
+>
   <div>
     <div class="flex items-center gap-3">
-      <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-md"
-           style="background: linear-gradient(135deg, #0A66C2, #004182);">
+      <div
+        class="w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-md"
+        style="background: linear-gradient(135deg, #0a66c2, #004182)"
+      >
         <i class="pi pi-linkedin text-2xl"></i>
       </div>
       <div>
-        <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+        <h1
+          class="text-2xl font-bold tracking-tight"
+          style="color: var(--app-text)"
+        >
           LinkedIn Automation & Outreach
         </h1>
         <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
-          Manage OAuth profile connection, auto-accept incoming requests, AI candidate discovery, and automated network outreach
+          Manage OAuth profile connection, auto-accept incoming requests, AI
+          candidate discovery, and automated network outreach
         </p>
       </div>
     </div>
   </div>
 
   <div class="flex items-center gap-2">
-    <p-button label="Channels" icon="pi pi-link" [text]="true" severity="secondary" routerLink="/client/channels"></p-button>
-    <p-button label="Campaigns" icon="pi pi-megaphone" [text]="true" severity="secondary" routerLink="/client/campaigns"></p-button>
-    <p-tag *ngIf="status?.connected" value="Connected" severity="success" [rounded]="true" icon="pi pi-check-circle"></p-tag>
-    <p-tag *ngIf="status && !status.connected" value="Not Connected" severity="secondary" [rounded]="true" icon="pi pi-exclamation-circle"></p-tag>
-    <p-button icon="pi pi-refresh" [rounded]="true" [text]="true" severity="secondary" pTooltip="Refresh Status" (onClick)="loadStatus()"></p-button>
+    <p-button
+      label="Channels"
+      icon="pi pi-link"
+      [text]="true"
+      severity="secondary"
+      routerLink="/client/channels"
+    ></p-button>
+    <p-button
+      label="Campaigns"
+      icon="pi pi-megaphone"
+      [text]="true"
+      severity="secondary"
+      routerLink="/client/campaigns"
+    ></p-button>
+    <p-tag
+      *ngIf="status?.connected"
+      value="Connected"
+      severity="success"
+      [rounded]="true"
+      icon="pi pi-check-circle"
+    ></p-tag>
+    <p-tag
+      *ngIf="status && !status.connected"
+      value="Not Connected"
+      severity="secondary"
+      [rounded]="true"
+      icon="pi pi-exclamation-circle"
+    ></p-tag>
+    <p-button
+      icon="pi pi-refresh"
+      [rounded]="true"
+      [text]="true"
+      severity="secondary"
+      pTooltip="Refresh Status"
+      (onClick)="loadStatus()"
+    ></p-button>
   </div>
 </div>
 
 <!-- Tabs Navigation -->
-<p-tabs [(value)]="activeTab">
+<p-tabs [(value)]="activeTab" [lazy]="true">
   <p-tablist>
     <p-tab value="connection">
       <i class="pi pi-shield mr-2"></i> Connection & Bot Auth
     </p-tab>
     <p-tab value="received">
       <i class="pi pi-inbox mr-2"></i> Received Requests
-      <span *ngIf="invitations.length > 0" class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-white">
+      <span
+        *ngIf="invitations.length > 0"
+        class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-white"
+      >
         {{ invitations.length }}
       </span>
     </p-tab>
@@ -46,8 +88,26 @@
     </p-tab>
     <p-tab value="invitations">
       <i class="pi pi-send mr-2"></i> Outreach & Invites
-      <span *ngIf="getSelectedCount() > 0" class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-brand-500 text-white">
-        {{ getSelectedCount() }}
+      <span
+        *ngIf="selectedCount > 0"
+        class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-brand-500 text-white"
+      >
+        {{ selectedCount }}
+      </span>
+    </p-tab>
+    <p-tab value="messages">
+      <i class="pi pi-comments mr-2"></i> Messages & InMail
+      <span
+        *ngIf="unreadConversationsCount > 0"
+        class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-blue-500 text-white"
+      >
+        {{ unreadConversationsCount }}
+      </span>
+    </p-tab>
+    <p-tab value="comments">
+      <i class="pi pi-comment mr-2"></i> Comments & AI Replies
+      <span *ngIf="pendingReviewCommentsCount > 0" class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-amber-500 text-white">
+        {{ pendingReviewCommentsCount }}
       </span>
     </p-tab>
   </p-tablist>
@@ -55,723 +115,2268 @@
   <p-tabpanels>
     <!-- TAB 1: CONNECTION & BOT AUTH -->
     <p-tabpanel value="connection">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
-        <!-- Left: OAuth & Bot Setup -->
-        <div class="lg:col-span-7 space-y-6">
-          <!-- OAuth Connection Card -->
-          <div class="card-base p-6 border transition-all duration-200"
-               [style.border-color]="status?.connected ? 'rgba(10, 102, 194, 0.4)' : 'var(--app-border)'"
-               [style.background]="status?.connected ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.06), rgba(0, 65, 130, 0.02))' : 'var(--app-surface)'">
-            <div class="flex items-start justify-between gap-4">
-              <div class="flex items-start gap-4">
-                <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                     [style.background]="status?.connected ? 'linear-gradient(135deg, #0A66C2, #004182)' : 'linear-gradient(135deg, #64748b, #475569)'">
-                  <i class="pi pi-linkedin text-xl"></i>
-                </div>
-                <div>
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <h3 class="text-base font-semibold" style="color: var(--app-text)">
-                      {{ status?.connected ? 'LinkedIn Profile Connected' : 'Connect LinkedIn Profile' }}
-                    </h3>
-                    <p-tag *ngIf="status?.connected" value="Authorized" severity="success" [rounded]="true"></p-tag>
-                    <p-tag *ngIf="status && !status.connected" value="Pending Link" severity="warning" [rounded]="true"></p-tag>
+      <ng-template [ngIf]="activeTab === 'connection'">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
+          <!-- Left: OAuth & Bot Setup -->
+          <div class="lg:col-span-7 space-y-6">
+            <!-- 1. Company Page & Official LinkedIn OAuth Card -->
+            <div
+              class="card-base p-6 border transition-all duration-200"
+              [style.border-color]="
+                status?.connected
+                  ? 'rgba(10, 102, 194, 0.4)'
+                  : 'var(--app-border)'
+              "
+              [style.background]="
+                status?.connected
+                  ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.06), rgba(0, 65, 130, 0.02))'
+                  : 'var(--app-surface)'
+              "
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex items-start gap-4">
+                  <div
+                    class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                    [style.background]="
+                      status?.connected
+                        ? 'linear-gradient(135deg, #0A66C2, #004182)'
+                        : 'linear-gradient(135deg, #64748b, #475569)'
+                    "
+                  >
+                    <i class="pi pi-linkedin text-xl"></i>
                   </div>
-                  <p class="text-xs mt-1" style="color: var(--app-text-muted)">
-                    {{ status?.connected ? 'Your company LinkedIn account is connected and authorized for social posting and outreach.' : 'Link your company\'s LinkedIn profile to schedule updates and enable automated candidate outreach.' }}
-                  </p>
-
-                  <div *ngIf="status?.connected" class="mt-3 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 space-y-1">
-                    <div class="text-xs font-mono" style="color: var(--app-text)">
-                      <span class="text-muted">Member URN:</span> <span class="font-semibold text-brand-500">{{ status?.person_urn || 'urn:li:person:connected' }}</span>
+                  <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h3
+                        class="text-base font-semibold"
+                        style="color: var(--app-text)"
+                      >
+                        Company Page & Official LinkedIn OAuth
+                      </h3>
+                      <p-tag
+                        *ngIf="status?.connected"
+                        value="Authorized"
+                        severity="success"
+                        [rounded]="true"
+                      ></p-tag>
+                      <p-tag
+                        *ngIf="status && !status.connected"
+                        value="1-Click OAuth"
+                        severity="info"
+                        [rounded]="true"
+                      ></p-tag>
                     </div>
-                    <div class="flex items-center gap-3 text-xs">
-                      <span *ngIf="status?.access_token_valid" class="text-emerald-500 font-medium">● Token Active</span>
-                      <span *ngIf="status?.has_refresh_token" class="text-blue-500 font-medium">● Auto-Refresh Enabled</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="shrink-0">
-                <p-button
-                  *ngIf="!status?.connected"
-                  label="{{ oauthLoading ? 'Connecting...' : 'Connect LinkedIn' }}"
-                  icon="{{ oauthLoading ? 'pi pi-spin pi-spinner' : 'pi pi-external-link' }}"
-                  iconPos="right"
-                  [loading]="oauthLoading"
-                  (onClick)="connectOAuth()"
-                  [rounded]="true"
-                  [style]="{ 'background': '#0A66C2', 'border': 'none' }"
-                ></p-button>
-
-                <p-button
-                  *ngIf="status?.connected"
-                  label="Disconnect"
-                  icon="pi pi-power-off"
-                  severity="danger"
-                  [outlined]="true"
-                  [rounded]="true"
-                  size="small"
-                  (onClick)="disconnectProfile()"
-                ></p-button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Bot Automation Credentials Card -->
-          <div class="card-base p-6 border" style="border-color: var(--app-border)">
-            <div class="flex items-start justify-between gap-4 mb-5">
-              <div class="flex items-start gap-4">
-                <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                     style="background: linear-gradient(135deg, #6366f1, #8b5cf6);">
-                  <i class="pi pi-shield text-xl"></i>
-                </div>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <h3 class="text-base font-semibold" style="color: var(--app-text)">Bot Automation Credentials</h3>
-                    <p-tag *ngIf="status?.['has_cookie_credentials']" value="Configured" severity="success" [rounded]="true"></p-tag>
-                  </div>
-                  <p class="text-xs mt-1" style="color: var(--app-text-muted)">
-                    Provide your LinkedIn login credentials to enable automated candidate searches, incoming connection processing, and batch invitations.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Username/Password Form -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label class="text-xs font-medium block mb-1" style="color: var(--app-text-muted)">LinkedIn Email / Username</label>
-                <input
-                  pInputText
-                  type="email"
-                  [(ngModel)]="credentialsForm.username"
-                  placeholder="your.email@example.com"
-                  class="w-full text-sm"
-                />
-              </div>
-              <div>
-                <label class="text-xs font-medium block mb-1" style="color: var(--app-text-muted)">LinkedIn Password</label>
-                <p-password
-                  [(ngModel)]="credentialsForm.password"
-                  [feedback]="false"
-                  [toggleMask]="true"
-                  styleClass="w-full"
-                  inputStyleClass="w-full text-sm"
-                  placeholder="••••••••••••"
-                ></p-password>
-              </div>
-            </div>
-
-            <div class="mt-6 flex items-center justify-between pt-4 border-t" style="border-color: var(--app-border)">
-              <div class="text-xs" style="color: var(--app-text-muted)">
-                <i class="pi pi-lock text-emerald-500 mr-1"></i> Credentials are encrypted at rest (AES-256 GCM)
-              </div>
-              <p-button
-                label="{{ savingCredentials ? 'Saving...' : 'Save Bot Credentials' }}"
-                icon="{{ savingCredentials ? 'pi pi-spin pi-spinner' : 'pi pi-check' }}"
-                [loading]="savingCredentials"
-                (onClick)="saveBotCredentials()"
-                [rounded]="true"
-                [style]="{ 'background': '#10b981', 'border': 'none' }"
-              ></p-button>
-            </div>
-          </div>
-
-          <!-- Auto-Accept & Automation Rules Card -->
-          <div class="card-base p-6 border" style="border-color: var(--app-border)">
-            <div class="flex items-start justify-between gap-4 mb-4">
-              <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                     style="background: linear-gradient(135deg, #10b981, #059669);">
-                  <i class="pi pi-user-plus text-lg"></i>
-                </div>
-                <div>
-                  <h3 class="text-base font-semibold" style="color: var(--app-text)">Auto-Accept & Welcome Automation</h3>
-                  <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
-                    Automatically accept incoming LinkedIn connection requests, convert them to CRM leads, and send a personalized welcome message.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div class="space-y-4">
-              <!-- Toggle Auto Accept -->
-              <div class="flex items-center justify-between p-3.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10">
-                <div>
-                  <span class="text-sm font-semibold block" style="color: var(--app-text)">
-                    Auto-Accept Incoming Connection Requests
-                  </span>
-                  <span class="text-xs" style="color: var(--app-text-muted)">
-                    Automatically accept pending connection invitations received on your LinkedIn account during periodic syncs.
-                  </span>
-                </div>
-                <p-inputSwitch [(ngModel)]="autoAcceptEnabled"></p-inputSwitch>
-              </div>
-
-              <!-- Automated Welcome Message -->
-              <div>
-                <div class="flex items-center justify-between mb-1.5">
-                  <label class="text-xs font-medium block" style="color: var(--app-text-muted)">
-                    Automated Welcome Message (Sent after accepting)
-                  </label>
-                  <div class="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      (click)="insertTag('name', 'welcome')"
-                      class="px-2 py-0.5 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-emerald-500 hover:text-white transition-colors"
+                    <p
+                      class="text-xs mt-1"
+                      style="color: var(--app-text-muted)"
                     >
-                      + {{ '{name}' }}
-                    </button>
+                      Official 1-Click integration for blog/article publishing,
+                      page updates, and Company Page inboxes. Zero passwords or
+                      cookies needed.
+                    </p>
+
+                    <div
+                      *ngIf="status?.connected"
+                      class="mt-3 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 space-y-1"
+                    >
+                      <div
+                        class="text-xs font-mono"
+                        style="color: var(--app-text)"
+                      >
+                        <span class="text-muted">Member URN:</span>
+                        <span class="font-semibold text-brand-500">{{
+                          status?.person_urn || "urn:li:person:connected"
+                        }}</span>
+                      </div>
+                      <div class="flex items-center gap-3 text-xs">
+                        <span
+                          *ngIf="status?.access_token_valid"
+                          class="text-emerald-500 font-medium"
+                          >● OAuth Token Active</span
+                        >
+                        <span
+                          *ngIf="status?.has_refresh_token"
+                          class="text-blue-500 font-medium"
+                          >● Auto-Refresh Enabled</span
+                        >
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <textarea
-                  pInputText
-                  rows="3"
-                  [(ngModel)]="welcomeMessage"
-                  class="w-full text-sm font-sans"
-                  placeholder="Hi {name}, thanks for connecting! Looking forward to staying in touch."
-                ></textarea>
-                <div class="flex justify-between items-center text-xs mt-1" style="color: var(--app-text-muted)">
-                  <span>Leave blank if you prefer not to send a message automatically.</span>
-                  <span>{{ welcomeMessage.length }} chars</span>
+                <div class="shrink-0">
+                  <p-button
+                    *ngIf="!status?.connected"
+                    label="{{
+                      oauthLoading ? 'Connecting...' : 'Connect OAuth'
+                    }}"
+                    icon="{{
+                      oauthLoading
+                        ? 'pi pi-spin pi-spinner'
+                        : 'pi pi-external-link'
+                    }}"
+                    iconPos="right"
+                    [loading]="oauthLoading"
+                    (onClick)="connectOAuth()"
+                    [rounded]="true"
+                    [style]="{ background: '#0A66C2', border: 'none' }"
+                  ></p-button>
+
+                  <p-button
+                    *ngIf="status?.connected"
+                    label="Disconnect"
+                    icon="pi pi-power-off"
+                    severity="danger"
+                    [outlined]="true"
+                    [rounded]="true"
+                    size="small"
+                    (onClick)="disconnectProfile()"
+                  ></p-button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Personal Profile 1-on-1 Messages & Automation Card -->
+            <div
+              class="card-base p-6 border rounded-2xl"
+              style="border-color: var(--app-border)"
+            >
+              <div class="flex items-start justify-between gap-4 mb-4">
+                <div class="flex items-start gap-4">
+                  <div
+                    class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                    style="
+                      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+                    "
+                  >
+                    <i class="pi pi-shield text-xl"></i>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <h3
+                        class="text-base font-semibold"
+                        style="color: var(--app-text)"
+                      >
+                        Personal Profile & InMail Automation
+                      </h3>
+                      <p-tag
+                        *ngIf="status?.['has_cookie_credentials']"
+                        value="Active & Connected"
+                        severity="success"
+                        [rounded]="true"
+                      ></p-tag>
+                      <p-tag
+                        *ngIf="!status?.['has_cookie_credentials']"
+                        value="Setup Required"
+                        severity="warn"
+                        [rounded]="true"
+                      ></p-tag>
+                    </div>
+                    <p
+                      class="text-xs mt-1"
+                      style="color: var(--app-text-muted)"
+                    >
+                      Choose your preferred authentication method to enable
+                      candidate discovery, Direct Messaging sync, and connection
+                      management.
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Disconnect Credentials Button -->
+                <div
+                  *ngIf="status?.['has_cookie_credentials']"
+                  class="shrink-0"
+                >
+                  <p-button
+                    label="Remove Credentials"
+                    icon="pi pi-trash"
+                    severity="danger"
+                    [outlined]="true"
+                    [rounded]="true"
+                    size="small"
+                    pTooltip="Clear saved session token & credentials"
+                    (onClick)="disconnectBotCredentials()"
+                  ></p-button>
                 </div>
               </div>
 
-              <div class="pt-3 border-t flex items-center justify-between" style="border-color: var(--app-border)">
-                <p-button
-                  label="{{ syncingInvitations ? 'Syncing...' : 'Sync Connection Requests Now' }}"
-                  icon="{{ syncingInvitations ? 'pi pi-spin pi-spinner' : 'pi pi-sync' }}"
-                  [outlined]="true"
-                  [loading]="syncingInvitations"
-                  [disabled]="!status?.connected || !status?.['has_cookie_credentials']"
-                  (onClick)="triggerSync()"
-                  size="small"
-                  [rounded]="true"
-                ></p-button>
+              <!-- Mode Selector Tabs/Pills -->
+              <div
+                class="flex items-center gap-2 mb-4 p-1 rounded-xl bg-black/5 dark:bg-white/5 w-fit border border-black/5 dark:border-white/5"
+              >
+                <button
+                  type="button"
+                  (click)="authMode = 'credentials'"
+                  class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5"
+                  [ngClass]="
+                    authMode === 'credentials'
+                      ? 'bg-white dark:bg-zinc-800 shadow-sm text-brand-500 font-semibold'
+                      : 'text-muted hover:text-white'
+                  "
+                >
+                  <i class="pi pi-user"></i> Email & Password
+                </button>
+                <button
+                  type="button"
+                  (click)="authMode = 'cookie'"
+                  class="px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5"
+                  [ngClass]="
+                    authMode === 'cookie'
+                      ? 'bg-white dark:bg-zinc-800 shadow-sm text-brand-500 font-semibold'
+                      : 'text-muted hover:text-white'
+                  "
+                >
+                  <i class="pi pi-key"></i> Session Token (li_at)
+                </button>
+              </div>
 
-                <p-button
-                  label="{{ savingSettings ? 'Saving...' : 'Save Automation Rules' }}"
-                  icon="{{ savingSettings ? 'pi pi-spin pi-spinner' : 'pi pi-check' }}"
-                  [loading]="savingSettings"
-                  (onClick)="saveAutomationSettings()"
-                  [rounded]="true"
-                  [style]="{ background: '#10b981', border: 'none' }"
-                  size="small"
-                ></p-button>
+              <!-- Form A: Email & Password -->
+              <div *ngIf="authMode === 'credentials'" class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label
+                      class="text-xs font-medium block mb-1"
+                      style="color: var(--app-text)"
+                      >LinkedIn Email / Phone</label
+                    >
+                    <input
+                      type="email"
+                      pInputText
+                      [(ngModel)]="credentialsForm.username"
+                      placeholder="e.g. alex@company.com"
+                      class="w-full text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="text-xs font-medium block mb-1"
+                      style="color: var(--app-text)"
+                      >LinkedIn Password</label
+                    >
+                    <input
+                      type="password"
+                      pInputText
+                      [(ngModel)]="credentialsForm.password"
+                      placeholder="••••••••••••"
+                      class="w-full text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <span
+                    class="text-[11px] text-muted flex items-center gap-1.5"
+                  >
+                    <i class="pi pi-lock text-emerald-500"></i> Encrypted at
+                    rest (AES-256 GCM)
+                  </span>
+                  <p-button
+                    label="{{
+                      savingCredentials ? 'Connecting...' : 'Connect Automation'
+                    }}"
+                    icon="{{
+                      savingCredentials
+                        ? 'pi pi-spin pi-spinner'
+                        : 'pi pi-check'
+                    }}"
+                    [loading]="savingCredentials"
+                    (onClick)="saveBotCredentials()"
+                    [rounded]="true"
+                    [style]="{ background: '#6366f1', border: 'none' }"
+                  ></p-button>
+                </div>
+              </div>
+
+              <!-- Form B: Direct Session Token (li_at) -->
+              <div *ngIf="authMode === 'cookie'" class="space-y-4">
+                <div>
+                  <label
+                    class="text-xs font-medium block mb-1.5"
+                    style="color: var(--app-text)"
+                  >
+                    Personal LinkedIn Session Token (<span
+                      class="font-mono text-brand-400"
+                      >li_at</span
+                    >)
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="password"
+                      pInputText
+                      [(ngModel)]="credentialsForm.cookie_li_at"
+                      placeholder="Paste your 'li_at' cookie here (e.g. AQEDAT01...)"
+                      class="w-full text-xs font-mono"
+                    />
+                    <p-button
+                      label="{{
+                        savingCredentials ? 'Saving...' : 'Connect InMail'
+                      }}"
+                      icon="{{
+                        savingCredentials
+                          ? 'pi pi-spin pi-spinner'
+                          : 'pi pi-check'
+                      }}"
+                      [loading]="savingCredentials"
+                      (onClick)="saveBotCredentials()"
+                      [rounded]="true"
+                      [style]="{ background: '#6366f1', border: 'none' }"
+                      class="shrink-0"
+                    ></p-button>
+                  </div>
+                </div>
+
+                <!-- Quick 10-Second Guide -->
+                <div
+                  class="p-3 rounded-xl bg-blue-500/5 border border-blue-500/15 text-xs space-y-1.5"
+                >
+                  <div
+                    class="font-semibold text-blue-400 flex items-center gap-1.5"
+                  >
+                    <i class="pi pi-info-circle"></i> How to get your li_at in
+                    10 seconds:
+                  </div>
+                  <div class="text-[11px] text-muted space-y-1 pl-1">
+                    <div>
+                      1. Open
+                      <strong class="text-white">linkedin.com</strong> in your
+                      browser.
+                    </div>
+                    <div>
+                      2. Press
+                      <kbd class="px-1 rounded bg-black/10 dark:bg-white/10"
+                        >F12</kbd
+                      >
+                      &gt; <strong class="text-white">Application</strong> &gt;
+                      <strong class="text-white">Cookies</strong>.
+                    </div>
+                    <div>
+                      3. Copy the value of
+                      <code class="text-brand-400 font-mono">li_at</code> and
+                      paste it above.
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  class="text-[11px] text-muted flex items-center gap-1.5 pt-1"
+                >
+                  <i class="pi pi-lock text-emerald-500"></i> Encrypted at rest
+                  using AES-256 GCM. Valid for ~1 year.
+                </div>
+              </div>
+            </div>
+
+            <!-- Auto-Accept & Automation Rules Card -->
+            <div
+              class="card-base p-6 border"
+              style="border-color: var(--app-border)"
+            >
+              <div class="flex items-start justify-between gap-4 mb-4">
+                <div class="flex items-start gap-3">
+                  <div
+                    class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                    style="
+                      background: linear-gradient(135deg, #10b981, #059669);
+                    "
+                  >
+                    <i class="pi pi-user-plus text-lg"></i>
+                  </div>
+                  <div>
+                    <h3
+                      class="text-base font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      Auto-Accept & Welcome Automation
+                    </h3>
+                    <p
+                      class="text-xs mt-0.5"
+                      style="color: var(--app-text-muted)"
+                    >
+                      Automatically accept incoming LinkedIn connection
+                      requests, convert them to CRM leads, and send a
+                      personalized welcome message.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <!-- Toggle Auto Accept -->
+                <div
+                  class="flex items-center justify-between p-3.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10"
+                >
+                  <div>
+                    <span
+                      class="text-sm font-semibold block"
+                      style="color: var(--app-text)"
+                    >
+                      Auto-Accept Incoming Connection Requests
+                    </span>
+                    <span class="text-xs" style="color: var(--app-text-muted)">
+                      Automatically accept pending connection invitations
+                      received on your LinkedIn account during periodic syncs.
+                    </span>
+                  </div>
+                  <p-inputSwitch
+                    [(ngModel)]="autoAcceptEnabled"
+                  ></p-inputSwitch>
+                </div>
+
+                <!-- Automated Welcome Message -->
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <label
+                      class="text-xs font-medium block"
+                      style="color: var(--app-text-muted)"
+                    >
+                      Automated Welcome Message (Sent after accepting)
+                    </label>
+                    <div class="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        (click)="insertTag('name', 'welcome')"
+                        class="px-2 py-0.5 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-emerald-500 hover:text-white transition-colors"
+                      >
+                        + {{ "{name}" }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    pInputText
+                    rows="3"
+                    [(ngModel)]="welcomeMessage"
+                    class="w-full text-sm font-sans"
+                    placeholder="Hi {name}, thanks for connecting! Looking forward to staying in touch."
+                  ></textarea>
+                  <div
+                    class="flex justify-between items-center text-xs mt-1"
+                    style="color: var(--app-text-muted)"
+                  >
+                    <span
+                      >Leave blank if you prefer not to send a message
+                      automatically.</span
+                    >
+                    <span>{{ welcomeMessage.length }} chars</span>
+                  </div>
+                </div>
+
+                <div
+                  class="pt-3 border-t flex items-center justify-between"
+                  style="border-color: var(--app-border)"
+                >
+                  <p-button
+                    label="{{
+                      syncingInvitations
+                        ? 'Syncing...'
+                        : 'Sync Connection Requests Now'
+                    }}"
+                    icon="{{
+                      syncingInvitations
+                        ? 'pi pi-spin pi-spinner'
+                        : 'pi pi-sync'
+                    }}"
+                    [outlined]="true"
+                    [loading]="syncingInvitations"
+                    [disabled]="
+                      !status?.connected || !status?.['has_cookie_credentials']
+                    "
+                    (onClick)="triggerSync()"
+                    size="small"
+                    [rounded]="true"
+                  ></p-button>
+
+                  <p-button
+                    label="{{
+                      savingSettings ? 'Saving...' : 'Save Automation Rules'
+                    }}"
+                    icon="{{
+                      savingSettings ? 'pi pi-spin pi-spinner' : 'pi pi-check'
+                    }}"
+                    [loading]="savingSettings"
+                    (onClick)="saveAutomationSettings()"
+                    [rounded]="true"
+                    [style]="{ background: '#10b981', border: 'none' }"
+                    size="small"
+                  ></p-button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Right: Helper Guidelines -->
-        <div class="lg:col-span-5 space-y-6">
-          <div class="card-base p-6">
-            <h3 class="text-base font-semibold mb-3 flex items-center gap-2" style="color: var(--app-text)">
-              <i class="pi pi-bolt text-amber-400"></i> How Auto-Accept Works
-            </h3>
-            <ul class="text-xs space-y-2.5 list-disc list-inside" style="color: var(--app-text-secondary)">
-              <li><strong>Lead Creation:</strong> When a connection request is accepted, LeadAI automatically logs the contact as a Lead/Customer in your CRM.</li>
-              <li><strong>Instant Welcome Notes:</strong> Engage your new connection immediately with custom personalized introductory notes.</li>
-              <li><strong>Scheduled Automation:</strong> The system automatically runs background sync every ~2 hours throughout the day with natural jitter.</li>
-              <li><strong>On-Demand Control:</strong> View, manually accept, or ignore pending invitations anytime in the <strong>Received Requests</strong> tab.</li>
-            </ul>
-          </div>
+          <!-- Right: Helper Guidelines -->
+          <div class="lg:col-span-5 space-y-6">
+            <div class="card-base p-6">
+              <h3
+                class="text-base font-semibold mb-3 flex items-center gap-2"
+                style="color: var(--app-text)"
+              >
+                <i class="pi pi-bolt text-amber-400"></i> How Auto-Accept Works
+              </h3>
+              <ul
+                class="text-xs space-y-2.5 list-disc list-inside"
+                style="color: var(--app-text-secondary)"
+              >
+                <li>
+                  <strong>Lead Creation:</strong> When a connection request is
+                  accepted, LeadAI automatically logs the contact as a
+                  Lead/Customer in your CRM.
+                </li>
+                <li>
+                  <strong>Instant Welcome Notes:</strong> Engage your new
+                  connection immediately with custom personalized introductory
+                  notes.
+                </li>
+                <li>
+                  <strong>Scheduled Automation:</strong> The system
+                  automatically runs background sync every ~2 hours throughout
+                  the day with natural jitter.
+                </li>
+                <li>
+                  <strong>On-Demand Control:</strong> View, manually accept, or
+                  ignore pending invitations anytime in the
+                  <strong>Received Requests</strong> tab.
+                </li>
+              </ul>
+            </div>
 
-          <div class="card-base p-6">
-            <h3 class="text-base font-semibold mb-3 flex items-center gap-2" style="color: var(--app-text)">
-              <i class="pi pi-shield text-brand-500"></i> Security & Tenancy
-            </h3>
-            <p class="text-xs leading-relaxed" style="color: var(--app-text-muted)">
-              All credentials and access tokens are strictly company-scoped and encrypted using industry-standard cryptography. Credentials are only used to execute scheduled candidate discovery, invitation management, and authorized outreach actions.
-            </p>
+            <div class="card-base p-6">
+              <h3
+                class="text-base font-semibold mb-3 flex items-center gap-2"
+                style="color: var(--app-text)"
+              >
+                <i class="pi pi-shield text-brand-500"></i> Security & Tenancy
+              </h3>
+              <p
+                class="text-xs leading-relaxed"
+                style="color: var(--app-text-muted)"
+              >
+                All credentials and access tokens are strictly company-scoped
+                and encrypted using industry-standard cryptography. Credentials
+                are only used to execute scheduled candidate discovery,
+                invitation management, and authorized outreach actions.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </ng-template>
     </p-tabpanel>
 
     <!-- TAB 2: RECEIVED REQUESTS (ACCEPTING) -->
     <p-tabpanel value="received">
-      <div class="mt-4 space-y-6">
-        <!-- Banner / Quick Actions Card -->
-        <div class="card-base p-6">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                   style="background: linear-gradient(135deg, #10b981, #059669);">
-                <i class="pi pi-inbox text-lg"></i>
-              </div>
-              <div>
-                <div class="flex items-center gap-2">
-                  <h3 class="text-base font-semibold" style="color: var(--app-text)">Received Connection Requests</h3>
-                  <p-tag [value]="invitations.length + ' Pending'" severity="info" [rounded]="true"></p-tag>
-                  <p-tag *ngIf="autoAcceptEnabled" value="Auto-Accept Active" severity="success" [rounded]="true"></p-tag>
+      <ng-template [ngIf]="activeTab === 'received'">
+        <div class="mt-4 space-y-6">
+          <!-- Banner / Quick Actions Card -->
+          <div class="card-base p-6">
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div class="flex items-center gap-3">
+                <div
+                  class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                  style="background: linear-gradient(135deg, #10b981, #059669)"
+                >
+                  <i class="pi pi-inbox text-lg"></i>
                 </div>
-                <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
-                  Review and accept incoming connection requests. Accepted connections are automatically captured in your CRM pipeline.
-                </p>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3
+                      class="text-base font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      Received Connection Requests
+                    </h3>
+                    <p-tag
+                      [value]="invitations.length + ' Pending'"
+                      severity="info"
+                      [rounded]="true"
+                    ></p-tag>
+                    <p-tag
+                      *ngIf="autoAcceptEnabled"
+                      value="Auto-Accept Active"
+                      severity="success"
+                      [rounded]="true"
+                    ></p-tag>
+                  </div>
+                  <p
+                    class="text-xs mt-0.5"
+                    style="color: var(--app-text-muted)"
+                  >
+                    Review and accept incoming connection requests. Accepted
+                    connections are automatically captured in your CRM pipeline.
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <p-button
+                  label="Refresh"
+                  icon="pi pi-refresh"
+                  [outlined]="true"
+                  [loading]="loadingInvitations"
+                  size="small"
+                  [rounded]="true"
+                  (onClick)="loadInvitations()"
+                ></p-button>
+
+                <p-button
+                  label="Accept All ({{ invitations.length }})"
+                  icon="{{
+                    acceptingAll
+                      ? 'pi pi-spin pi-spinner'
+                      : 'pi pi-check-circle'
+                  }}"
+                  [loading]="acceptingAll"
+                  [disabled]="invitations.length === 0"
+                  size="small"
+                  [rounded]="true"
+                  [style]="{ background: '#10b981', border: 'none' }"
+                  (onClick)="acceptAllInvitations()"
+                ></p-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Connection Requests Table / List -->
+          <div class="card-base overflow-hidden">
+            <!-- Empty State -->
+            <div
+              *ngIf="!loadingInvitations && invitations.length === 0"
+              class="p-12 text-center"
+            >
+              <div
+                class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-emerald-500 mb-3 bg-emerald-500/10"
+              >
+                <i class="pi pi-check-circle text-3xl"></i>
+              </div>
+              <h4
+                class="text-base font-semibold"
+                style="color: var(--app-text)"
+              >
+                No Pending Connection Requests
+              </h4>
+              <p
+                class="text-xs mt-1 max-w-md mx-auto"
+                style="color: var(--app-text-muted)"
+              >
+                You're all caught up! When professionals send you connection
+                requests on LinkedIn, they will appear here.
+              </p>
+              <div class="mt-4">
+                <p-button
+                  label="Refresh Requests"
+                  icon="pi pi-refresh"
+                  size="small"
+                  [rounded]="true"
+                  [outlined]="true"
+                  (onClick)="loadInvitations()"
+                ></p-button>
               </div>
             </div>
 
-            <div class="flex items-center gap-2 shrink-0">
-              <p-button
-                label="Refresh"
-                icon="pi pi-refresh"
-                [outlined]="true"
-                [loading]="loadingInvitations"
-                size="small"
-                [rounded]="true"
-                (onClick)="loadInvitations()"
-              ></p-button>
-
-              <p-button
-                label="Accept All ({{ invitations.length }})"
-                icon="{{ acceptingAll ? 'pi pi-spin pi-spinner' : 'pi pi-check-circle' }}"
-                [loading]="acceptingAll"
-                [disabled]="invitations.length === 0"
-                size="small"
-                [rounded]="true"
-                [style]="{ background: '#10b981', border: 'none' }"
-                (onClick)="acceptAllInvitations()"
-              ></p-button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Connection Requests Table / List -->
-        <div class="card-base overflow-hidden">
-          <!-- Empty State -->
-          <div *ngIf="!loadingInvitations && invitations.length === 0" class="p-12 text-center">
-            <div class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-emerald-500 mb-3 bg-emerald-500/10">
-              <i class="pi pi-check-circle text-3xl"></i>
-            </div>
-            <h4 class="text-base font-semibold" style="color: var(--app-text)">No Pending Connection Requests</h4>
-            <p class="text-xs mt-1 max-w-md mx-auto" style="color: var(--app-text-muted)">
-              You're all caught up! When professionals send you connection requests on LinkedIn, they will appear here.
-            </p>
-            <div class="mt-4">
-              <p-button
-                label="Refresh Requests"
-                icon="pi pi-refresh"
-                size="small"
-                [rounded]="true"
-                [outlined]="true"
-                (onClick)="loadInvitations()"
-              ></p-button>
-            </div>
-          </div>
-
-          <!-- Table of Invitations -->
-          <p-table
-            *ngIf="invitations.length > 0"
-            [value]="invitations"
-            [loading]="loadingInvitations"
-            [rowHover]="true"
-            dataKey="invitation_urn"
-          >
-            <ng-template pTemplate="header">
-              <tr>
-                <th>Member</th>
-                <th>Headline</th>
-                <th>Note / Message</th>
-                <th class="text-right">Action</th>
-              </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-invitation>
-              <tr>
-                <td>
-                  <div class="flex items-center gap-3">
-                    <p-avatar
-                      [label]="invitation.name ? invitation.name.charAt(0) : 'L'"
-                      shape="circle"
-                      size="normal"
-                      [style]="{
-                        background: 'linear-gradient(135deg, #10b981, #059669)',
-                        color: 'white'
-                      }"
-                    ></p-avatar>
-                    <div>
-                      <span class="font-semibold block text-sm" style="color: var(--app-text)">
-                        {{ invitation.name }}
-                      </span>
-                      <span *ngIf="invitation.public_id" class="text-xs font-mono text-muted">
-                        {{ invitation.public_id }}
-                      </span>
+            <!-- Table of Invitations -->
+            <p-table
+              *ngIf="invitations.length > 0"
+              [value]="invitations"
+              [loading]="loadingInvitations"
+              [rowHover]="true"
+              dataKey="invitation_urn"
+            >
+              <ng-template pTemplate="header">
+                <tr>
+                  <th>Member</th>
+                  <th>Headline</th>
+                  <th>Note / Message</th>
+                  <th class="text-right">Action</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-invitation>
+                <tr>
+                  <td>
+                    <div class="flex items-center gap-3">
+                      <p-avatar
+                        [label]="
+                          invitation.name ? invitation.name.charAt(0) : 'L'
+                        "
+                        shape="circle"
+                        size="normal"
+                        [style]="{
+                          background:
+                            'linear-gradient(135deg, #10b981, #059669)',
+                          color: 'white',
+                        }"
+                      ></p-avatar>
+                      <div>
+                        <span
+                          class="font-semibold block text-sm"
+                          style="color: var(--app-text)"
+                        >
+                          {{ invitation.name }}
+                        </span>
+                        <span
+                          *ngIf="invitation.public_id"
+                          class="text-xs font-mono text-muted"
+                        >
+                          {{ invitation.public_id }}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </td>
-                <td>
-                  <span class="text-xs block max-w-md line-clamp-2" style="color: var(--app-text-secondary)">
-                    {{ invitation.headline || '—' }}
-                  </span>
-                </td>
-                <td>
-                  <span *ngIf="invitation.message" class="text-xs block max-w-xs line-clamp-2 p-1.5 rounded bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 italic text-brand-400">
-                    "{{ invitation.message }}"
-                  </span>
-                  <span *ngIf="!invitation.message" class="text-xs text-muted">
-                    No note attached
-                  </span>
-                </td>
-                <td class="text-right">
-                  <div class="flex items-center justify-end gap-2">
-                    <p-button
-                      label="Ignore"
-                      severity="secondary"
-                      [outlined]="true"
-                      size="small"
-                      [rounded]="true"
-                      [disabled]="invitation.processing"
-                      (onClick)="rejectInvitation(invitation)"
-                    ></p-button>
+                  </td>
+                  <td>
+                    <span
+                      class="text-xs block max-w-md line-clamp-2"
+                      style="color: var(--app-text-secondary)"
+                    >
+                      {{ invitation.headline || "—" }}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      *ngIf="invitation.message"
+                      class="text-xs block max-w-xs line-clamp-2 p-1.5 rounded bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 italic text-brand-400"
+                    >
+                      "{{ invitation.message }}"
+                    </span>
+                    <span
+                      *ngIf="!invitation.message"
+                      class="text-xs text-muted"
+                    >
+                      No note attached
+                    </span>
+                  </td>
+                  <td class="text-right">
+                    <div class="flex items-center justify-end gap-2">
+                      <p-button
+                        label="Ignore"
+                        severity="secondary"
+                        [outlined]="true"
+                        size="small"
+                        [rounded]="true"
+                        [disabled]="invitation.processing"
+                        (onClick)="rejectInvitation(invitation)"
+                      ></p-button>
 
-                    <p-button
-                      label="{{ invitation.processing ? 'Accepting...' : 'Accept' }}"
-                      icon="{{ invitation.processing ? 'pi pi-spin pi-spinner' : 'pi pi-check' }}"
-                      size="small"
-                      [rounded]="true"
-                      [loading]="invitation.processing"
-                      [style]="{ background: '#10b981', border: 'none' }"
-                      (onClick)="acceptInvitation(invitation)"
-                    ></p-button>
-                  </div>
-                </td>
-              </tr>
-            </ng-template>
-          </p-table>
+                      <p-button
+                        label="{{
+                          invitation.processing ? 'Accepting...' : 'Accept'
+                        }}"
+                        icon="{{
+                          invitation.processing
+                            ? 'pi pi-spin pi-spinner'
+                            : 'pi pi-check'
+                        }}"
+                        size="small"
+                        [rounded]="true"
+                        [loading]="invitation.processing"
+                        [style]="{ background: '#10b981', border: 'none' }"
+                        (onClick)="acceptInvitation(invitation)"
+                      ></p-button>
+                    </div>
+                  </td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
         </div>
-      </div>
+      </ng-template>
     </p-tabpanel>
 
     <!-- TAB 3: AI CANDIDATE DISCOVERY & SEARCH -->
     <p-tabpanel value="search">
-      <div class="mt-4 space-y-6">
-        <!-- Search Controls -->
-        <div class="card-base p-6">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white"
-                 style="background: linear-gradient(135deg, #a855f7, #ec4899);">
-              <i class="pi pi-sparkles"></i>
+      <ng-template [ngIf]="activeTab === 'search'">
+        <div class="mt-4 space-y-6">
+          <!-- Search Controls -->
+          <div class="card-base p-6">
+            <div class="flex items-center gap-2 mb-4">
+              <div
+                class="w-8 h-8 rounded-lg flex items-center justify-center text-white"
+                style="background: linear-gradient(135deg, #a855f7, #ec4899)"
+              >
+                <i class="pi pi-sparkles"></i>
+              </div>
+              <div>
+                <h3
+                  class="text-base font-semibold"
+                  style="color: var(--app-text)"
+                >
+                  AI Boolean Search Generator
+                </h3>
+                <p class="text-xs" style="color: var(--app-text-muted)">
+                  Describe your target ideal candidates in plain English and let
+                  AI create the exact Boolean keywords
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 class="text-base font-semibold" style="color: var(--app-text)">AI Boolean Search Generator</h3>
-              <p class="text-xs" style="color: var(--app-text-muted)">
-                Describe your target ideal candidates in plain English and let AI create the exact Boolean keywords
-              </p>
-            </div>
-          </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <div class="lg:col-span-7">
-              <label class="text-xs font-medium block mb-1" style="color: var(--app-text-muted)">Target Candidate Description</label>
-              <div class="p-inputgroup">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              <div class="lg:col-span-7">
+                <label
+                  class="text-xs font-medium block mb-1"
+                  style="color: var(--app-text-muted)"
+                  >Target Candidate Description</label
+                >
+                <div class="p-inputgroup">
+                  <input
+                    pInputText
+                    type="text"
+                    [(ngModel)]="aiPrompt"
+                    placeholder="e.g. Senior Backend Engineers specializing in Go and Kubernetes in London"
+                    (keyup.enter)="generateKeywords()"
+                    class="text-sm"
+                  />
+                  <button
+                    pButton
+                    type="button"
+                    label="{{
+                      isGeneratingKeywords ? 'Generating...' : 'AI Generate'
+                    }}"
+                    icon="{{
+                      isGeneratingKeywords
+                        ? 'pi pi-spin pi-spinner'
+                        : 'pi pi-sparkles'
+                    }}"
+                    [loading]="isGeneratingKeywords"
+                    (click)="generateKeywords()"
+                    style="
+                      background: linear-gradient(135deg, #a855f7, #ec4899);
+                      border: none;
+                    "
+                  ></button>
+                </div>
+              </div>
+
+              <div class="lg:col-span-3">
+                <label
+                  class="text-xs font-medium block mb-1"
+                  style="color: var(--app-text-muted)"
+                  >Boolean Keywords</label
+                >
                 <input
                   pInputText
                   type="text"
-                  [(ngModel)]="aiPrompt"
-                  placeholder="e.g. Senior Backend Engineers specializing in Go and Kubernetes in London"
-                  (keyup.enter)="generateKeywords()"
-                  class="text-sm"
+                  [(ngModel)]="generatedKeywords"
+                  placeholder='"engineer" AND "golang"'
+                  class="w-full text-sm font-mono"
                 />
-                <button
-                  pButton
-                  type="button"
-                  label="{{ isGeneratingKeywords ? 'Generating...' : 'AI Generate' }}"
-                  icon="{{ isGeneratingKeywords ? 'pi pi-spin pi-spinner' : 'pi pi-sparkles' }}"
-                  [loading]="isGeneratingKeywords"
-                  (click)="generateKeywords()"
-                  style="background: linear-gradient(135deg, #a855f7, #ec4899); border: none;"
-                ></button>
-              </div>
-            </div>
-
-            <div class="lg:col-span-3">
-              <label class="text-xs font-medium block mb-1" style="color: var(--app-text-muted)">Boolean Keywords</label>
-              <input
-                pInputText
-                type="text"
-                [(ngModel)]="generatedKeywords"
-                placeholder='"engineer" AND "golang"'
-                class="w-full text-sm font-mono"
-              />
-            </div>
-
-            <div class="lg:col-span-2">
-              <label class="text-xs font-medium block mb-1" style="color: var(--app-text-muted)">Limit Results</label>
-              <p-dropdown
-                [options]="[
-                  { label: '5 Profiles', value: 5 },
-                  { label: '10 Profiles', value: 10 },
-                  { label: '25 Profiles', value: 25 },
-                  { label: '50 Profiles', value: 50 }
-                ]"
-                [(ngModel)]="searchLimit"
-                optionLabel="label"
-                optionValue="value"
-                [style]="{ width: '100%' }"
-              ></p-dropdown>
-            </div>
-          </div>
-
-          <div class="mt-4 flex items-center justify-end">
-            <p-button
-              label="{{ isSearchingProfiles ? 'Searching LinkedIn...' : 'Search Candidates' }}"
-              icon="{{ isSearchingProfiles ? 'pi pi-spin pi-spinner' : 'pi pi-search' }}"
-              [loading]="isSearchingProfiles"
-              (onClick)="searchCandidates()"
-              [rounded]="true"
-              [style]="{ background: '#0A66C2', border: 'none' }"
-            ></p-button>
-          </div>
-        </div>
-
-        <!-- Profiles Table / Results -->
-        <div class="card-base overflow-hidden">
-          <div class="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b" style="border-color: var(--app-border)">
-            <div class="flex items-center gap-3">
-              <h4 class="text-base font-semibold" style="color: var(--app-text)">Search Results</h4>
-              <p-tag [value]="profiles.length + ' found'" severity="info" [rounded]="true"></p-tag>
-              <span *ngIf="getSelectedCount() > 0" class="text-xs text-brand-400 font-medium">
-                ({{ getSelectedCount() }} selected)
-              </span>
-            </div>
-
-            <div class="flex items-center gap-2" *ngIf="profiles.length > 0">
-              <p-button
-                label="{{ selectAllChecked ? 'Deselect All' : 'Select All' }}"
-                [outlined]="true"
-                size="small"
-                [rounded]="true"
-                (onClick)="toggleSelectAll()"
-              ></p-button>
-
-              <p-button
-                label="Proceed to Outreach ({{ getSelectedCount() }})"
-                icon="pi pi-arrow-right"
-                iconPos="right"
-                size="small"
-                [rounded]="true"
-                [disabled]="getSelectedCount() === 0"
-                (onClick)="activeTab = 'invitations'"
-              ></p-button>
-            </div>
-          </div>
-
-          <!-- Empty State -->
-          <div *ngIf="!isSearchingProfiles && profiles.length === 0" class="p-12 text-center">
-            <div class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-muted mb-3 bg-black/5 dark:bg-white/5">
-              <i class="pi pi-users text-3xl"></i>
-            </div>
-            <h4 class="text-base font-semibold" style="color: var(--app-text)">No candidates loaded</h4>
-            <p class="text-xs mt-1 max-w-md mx-auto" style="color: var(--app-text-muted)">
-              Enter an AI prompt or boolean search string above and click Search Candidates to discover LinkedIn profiles.
-            </p>
-          </div>
-
-          <!-- Profiles Table -->
-          <p-table
-            *ngIf="profiles.length > 0"
-            [value]="profiles"
-            [loading]="isSearchingProfiles"
-            [rowHover]="true"
-            dataKey="public_id"
-          >
-            <ng-template pTemplate="header">
-              <tr>
-                <th style="width: 3rem">
-                  <p-checkbox
-                    [binary]="true"
-                    [ngModel]="selectAllChecked"
-                    (onChange)="toggleSelectAll()"
-                  ></p-checkbox>
-                </th>
-                <th>Candidate</th>
-                <th>Headline</th>
-                <th>Location</th>
-                <th>Public ID / URN</th>
-                <th>Actions</th>
-              </tr>
-            </ng-template>
-            <ng-template pTemplate="body" let-profile>
-              <tr>
-                <td>
-                  <p-checkbox
-                    [binary]="true"
-                    [(ngModel)]="profile.selected"
-                    (onChange)="onProfileSelectChange()"
-                  ></p-checkbox>
-                </td>
-                <td>
-                  <div class="flex items-center gap-3">
-                    <p-avatar
-                      [label]="profile.name ? profile.name.charAt(0) : 'L'"
-                      shape="circle"
-                      size="normal"
-                      [style]="{
-                        background: 'linear-gradient(135deg, #0A66C2, #004182)',
-                        color: 'white'
-                      }"
-                    ></p-avatar>
-                    <div>
-                      <span class="font-semibold block" style="color: var(--app-text)">{{ profile.name }}</span>
-                      <span *ngIf="profile.profile_url" class="text-xs text-brand-400 hover:underline">
-                        <a [href]="profile.profile_url" target="_blank" rel="noopener noreferrer">View LinkedIn</a>
-                      </span>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <span class="text-xs block max-w-sm line-clamp-2" style="color: var(--app-text-secondary)">
-                    {{ profile.headline || '—' }}
-                  </span>
-                </td>
-                <td>
-                  <span class="text-xs" style="color: var(--app-text-muted)">
-                    <i class="pi pi-map-marker mr-1 text-muted"></i>{{ profile.location || 'Unknown' }}
-                  </span>
-                </td>
-                <td>
-                  <code class="text-xs px-2 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-muted">
-                    {{ profile.public_id || profile.urn_id }}
-                  </code>
-                </td>
-                <td>
-                  <p-button
-                    icon="pi pi-send"
-                    [rounded]="true"
-                    [text]="true"
-                    severity="secondary"
-                    pTooltip="Add to Outbox"
-                    (onClick)="profile.selected = true; activeTab = 'invitations'"
-                  ></p-button>
-                </td>
-              </tr>
-            </ng-template>
-          </p-table>
-        </div>
-      </div>
-    </p-tabpanel>
-
-    <!-- TAB 4: OUTREACH & INVITATIONS -->
-    <p-tabpanel value="invitations">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
-        <!-- Message Editor -->
-        <div class="lg:col-span-7 space-y-6">
-          <div class="card-base p-6">
-            <div class="flex items-center justify-between mb-4">
-              <div class="flex items-center gap-2">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white bg-brand-500">
-                  <i class="pi pi-envelope"></i>
-                </div>
-                <div>
-                  <h3 class="text-base font-semibold" style="color: var(--app-text)">Personalized Invitation Message</h3>
-                  <p class="text-xs" style="color: var(--app-text-muted)">Compose note sent with LinkedIn connection request</p>
-                </div>
               </div>
 
-              <!-- Personalization Tags -->
-              <div class="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  (click)="insertTag('name', 'outreach')"
-                  class="px-2 py-1 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-brand-500 hover:text-white transition-colors"
+              <div class="lg:col-span-2">
+                <label
+                  class="text-xs font-medium block mb-1"
+                  style="color: var(--app-text-muted)"
+                  >Limit Results</label
                 >
-                  + {{ '{name}' }}
-                </button>
-                <button
-                  type="button"
-                  (click)="insertTag('headline', 'outreach')"
-                  class="px-2 py-1 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-brand-500 hover:text-white transition-colors"
-                >
-                  + {{ '{headline}' }}
-                </button>
+                <p-dropdown
+                  [options]="[
+                    { label: '5 Profiles', value: 5 },
+                    { label: '10 Profiles', value: 10 },
+                    { label: '25 Profiles', value: 25 },
+                    { label: '50 Profiles', value: 50 },
+                  ]"
+                  [(ngModel)]="searchLimit"
+                  optionLabel="label"
+                  optionValue="value"
+                  [style]="{ width: '100%' }"
+                ></p-dropdown>
               </div>
             </div>
 
-            <div>
-              <textarea
-                pInputText
-                rows="6"
-                [(ngModel)]="invitationMessage"
-                class="w-full text-sm font-sans"
-                placeholder="Hi {name}, I'd love to connect..."
-              ></textarea>
-              <div class="flex justify-between items-center text-xs mt-1" style="color: var(--app-text-muted)">
-                <span>LinkedIn note limit: 300 characters recommended</span>
-                <span [ngClass]="invitationMessage.length > 300 ? 'text-amber-500 font-bold' : ''">
-                  {{ invitationMessage.length }} / 300
-                </span>
-              </div>
-            </div>
-
-            <div class="mt-6 pt-4 border-t flex items-center justify-between" style="border-color: var(--app-border)">
-              <div class="text-xs" style="color: var(--app-text-muted)">
-                Targeting <strong>{{ getSelectedCount() }}</strong> candidate(s)
-              </div>
-
+            <div class="mt-4 flex items-center justify-end">
               <p-button
-                label="{{ isSendingInvitations ? 'Sending Invitations...' : 'Send Connection Requests' }}"
-                icon="{{ isSendingInvitations ? 'pi pi-spin pi-spinner' : 'pi pi-send' }}"
-                [loading]="isSendingInvitations"
-                [disabled]="getSelectedCount() === 0"
-                (onClick)="sendInvitations()"
+                label="{{
+                  isSearchingProfiles
+                    ? 'Searching LinkedIn...'
+                    : 'Search Candidates'
+                }}"
+                icon="{{
+                  isSearchingProfiles ? 'pi pi-spin pi-spinner' : 'pi pi-search'
+                }}"
+                [loading]="isSearchingProfiles"
+                (onClick)="searchCandidates()"
                 [rounded]="true"
                 [style]="{ background: '#0A66C2', border: 'none' }"
               ></p-button>
             </div>
           </div>
-        </div>
 
-        <!-- Selected Recipients Preview -->
-        <div class="lg:col-span-5 space-y-6">
-          <div class="card-base p-6">
-            <h3 class="text-base font-semibold mb-3 flex items-center justify-between" style="color: var(--app-text)">
-              <span>Selected Candidates ({{ getSelectedCount() }})</span>
-              <button
-                *ngIf="getSelectedCount() > 0"
-                type="button"
-                (click)="toggleSelectAll()"
-                class="text-xs text-brand-400 hover:underline"
+          <!-- Profiles Table / Results -->
+          <div class="card-base overflow-hidden">
+            <div
+              class="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b"
+              style="border-color: var(--app-border)"
+            >
+              <div class="flex items-center gap-3">
+                <h4
+                  class="text-base font-semibold"
+                  style="color: var(--app-text)"
+                >
+                  Search Results
+                </h4>
+                <p-tag
+                  [value]="profiles.length + ' found'"
+                  severity="info"
+                  [rounded]="true"
+                ></p-tag>
+                <span
+                  *ngIf="selectedCount > 0"
+                  class="text-xs text-brand-400 font-medium"
+                >
+                  ({{ selectedCount }} selected)
+                </span>
+              </div>
+
+              <div class="flex items-center gap-2" *ngIf="profiles.length > 0">
+                <p-button
+                  label="{{ selectAllChecked ? 'Deselect All' : 'Select All' }}"
+                  [outlined]="true"
+                  size="small"
+                  [rounded]="true"
+                  (onClick)="toggleSelectAll()"
+                ></p-button>
+
+                <p-button
+                  [label]="'Proceed to Outreach (' + selectedCount + ')'"
+                  icon="pi pi-arrow-right"
+                  iconPos="right"
+                  size="small"
+                  [rounded]="true"
+                  [disabled]="selectedCount === 0"
+                  (onClick)="activeTab = 'invitations'"
+                ></p-button>
+              </div>
+            </div>
+
+            <!-- Empty State -->
+            <div
+              *ngIf="!isSearchingProfiles && profiles.length === 0"
+              class="p-12 text-center"
+            >
+              <div
+                class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-muted mb-3 bg-black/5 dark:bg-white/5"
               >
-                Clear All
-              </button>
-            </h3>
-
-            <div *ngIf="getSelectedCount() === 0" class="p-8 text-center border rounded-lg border-dashed" style="border-color: var(--app-border)">
-              <i class="pi pi-user-plus text-2xl text-muted mb-2"></i>
-              <p class="text-xs" style="color: var(--app-text-muted)">
-                No candidates selected yet. Search and check candidates in the <strong>AI Discovery</strong> tab.
+                <i class="pi pi-users text-3xl"></i>
+              </div>
+              <h4
+                class="text-base font-semibold"
+                style="color: var(--app-text)"
+              >
+                No candidates loaded
+              </h4>
+              <p
+                class="text-xs mt-1 max-w-md mx-auto"
+                style="color: var(--app-text-muted)"
+              >
+                Enter an AI prompt or boolean search string above and click
+                Search Candidates to discover LinkedIn profiles.
               </p>
             </div>
 
-            <div *ngIf="getSelectedCount() > 0" class="max-h-80 overflow-y-auto space-y-2 pr-1">
-              <div
-                *ngFor="let profile of getSelectedProfiles()"
-                class="flex items-center justify-between p-2.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10"
-              >
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <p-avatar [label]="profile.name.charAt(0)" shape="circle" size="normal"></p-avatar>
-                  <div class="truncate">
-                    <p class="text-xs font-semibold truncate" style="color: var(--app-text)">{{ profile.name }}</p>
-                    <p class="text-xs truncate" style="color: var(--app-text-muted)">{{ profile.headline || profile.location || profile.public_id }}</p>
+            <!-- Profiles Table -->
+            <p-table
+              *ngIf="profiles.length > 0"
+              [value]="profiles"
+              [loading]="isSearchingProfiles"
+              [rowHover]="true"
+              dataKey="public_id"
+            >
+              <ng-template pTemplate="header">
+                <tr>
+                  <th style="width: 3rem">
+                    <p-checkbox
+                      [binary]="true"
+                      [ngModel]="selectAllChecked"
+                      (onChange)="toggleSelectAll()"
+                    ></p-checkbox>
+                  </th>
+                  <th>Candidate</th>
+                  <th>Headline</th>
+                  <th>Location</th>
+                  <th>Public ID / URN</th>
+                  <th>Actions</th>
+                </tr>
+              </ng-template>
+              <ng-template pTemplate="body" let-profile>
+                <tr>
+                  <td>
+                    <p-checkbox
+                      [binary]="true"
+                      [(ngModel)]="profile.selected"
+                      (onChange)="onProfileSelectChange()"
+                    ></p-checkbox>
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-3">
+                      <p-avatar
+                        [label]="profile.name ? profile.name.charAt(0) : 'L'"
+                        shape="circle"
+                        size="normal"
+                        [style]="{
+                          background:
+                            'linear-gradient(135deg, #0A66C2, #004182)',
+                          color: 'white',
+                        }"
+                      ></p-avatar>
+                      <div>
+                        <span
+                          class="font-semibold block"
+                          style="color: var(--app-text)"
+                          >{{ profile.name }}</span
+                        >
+                        <span
+                          *ngIf="profile.profile_url"
+                          class="text-xs text-brand-400 hover:underline"
+                        >
+                          <a
+                            [href]="profile.profile_url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >View LinkedIn</a
+                          >
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span
+                      class="text-xs block max-w-sm line-clamp-2"
+                      style="color: var(--app-text-secondary)"
+                    >
+                      {{ profile.headline || "—" }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="text-xs" style="color: var(--app-text-muted)">
+                      <i class="pi pi-map-marker mr-1 text-muted"></i
+                      >{{ profile.location || "Unknown" }}
+                    </span>
+                  </td>
+                  <td>
+                    <code
+                      class="text-xs px-2 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-muted"
+                    >
+                      {{ profile.public_id || profile.urn_id }}
+                    </code>
+                  </td>
+                  <td>
+                    <p-button
+                      icon="pi pi-send"
+                      [rounded]="true"
+                      [text]="true"
+                      severity="secondary"
+                      pTooltip="Add to Outbox"
+                      (onClick)="selectSingleProfile(profile)"
+                    ></p-button>
+                  </td>
+                </tr>
+              </ng-template>
+            </p-table>
+          </div>
+        </div>
+      </ng-template>
+    </p-tabpanel>
+
+    <!-- TAB 4: OUTREACH & INVITATIONS -->
+    <p-tabpanel value="invitations">
+      <ng-template [ngIf]="activeTab === 'invitations'">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
+          <!-- Message Editor -->
+          <div class="lg:col-span-7 space-y-6">
+            <div class="card-base p-6">
+              <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                  <div
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-white bg-brand-500"
+                  >
+                    <i class="pi pi-envelope"></i>
+                  </div>
+                  <div>
+                    <h3
+                      class="text-base font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      Personalized Invitation Message
+                    </h3>
+                    <p class="text-xs" style="color: var(--app-text-muted)">
+                      Compose note sent with LinkedIn connection request
+                    </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  (click)="profile.selected = false"
-                  class="text-muted hover:text-red-400 p-1 text-sm shrink-0"
+
+                <!-- Personalization Tags -->
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    (click)="insertTag('name', 'outreach')"
+                    class="px-2 py-1 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-brand-500 hover:text-white transition-colors"
+                  >
+                    + {{ "{name}" }}
+                  </button>
+                  <button
+                    type="button"
+                    (click)="insertTag('headline', 'outreach')"
+                    class="px-2 py-1 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-brand-500 hover:text-white transition-colors"
+                  >
+                    + {{ "{headline}" }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <textarea
+                  pInputText
+                  rows="6"
+                  [(ngModel)]="invitationMessage"
+                  class="w-full text-sm font-sans"
+                  placeholder="Hi {name}, I'd love to connect..."
+                ></textarea>
+                <div
+                  class="flex justify-between items-center text-xs mt-1"
+                  style="color: var(--app-text-muted)"
                 >
-                  <i class="pi pi-times"></i>
+                  <span>LinkedIn note limit: 300 characters recommended</span>
+                  <span
+                    [ngClass]="
+                      invitationMessage.length > 300
+                        ? 'text-amber-500 font-bold'
+                        : ''
+                    "
+                  >
+                    {{ invitationMessage.length }} / 300
+                  </span>
+                </div>
+              </div>
+
+              <div
+                class="mt-6 pt-4 border-t flex items-center justify-between"
+                style="border-color: var(--app-border)"
+              >
+                <div class="text-xs" style="color: var(--app-text-muted)">
+                  Targeting <strong>{{ selectedCount }}</strong> candidate(s)
+                </div>
+
+                <p-button
+                  label="{{
+                    isSendingInvitations
+                      ? 'Sending Invitations...'
+                      : 'Send Connection Requests'
+                  }}"
+                  icon="{{
+                    isSendingInvitations
+                      ? 'pi pi-spin pi-spinner'
+                      : 'pi pi-send'
+                  }}"
+                  [loading]="isSendingInvitations"
+                  [disabled]="selectedCount === 0"
+                  (onClick)="sendInvitations()"
+                  [rounded]="true"
+                  [style]="{ background: '#0A66C2', border: 'none' }"
+                ></p-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Selected Recipients Preview -->
+          <div class="lg:col-span-5 space-y-6">
+            <div class="card-base p-6">
+              <h3
+                class="text-base font-semibold mb-3 flex items-center justify-between"
+                style="color: var(--app-text)"
+              >
+                <span>Selected Candidates ({{ selectedCount }})</span>
+                <button
+                  *ngIf="selectedCount > 0"
+                  type="button"
+                  (click)="toggleSelectAll()"
+                  class="text-xs text-brand-400 hover:underline"
+                >
+                  Clear All
                 </button>
+              </h3>
+
+              <div
+                *ngIf="selectedCount === 0"
+                class="p-8 text-center border rounded-lg border-dashed"
+                style="border-color: var(--app-border)"
+              >
+                <i class="pi pi-user-plus text-2xl text-muted mb-2"></i>
+                <p class="text-xs" style="color: var(--app-text-muted)">
+                  No candidates selected yet. Search and check candidates in the
+                  <strong>AI Discovery</strong> tab.
+                </p>
+              </div>
+
+              <div
+                *ngIf="selectedCount > 0"
+                class="max-h-80 overflow-y-auto space-y-2 pr-1"
+              >
+                <div
+                  *ngFor="let profile of selectedProfiles"
+                  class="flex items-center justify-between p-2.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10"
+                >
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <p-avatar
+                      [label]="profile.name.charAt(0)"
+                      shape="circle"
+                      size="normal"
+                    ></p-avatar>
+                    <div class="truncate">
+                      <p
+                        class="text-xs font-semibold truncate"
+                        style="color: var(--app-text)"
+                      >
+                        {{ profile.name }}
+                      </p>
+                      <p
+                        class="text-xs truncate"
+                        style="color: var(--app-text-muted)"
+                      >
+                        {{
+                          profile.headline ||
+                            profile.location ||
+                            profile.public_id
+                        }}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    (click)="deselectProfile(profile)"
+                    class="text-muted hover:text-red-400 p-1 text-sm shrink-0"
+                  >
+                    <i class="pi pi-times"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ng-template>
+    </p-tabpanel>
+
+    <!-- TAB 5: DIRECT MESSAGES & INMAIL -->
+    <p-tabpanel value="messages">
+      <ng-template [ngIf]="activeTab === 'messages'">
+        <div class="mt-4 space-y-6">
+          <!-- Top Toolbar / Info Banner -->
+          <div class="card-base p-6">
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div class="flex items-center gap-3">
+                <div
+                  class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                  style="background: linear-gradient(135deg, #0a66c2, #0284c7)"
+                >
+                  <i class="pi pi-comments text-lg"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <h3
+                      class="text-base font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      LinkedIn Direct Messages & InMail
+                    </h3>
+                    <p-tag
+                      [value]="conversations.length + ' Conversations'"
+                      severity="info"
+                      [rounded]="true"
+                    ></p-tag>
+                    <p-tag
+                      *ngIf="unreadConversationsCount > 0"
+                      [value]="unreadConversationsCount + ' Unread'"
+                      severity="warning"
+                      [rounded]="true"
+                    ></p-tag>
+                    <p-tag
+                      value="Safe Periodic Retrieval"
+                      severity="secondary"
+                      [rounded]="true"
+                      icon="pi pi-shield"
+                    ></p-tag>
+                  </div>
+                  <p
+                    class="text-xs mt-0.5"
+                    style="color: var(--app-text-muted)"
+                  >
+                    Synchronized message threads with contact details,
+                    timestamps, and direct operator reply channel.
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <p-button
+                  label="Refresh"
+                  icon="pi pi-refresh"
+                  [outlined]="true"
+                  [loading]="loadingConversations"
+                  size="small"
+                  [rounded]="true"
+                  [disabled]="
+                    !status?.connected || !status?.['has_cookie_credentials']
+                  "
+                  (onClick)="loadConversations()"
+                ></p-button>
+
+                <p-button
+                  label="{{ syncingMessages ? 'Syncing...' : 'Sync to CRM' }}"
+                  icon="{{
+                    syncingMessages ? 'pi pi-spin pi-spinner' : 'pi pi-sync'
+                  }}"
+                  [loading]="syncingMessages"
+                  [disabled]="
+                    !status?.connected || !status?.['has_cookie_credentials']
+                  "
+                  size="small"
+                  [rounded]="true"
+                  [style]="{ background: '#0A66C2', border: 'none' }"
+                  (onClick)="triggerMessageSync()"
+                  pTooltip="Sync all threads and message history to LeadAI CRM database"
+                ></p-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat Workspace Grid -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[580px]">
+            <!-- Left Column: Conversation Thread List (5 Cols) -->
+            <div
+              class="lg:col-span-5 flex flex-col card-base overflow-hidden border"
+              style="border-color: var(--app-border)"
+            >
+              <!-- Search Threads Bar -->
+              <div
+                class="p-3.5 border-b"
+                style="border-color: var(--app-border)"
+              >
+                <div class="p-inputgroup">
+                  <span class="p-inputgroup-addon bg-transparent border-r-0">
+                    <i
+                      class="pi pi-search text-xs"
+                      style="color: var(--app-text-muted)"
+                    ></i>
+                  </span>
+                  <input
+                    pInputText
+                    type="text"
+                    [(ngModel)]="searchConversationText"
+                    (ngModelChange)="applyConversationFilter()"
+                    placeholder="Search conversations..."
+                    class="w-full text-xs border-l-0"
+                  />
+                  <button
+                    *ngIf="searchConversationText"
+                    pButton
+                    type="button"
+                    icon="pi pi-times"
+                    class="p-button-text p-button-secondary p-button-sm text-xs"
+                    (click)="
+                      searchConversationText = ''; applyConversationFilter()
+                    "
+                  ></button>
+                </div>
+              </div>
+
+              <!-- Thread Items List -->
+              <div
+                class="flex-1 overflow-y-auto max-h-[540px] divide-y divide-black/5 dark:divide-white/5"
+              >
+                <!-- Loading Skeleton -->
+                <div *ngIf="loadingConversations" class="p-4 space-y-4">
+                  <div
+                    *ngFor="let i of [1, 2, 3, 4]"
+                    class="flex items-center gap-3"
+                  >
+                    <p-skeleton shape="circle" size="2.75rem"></p-skeleton>
+                    <div class="flex-1 space-y-1.5">
+                      <p-skeleton width="60%" height="0.9rem"></p-skeleton>
+                      <p-skeleton width="85%" height="0.75rem"></p-skeleton>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Empty State -->
+                <div
+                  *ngIf="
+                    !loadingConversations && filteredConversations.length === 0
+                  "
+                  class="p-8 text-center"
+                >
+                  <i class="pi pi-inbox text-3xl text-muted mb-2 block"></i>
+                  <p
+                    class="text-xs font-semibold"
+                    style="color: var(--app-text)"
+                  >
+                    No conversations found
+                  </p>
+                  <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+                    {{
+                      !status?.["has_cookie_credentials"]
+                        ? "Please configure your bot credentials in the Connection tab first."
+                        : "No message threads match your search."
+                    }}
+                  </p>
+                </div>
+
+                <!-- Conversation Item Card -->
+                <div
+                  *ngFor="let conv of filteredConversations"
+                  (click)="selectConversation(conv)"
+                  class="p-3.5 cursor-pointer transition-all duration-150 flex items-start gap-3 hover:bg-black/5 dark:hover:bg-white/5 relative"
+                  [ngClass]="{
+                    'bg-brand-500/10 border-l-4 border-l-brand-500 font-medium':
+                      selectedConversation?.conversation_id ===
+                        conv.conversation_id ||
+                      selectedConversation?.conversation_urn ===
+                        conv.conversation_urn,
+                    'border-l-4 border-l-transparent':
+                      selectedConversation?.conversation_id !==
+                        conv.conversation_id &&
+                      selectedConversation?.conversation_urn !==
+                        conv.conversation_urn,
+                  }"
+                >
+                  <!-- Avatar -->
+                  <div class="relative shrink-0">
+                    <p-avatar
+                      *ngIf="conv.contact_avatar"
+                      [image]="conv.contact_avatar"
+                      shape="circle"
+                      size="normal"
+                    ></p-avatar>
+                    <p-avatar
+                      *ngIf="!conv.contact_avatar"
+                      [label]="
+                        conv.contact_name ? conv.contact_name.charAt(0) : 'L'
+                      "
+                      shape="circle"
+                      size="normal"
+                      [style]="{
+                        background: 'linear-gradient(135deg, #0A66C2, #0284c7)',
+                        color: 'white',
+                      }"
+                    ></p-avatar>
+                    <span
+                      *ngIf="
+                        !conv.is_read ||
+                        (conv.unread_count && conv.unread_count > 0)
+                      "
+                      class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-blue-500 rounded-full ring-2 ring-white dark:ring-black"
+                    ></span>
+                  </div>
+
+                  <!-- Info Snippet -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between gap-1 mb-0.5">
+                      <span
+                        class="text-xs font-semibold truncate"
+                        style="color: var(--app-text)"
+                      >
+                        {{ conv.contact_name }}
+                      </span>
+                      <span
+                        *ngIf="conv.last_activity_at"
+                        class="text-[10px] shrink-0 text-muted"
+                      >
+                        {{ conv.last_activity_at | date: "MMM d, h:mm a" }}
+                      </span>
+                    </div>
+
+                    <p
+                      *ngIf="conv.contact_headline"
+                      class="text-[11px] truncate text-muted mb-1"
+                    >
+                      {{ conv.contact_headline }}
+                    </p>
+
+                    <p
+                      class="text-xs truncate"
+                      [style.color]="
+                        conv.is_read
+                          ? 'var(--app-text-muted)'
+                          : 'var(--app-text)'
+                      "
+                    >
+                      <span
+                        *ngIf="
+                          conv.last_sender_name &&
+                          conv.last_sender_name !== conv.contact_name
+                        "
+                        class="font-medium"
+                        >You:
+                      </span>
+                      {{ conv.last_message || "No messages yet" }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Active Conversation Thread (7 Cols) -->
+            <div
+              class="lg:col-span-7 flex flex-col card-base overflow-hidden border"
+              style="border-color: var(--app-border)"
+            >
+              <!-- Chat Header -->
+              <div
+                *ngIf="selectedConversation"
+                class="p-4 border-b flex items-center justify-between gap-4"
+                style="border-color: var(--app-border)"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <p-avatar
+                    *ngIf="selectedConversation.contact_avatar"
+                    [image]="selectedConversation.contact_avatar"
+                    shape="circle"
+                    size="normal"
+                  ></p-avatar>
+                  <p-avatar
+                    *ngIf="!selectedConversation.contact_avatar"
+                    [label]="
+                      selectedConversation.contact_name
+                        ? selectedConversation.contact_name.charAt(0)
+                        : 'L'
+                    "
+                    shape="circle"
+                    size="normal"
+                    [style]="{
+                      background: 'linear-gradient(135deg, #0A66C2, #0284c7)',
+                      color: 'white',
+                    }"
+                  ></p-avatar>
+                  <div class="truncate">
+                    <h4
+                      class="text-sm font-semibold truncate"
+                      style="color: var(--app-text)"
+                    >
+                      {{ selectedConversation.contact_name }}
+                    </h4>
+                    <p class="text-xs truncate text-muted">
+                      {{
+                        selectedConversation.contact_headline ||
+                          selectedConversation.contact_public_id ||
+                          "LinkedIn Contact"
+                      }}
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                  <p-button
+                    icon="pi pi-refresh"
+                    [rounded]="true"
+                    [text]="true"
+                    severity="secondary"
+                    size="small"
+                    pTooltip="Refresh Thread"
+                    [loading]="loadingMessages"
+                    (onClick)="selectConversation(selectedConversation)"
+                  ></p-button>
+                </div>
+              </div>
+
+              <!-- Messages Stream Area -->
+              <div
+                id="linkedin-chat-messages-container"
+                class="flex-1 p-5 overflow-y-auto max-h-[440px] min-h-[340px] space-y-4"
+                style="background: rgba(0, 0, 0, 0.02)"
+              >
+                <!-- No Thread Selected -->
+                <div
+                  *ngIf="!selectedConversation"
+                  class="h-full flex flex-col items-center justify-center text-center p-8"
+                >
+                  <div
+                    class="w-14 h-14 rounded-2xl flex items-center justify-center text-muted mb-3 bg-black/5 dark:bg-white/5"
+                  >
+                    <i class="pi pi-comments text-2xl"></i>
+                  </div>
+                  <h4
+                    class="text-sm font-semibold"
+                    style="color: var(--app-text)"
+                  >
+                    Select a Conversation
+                  </h4>
+                  <p
+                    class="text-xs mt-1 max-w-xs"
+                    style="color: var(--app-text-muted)"
+                  >
+                    Choose a thread from the list on the left to read messages
+                    and reply.
+                  </p>
+                </div>
+
+                <!-- Loading Messages Spinner -->
+                <div
+                  *ngIf="loadingMessages"
+                  class="h-full flex flex-col items-center justify-center p-8"
+                >
+                  <i
+                    class="pi pi-spin pi-spinner text-2xl text-brand-500 mb-2"
+                  ></i>
+                  <p class="text-xs text-muted">Loading message history...</p>
+                </div>
+
+                <!-- Empty Messages in Thread -->
+                <div
+                  *ngIf="
+                    selectedConversation &&
+                    !loadingMessages &&
+                    messages.length === 0
+                  "
+                  class="text-center p-8"
+                >
+                  <i class="pi pi-inbox text-2xl text-muted mb-2 block"></i>
+                  <p class="text-xs text-muted">
+                    No messages found in this thread.
+                  </p>
+                </div>
+
+                <!-- Message Bubbles -->
+                <ng-container
+                  *ngIf="
+                    selectedConversation &&
+                    !loadingMessages &&
+                    messages.length > 0
+                  "
+                >
+                  <div
+                    *ngFor="let msg of messages"
+                    class="flex flex-col"
+                    [ngClass]="msg.is_self ? 'items-end' : 'items-start'"
+                  >
+                    <div
+                      class="flex items-end gap-2 max-w-[85%]"
+                      [ngClass]="msg.is_self ? 'flex-row-reverse' : 'flex-row'"
+                    >
+                      <!-- Mini Avatar for incoming -->
+                      <p-avatar
+                        *ngIf="!msg.is_self"
+                        [label]="
+                          msg.sender_name ? msg.sender_name.charAt(0) : 'L'
+                        "
+                        shape="circle"
+                        size="normal"
+                        [style]="{
+                          background: '#64748b',
+                          color: 'white',
+                          width: '24px',
+                          height: '24px',
+                          fontSize: '11px',
+                        }"
+                      ></p-avatar>
+
+                      <!-- Bubble -->
+                      <div
+                        class="rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm whitespace-pre-wrap break-words"
+                        [style.background]="
+                          msg.is_self
+                            ? 'linear-gradient(135deg, #0A66C2, #004182)'
+                            : 'var(--app-surface)'
+                        "
+                        [style.color]="
+                          msg.is_self ? '#ffffff' : 'var(--app-text)'
+                        "
+                        [style.border]="
+                          msg.is_self ? 'none' : '1px solid var(--app-border)'
+                        "
+                      >
+                        <div
+                          *ngIf="!msg.is_self && msg.sender_name"
+                          class="font-semibold text-[11px] mb-1 opacity-75"
+                        >
+                          {{ msg.sender_name }}
+                        </div>
+                        <div>{{ msg.text }}</div>
+                      </div>
+                    </div>
+
+                    <!-- Timestamp -->
+                    <div
+                      class="text-[10px] text-muted mt-1 px-1 flex items-center gap-1"
+                      [ngClass]="msg.is_self ? 'pr-2' : 'pl-9'"
+                    >
+                      <span *ngIf="msg.created_at">{{
+                        msg.created_at | date: "MMM d, h:mm a"
+                      }}</span>
+                      <i
+                        *ngIf="msg.is_self"
+                        class="pi pi-check text-[9px] text-emerald-500"
+                      ></i>
+                    </div>
+                  </div>
+                </ng-container>
+              </div>
+
+              <!-- Chat Composer / Input Bar -->
+              <div
+                *ngIf="selectedConversation"
+                class="p-3.5 border-t"
+                style="border-color: var(--app-border)"
+              >
+                <div class="space-y-2">
+                  <textarea
+                    pInputText
+                    rows="2"
+                    [(ngModel)]="replyMessageText"
+                    (ngModelChange)="onReplyTextChange($event)"
+                    (keydown.control.enter)="sendDirectReply()"
+                    placeholder="Type your reply message... (Ctrl+Enter to send)"
+                    class="w-full text-xs font-sans resize-none"
+                  ></textarea>
+
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] text-muted">
+                      Press
+                      <kbd
+                        class="px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-mono text-[10px]"
+                        >Ctrl+Enter</kbd
+                      >
+                      to dispatch
+                    </span>
+
+                    <p-button
+                      label="{{
+                        sendingMessage ? 'Sending...' : 'Send Message'
+                      }}"
+                      icon="{{
+                        sendingMessage ? 'pi pi-spin pi-spinner' : 'pi pi-send'
+                      }}"
+                      [loading]="sendingMessage"
+                      [disabled]="!canSendReply"
+                      (onClick)="sendDirectReply()"
+                      size="small"
+                      [rounded]="true"
+                      [style]="{ background: '#0A66C2', border: 'none' }"
+                    ></p-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ng-template>
+    </p-tabpanel>
+
+    <!-- TAB 6: COMMENTS & AI REPLIES AUTOMATION -->
+    <p-tabpanel value="comments">
+      <ng-template [ngIf]="activeTab === 'comments'">
+        <div class="mt-4 space-y-6">
+          <!-- Top Toolbar / Info Banner -->
+          <div class="card-base p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                     style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                  <i class="pi pi-comment text-lg"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <h3 class="text-base font-semibold" style="color: var(--app-text)">LinkedIn Comments & AI Reply Studio</h3>
+                    <p-tag [value]="comments.length + ' Total Comments'" severity="info" [rounded]="true"></p-tag>
+                    <p-tag *ngIf="pendingReviewCommentsCount > 0" [value]="pendingReviewCommentsCount + ' Pending Review'" severity="warning" [rounded]="true"></p-tag>
+                    <p-tag *ngIf="commentSettings.is_auto_reply_enabled" value="Auto-Pilot Active" severity="success" [rounded]="true" icon="pi pi-bolt"></p-tag>
+                    <p-tag *ngIf="!commentSettings.is_auto_reply_enabled" value="1-Click Approval Mode" severity="secondary" [rounded]="true" icon="pi pi-check-circle"></p-tag>
+                  </div>
+                  <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+                    Context-aware AI response generator grounded in your company profile, knowledge base, and original post topic.
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0 flex-wrap">
+                <p-button
+                  label="Scan Posts for Comments"
+                  icon="{{ syncingComments ? 'pi pi-spin pi-spinner' : 'pi pi-sync' }}"
+                  [outlined]="true"
+                  [loading]="syncingComments"
+                  size="small"
+                  [rounded]="true"
+                  [disabled]="!status?.connected || !status?.['has_cookie_credentials']"
+                  (onClick)="syncLinkedInComments()"
+                  pTooltip="Scan your published posts on LinkedIn and pull latest comments"
+                ></p-button>
+
+                <p-button
+                  label="Auto-Reply Rules"
+                  icon="pi pi-sliders-h"
+                  [outlined]="true"
+                  size="small"
+                  [rounded]="true"
+                  (onClick)="showCommentSettingsModal = true"
+                ></p-button>
+
+                <p-button
+                  icon="pi pi-refresh"
+                  [rounded]="true"
+                  [text]="true"
+                  severity="secondary"
+                  size="small"
+                  [loading]="loadingComments"
+                  (onClick)="loadComments()"
+                  pTooltip="Refresh List"
+                ></p-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metrics Grid -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-blue-500 bg-blue-500/10 shrink-0">
+                <i class="pi pi-comments text-lg"></i>
+              </div>
+              <div>
+                <p class="text-[11px] text-muted font-medium">Total Comments</p>
+                <h4 class="text-lg font-bold" style="color: var(--app-text)">{{ comments.length }}</h4>
+              </div>
+            </div>
+
+            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-amber-500 bg-amber-500/10 shrink-0">
+                <i class="pi pi-hourglass text-lg"></i>
+              </div>
+              <div>
+                <p class="text-[11px] text-muted font-medium">Pending Review</p>
+                <h4 class="text-lg font-bold text-amber-400">{{ pendingReviewCommentsCount }}</h4>
+              </div>
+            </div>
+
+            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-emerald-500 bg-emerald-500/10 shrink-0">
+                <i class="pi pi-user-plus text-lg"></i>
+              </div>
+              <div>
+                <p class="text-[11px] text-muted font-medium">Captured CRM Leads</p>
+                <h4 class="text-lg font-bold text-emerald-400">{{ capturedLeadsCount }}</h4>
+              </div>
+            </div>
+
+            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-purple-500 bg-purple-500/10 shrink-0">
+                <i class="pi pi-sparkles text-lg"></i>
+              </div>
+              <div>
+                <p class="text-[11px] text-muted font-medium">Active Tone</p>
+                <h4 class="text-xs font-semibold capitalize" style="color: var(--app-text)">{{ commentSettings.reply_tone.replace('_', ' ') }}</h4>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter & Search Bar -->
+          <div class="card-base p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border" style="border-color: var(--app-border)">
+            <div class="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                (click)="commentStatusFilter = 'all'; applyCommentFilter()"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                [ngClass]="commentStatusFilter === 'all' ? 'bg-brand-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+              >
+                All ({{ comments.length }})
+              </button>
+              <button
+                type="button"
+                (click)="commentStatusFilter = 'pending_review'; applyCommentFilter()"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                [ngClass]="commentStatusFilter === 'pending_review' ? 'bg-amber-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+              >
+                Pending Review ({{ pendingReviewCommentsCount }})
+              </button>
+              <button
+                type="button"
+                (click)="commentStatusFilter = 'leads'; applyCommentFilter()"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                [ngClass]="commentStatusFilter === 'leads' ? 'bg-emerald-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+              >
+                High Intent Leads ({{ capturedLeadsCount }})
+              </button>
+              <button
+                type="button"
+                (click)="commentStatusFilter = 'replied'; applyCommentFilter()"
+                class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                [ngClass]="commentStatusFilter === 'replied' ? 'bg-blue-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+              >
+                Replied
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="p-inputgroup max-w-xs">
+                <span class="p-inputgroup-addon bg-transparent border-r-0">
+                  <i class="pi pi-search text-xs" style="color: var(--app-text-muted)"></i>
+                </span>
+                <input
+                  pInputText
+                  type="text"
+                  [(ngModel)]="commentSearchText"
+                  (ngModelChange)="applyCommentFilter()"
+                  placeholder="Search author, text, post..."
+                  class="w-full text-xs border-l-0"
+                />
+                <button
+                  *ngIf="commentSearchText"
+                  pButton
+                  type="button"
+                  icon="pi pi-times"
+                  class="p-button-text p-button-secondary p-button-sm text-xs"
+                  (click)="commentSearchText = ''; applyCommentFilter()"
+                ></button>
+              </div>
+            </div>
+          </div>
+
+        <!-- Comments Feed List -->
+        <div class="space-y-4">
+          <!-- Loading State -->
+          <div *ngIf="loadingComments" class="p-12 text-center card-base">
+            <i class="pi pi-spin pi-spinner text-3xl text-brand-500 mb-3 block"></i>
+            <h4 class="text-sm font-semibold" style="color: var(--app-text)">Scanning LinkedIn Comments...</h4>
+            <p class="text-xs text-muted mt-1">Grounded AI analysis in progress.</p>
+          </div>
+
+          <!-- Empty State -->
+          <div *ngIf="!loadingComments && filteredComments.length === 0" class="p-12 text-center card-base">
+            <div class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-amber-500 mb-3 bg-amber-500/10">
+              <i class="pi pi-comments text-3xl"></i>
+            </div>
+            <h4 class="text-base font-semibold" style="color: var(--app-text)">No comments in this view</h4>
+            <p class="text-xs mt-1 max-w-md mx-auto" style="color: var(--app-text-muted)">
+              {{ comments.length === 0 ? 'Click "Scan Posts for Comments" to fetch recent activity from your published LinkedIn posts.' : 'No comments match your search or active filter tab.' }}
+            </p>
+            <div class="mt-4" *ngIf="comments.length === 0">
+              <p-button
+                label="Scan Posts for Comments"
+                icon="pi pi-sync"
+                size="small"
+                [rounded]="true"
+                [loading]="syncingComments"
+                (onClick)="syncLinkedInComments()"
+              ></p-button>
+            </div>
+          </div>
+
+          <!-- Comment Card Item -->
+          <div
+            *ngFor="let c of filteredComments"
+            class="card-base p-6 border transition-all duration-200"
+            [ngClass]="{
+              'border-amber-500/30 bg-amber-500/5': c.status === 'pending_review',
+              'border-emerald-500/30 bg-emerald-500/5': c.is_lead_candidate || c.customer_id,
+              'border-black/10 dark:border-white/10': c.status !== 'pending_review' && !c.is_lead_candidate
+            }"
+          >
+            <!-- Post Context Header -->
+            <div class="mb-4 pb-3 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2" style="border-color: var(--app-border)">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-black/10 dark:bg-white/10 text-muted">
+                  Post Context
+                </span>
+                <span class="text-xs font-semibold truncate" style="color: var(--app-text)">
+                  {{ c.post_title || 'LinkedIn Post' }}
+                </span>
+              </div>
+
+              <div class="flex items-center gap-2 shrink-0">
+                <!-- Sentiment Tag -->
+                <span
+                  *ngIf="c.sentiment"
+                  class="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
+                  [ngClass]="{
+                    'bg-blue-500/10 text-blue-400': c.sentiment === 'question',
+                    'bg-emerald-500/10 text-emerald-400': c.sentiment === 'lead_inquiry' || c.sentiment === 'positive' || c.sentiment === 'praise',
+                    'bg-red-500/10 text-red-400': c.sentiment === 'critical',
+                    'bg-slate-500/10 text-slate-400': c.sentiment === 'neutral'
+                  }"
+                >
+                  <i class="pi pi-tag mr-1 text-[9px]"></i> {{ c.sentiment.replace('_', ' ') }}
+                </span>
+
+                <!-- Lead Tag -->
+                <span
+                  *ngIf="c.is_lead_candidate || c.customer_id"
+                  class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500 text-white flex items-center gap-1 shadow-sm"
+                >
+                  <i class="pi pi-star-fill text-[9px]"></i> High Intent Lead
+                </span>
+
+                <!-- Status Badge -->
+                <p-tag
+                  [value]="c.status === 'replied' ? 'Replied' : (c.status === 'auto_replied' ? 'Auto-Replied' : (c.status === 'ignored' ? 'Ignored' : 'Pending Review'))"
+                  [severity]="c.status === 'replied' ? 'info' : (c.status === 'auto_replied' ? 'success' : (c.status === 'ignored' ? 'secondary' : 'warning'))"
+                  [rounded]="true"
+                ></p-tag>
+              </div>
+            </div>
+
+            <!-- Commenter Profile & Text -->
+            <div class="flex items-start gap-3.5 mb-4">
+              <p-avatar
+                *ngIf="c.author_avatar"
+                [image]="c.author_avatar"
+                shape="circle"
+                size="large"
+                class="shrink-0"
+              ></p-avatar>
+              <p-avatar
+                *ngIf="!c.author_avatar"
+                [label]="c.author_name ? c.author_name.charAt(0) : 'L'"
+                shape="circle"
+                size="large"
+                class="shrink-0"
+                [style]="{ background: 'linear-gradient(135deg, #0A66C2, #004182)', color: 'white' }"
+              ></p-avatar>
+
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between gap-2">
+                  <h4 class="text-sm font-semibold truncate" style="color: var(--app-text)">
+                    {{ c.author_name }}
+                  </h4>
+                  <span class="text-[11px] text-muted shrink-0">
+                    {{ c.comment_created_at | date:'MMM d, y, h:mm a' }}
+                  </span>
+                </div>
+
+                <p *ngIf="c.author_headline" class="text-xs text-muted truncate mb-2">
+                  {{ c.author_headline }}
+                </p>
+
+                <!-- Comment Content Box -->
+                <div class="p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs leading-relaxed" style="color: var(--app-text)">
+                  "{{ c.comment_text }}"
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Suggested Response Box -->
+            <div class="mt-4 pt-4 border-t pl-0 sm:pl-12" style="border-color: var(--app-border)">
+              <!-- Status: Already Replied View -->
+              <div *ngIf="c.status === 'replied' || c.status === 'auto_replied'" class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-semibold text-emerald-400 flex items-center gap-1.5">
+                    <i class="pi pi-check-circle"></i>
+                    {{ c.status === 'auto_replied' ? 'Auto-Replied by AI' : 'Replied by Operator' }}
+                  </span>
+                  <span class="text-[10px] text-muted" *ngIf="c.replied_at">
+                    {{ c.replied_at | date:'MMM d, h:mm a' }}
+                  </span>
+                </div>
+                <p class="text-xs leading-relaxed" style="color: var(--app-text)">
+                  {{ c.reply_text || c.suggested_reply }}
+                </p>
+              </div>
+
+              <!-- Status: Pending Review / Interactive AI Box -->
+              <div *ngIf="c.status === 'pending_review' || c.status === 'approved'" class="space-y-3">
+                <!-- AI Grounding & Rationale Banner -->
+                <div class="flex items-start gap-2 p-2.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-xs">
+                  <i class="pi pi-sparkles text-brand-400 mt-0.5 shrink-0"></i>
+                  <div class="flex-1">
+                    <span class="font-semibold text-brand-400">AI Contextual Grounding: </span>
+                    <span style="color: var(--app-text-secondary)">
+                      {{ c.suggested_reply_rationale || 'Crafted using company value proposition and post context.' }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Suggested Reply Area -->
+                <div *ngIf="!c.isEditing" class="p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-brand-500/30 text-xs relative group">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-[11px] font-semibold text-muted uppercase tracking-wider">Suggested Reply</span>
+                    <button
+                      type="button"
+                      (click)="startEditingReply(c)"
+                      class="text-xs text-brand-400 hover:underline flex items-center gap-1"
+                    >
+                      <i class="pi pi-pencil text-[10px]"></i> Edit
+                    </button>
+                  </div>
+                  <p class="text-xs leading-relaxed whitespace-pre-wrap" style="color: var(--app-text)">
+                    {{ c.draftReply || c.suggested_reply }}
+                  </p>
+                </div>
+
+                <!-- In-Line Editor -->
+                <div *ngIf="c.isEditing" class="space-y-2">
+                  <textarea
+                    pInputText
+                    rows="3"
+                    [(ngModel)]="c.draftReply"
+                    class="w-full text-xs font-sans"
+                    placeholder="Refine your reply..."
+                  ></textarea>
+
+                  <div class="flex items-center justify-between">
+                    <button
+                      type="button"
+                      (click)="cancelEditingReply(c)"
+                      class="text-xs text-muted hover:underline"
+                    >
+                      Cancel Edit
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Optional Custom AI Prompt Instruction -->
+                <div class="flex items-center gap-2">
+                  <input
+                    pInputText
+                    type="text"
+                    [(ngModel)]="c.customInstruction"
+                    placeholder="Optional tweak instruction (e.g. 'Make it shorter and mention our demo link')"
+                    class="text-xs flex-1"
+                    (keyup.enter)="regenerateReply(c)"
+                  />
+                  <p-button
+                    label="Regenerate"
+                    icon="{{ c.isGenerating ? 'pi pi-spin pi-spinner' : 'pi pi-refresh' }}"
+                    [outlined]="true"
+                    size="small"
+                    [rounded]="true"
+                    [loading]="c.isGenerating"
+                    (onClick)="regenerateReply(c)"
+                  ></p-button>
+                </div>
+
+                <!-- Action Buttons Toolbar -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <div class="flex items-center gap-2">
+                    <p-button
+                      *ngIf="!c.customer_id"
+                      label="{{ c.isCapturingLead ? 'Saving Lead...' : 'Capture as CRM Lead' }}"
+                      icon="pi pi-user-plus"
+                      [outlined]="true"
+                      size="small"
+                      [rounded]="true"
+                      [loading]="c.isCapturingLead"
+                      (onClick)="captureCommentLead(c)"
+                    ></p-button>
+
+                    <span *ngIf="c.customer_id" class="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                      <i class="pi pi-check"></i> CRM Lead Saved
+                    </span>
+
+                    <p-button
+                      label="Ignore"
+                      icon="pi pi-times"
+                      [text]="true"
+                      severity="secondary"
+                      size="small"
+                      [rounded]="true"
+                      (onClick)="ignoreComment(c)"
+                    ></p-button>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <p-button
+                      label="{{ c.isReplying ? 'Publishing...' : 'Approve & Post Reply' }}"
+                      icon="{{ c.isReplying ? 'pi pi-spin pi-spinner' : 'pi pi-send' }}"
+                      [loading]="c.isReplying"
+                      size="small"
+                      [rounded]="true"
+                      [style]="{ background: '#10b981', border: 'none' }"
+                      (onClick)="approveAndSendReply(c)"
+                    ></p-button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </p-tabpanel>
+    </ng-template>
+  </p-tabpanel>
   </p-tabpanels>
 </p-tabs>
+
+<!-- Comment Automation & Auto-Pilot Settings Modal -->
+<p-dialog
+  header="LinkedIn Comment Automation & Auto-Pilot Rules"
+  [(visible)]="showCommentSettingsModal"
+  [modal]="true"
+  [style]="{ width: '42rem' }"
+  [draggable]="false"
+  [resizable]="false"
+>
+  <div class="space-y-5 p-1">
+    <!-- Mode Switch -->
+    <div class="p-4 rounded-xl border flex items-center justify-between gap-4" style="border-color: var(--app-border); background: var(--app-surface-elevated)">
+      <div>
+        <h4 class="text-sm font-semibold" style="color: var(--app-text)">Enable Full Auto-Pilot Replies</h4>
+        <p class="text-xs text-muted mt-0.5">
+          Automatically post AI-generated replies to comments in the background without waiting for manual approval.
+        </p>
+      </div>
+      <p-inputSwitch [(ngModel)]="commentSettings.is_auto_reply_enabled"></p-inputSwitch>
+    </div>
+
+    <!-- Question Rule -->
+    <div class="flex items-center justify-between gap-4 py-2 border-b" style="border-color: var(--app-border)">
+      <div>
+        <h5 class="text-xs font-semibold" style="color: var(--app-text)">Require Manual Approval for Technical/Product Questions</h5>
+        <p class="text-[11px] text-muted">Hold inquiries with question marks for operator 1-click approval</p>
+      </div>
+      <p-inputSwitch [(ngModel)]="commentSettings.require_approval_for_questions"></p-inputSwitch>
+    </div>
+
+    <!-- Tone Selector -->
+    <div>
+      <label class="text-xs font-semibold block mb-1.5" style="color: var(--app-text)">AI Reply Tone & Persona</label>
+      <p-dropdown
+        [options]="[
+          { label: 'Thought Leadership (Authoritative & Insightful)', value: 'thought_leadership' },
+          { label: 'Friendly & Professional (Warm, helpful & clear)', value: 'friendly_professional' },
+          { label: 'Consultative (Inquisitive & solutions-oriented)', value: 'consultative' },
+          { label: 'Conversational (Casual & authentic networking)', value: 'conversational' },
+          { label: 'Direct & Concise (Brief & action-oriented)', value: 'direct' }
+        ]"
+        [(ngModel)]="commentSettings.reply_tone"
+        optionLabel="label"
+        optionValue="value"
+        [style]="{ width: '100%' }"
+      ></p-dropdown>
+    </div>
+
+    <!-- Custom Prompt Instructions -->
+    <div>
+      <label class="text-xs font-semibold block mb-1.5" style="color: var(--app-text)">Custom Company Instructions</label>
+      <textarea
+        pInputText
+        rows="3"
+        [(ngModel)]="commentSettings.custom_instructions"
+        placeholder="e.g. Always mention that our platform is open-source friendly, and invite interested users to book a 15-min strategy call."
+        class="w-full text-xs font-sans"
+      ></textarea>
+      <span class="text-[11px] text-muted mt-1 block">
+        These instructions are injected into the AI system prompt alongside your company knowledge base.
+      </span>
+    </div>
+
+    <!-- Lead Capture Settings -->
+    <div class="p-3.5 rounded-xl border flex items-center justify-between gap-4" style="border-color: var(--app-border)">
+      <div>
+        <h5 class="text-xs font-semibold" style="color: var(--app-text)">Auto-Capture High-Intent Commenters in CRM</h5>
+        <p class="text-[11px] text-muted">Automatically creates a Lead/Customer profile when someone shows buying interest</p>
+      </div>
+      <p-inputSwitch [(ngModel)]="commentSettings.auto_capture_leads"></p-inputSwitch>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-end gap-2 pt-2">
+      <p-button label="Cancel" severity="secondary" [outlined]="true" (onClick)="showCommentSettingsModal = false" [rounded]="true"></p-button>
+      <p-button
+        label="{{ savingCommentSettings ? 'Saving...' : 'Save Rules' }}"
+        icon="pi pi-check"
+        [loading]="savingCommentSettings"
+        (onClick)="saveCommentSettings()"
+        [rounded]="true"
+        [style]="{ background: '#10b981', border: 'none' }"
+      ></p-button>
+    </div>
+  </ng-template>
+</p-dialog>
 
 <!-- Invitation Dispatch Results Dialog -->
 <p-dialog
@@ -783,7 +2388,9 @@
   [resizable]="false"
 >
   <div class="space-y-4" *ngIf="invitationResults">
-    <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+    <div
+      class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2"
+    >
       <i class="pi pi-check-circle text-lg"></i>
       <span>Batch connection requests process has completed.</span>
     </div>
@@ -792,20 +2399,40 @@
       <div
         *ngFor="let item of invitationResults | keyvalue"
         class="flex items-center justify-between p-3 rounded-lg border text-xs"
-        [ngClass]="item.value.success ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'"
+        [ngClass]="
+          item.value.success
+            ? 'bg-emerald-500/5 border-emerald-500/20'
+            : 'bg-red-500/5 border-red-500/20'
+        "
       >
         <div class="flex items-center gap-2">
-          <i [ngClass]="item.value.success ? 'pi pi-check text-emerald-400' : 'pi pi-times text-red-400'"></i>
+          <i
+            [ngClass]="
+              item.value.success
+                ? 'pi pi-check text-emerald-400'
+                : 'pi pi-times text-red-400'
+            "
+          ></i>
           <span class="font-mono font-medium">{{ item.key }}</span>
         </div>
-        <span [ngClass]="item.value.success ? 'text-emerald-400' : 'text-red-400'">
-          {{ item.value.message || (item.value.success ? 'Invitation Sent' : 'Failed') }}
+        <span
+          [ngClass]="item.value.success ? 'text-emerald-400' : 'text-red-400'"
+        >
+          {{
+            item.value.message ||
+              (item.value.success ? "Invitation Sent" : "Failed")
+          }}
         </span>
       </div>
     </div>
   </div>
 
   <ng-template pTemplate="footer">
-    <p-button label="Close" icon="pi pi-check" (onClick)="showResultsModal = false" [rounded]="true"></p-button>
+    <p-button
+      label="Close"
+      icon="pi pi-check"
+      (onClick)="showResultsModal = false"
+      [rounded]="true"
+    ></p-button>
   </ng-template>
 </p-dialog>

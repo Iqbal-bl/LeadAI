@@ -107,22 +107,94 @@ export class CustomerInfoComponent {
     });
   }
 
-  convertToCustomer(): void {
-    if (!this.lead?.id) return;
+  showConvertDialog = false;
+  convertPayload: {
+    conversation_id: string;
+    lead_id: string;
+    owner_email: string;
+    stage: string;
+    value: number | null;
+    notes: string;
+  } = {
+    conversation_id: '',
+    lead_id: '',
+    owner_email: '',
+    stage: 'customer',
+    value: null,
+    notes: '',
+  };
+
+  stageOptions = [
+    { label: 'Customer', value: 'customer' },
+    { label: 'Opportunity', value: 'opportunity' },
+    { label: 'Lead', value: 'lead' },
+    { label: 'Won', value: 'won' },
+  ];
+
+  openConvertDialog(): void {
+    if (!this.lead) return;
+    const convId = String(this.lead.id || this.lead.conversation_id || '');
+
+    // Extract numeric budget value if present
+    let numericValue: number | null = null;
+    if (this.lead.budget) {
+      const match = String(this.lead.budget).match(/[\d,.]+/);
+      if (match) {
+        const val = parseFloat(match[0].replace(/,/g, ''));
+        if (!isNaN(val)) numericValue = val;
+      }
+    }
+
+    this.convertPayload = {
+      conversation_id: convId,
+      lead_id: convId,
+      owner_email: this.lead.assignedTo || this.lead.assigned_user_email || '',
+      stage: 'customer',
+      value: numericValue,
+      notes: this.lead.summary
+        ? `Summary: ${this.lead.summary.slice(0, 150)}...`
+        : '',
+    };
+    this.showConvertDialog = true;
+  }
+
+  submitConvert(): void {
+    if (!this.convertPayload.conversation_id) return;
     this.converting = true;
-    this.customerService.convertLead({ lead_id: this.lead.id }).subscribe({
+
+    const payload = {
+      conversation_id: this.convertPayload.conversation_id,
+      lead_id: this.convertPayload.lead_id,
+      owner_email: this.convertPayload.owner_email
+        ? this.convertPayload.owner_email.trim()
+        : null,
+      stage: this.convertPayload.stage || 'customer',
+      value:
+        this.convertPayload.value != null
+          ? Number(this.convertPayload.value)
+          : null,
+      notes: this.convertPayload.notes
+        ? this.convertPayload.notes.trim()
+        : null,
+    };
+
+    this.customerService.convertLead(payload).subscribe({
       next: () => {
         this.converting = false;
+        this.showConvertDialog = false;
         this.toastService.success(
-          `${this.lead.name} has been successfully promoted to a Customer.`,
+          `${this.lead.name || 'Lead'} has been successfully promoted to a Customer.`,
           'Lead Converted',
         );
-        this.lead.leadStatus = 'converted'; // update state
+        this.lead.leadStatus = 'converted';
+        this.lead.status = 'CONVERTED';
       },
       error: (err) => {
         this.converting = false;
         this.toastService.error(
-          err?.error?.detail || 'Failed to convert lead to customer.',
+          err?.error?.detail ||
+            err?.message ||
+            'Failed to convert lead to customer.',
           'Conversion Failed',
         );
       },

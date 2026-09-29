@@ -27,8 +27,7 @@
 
   <!-- Right: Developer Switcher, Search, Theme, Notifications, Profile -->
   <div class="flex items-center gap-2">
-    <!-- Search Trigger -->
-    <button
+    <!-- <button
       (click)="openSearch()"
       class="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 hover:border-brand-300 dark:hover:border-brand-600 group cursor-pointer"
       style="
@@ -49,7 +48,7 @@
       >
         ⌘K
       </kbd>
-    </button>
+    </button> -->
 
     <!-- Theme Toggle -->
     <button
@@ -66,7 +65,7 @@
     </button>
 
     <!-- Notifications Toggle -->
-    <button
+    <!-- <button
       (click)="toggleNotifications()"
       class="relative p-2.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200 cursor-pointer"
       style="color: var(--app-text-secondary)"
@@ -80,7 +79,7 @@
       >
         {{ unreadNotifications }}
       </span>
-    </button>
+    </button> -->
 
     <!-- User Profile -->
     <div class="flex items-center gap-2 ml-1">
@@ -104,7 +103,7 @@
 </div>
 
 <!-- Search Dialog (Command Palette) -->
-<p-dialog
+<!-- <p-dialog
   [(visible)]="showSearch"
   [modal]="true"
   [dismissableMask]="true"
@@ -115,7 +114,6 @@
   position="top"
 >
   <div class="p-4" style="background: var(--card-bg)">
-    <!-- Search Input -->
     <div
       class="flex items-center gap-3 pb-3 border-b"
       style="border-color: var(--card-border)"
@@ -142,7 +140,6 @@
       </kbd>
     </div>
 
-    <!-- Results -->
     <div class="max-h-[360px] overflow-y-auto py-2">
       <div
         *ngIf="searchResults.length === 0 && searchQuery.length >= 2"
@@ -223,4 +220,4 @@
       </button>
     </div>
   </div>
-</p-dialog>
+</p-dialog> -->

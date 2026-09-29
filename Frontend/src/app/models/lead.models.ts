@@ -1,5 +1,5 @@
 export interface Lead {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone: string;
@@ -9,12 +9,23 @@ export interface Lead {
   tags: string[];
   leadScore: number;
   priority: 'High' | 'Medium' | 'Low';
-  status: 'New' | 'Assigned' | 'Follow-up' | 'Interested' | 'Negotiation' | 'Won' | 'Lost' | 'Closed';
+  status:
+    | 'New'
+    | 'Assigned'
+    | 'Follow-up'
+    | 'Interested'
+    | 'Negotiation'
+    | 'Won'
+    | 'Lost'
+    | 'Closed';
   source: string;
   assignedTo: string;
   createdAt: string;
   updatedAt: string;
   avatar: string;
+  channel: string;
+  leadStatus: string;
+  aboveThreshold: boolean;
 }
 
 export interface TimelineEvent {
@@ -34,7 +45,6 @@ export interface AiSummary {
   painPoints: string[];
   budget: string;
   timeline: string;
-  decisionMaker: string;
   buyingIntent: 'High' | 'Medium' | 'Low';
 }
 
