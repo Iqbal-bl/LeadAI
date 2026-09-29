@@ -87,6 +87,28 @@ def _local_now(tz_name: str | None) -> datetime:
         return datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
 
 
+def local_to_utc(dt: datetime, tz_name: str | None) -> datetime:
+    """Interpret a naive datetime as wall-clock time in `tz_name` and return it
+    as a naive UTC datetime, matching how the rest of the row is stored.
+
+    The scheduling UI sends a plain "YYYY-MM-DDTHH:MM" with no offset — the
+    campaign's own TimeZone (used for quiet hours) is the only place that says
+    what that wall-clock time actually means. An already-aware datetime is
+    trusted as-is and just normalised to naive UTC.
+    """
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    name = tz_name or settings.default_timezone
+    try:
+        from zoneinfo import ZoneInfo
+
+        aware = dt.replace(tzinfo=ZoneInfo(name))
+        return aware.astimezone(timezone.utc).replace(tzinfo=None)
+    except Exception:  # noqa: BLE001
+        # Python without tzdata: approximate IST rather than fail the campaign.
+        return dt - timedelta(hours=5, minutes=30)
+
+
 def quiet_hours_check(campaign: LeadCampaign) -> tuple[bool, datetime | None]:
     """Return (may_send_now, resume_at).
 

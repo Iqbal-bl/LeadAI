@@ -3,6 +3,8 @@ import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
 import { ContactListService } from '../../../services/contact-list.service';
 import { ContactList } from '../../../models/contact-list.models';
+import { ChannelService } from '../../../services/channel.service';
+import { Channel } from '../../../models/channel.models';
 import {
   CampaignKind,
   CampaignChannel,
@@ -10,6 +12,10 @@ import {
   AudienceType,
 } from '../../../models/campaign.models';
 import { MessageService } from 'primeng/api';
+
+// Channels where a campaign must send through one specific connected account,
+// same channels the backend requires channel_account_id for (routers/campaigns.py).
+const ACCOUNT_REQUIRED_CHANNELS: CampaignChannel[] = ['whatsapp', 'messenger', 'instagram'];
 
 @Component({
   selector: 'app-campaign-create',
@@ -26,6 +32,7 @@ export class CampaignCreateComponent {
   name = '';
   kind: CampaignKind = 'message';
   channel: CampaignChannel = 'whatsapp';
+  channelAccountId = '';
   purpose: CampaignPurpose = 'promotional';
   audienceType: AudienceType = 'list';
   @Input() audienceId = '';
@@ -36,6 +43,7 @@ export class CampaignCreateComponent {
 
   saving = false;
   contactLists: ContactList[] = [];
+  channels: Channel[] = [];
 
   kindOptions: { label: string; value: CampaignKind; icon: string }[] = [
     { label: 'Message', value: 'message', icon: 'pi pi-envelope' },
@@ -89,9 +97,11 @@ export class CampaignCreateComponent {
   constructor(
     private campaignService: CampaignService,
     private contactListService: ContactListService,
+    private channelService: ChannelService,
     private messageService: MessageService,
   ) {
     this.loadContactLists();
+    this.loadChannels();
   }
 
   loadContactLists(): void {
@@ -100,6 +110,30 @@ export class CampaignCreateComponent {
         this.contactLists = lists;
       },
     });
+  }
+
+  loadChannels(): void {
+    this.channelService.getChannels().subscribe({
+      next: (channels) => {
+        this.channels = channels;
+      },
+    });
+  }
+
+  /** Whether the selected channel needs one specific connected account picked. */
+  get needsChannelAccount(): boolean {
+    return this.kind === 'message' && ACCOUNT_REQUIRED_CHANNELS.includes(this.channel);
+  }
+
+  get accountsForChannel(): Channel[] {
+    return this.channels.filter(
+      (c) => c.channel === this.channel && c.is_active !== false,
+    );
+  }
+
+  onChannelChange(): void {
+    // The previous selection almost certainly belongs to a different channel.
+    this.channelAccountId = '';
   }
 
   get availableVariables(): string[] {
@@ -115,7 +149,9 @@ export class CampaignCreateComponent {
   }
 
   get canSave(): boolean {
-    return !!this.name.trim() && !!this.body.trim();
+    if (!this.name.trim() || !this.body.trim()) return false;
+    if (this.needsChannelAccount && !this.channelAccountId) return false;
+    return true;
   }
 
   save(): void {
@@ -125,6 +161,7 @@ export class CampaignCreateComponent {
         name: this.name,
         kind: this.kind,
         channel: this.channel,
+        channel_account_id: this.needsChannelAccount ? this.channelAccountId : undefined,
         purpose: this.purpose,
         audience_type: this.audienceType,
         list_id: this.audienceType === 'list' ? this.audienceId : undefined,

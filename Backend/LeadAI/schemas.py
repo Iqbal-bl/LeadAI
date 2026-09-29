@@ -281,13 +281,13 @@ class DocumentDetailOut(DocumentOut):
 
 class FaqCreate(BaseModel):
     title: str = Field(default="FAQ", max_length=255)
-    content: str = Field(min_length=10)
+    content: str = Field(min_length=3)
     tags: str | None = None
 
 
 class TextCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
-    content: str = Field(min_length=10)
+    content: str = Field(min_length=3)
     tags: str | None = None
 
 
