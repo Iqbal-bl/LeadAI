@@ -104,6 +104,8 @@ class A:
     CAMPAIGN_CANCELLED = "campaign.cancelled"
     CAMPAIGN_COMPLETED = "campaign.completed"
     CAMPAIGN_FAILED = "campaign.failed"
+    CAMPAIGN_BATCH_PROCESSED = "campaign.batch_processed"
+    CAMPAIGN_DEFERRED = "campaign.deferred"
 
     # CRM accounts
     ACCOUNT_CREATED = "account.created"

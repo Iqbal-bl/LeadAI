@@ -7,6 +7,7 @@ import os
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,7 @@ from ..models import (
     ROLE_COMPANY_ADMIN,
     ROLE_EMPLOYEE,
     ROLE_MANAGER,
+    LeadConversation,
     LeadUserRole,
     utcnow,
 )
@@ -371,6 +373,7 @@ async def create_member(
         # Reactivate soft-deleted role
         existing.UserId = user_id
         existing.FullName = payload.name
+        existing.Phone = payload.phone
         existing.Role = payload.role
         existing.IsActive = True
         existing.IsDeleted = False
@@ -381,6 +384,7 @@ async def create_member(
             UserEmail=payload.email.lower(),
             UserId=user_id,
             FullName=payload.name,
+            Phone=payload.phone,
             Role=payload.role,
             ClientId=client_id,
             IsActive=True,
@@ -413,9 +417,11 @@ async def create_member(
         id=str(user_id),
         email=payload.email,
         name=payload.name,
+        phone=payload.phone,
         role=payload.role,
         client_id=client_id,
         is_active=True,
+        assigned_leads=0,   # brand new member: nothing assigned yet
         created_at=grant.CreatedAt,
     )
 
@@ -446,14 +452,29 @@ def list_employees(
         .all()
     )
 
+    # One grouped query rather than one COUNT per row — how many conversations each
+    # person is CURRENTLY carrying (AssignedUserEmail), not a lifetime total.
+    assigned_counts = dict(
+        db.query(LeadConversation.AssignedUserEmail, func.count(LeadConversation.Id))
+        .filter(
+            LeadConversation.ClientId == client_id,
+            LeadConversation.IsDeleted == False,  # noqa: E712
+            LeadConversation.AssignedUserEmail.isnot(None),
+        )
+        .group_by(LeadConversation.AssignedUserEmail)
+        .all()
+    )
+
     items = [
         MemberOut(
             id=str(r.Id),
             email=r.UserEmail,
             name=r.FullName,
+            phone=r.Phone,
             role=r.Role,
             client_id=str(r.ClientId) if r.ClientId else "",
             is_active=bool(r.IsActive),
+            assigned_leads=assigned_counts.get(r.UserEmail, 0),
             created_at=r.CreatedAt,
         )
         for r in rows
@@ -508,6 +529,9 @@ def update_employee(
     if payload.full_name is not None:
         row.FullName = payload.full_name
 
+    if payload.phone is not None:
+        row.Phone = payload.phone
+
     if payload.is_active is not None:
         row.IsActive = payload.is_active
 
@@ -533,13 +557,25 @@ def update_employee(
     db.commit()
     db.refresh(row)
 
+    assigned_leads = (
+        db.query(func.count(LeadConversation.Id))
+        .filter(
+            LeadConversation.ClientId == client_id,
+            LeadConversation.IsDeleted == False,  # noqa: E712
+            LeadConversation.AssignedUserEmail == row.UserEmail,
+        )
+        .scalar()
+        or 0
+    )
     return MemberOut(
         id=str(row.Id),
         email=row.UserEmail,
         name=row.FullName,
+        phone=row.Phone,
         role=row.Role,
         client_id=str(row.ClientId) if row.ClientId else "",
         is_active=bool(row.IsActive),
+        assigned_leads=assigned_leads,
         created_at=row.CreatedAt,
     )
 

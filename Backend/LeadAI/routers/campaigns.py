@@ -45,6 +45,7 @@ from ..activity import A
 from ..config import settings
 from ..db import get_leadai_db
 from ..models import (
+    LeadActivityLog,
     LeadCampaign,
     LeadCampaignRecipient,
     LeadChannelAccount,
@@ -54,7 +55,7 @@ from ..models import (
     utcnow,
 )
 from ..rbac import Principal, assert_owns, scoped
-from ..schemas import Ok
+from ..schemas import ActivityListOut, Ok
 from ..schemas_ext import (
     CampaignCreate,
     CampaignListOut,
@@ -67,6 +68,7 @@ from ..schemas_ext import (
     ContactListPreviewOut,
     RecipientListOut,
 )
+from ..serializers import activity_out
 from ..serializers_ext import (
     campaign_out,
     contact_list_item_out,
@@ -301,7 +303,7 @@ def create_list_from_leads(
     db.flush()
 
     seen: set[str] = set()
-    items, total, valid = [], 0, 0
+    items, total, valid, duplicates = [], 0, 0, 0
     for index, (lead, conversation, customer) in enumerate(query.yield_per(500), start=1):
         phone = decrypt_pii(customer.PhoneEnc)
         email = decrypt_pii(customer.EmailEnc)
@@ -310,6 +312,7 @@ def create_list_from_leads(
         duplicate = bool(fingerprint and fingerprint in seen)
         if fingerprint:
             seen.add(fingerprint)
+        duplicates += 1 if duplicate else 0
         usable = bool(phone or email) and not duplicate
         valid += 1 if usable else 0
         items.append(
@@ -336,6 +339,7 @@ def create_list_from_leads(
     db.bulk_save_objects(items)
     contact_list.TotalCount, contact_list.ValidCount = total, valid
     contact_list.InvalidCount = total - valid
+    contact_list.DuplicateCount = duplicates
 
     activity.log_principal(
         db, principal, action=A.LIST_CREATED, client_id=client_id,
@@ -882,6 +886,41 @@ def list_recipients(
     return RecipientListOut(
         total_items=total, page=page, page_size=page_size,
         items=[recipient_out(r) for r in rows],
+    )
+
+
+@router.get(
+    "/{campaign_id}/history",
+    response_model=ActivityListOut,
+    summary="Full run history — created, built, started, paused/resumed, each batch, completed",
+)
+def campaign_history(
+    campaign_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Every lifecycle event for one campaign, newest first — the same audit
+    trail as GET /activity, pre-filtered so the caller doesn't need to know
+    entity_type/entity_id. Recipient-level detail (who, what failed) lives in
+    /recipients; this is the timeline of the run itself."""
+    _, client_id = scope
+    _campaign(db, campaign_id, client_id)
+    query = db.query(LeadActivityLog).filter(
+        LeadActivityLog.EntityType == "campaign",
+        LeadActivityLog.EntityId == campaign_id,
+    )
+    total = query.count()
+    rows = (
+        query.order_by(LeadActivityLog.CreatedAt.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return ActivityListOut(
+        total_items=total, page=page, page_size=page_size,
+        items=[activity_out(r) for r in rows],
     )
 
 

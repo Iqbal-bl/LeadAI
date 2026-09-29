@@ -360,7 +360,13 @@ class LeadCampaignRecipient(LeadAIBase):
     Name = Column(String(160), nullable=True)
     PhoneEnc = Column(Text, nullable=True)
     PhoneMasked = Column(String(40), nullable=True)
-    DedupeKey = Column(String(80), nullable=False)      # phone hash or email hash
+    # The IGSID/PSID to actually send to, when the campaign's channel needs one
+    # (Instagram, Messenger). A phone number is never a valid recipient id on
+    # either platform — Meta rejects it — so those sends need this, not PhoneEnc.
+    # Resolved at audience-build time from LeadChannelIdentity, per the campaign's
+    # own Channel, not stored on the source list/lead (which may span channels).
+    ExternalUserId = Column(String(120), nullable=True)
+    DedupeKey = Column(String(80), nullable=False)      # phone hash, email hash, or channel:external_user_id
     FieldsJson = Column(JSON, nullable=True)
 
     Status = Column(String(20), nullable=False, default="queued")
