@@ -196,10 +196,29 @@ export const CLIENT_ROUTES: Routes = [
         pathMatch: 'full',
       },
       {
-        path: 'billing',
+        path: 'usage',
         loadComponent: () =>
-          import('./pages/billing-dashboard/billing-dashboard.component').then(
-            (m) => m.BillingDashboardComponent,
+          import('../../features/usage/usage.component').then(
+            (m) => m.UsageComponent,
+          ),
+      },
+      {
+        path: 'billing',
+        redirectTo: 'usage',
+        pathMatch: 'full',
+      },
+      {
+        path: 'plans-pricing',
+        loadComponent: () =>
+          import('../../features/plans-pricing/plans-pricing.component').then(
+            (m) => m.PlansPricingComponent,
+          ),
+      },
+      {
+        path: 'profile',
+        loadComponent: () =>
+          import('../../features/profile/profile.component').then(
+            (m) => m.ProfileComponent,
           ),
       },
       {

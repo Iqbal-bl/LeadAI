@@ -87,24 +87,67 @@ export class PlanManagementComponent implements OnInit {
     });
   }
 
-  openCreatePlanModal(type: 'standard' | 'custom' = 'standard'): void {
+  // Category Filter Tab
+  selectedCategoryTab: 'all' | 'voice_standard' | 'voice_topup' | 'channel_addon' = 'all';
+
+  // Multi-Company Selection for Direct Grants
+  grantClientIds: string[] = [];
+
+  get filteredPlans(): RechargePlanTemplate[] {
+    if (this.selectedCategoryTab === 'all') return this.plans;
+    return this.plans.filter((p) => (p.plan_category || 'voice_standard') === this.selectedCategoryTab);
+  }
+
+  openCreatePlanModal(
+    category: 'voice_standard' | 'voice_topup' | 'channel_addon' = 'voice_standard',
+    type: 'standard' | 'custom' = 'standard'
+  ): void {
     this.editingPlan = null;
+    let name = 'New Standard Plan';
+    if (category === 'voice_topup') name = 'New Minute Booster';
+    else if (category === 'channel_addon') name = 'New Channel Add-on';
+    else if (type === 'custom') name = 'Custom Enterprise Plan';
+
     this.planForm = {
-      name: type === 'custom' ? 'Custom Enterprise Plan' : 'New Standard Plan',
-      plan_type: type,
-      plan_category: 'voice_standard',
-      feature_key: null,
+      name: name,
+      plan_type: category === 'voice_topup' ? 'topup' : type,
+      plan_category: category,
+      feature_key: category === 'channel_addon' ? 'whatsapp' : null,
       target_client_id: null,
       target_client_ids: [],
       addon_channels: [],
-      included_minutes: 500,
-      validity_days: 30,
-      price: 2000,
+      included_minutes: category === 'channel_addon' ? 0 : (category === 'voice_topup' ? 250 : 500),
+      validity_days: category === 'voice_topup' ? 0 : 30,
+      price: category === 'voice_topup' ? 1000 : 2000,
       rate_per_minute: 4.0,
-      auto_pay_by_default: true,
+      auto_pay_by_default: category !== 'voice_topup',
       description: '',
     };
     this.showPlanDialog = true;
+  }
+
+  onCategoryChange(): void {
+    if (this.planForm.plan_category === 'voice_topup') {
+      this.planForm.plan_type = 'topup';
+      this.planForm.validity_days = 0;
+      this.planForm.auto_pay_by_default = false;
+      this.planForm.feature_key = null;
+      if (!this.planForm.included_minutes || this.planForm.included_minutes === 0) {
+        this.planForm.included_minutes = 250;
+      }
+    } else if (this.planForm.plan_category === 'channel_addon') {
+      this.planForm.plan_type = 'standard';
+      this.planForm.included_minutes = 0;
+      this.planForm.validity_days = 30;
+      this.planForm.auto_pay_by_default = true;
+      if (!this.planForm.feature_key) this.planForm.feature_key = 'whatsapp';
+    } else {
+      this.planForm.feature_key = null;
+      if (this.planForm.plan_type === 'topup') this.planForm.plan_type = 'standard';
+      if (!this.planForm.validity_days) this.planForm.validity_days = 30;
+      if (!this.planForm.included_minutes) this.planForm.included_minutes = 500;
+      this.planForm.auto_pay_by_default = true;
+    }
   }
 
   openEditPlanModal(plan: RechargePlanTemplate): void {
@@ -129,13 +172,57 @@ export class PlanManagementComponent implements OnInit {
   }
 
   savePlan(): void {
-    if (!this.planForm.name.trim() || !this.planForm.included_minutes || !this.planForm.validity_days) {
+    if (!this.planForm.name.trim()) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation Error',
-        detail: 'Please fill in all required plan fields.',
+        detail: 'Plan name is required.',
       });
       return;
+    }
+
+    if (this.planForm.plan_category === 'voice_standard') {
+      if (!this.planForm.included_minutes || this.planForm.included_minutes <= 0) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation Error',
+          detail: 'Included minutes must be greater than 0 for base voice plans.',
+        });
+        return;
+      }
+      if (!this.planForm.validity_days || this.planForm.validity_days <= 0) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation Error',
+          detail: 'Validity days must be greater than 0 for base voice plans.',
+        });
+        return;
+      }
+    } else if (this.planForm.plan_category === 'voice_topup') {
+      if (!this.planForm.included_minutes || this.planForm.included_minutes <= 0) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation Error',
+          detail: 'Booster call minutes must be greater than 0.',
+        });
+        return;
+      }
+      this.planForm.validity_days = 0;
+      this.planForm.auto_pay_by_default = false;
+      this.planForm.plan_type = 'topup';
+    } else if (this.planForm.plan_category === 'channel_addon') {
+      if (!this.planForm.feature_key) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation Error',
+          detail: 'Please select a channel (WhatsApp, Instagram, Facebook, or LinkedIn).',
+        });
+        return;
+      }
+      this.planForm.included_minutes = 0;
+      this.planForm.validity_days = 30;
+      this.planForm.plan_type = 'standard';
+      this.planForm.auto_pay_by_default = true;
     }
 
     if (this.planForm.plan_type === 'custom') {
@@ -144,7 +231,6 @@ export class PlanManagementComponent implements OnInit {
       }
       this.planForm.auto_pay_by_default = true;
     }
-
 
     this.saving = true;
 
@@ -224,8 +310,10 @@ export class PlanManagementComponent implements OnInit {
   }
 
   openGrantModal(clientId?: string): void {
+    this.grantClientIds = clientId ? [clientId] : (this.companies.length > 0 ? [this.companies[0].id] : []);
     this.grantForm = {
       client_id: clientId || (this.companies[0]?.id || ''),
+      client_ids: this.grantClientIds,
       plan_template_id: this.plans[0]?.id,
       custom_minutes: 1000,
       custom_validity_days: 60,
@@ -238,18 +326,20 @@ export class PlanManagementComponent implements OnInit {
   }
 
   submitGrant(): void {
-    if (!this.grantForm.client_id) {
+    const clientIds = this.grantClientIds.length > 0 ? this.grantClientIds : (this.grantForm.client_id ? [this.grantForm.client_id] : []);
+    if (clientIds.length === 0) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation Error',
-        detail: 'Please select a target client company.',
+        detail: 'Please select at least one client company.',
       });
       return;
     }
 
     this.saving = true;
     const payload: RechargeAllocatePayload = {
-      client_id: this.grantForm.client_id,
+      client_id: clientIds[0],
+      client_ids: clientIds,
       payment_reference: this.grantForm.payment_reference,
     };
 
@@ -269,7 +359,7 @@ export class PlanManagementComponent implements OnInit {
         this.messageService.add({
           severity: 'success',
           summary: 'Recharge Granted',
-          detail: `Recharge "${recharge.plan_name_snapshot}" granted to client.`,
+          detail: `Recharge "${recharge.plan_name_snapshot}" granted to ${clientIds.length} company/companies.`,
         });
         this.loadData();
       },

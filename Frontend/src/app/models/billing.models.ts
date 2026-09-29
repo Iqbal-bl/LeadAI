@@ -113,6 +113,8 @@ export interface RazorpayPaymentFailurePayload {
   order_id?: string;
   razorpay_subscription_id?: string;
   subscription_id?: string;
+  razorpay_payment_id?: string;
+  payment_id?: string;
   error_code?: string;
   error_description?: string;
 }
@@ -156,6 +158,7 @@ export interface BillingSummary {
 
 export interface RechargeAllocatePayload {
   client_id?: string;
+  client_ids?: string[];
   plan_template_id?: string;
   custom_minutes?: number;
   custom_validity_days?: number;
@@ -189,4 +192,58 @@ export interface ChannelActionResponse {
   next_cycle_channels: string[];
   next_cycle_bundle_price?: number;
   message: string;
+}
+
+/**
+ * Model representing an item selected for addon purchase or topup.
+ */
+export interface AddonItemSelection {
+  id: string;
+  type: 'topup' | 'channel';
+  key: string;
+  name: string;
+  price: number;
+  regularPrice?: number;
+  minutes?: number;
+  isProrated?: boolean;
+  remainingDays?: number;
+}
+
+/**
+ * Configuration item for call minute booster top-ups.
+ */
+export interface BoosterOption {
+  id: string;
+  name: string;
+  minutes: number;
+  price: number;
+  ratePerMinute: number;
+  badge?: string;
+  description: string;
+}
+
+/**
+ * Channel item in the Plans & Pricing selection flow.
+ */
+export interface PricingChannelOption {
+  key: string;
+  name: string;
+  icon: string;
+  color: string;
+  monthlyPrice: number;
+  durationDays: number;
+  description: string;
+  features: string[];
+}
+
+/**
+ * Encapsulated state of a user's selection in the pricing funnel.
+ */
+export interface PricingSelectionState {
+  selectionType: 'standard' | 'custom';
+  standardPlan?: RechargePlanTemplate | null;
+  customMinutes: number;
+  customPrice: number;
+  selectedChannels: string[];
+  totalMonthlyPrice: number;
 }

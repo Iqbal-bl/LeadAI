@@ -154,5 +154,12 @@ export const ADMIN_ROUTES: Routes = [
         (m) => m.PlanManagementComponent,
       ),
   },
+  {
+    path: 'profile',
+    loadComponent: () =>
+      import('../../features/profile/profile.component').then(
+        (m) => m.ProfileComponent,
+      ),
+  },
 ];
 
