@@ -269,7 +269,7 @@ def create_list_from_leads(
     A snapshot, not a live query: a campaign must contact exactly the people the
     operator approved, not whoever happens to match the filter when it runs.
     """
-    from ..models import Lead, LeadConversation, LeadCustomer
+    from ..models import Lead, LeadChannelIdentity, LeadConversation, LeadCustomer
     from ..security import decrypt_pii, encrypt_pii, mask_phone, phone_fingerprint
 
     principal, client_id = scope
@@ -279,6 +279,20 @@ def create_list_from_leads(
         .join(LeadCustomer, LeadCustomer.Id == LeadConversation.CustomerId)
         .filter(Lead.ClientId == client_id, Lead.IsDeleted == False)  # noqa: E712
     )
+    # A phone/email isn't the only usable contact detail — a resolved Instagram/
+    # Messenger identity is just as contactable for a social campaign. Without
+    # this, every social-only lead gets marked "No contact detail" and is
+    # permanently excluded from every list built from it, on every channel.
+    social_customer_ids = {
+        cid
+        for (cid,) in db.query(LeadChannelIdentity.CustomerId)
+        .filter(
+            LeadChannelIdentity.ClientId == client_id,
+            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
+        )
+        .distinct()
+        .all()
+    }
     if payload.status:
         query = query.filter(Lead.Status.in_(payload.status))
     if payload.min_score is not None:
@@ -313,7 +327,8 @@ def create_list_from_leads(
         if fingerprint:
             seen.add(fingerprint)
         duplicates += 1 if duplicate else 0
-        usable = bool(phone or email) and not duplicate
+        has_social_identity = customer.Id in social_customer_ids
+        usable = (bool(phone or email) or has_social_identity) and not duplicate
         valid += 1 if usable else 0
         items.append(
             LeadContactListItem(
