@@ -62,24 +62,28 @@
     <!-- LEFT COLUMN: Step 1 Base Plans OR Step 2 Channels        -->
     <!-- ========================================================= -->
     <div class="lg:col-span-8 xl:col-span-9 space-y-6">
-      <!-- Active Plan Exclusivity Alert (Shown when client has active plan) -->
+      <!-- Active Plan Alert Banner -->
       <div
         *ngIf="hasActivePlan && currentSummary?.active_recharge as active"
         class="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in"
       >
         <div class="flex items-start gap-3">
           <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <i class="pi pi-exclamation-triangle text-xl"></i>
+            <i [class]="isManualPlan ? 'pi pi-info-circle text-xl' : 'pi pi-bolt text-xl'"></i>
           </div>
           <div>
-            <h4 class="text-sm font-bold text-amber-600 dark:text-amber-400">
-              Active Plan in Progress: {{ active.plan_name_snapshot }}
+            <h4 class="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
+              <span>Active Plan in Progress: {{ active.plan_name_snapshot }}</span>
+              <span *ngIf="isManualPlan" class="px-2 py-0.5 text-[10px] rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-300 font-semibold uppercase">Manual Prepaid</span>
+              <span *ngIf="hasActiveAutoPay" class="px-2 py-0.5 text-[10px] rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-semibold uppercase">AutoPay Active</span>
             </h4>
             <p class="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-              Your company already has an active base voice plan with <strong>{{ active.remaining_minutes | number }}</strong> minutes remaining. Additional base plans cannot be queued while your current plan is active.
-            </p>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-              Need more calling minutes immediately? You can purchase minute top-up boosters anytime.
+              <span *ngIf="isManualPlan">
+                You have <strong>{{ active.remaining_minutes | number }}</strong> minutes remaining. You can activate any 30-Day AutoPay plan below — your existing minutes will automatically roll over!
+              </span>
+              <span *ngIf="hasActiveAutoPay">
+                You have <strong>{{ active.remaining_minutes | number }}</strong> minutes remaining. You can upgrade to a higher tier anytime — additional minutes are added immediately.
+              </span>
             </p>
           </div>
         </div>
@@ -128,10 +132,50 @@
           >
             <!-- Top Tag -->
             <div class="flex items-center justify-between mb-4">
+              <!-- Dynamic AutoPay Tag -->
               <p-tag
-                [severity]="selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id ? 'success' : 'info'"
-                [value]="selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id ? 'Selected' : '30-Day AutoPay'"
+                *ngIf="isAutoPayPlan(plan)"
+                severity="info"
+                value="AutoPay"
+                icon="pi pi-sync"
+                [rounded]="true"
+                styleClass="text-xs font-semibold"
               ></p-tag>
+              <p-tag
+                *ngIf="!isAutoPayPlan(plan)"
+                severity="secondary"
+                value="One-Time"
+                icon="pi pi-bolt"
+                [rounded]="true"
+                styleClass="text-xs font-semibold"
+              ></p-tag>
+
+              <!-- State Tag: Current Plan / Selected / Upgrade Available -->
+              <div>
+                <p-tag
+                  *ngIf="isCurrentPlan(plan)"
+                  severity="warn"
+                  value="Current Active Plan"
+                  [rounded]="true"
+                  styleClass="text-xs font-semibold"
+                ></p-tag>
+                <p-tag
+                  *ngIf="!isCurrentPlan(plan) && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id"
+                  severity="success"
+                  value="Selected"
+                  icon="pi pi-check"
+                  [rounded]="true"
+                  styleClass="text-xs font-semibold"
+                ></p-tag>
+                <p-tag
+                  *ngIf="!isCurrentPlan(plan) && isHigherTier(plan) && (selectedPlanType !== 'standard' || selectedStandardPlan?.id !== plan.id)"
+                  severity="help"
+                  value="Upgrade Available"
+                  icon="pi pi-arrow-up"
+                  [rounded]="true"
+                  styleClass="text-xs font-semibold"
+                ></p-tag>
+              </div>
             </div>
 
             <!-- Plan Info -->
@@ -140,7 +184,7 @@
                 {{ getPlanDisplayTitle(plan) }}
               </h3>
               <p class="text-xs sm:text-sm mt-1.5 min-h-[36px]" style="color: var(--app-text-muted)">
-                30 days validity with {{ plan.included_minutes | number }} minutes of AI voice calling.
+                {{ plan.description || ('30 days validity with ' + (plan.included_minutes | number) + ' minutes of AI voice calling.') }}
               </p>
 
               <!-- Price & Minutes Box -->
@@ -158,7 +202,7 @@
                     <i class="pi pi-phone text-xs"></i> {{ plan.included_minutes | number }} Call Mins
                   </span>
                   <span class="text-slate-400 text-xs">
-                    ≈ ₹{{ (plan.price / plan.included_minutes) | number:'1.2-2' }}/min
+                    ≈ ₹{{ (plan.rate_per_minute || (plan.included_minutes > 0 ? (plan.price / plan.included_minutes) : 4.0)) | number:'1.2-2' }}/min
                   </span>
                 </div>
               </div>
@@ -188,17 +232,21 @@
             <button
               type="button"
               (click)="selectStandardPlan(plan)"
-              [disabled]="hasActivePlan"
-              [ngClass]="hasActivePlan
+              [disabled]="isPlanLocked(plan)"
+              [ngClass]="isCurrentPlan(plan)
                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                : (selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
-                  ? 'bg-brand-600 text-white shadow-md hover:bg-brand-500'
-                  : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800')"
+                : (isPlanLocked(plan)
+                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                  : (selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
+                    ? 'bg-brand-600 text-white shadow-md hover:bg-brand-500'
+                    : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'))"
               class="w-full py-3 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2"
             >
-              <i *ngIf="hasActivePlan" class="pi pi-lock text-xs"></i>
-              <i *ngIf="!hasActivePlan && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id" class="pi pi-check text-xs"></i>
-              <span>{{ hasActivePlan ? 'Plan Active (Locked)' : (selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id ? 'Selected' : 'Select ' + getPlanDisplayTitle(plan)) }}</span>
+              <i *ngIf="isCurrentPlan(plan)" class="pi pi-check-circle text-xs text-emerald-500"></i>
+              <i *ngIf="!isCurrentPlan(plan) && isPlanLocked(plan)" class="pi pi-lock text-xs"></i>
+              <i *ngIf="!isPlanLocked(plan) && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id" class="pi pi-check text-xs"></i>
+              <i *ngIf="!isPlanLocked(plan) && isHigherTier(plan) && (selectedPlanType !== 'standard' || selectedStandardPlan?.id !== plan.id)" class="pi pi-arrow-up text-xs text-brand-500"></i>
+              <span>{{ getPlanActionLabel(plan) }}</span>
             </button>
           </div>
 
@@ -214,9 +262,29 @@
             <!-- Top Tag -->
             <div class="flex items-center justify-between mb-4">
               <p-tag
-                [severity]="selectedPlanType === 'custom' ? 'warn' : 'info'"
-                [value]="selectedPlanType === 'custom' ? 'Selected' : 'Build Your Own'"
+                severity="info"
+                value="AutoPay"
+                icon="pi pi-sync"
+                [rounded]="true"
+                styleClass="text-xs font-semibold"
               ></p-tag>
+              <div>
+                <p-tag
+                  *ngIf="selectedPlanType === 'custom'"
+                  severity="success"
+                  value="Selected"
+                  icon="pi pi-check"
+                  [rounded]="true"
+                  styleClass="text-xs font-semibold"
+                ></p-tag>
+                <p-tag
+                  *ngIf="selectedPlanType !== 'custom'"
+                  severity="secondary"
+                  value="Build Your Own"
+                  [rounded]="true"
+                  styleClass="text-xs font-semibold"
+                ></p-tag>
+              </div>
             </div>
 
             <div>
@@ -342,9 +410,7 @@
             <p class="text-xs sm:text-sm mt-0.5" style="color: var(--app-text-muted)">
               Connect social media channels with 24/7 AI conversational auto-replies. Valid for 30 days recurring.
             </p>
-          </div>
-
-          <button
+              <button
             type="button"
             (click)="goToStep(1)"
             class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
@@ -353,15 +419,30 @@
           </button>
         </div>
 
+        <!-- Channel Retention Banner for Voice Tier Upgrades -->
+        <div *ngIf="hasActivePlan && activeSubscriptionChannels.length > 0" class="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
+          <i class="pi pi-shield-check text-emerald-500 text-lg mt-0.5"></i>
+          <div>
+            <h4 class="text-xs sm:text-sm font-bold text-emerald-700 dark:text-emerald-300">
+              Active Omni-Channels Preserved
+            </h4>
+            <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
+              Your ongoing channels ({{ activeSubscriptionChannels.join(', ') }}) remain active without interruption until your cycle renewal date ({{ currentSummary?.active_recharge?.expires_at | date:'mediumDate' }}). Upgrading your voice plan carries them forward automatically.
+            </p>
+          </div>
+        </div>
+
         <!-- Channel Cards Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div
             *ngFor="let ch of CHANNEL_OPTIONS"
-            [ngClass]="hasActivePlan
-              ? 'opacity-60 border-slate-200 dark:border-slate-800'
-              : (selectedChannelsMap[ch.key]
-                ? 'ring-2 ring-brand-500 shadow-lg border-brand-500/50 bg-brand-500/[0.03]'
-                : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700')"
+            [ngClass]="isChannelActiveOnSubscription(ch.key)
+              ? 'ring-2 ring-emerald-500/50 shadow-md border-emerald-500/30 bg-emerald-500/[0.02]'
+              : (hasActivePlan
+                ? 'opacity-60 border-slate-200 dark:border-slate-800'
+                : (selectedChannelsMap[ch.key]
+                  ? 'ring-2 ring-brand-500 shadow-lg border-brand-500/50 bg-brand-500/[0.03]'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'))"
             class="card-base p-5 rounded-2xl border flex flex-col justify-between transition-all duration-200 relative"
           >
             <div>
@@ -383,6 +464,22 @@
                     </span>
                   </div>
                 </div>
+                <p-tag
+                  *ngIf="isChannelActiveOnSubscription(ch.key)"
+                  severity="success"
+                  value="Active on Subscription"
+                  icon="pi pi-check"
+                  [rounded]="true"
+                  styleClass="text-[10px] font-semibold"
+                ></p-tag>
+                <p-tag
+                  *ngIf="!isChannelActiveOnSubscription(ch.key)"
+                  severity="info"
+                  value="AutoPay"
+                  icon="pi pi-sync"
+                  [rounded]="true"
+                  styleClass="text-[10px] font-semibold"
+                ></p-tag>
               </div>
 
               <p class="text-xs min-h-[34px] leading-relaxed" style="color: var(--app-text-muted)">
@@ -413,16 +510,19 @@
               type="button"
               (click)="toggleChannel(ch.key)"
               [disabled]="hasActivePlan"
-              [ngClass]="hasActivePlan
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                : (selectedChannelsMap[ch.key]
-                  ? 'bg-brand-600 text-white'
-                  : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800')"
+              [ngClass]="isChannelActiveOnSubscription(ch.key)
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold cursor-default'
+                : (hasActivePlan
+                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                  : (selectedChannelsMap[ch.key]
+                    ? 'bg-brand-600 text-white'
+                    : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'))"
               class="w-full py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2"
             >
-              <i *ngIf="hasActivePlan" class="pi pi-lock text-xs"></i>
+              <i *ngIf="isChannelActiveOnSubscription(ch.key)" class="pi pi-check-circle text-xs text-emerald-500"></i>
+              <i *ngIf="!isChannelActiveOnSubscription(ch.key) && hasActivePlan" class="pi pi-lock text-xs"></i>
               <i *ngIf="!hasActivePlan" [class]="selectedChannelsMap[ch.key] ? 'pi pi-check' : 'pi pi-plus'"></i>
-              <span>{{ hasActivePlan ? 'Plan Active (Locked)' : (selectedChannelsMap[ch.key] ? 'Channel Included' : 'Add to Subscription') }}</span>
+              <span>{{ isChannelActiveOnSubscription(ch.key) ? 'Active on Subscription' : (hasActivePlan ? 'Plan Active (Locked)' : (selectedChannelsMap[ch.key] ? 'Channel Included' : 'Add to Subscription')) }}</span>
             </button>
           </div>
         </div>
@@ -543,26 +643,26 @@
         <div class="space-y-2 pt-2">
           <p-button
             *ngIf="currentStep === 1"
-            [label]="hasActivePlan ? 'Plan Active (Locked)' : 'Continue to Channels'"
-            [icon]="hasActivePlan ? 'pi pi-lock' : 'pi pi-arrow-right'"
+            [label]="selectedStandardPlan && isCurrentPlan(selectedStandardPlan) ? 'Current Plan Active' : ((hasActivePlan && selectedStandardPlan && isHigherTier(selectedStandardPlan)) ? 'Continue to Upgrade' : 'Continue to Channels')"
+            [icon]="(selectedStandardPlan && isPlanLocked(selectedStandardPlan)) ? 'pi pi-lock' : 'pi pi-arrow-right'"
             iconPos="right"
             (click)="goToStep(2)"
-            [disabled]="hasActivePlan"
+            [disabled]="selectedStandardPlan ? isPlanLocked(selectedStandardPlan) : false"
             styleClass="w-full font-bold py-3 rounded-xl"
           ></p-button>
 
           <p-button
             *ngIf="currentStep === 2"
-            [label]="hasActivePlan ? 'Plan Active (Locked)' : ('Pay ₹' + (getTotalMonthlyPrice() | number) + ' with AutoPay')"
-            [icon]="hasActivePlan ? 'pi pi-lock' : 'pi pi-shield'"
+            [label]="hasActivePlan && selectedStandardPlan && isHigherTier(selectedStandardPlan) ? ('Upgrade to ' + selectedStandardPlan.name + ' (₹' + (getTotalMonthlyPrice() | number) + '/mo)') : ('Pay ₹' + (getTotalMonthlyPrice() | number) + ' with AutoPay')"
+            [icon]="'pi pi-shield'"
             [loading]="isCheckingOut"
             (click)="initiateAutoPayCheckout()"
-            [disabled]="hasActivePlan"
+            [disabled]="selectedStandardPlan ? isPlanLocked(selectedStandardPlan) : false"
             styleClass="w-full font-bold py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 border-none"
           ></p-button>
 
           <button
-            *ngIf="currentStep === 2 && !hasActivePlan"
+            *ngIf="currentStep === 2"
             type="button"
             (click)="goToStep(1)"
             class="w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 py-1.5 transition"
@@ -571,13 +671,13 @@
           </button>
         </div>
 
-        <!-- Active Plan Locked Notice -->
-        <div *ngIf="hasActivePlan" class="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-center space-y-2">
-          <span class="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center justify-center gap-1.5">
-            <i class="pi pi-lock text-xs"></i> Subscription Active
+        <!-- Active Plan Locked Notice (Only show Top-Up booster note when on current tier) -->
+        <div *ngIf="hasActiveAutoPay && selectedStandardPlan && isCurrentPlan(selectedStandardPlan)" class="p-3.5 rounded-xl bg-slate-500/10 border border-slate-500/20 text-center space-y-2">
+          <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5">
+            <i class="pi pi-check-circle text-xs text-emerald-500"></i> Current Tier Active
           </span>
-          <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
-            Your company already has an active subscription. Base plans and modular channel selections are locked until renewal.
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+            To add more minutes to this tier right now, use Top-Up Boosters. Or select a higher plan to upgrade.
           </p>
           <button
             type="button"

@@ -195,12 +195,21 @@
             ₹{{ plan.price | number }}
           </td>
           <td>
-            <span *ngIf="plan.auto_pay_by_default" class="text-emerald-500 font-bold text-xs flex items-center gap-1">
-              <i class="pi pi-sync text-[10px]"></i> Recurring
-            </span>
-            <span *ngIf="!plan.auto_pay_by_default" class="text-slate-400 text-xs">
-              One-Time
-            </span>
+            <p-tag
+              *ngIf="plan.auto_pay_by_default"
+              value="AutoPay"
+              severity="success"
+              icon="pi pi-sync"
+              [rounded]="true"
+              styleClass="text-[10px] font-bold"
+            ></p-tag>
+            <p-tag
+              *ngIf="!plan.auto_pay_by_default"
+              value="One-Time"
+              severity="secondary"
+              [rounded]="true"
+              styleClass="text-[10px] font-bold"
+            ></p-tag>
           </td>
           <td>
             <span [class]="plan.is_active ? 'text-emerald-600 font-semibold text-xs' : 'text-red-500 text-xs'">

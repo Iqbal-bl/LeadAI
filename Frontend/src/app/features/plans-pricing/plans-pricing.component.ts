@@ -157,6 +157,14 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   /** Selected channels map */
   public selectedChannelsMap: Record<string, boolean> = {};
 
+  /** Active Plan States */
+  public hasActiveAutoPay: boolean = false;
+  public isManualPlan: boolean = false;
+  public currentActivePlanId: string | null = null;
+  public currentMinutes: number = 0;
+  public currentPrice: number = 0;
+  public activeSubscriptionChannels: string[] = [];
+
   /** Checkout & Verification States */
   public isCheckingOut: boolean = false;
   public isVerifyingPayment: boolean = false;
@@ -184,12 +192,20 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
           if (active && active.status === 'active') {
             const isNotExpired = !active.expires_at || new Date(active.expires_at).getTime() > Date.now();
             this.hasActivePlan = isNotExpired;
+            this.hasActiveAutoPay = isNotExpired && !!active.razorpay_subscription_id && !active.cancel_at_period_end;
+            this.isManualPlan = isNotExpired && !active.razorpay_subscription_id;
+            this.currentActivePlanId = (active as any).plan_template_id || null;
+            this.currentMinutes = active.purchased_minutes || 0;
+            this.currentPrice = active.price_paid || 0;
+            this.activeSubscriptionChannels = active.active_channels || [];
           } else {
             this.hasActivePlan = false;
-          }
-          if (this.hasActivePlan) {
-            this.currentStep = 1;
-            this.selectedChannelsMap = {};
+            this.hasActiveAutoPay = false;
+            this.isManualPlan = false;
+            this.currentActivePlanId = null;
+            this.currentMinutes = 0;
+            this.currentPrice = 0;
+            this.activeSubscriptionChannels = [];
           }
           this.isLoadingSummary = false;
         },
@@ -208,30 +224,33 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.billingService.getAvailablePlans().subscribe({
         next: (plans) => {
-          // Filter out custom bundles, channel addons, boosters, and legacy yearly plans
+          // Base Voice Plans: strictly plans with positive minutes, validity <= 90 (monthly), excluding channel addons, boosters, and self bundles
           const filtered = plans.filter(
             (p) =>
-              p.plan_type === 'standard' &&
+              (p.plan_category === 'voice_standard' || (p.plan_type === 'standard' && (!p.plan_category || p.plan_category === 'voice_standard'))) &&
+              p.included_minutes > 0 &&
+              p.plan_category !== 'channel_addon' &&
               p.plan_category !== 'client_self_bundle' &&
-              !p.name.toLowerCase().includes('channel add-on') &&
+              p.plan_category !== 'voice_topup' &&
+              p.plan_type !== 'topup' &&
               !p.name.toLowerCase().includes('booster') &&
               !p.name.toLowerCase().includes('yearly') &&
               p.validity_days <= 90
           );
 
-          // Deduplicate so each distinct minute quota appears exactly once
-          const seenMinutes = new Set<number>();
+          // Deduplicate by plan ID
+          const seenIds = new Set<string>();
           const distinctPlans: RechargePlanTemplate[] = [];
           for (const plan of filtered) {
-            if (!seenMinutes.has(plan.included_minutes)) {
-              seenMinutes.add(plan.included_minutes);
+            if (!seenIds.has(plan.id)) {
+              seenIds.add(plan.id);
               distinctPlans.push(plan);
             }
           }
 
-          // Sort by price ascending: Monthly Basic (500 Mins), Monthly Pro (1000 Mins)
+          // Sort by price ascending and display ALL active plans created by Super Admin
           distinctPlans.sort((a, b) => a.price - b.price);
-          this.standardPlans = distinctPlans.slice(0, 2);
+          this.standardPlans = distinctPlans;
 
           // Dynamically sync channel addon prices from database templates
           const channelTemplates = plans.filter(
@@ -245,7 +264,9 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
           });
 
           if (this.standardPlans.length > 0) {
-            this.selectedStandardPlan = this.standardPlans[0];
+            // If user has active plan, try to pre-select an upgrade plan if available, else first plan
+            const upgradePlan = this.standardPlans.find((p) => this.isHigherTier(p));
+            this.selectedStandardPlan = upgradePlan || this.standardPlans[0];
             this.selectedPlanType = 'standard';
           }
           this.isLoadingPlans = false;
@@ -262,24 +283,68 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Formats a clean marketing display title for standard plan cards.
-   *
-   * @param plan Standard plan template
+   * Formats a clean display title from the database plan template.
    */
   public getPlanDisplayTitle(plan: RechargePlanTemplate): string {
-    if (plan.included_minutes <= 500) {
-      return 'Monthly Basic Plan';
+    return plan.name || 'Standard Voice Plan';
+  }
+
+  /**
+   * Checks whether a plan template is configured for recurring AutoPay.
+   * Driven dynamically by the database template's auto_pay_by_default field.
+   */
+  public isAutoPayPlan(plan: RechargePlanTemplate): boolean {
+    return plan?.auto_pay_by_default !== false;
+  }
+
+  public isCurrentPlan(plan: RechargePlanTemplate): boolean {
+    if (!this.hasActivePlan || !this.currentSummary?.active_recharge) return false;
+    const active = this.currentSummary.active_recharge;
+    if (this.currentActivePlanId && this.currentActivePlanId === plan.id) return true;
+    if (active.plan_name_snapshot && plan.name && active.plan_name_snapshot.toLowerCase().trim() === plan.name.toLowerCase().trim()) return true;
+    return active.purchased_minutes === plan.included_minutes && Math.abs(active.price_paid - plan.price) < 1;
+  }
+
+  public isHigherTier(plan: RechargePlanTemplate): boolean {
+    if (!this.hasActivePlan) return false;
+    return (plan.included_minutes || 0) > this.currentMinutes || (plan.price || 0) > this.currentPrice;
+  }
+
+  public isPlanLocked(plan: RechargePlanTemplate): boolean {
+    if (this.isCurrentPlan(plan)) return true;
+    if (this.hasActiveAutoPay) {
+      return !this.isHigherTier(plan);
     }
-    return 'Monthly Pro Plan';
+    return false;
+  }
+
+  public getPlanActionLabel(plan: RechargePlanTemplate): string {
+    if (this.isCurrentPlan(plan)) {
+      return 'Current Plan Active';
+    }
+    if (this.hasActiveAutoPay) {
+      if (this.isHigherTier(plan)) {
+        return this.selectedStandardPlan?.id === plan.id ? 'Selected for Upgrade' : 'Upgrade to ' + (plan.name || 'Tier');
+      }
+      return 'Plan Active (Locked)';
+    }
+    if (this.isManualPlan) {
+      if (this.selectedPlanType === 'standard' && this.selectedStandardPlan?.id === plan.id) {
+        return 'Selected';
+      }
+      return this.isHigherTier(plan) ? 'Upgrade to ' + (plan.name || 'Tier') : 'Select ' + (plan.name || 'Tier');
+    }
+    if (this.selectedPlanType === 'standard' && this.selectedStandardPlan?.id === plan.id) {
+      return 'Selected';
+    }
+    return 'Select ' + this.getPlanDisplayTitle(plan);
   }
 
   /**
    * Selects a standard pre-configured master plan.
-   *
-   * @param plan Selected RechargePlanTemplate
    */
   public selectStandardPlan(plan: RechargePlanTemplate): void {
-    if (this.hasActivePlan) return;
+    if (this.isPlanLocked(plan)) return;
     this.selectedPlanType = 'standard';
     this.selectedStandardPlan = plan;
   }
@@ -288,7 +353,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
    * Selects the custom plan card.
    */
   public selectCustomPlan(): void {
-    if (this.hasActivePlan) return;
+    if (this.hasActiveAutoPay) return;
     this.selectedPlanType = 'custom';
   }
 
@@ -321,6 +386,13 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
       return;
     }
     this.selectedChannelsMap[channelKey] = !this.selectedChannelsMap[channelKey];
+  }
+
+  /**
+   * Checks if an omni-channel add-on is currently active in the user's ongoing subscription.
+   */
+  public isChannelActiveOnSubscription(key: string): boolean {
+    return this.activeSubscriptionChannels.includes(key);
   }
 
   /**
@@ -380,9 +452,9 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
    * @param step Step number (1 or 2)
    */
   public goToStep(step: 1 | 2): void {
-    if (this.hasActivePlan) {
+    if (this.hasActiveAutoPay && this.selectedStandardPlan && !this.isHigherTier(this.selectedStandardPlan)) {
       this.toastService.warn(
-        'You already have an active subscription. Additional plans or channels cannot be configured.',
+        'You already have an active subscription for this tier. You can upgrade to a higher tier or top up minutes.',
         'Active Plan Running'
       );
       return;
@@ -399,9 +471,9 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
    * Initiates recurring AutoPay subscription checkout via Razorpay.
    */
   public initiateAutoPayCheckout(): void {
-    if (this.hasActivePlan) {
+    if (this.hasActiveAutoPay && this.selectedStandardPlan && !this.isHigherTier(this.selectedStandardPlan)) {
       this.toastService.warn(
-        'You already have an active subscription. Additional plans cannot be purchased while your current plan is active.',
+        'You already have an active subscription for this tier. You can upgrade to a higher tier or top up minutes.',
         'Active Plan Running'
       );
       return;

@@ -83,7 +83,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
     private leadService: LeadService,
     private customerService: CustomerService,
     private toastService: ToastService,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.setupSearchDebounce();
@@ -289,13 +289,13 @@ export class LeadListComponent implements OnInit, OnDestroy {
     notes: string;
     leadName?: string;
   } = {
-    conversation_id: '',
-    lead_id: '',
-    owner_email: '',
-    stage: 'customer',
-    value: null,
-    notes: '',
-  };
+      conversation_id: '',
+      lead_id: '',
+      owner_email: '',
+      stage: 'customer',
+      value: null,
+      notes: '',
+    };
 
   stageOptions = [
     { label: 'Customer', value: 'customer' },
@@ -363,8 +363,8 @@ export class LeadListComponent implements OnInit, OnDestroy {
         this.converting = false;
         this.toastService.error(
           err?.error?.detail ||
-            err?.message ||
-            'Failed to convert lead to customer.',
+          err?.message ||
+          'Failed to convert lead to customer.',
           'Conversion Failed',
         );
       },
