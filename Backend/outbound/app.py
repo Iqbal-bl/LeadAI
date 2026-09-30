@@ -1376,36 +1376,45 @@ async def make_call(call_data: CallRequest, request: Request, current_user: str 
     if session_id not in session_xml_sections or not session_xml_sections[session_id]:
         raise HTTPException(status_code=400, detail="Please upload an XML template first")
 
-    # Resolve client_id for multi-tenant billing (Bug #5 fix)
-    client_id = (
-        request.headers.get("X-Client-Id")
-        or request.query_params.get("client_id")
-    )
-    if not client_id and current_user:
+    # Securely resolve client_id for multi-tenant billing
+    resolved_client_id = None
+    if current_user:
         try:
-            from LeadAI.db import get_leadai_db
+            from LeadAI.db import session as leadai_session
             from LeadAI.models import LeadUserRole
-            leadai_db = next(get_leadai_db())
-            user_role = leadai_db.query(LeadUserRole).filter(
-                LeadUserRole.UserEmail == current_user.strip().lower(),
-                LeadUserRole.IsActive == True,
-                LeadUserRole.IsDeleted == False,
-            ).first()
-            if user_role and user_role.ClientId:
-                client_id = user_role.ClientId
+            with leadai_session() as leadai_db:
+                roles = leadai_db.query(LeadUserRole).filter(
+                    LeadUserRole.UserEmail == current_user.strip().lower(),
+                    LeadUserRole.IsActive == True,
+                    LeadUserRole.IsDeleted == False,
+                ).all()
+                user_client_ids = [r.ClientId for r in roles if r.ClientId]
+                is_superadmin = any(r.RoleName in ("superadmin", "system.admin") for r in roles)
+
+                header_client_id = request.headers.get("X-Client-Id") or request.query_params.get("client_id")
+                if header_client_id:
+                    if is_superadmin or header_client_id in user_client_ids:
+                        resolved_client_id = header_client_id
+                    elif not user_client_ids:
+                        # Fallback for environments without explicit LeadUserRole mapping
+                        resolved_client_id = header_client_id
+                elif user_client_ids:
+                    resolved_client_id = user_client_ids[0]
         except Exception as e:
             logger.warning(f"[make-call] Could not resolve ClientId for user {current_user}: {e}")
+
+    client_id = resolved_client_id or request.headers.get("X-Client-Id") or request.query_params.get("client_id")
 
     # Enforce billing quota check before dialing Twilio
     if client_id:
         try:
-            from LeadAI.db import get_leadai_db
+            from LeadAI.db import session as leadai_session
             from LeadAI.services.billing import check_call_quota
-            leadai_db = next(get_leadai_db())
-            has_quota, quota_reason, _ = check_call_quota(leadai_db, client_id)
-            if not has_quota:
-                logger.warning(f"[make-call] Quota check failed for client {client_id}: {quota_reason}")
-                raise HTTPException(status_code=402, detail=quota_reason)
+            with leadai_session() as leadai_db:
+                has_quota, quota_reason, _ = check_call_quota(leadai_db, client_id)
+                if not has_quota:
+                    logger.warning(f"[make-call] Quota check failed for client {client_id}: {quota_reason}")
+                    raise HTTPException(status_code=402, detail=quota_reason)
         except HTTPException:
             raise
         except Exception as exc:
@@ -1519,20 +1528,23 @@ def _deduct_billing_usage_for_call(call_sid: str, call_data: dict):
     if not client_id:
         return
     try:
-        duration_sec = 0
-        if call_sid and twilio_client:
-            try:
-                tw_call = twilio_client.calls(call_sid).fetch()
-                if tw_call and tw_call.duration:
-                    duration_sec = int(tw_call.duration)
-            except Exception as e:
-                logger.warning(f"[Billing] Could not fetch Twilio call duration for {call_sid}: {e}")
+        import time as _time
+        duration_sec = call_data.get("call_duration") or 0
+        if not duration_sec and call_sid and twilio_client:
+            for _ in range(3):
+                try:
+                    tw_call = twilio_client.calls(call_sid).fetch()
+                    if tw_call and tw_call.duration:
+                        duration_sec = int(tw_call.duration)
+                        break
+                except Exception as e:
+                    logger.warning(f"[Billing] Could not fetch Twilio call duration for {call_sid}: {e}")
+                _time.sleep(0.5)
 
-        if duration_sec > 0:
-            from LeadAI.db import get_leadai_db
-            from LeadAI.services.billing import deduct_call_usage
+        from LeadAI.db import session as leadai_session
+        from LeadAI.services.billing import deduct_call_usage
 
-            db = next(get_leadai_db())
+        with leadai_session() as db:
             deduct_call_usage(
                 db,
                 client_id=client_id,
@@ -1577,6 +1589,12 @@ async def call_status(request: Request):
 
     if call_sid in active_calls:
         active_calls[call_sid]["status"] = status
+        call_dur_str = form.get("CallDuration")
+        if call_dur_str:
+            try:
+                active_calls[call_sid]["call_duration"] = int(call_dur_str)
+            except (ValueError, TypeError):
+                pass
     
     # ── Pre-warm Sarvam TTS during ringing so WS is ready when user picks up ──
     if status == "ringing" and call_sid in active_calls and not _is_pipecat_call(active_calls[call_sid]):
@@ -2637,22 +2655,24 @@ async def media_stream(ws: WebSocket):
                     if agent:
                         asyncio.create_task(agent.pre_warm(greeting))
 
+                    call_data["media_start_time"] = time.time()
+
                     # ── Live 1-Minute Pulse Telecom Billing ──────────────────────
                     client_id = call_data.get("client_id")
                     if client_id:
                         try:
-                            from LeadAI.db import get_leadai_db
+                            from LeadAI.db import session as leadai_session
                             from LeadAI.services.billing import reserve_minute_pulse
 
-                            p_db = next(get_leadai_db())
                             # Reserve Minute #1 upfront upon answer/media stream start
-                            p_ok, p_bal, p_ex = reserve_minute_pulse(
-                                p_db,
-                                client_id=client_id,
-                                call_sid=call_sid,
-                                minute_number=1,
-                                conversation_id=call_data.get("conversation_id"),
-                            )
+                            with leadai_session() as p_db:
+                                p_ok, p_bal, p_ex = reserve_minute_pulse(
+                                    p_db,
+                                    client_id=client_id,
+                                    call_sid=call_sid,
+                                    minute_number=1,
+                                    conversation_id=call_data.get("conversation_id"),
+                                )
                             if not p_ok:
                                 logger.warning(f"[Billing Pulse] Insufficient balance for initial minute for call {call_sid}. Terminating.")
                                 agent_initiated_hangup = True
@@ -2670,14 +2690,14 @@ async def media_stream(ws: WebSocket):
                                             if should_terminate or call_sid not in active_calls:
                                                 break
                                             current_min += 1
-                                            w_db = next(get_leadai_db())
-                                            w_ok, w_bal, w_ex = reserve_minute_pulse(
-                                                w_db,
-                                                client_id=client_id,
-                                                call_sid=call_sid,
-                                                minute_number=current_min,
-                                                conversation_id=call_data.get("conversation_id"),
-                                            )
+                                            with leadai_session() as w_db:
+                                                w_ok, w_bal, w_ex = reserve_minute_pulse(
+                                                    w_db,
+                                                    client_id=client_id,
+                                                    call_sid=call_sid,
+                                                    minute_number=current_min,
+                                                    conversation_id=call_data.get("conversation_id"),
+                                                )
                                             if not w_ok:
                                                 logger.info(
                                                     f"[Billing Pulse] Client {client_id} exhausted balance entering minute {current_min}. "
@@ -2766,6 +2786,11 @@ async def media_stream(ws: WebSocket):
                 pass
         if tts_manager:
             await tts_manager.cleanup()
+        if call_sid in active_calls and "media_start_time" in active_calls[call_sid]:
+            try:
+                active_calls[call_sid]["call_duration"] = max(1, int(time.time() - active_calls[call_sid]["media_start_time"]))
+            except Exception:
+                pass
         if call_sid:
             # Determine WHO ended the call:
             #  - AI / manual set call_hangup_reasons earlier
