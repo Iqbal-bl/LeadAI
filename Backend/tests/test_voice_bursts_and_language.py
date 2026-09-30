@@ -209,6 +209,19 @@ def test_a_superseded_turn_saves_nothing_at_all():
     assert conv.Status == "open" and not conv.MessageCount
 
 
+def test_a_turn_already_known_superseded_never_pays_for_the_llm_call():
+    # A live hangup mid-turn was seen paying for a full retrieve+generate cycle (several
+    # seconds, two real OpenAI calls) for a reply that was already known to be discarded —
+    # the only supersede check ran AFTER the expensive call, never before it.
+    wire()
+    db, client, conv, call = setup()
+    voice_flow.handle_voice_turn(db, client, conv, call, "the site visit is on Saturday",
+                                 live_call=True, defer_scoring=True, commit=True,
+                                 superseded=lambda: True)
+    assert LLM_CALLS == []                                     # the LLM was never called at all
+    assert SEARCHED == []                                      # nor was retrieval
+
+
 def test_a_turn_that_is_not_superseded_saves_normally():
     wire()
     db, conv, out = turn("what is the rate", superseded=lambda: False)

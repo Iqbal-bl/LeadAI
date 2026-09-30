@@ -166,7 +166,8 @@ def build_services(context: dict) -> Services:
         raise CallRejected("SARVAM_API_KEY is not set")
     language = sarvam_language(context.get("language")) if not context.get("multi_stt") else None
     stt_settings = SarvamSTTService.Settings(language=language) if language else SarvamSTTService.Settings()
-    tts_kwargs = {"voice": context.get("speaker") or "anushka"}
+    # 1.0 is Sarvam's normal speaking speed; valid range on bulbul:v3 is 0.5-2.0.
+    tts_kwargs = {"voice": context.get("speaker") or "anushka", "pace": 1.2}
     if language:
         tts_kwargs["language"] = language
     def language_frame(code: str):

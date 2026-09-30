@@ -338,6 +338,16 @@ def handle_voice_turn(
                    code=language)
         english = english_query(utterance, trace)
 
+        if superseded is not None and superseded():
+            # Already stale before the expensive call even starts — the caller spoke again,
+            # or (a live hangup mid-turn) the call itself ended, while the cheap prep above was
+            # still running. A live call was seen paying for a full retrieve+generate cycle
+            # (several seconds, two OpenAI calls) for a reply that was always going to be
+            # discarded at the existing post-generate check below.
+            db.rollback()
+            trace_step(trace, "superseded", "the caller spoke again first: reply dropped, nothing saved")
+            return VoiceTurnResult("", {}, handed_off=False, superseded=True, history=history, trace=trace)
+
         # channel="voice" selects the voice prompt template and the tighter token cap.
         result = ai_engine.answer(
             db, client_id, client.Name, utterance, history=history, channel="voice",
