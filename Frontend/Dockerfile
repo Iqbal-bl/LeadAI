@@ -13,6 +13,6 @@ RUN npm run build
 FROM nginx:alpine AS runtime
 COPY --from=build /app/dist/lead/browser /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+EXPOSE 7009
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:80/ || exit 1
+    CMD wget -qO- http://127.0.0.1:7009/ || exit 1

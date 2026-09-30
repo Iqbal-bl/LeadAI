@@ -54,7 +54,7 @@ ENV PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     TZ=Asia/Kolkata \
-    PORT=6789
+    PORT=7011
 
 # Runtime libraries only — no compilers.
 #   libmysqlclient21 : mysqlclient at runtime
@@ -85,7 +85,7 @@ RUN mkdir -p /app/storage_local /app/scripts \
 
 USER appuser
 
-EXPOSE 6789
+EXPOSE 7011
 
 # The health endpoint is in PUBLIC_PATHS, so this needs no credentials.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
