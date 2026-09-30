@@ -946,6 +946,7 @@ class MemberCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=40)
     role: str = Field(
         default="employee",
         description="Role to grant: employee, manager",
@@ -957,6 +958,8 @@ class MemberOut(BaseModel):
     id: str
     email: str
     name: str | None = None
+    phone: str | None = None
+    assigned_leads: int = 0
     role: str
     client_id: str
     is_active: bool = True
@@ -973,6 +976,7 @@ class MemberOut(BaseModel):
 
 class MemberUpdate(BaseModel):
     full_name: str | None = None
+    phone: str | None = None
     role: RoleName | None = None
     is_active: bool | None = None
 
