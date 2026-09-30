@@ -2,6 +2,7 @@ export interface AccessibleCompany {
   id: string;
   name: string;
   is_active: boolean;
+  has_active_subscription?: boolean | null;
 }
 
 export interface UserMe {
@@ -12,6 +13,8 @@ export interface UserMe {
   client_name: string;
   permissions: string[];
   accessible_companies: AccessibleCompany[];
+  has_active_subscription?: boolean;
+  active_subscription_plan?: string | null;
 }
 
 /**
@@ -36,6 +39,8 @@ export interface UserProfileDetails {
   timezone?: string;
   permissions: string[];
   accessible_companies: AccessibleCompany[];
+  has_active_subscription?: boolean;
+  active_subscription_plan?: string | null;
 }
 
 export interface RoleGrant {

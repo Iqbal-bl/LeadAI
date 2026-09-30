@@ -299,7 +299,10 @@
             </span>
           </div>
           <p class="text-xs" style="color: var(--app-text-muted)">
-            Control which roles in your company can reveal unmasked customer contact details (phone, email, WhatsApp, Instagram) in the conversation view. Every reveal action is recorded in the activity audit log.
+            Control which roles in your company can reveal unmasked customer
+            contact details (phone, email, WhatsApp, Instagram) in the
+            conversation view. Every reveal action is recorded in the activity
+            audit log.
           </p>
         </div>
 
@@ -313,7 +316,8 @@
               Managers can reveal customer contact details
             </div>
             <div class="text-xs" style="color: var(--app-text-muted)">
-              Allows team members with the Manager role to view real customer phone and email.
+              Allows team members with the Manager role to view real customer
+              phone and email.
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -323,7 +327,11 @@
             ></i>
             <p-inputSwitch
               [ngModel]="managerCanReveal"
-              [disabled]="savingManager || loadingPermissions || managerCanReveal === undefined"
+              [disabled]="
+                savingManager ||
+                loadingPermissions ||
+                managerCanReveal === undefined
+              "
               (onChange)="setRolePermission('manager', $event.checked)"
             ></p-inputSwitch>
           </div>
@@ -339,7 +347,8 @@
               Employees can reveal customer contact details
             </div>
             <div class="text-xs" style="color: var(--app-text-muted)">
-              Allows agents and staff with the Employee role to decrypt and reveal customer contacts.
+              Allows agents and staff with the Employee role to decrypt and
+              reveal customer contacts.
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -349,7 +358,11 @@
             ></i>
             <p-inputSwitch
               [ngModel]="employeeCanReveal"
-              [disabled]="savingEmployee || loadingPermissions || employeeCanReveal === undefined"
+              [disabled]="
+                savingEmployee ||
+                loadingPermissions ||
+                employeeCanReveal === undefined
+              "
               (onChange)="setRolePermission('employee', $event.checked)"
             ></p-inputSwitch>
           </div>
@@ -366,11 +379,16 @@
         >
           <i class="pi pi-info-circle text-indigo-500 mt-0.5 flex-shrink-0"></i>
           <div>
-            <span class="font-semibold block mb-0.5" style="color: var(--app-text)">
+            <span
+              class="font-semibold block mb-0.5"
+              style="color: var(--app-text)"
+            >
               Company Admin Access
             </span>
             <span style="color: var(--app-text-muted)">
-              Company Admins always hold contact reveal privileges by default. Toggles apply strictly to your company's team members and take effect immediately.
+              Company Admins always hold contact reveal privileges by default.
+              Toggles apply strictly to your company's team members and take
+              effect immediately.
             </span>
           </div>
         </div>
@@ -378,4 +396,3 @@
     </p-tabpanel>
   </p-tabpanels>
 </p-tabs>
-

@@ -22,6 +22,9 @@ export interface LeadInfo {
   sentiment: string | null;
   score_breakdown?: ScoreBreakdown | Record<string, number> | null;
   qualified_at?: string | null;
+  data_points_json?: Record<string, any> | null;
+  DataPointsJson?: Record<string, any> | null;
+  data_points?: Record<string, any> | null;
 }
 
 export interface MessageSource {
@@ -114,6 +117,9 @@ export interface LeadDetail extends LeadInboxItem {
   leadStatus?: string;
   source?: string;
   avatar?: string;
+  data_points_json?: Record<string, any> | null;
+  DataPointsJson?: Record<string, any> | null;
+  data_points?: Record<string, any> | null;
 }
 
 export interface ContactInfo {

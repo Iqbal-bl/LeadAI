@@ -1,699 +1,732 @@
-<div class="space-y-6 animate-fade-in w-full px-4 sm:px-6 lg:px-8 pb-16">
-  <!-- Top Bar / Breadcrumb Header -->
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
-    <div class="space-y-1">
-      <div class="flex items-center gap-2">
-        <button
-          (click)="navigateToUsage()"
-          class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-        >
-          <i class="pi pi-arrow-left text-xs"></i> Back to Usage & Invoices
-        </button>
-        <p-tag severity="info" value="30-Day AutoPay Recurring"></p-tag>
-      </div>
-      <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight" style="color: var(--app-text)">
-        Subscription Plans & Omni-Channel Add-ons
-      </h1>
-      <p class="text-xs sm:text-sm" style="color: var(--app-text-muted)">
-        Build your monthly plan with custom call minute allocations and modular 30-day social media channels.
-      </p>
-    </div>
-
-    <!-- Stepper Navigation Pill -->
-    <div class="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 self-start md:self-auto">
+<div class="pricing-page-wrapper min-h-screen w-full px-4 sm:px-6 lg:px-10 pb-24 animate-fade-in">
+  <!-- Top Navigation Return Bar -->
+  <div class="max-w-6xl mx-auto pt-4 flex items-center justify-between gap-3 flex-wrap">
+    <div class="flex items-center gap-2.5">
       <button
+        *ngIf="hasActivePlan"
         type="button"
-        (click)="goToStep(1)"
-        [ngClass]="currentStep === 1 ? 'bg-white dark:bg-slate-900 shadow-sm text-brand-600 dark:text-brand-400 font-bold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium'"
-        class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm transition"
+        id="btn-back-to-usage"
+        (click)="navigateToUsage()"
+        class="inline-flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-full border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition shadow-2xs cursor-pointer"
       >
-        <span class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" [ngClass]="currentStep === 1 ? 'bg-brand-600 text-white' : 'bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300'">
-          1
-        </span>
-        <span>Base Voice Plan</span>
+        <i class="pi pi-arrow-left text-xs"></i>
+        <span>Back to Workspace</span>
       </button>
 
-      <i class="pi pi-chevron-right text-xs text-slate-400"></i>
+      <span
+        *ngIf="!hasActivePlan"
+        class="inline-flex items-center gap-2 text-xs font-bold px-3.5 py-1.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 shadow-2xs"
+      >
+        <i class="pi pi-lock text-xs"></i>
+        <span>Workspace Locked &bull; Plan Required</span>
+      </span>
+    </div>
+
+    <div class="flex items-center gap-2.5">
+      <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+        <i class="pi pi-shield text-xs"></i>
+        <span>Prices Inclusive of 18% GST</span>
+      </span>
 
       <button
         type="button"
-        (click)="goToStep(2)"
-        [disabled]="hasActivePlan"
-        [ngClass]="hasActivePlan
-          ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-600'
-          : (currentStep === 2 ? 'bg-white dark:bg-slate-900 shadow-sm text-brand-600 dark:text-brand-400 font-bold' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-medium')"
-        class="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm transition"
+        (click)="logout()"
+        pTooltip="Sign Out"
+        tooltipPosition="bottom"
+        class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 hover:text-rose-500 hover:border-rose-300 transition cursor-pointer"
       >
-        <span class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" [ngClass]="hasActivePlan ? 'bg-slate-200 dark:bg-slate-800 text-slate-400' : (currentStep === 2 ? 'bg-brand-600 text-white' : 'bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300')">
-          <i *ngIf="hasActivePlan" class="pi pi-lock text-[10px]"></i>
-          <span *ngIf="!hasActivePlan">2</span>
-        </span>
-        <span>Omni-Channels</span>
-        <span *ngIf="!hasActivePlan && getSelectedChannels().length > 0" class="px-1.5 py-0.5 rounded-full text-[10px] bg-brand-500/20 text-brand-600 dark:text-brand-400 font-bold">
-          {{ getSelectedChannels().length }}
-        </span>
+        <i class="pi pi-sign-out text-xs"></i>
+        <span>Sign Out</span>
       </button>
     </div>
   </div>
 
-  <!-- Main 2-Column Funnel Grid -->
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start w-full">
-    <!-- ========================================================= -->
-    <!-- LEFT COLUMN: Step 1 Base Plans OR Step 2 Channels        -->
-    <!-- ========================================================= -->
-    <div class="lg:col-span-8 xl:col-span-9 space-y-6">
-      <!-- Active Plan Alert Banner -->
-      <div
-        *ngIf="hasActivePlan && currentSummary?.active_recharge as active"
-        class="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in"
-      >
-        <div class="flex items-start gap-3">
-          <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <i [class]="isManualPlan ? 'pi pi-info-circle text-xl' : 'pi pi-bolt text-xl'"></i>
-          </div>
-          <div>
-            <h4 class="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
-              <span>Active Plan in Progress: {{ active.plan_name_snapshot }}</span>
-              <span *ngIf="isManualPlan" class="px-2 py-0.5 text-[10px] rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-300 font-semibold uppercase">Manual Prepaid</span>
-              <span *ngIf="hasActiveAutoPay" class="px-2 py-0.5 text-[10px] rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-semibold uppercase">AutoPay Active</span>
-            </h4>
-            <p class="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-              <span *ngIf="isManualPlan">
-                You have <strong>{{ active.remaining_minutes | number }}</strong> minutes remaining. You can activate any 30-Day AutoPay plan below — your existing minutes will automatically roll over!
-              </span>
-              <span *ngIf="hasActiveAutoPay">
-                You have <strong>{{ active.remaining_minutes | number }}</strong> minutes remaining. You can upgrade to a higher tier anytime — additional minutes are added immediately.
-              </span>
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          (click)="navigateToUsage()"
-          class="whitespace-nowrap px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5 self-start sm:self-center"
-        >
-          <i class="pi pi-bolt text-xs"></i>
-          <span>Go to Top-Up Boosters</span>
-        </button>
+  <!-- Subscription Status Alert Banners -->
+  <div *ngIf="!hasActivePlan" class="max-w-6xl mx-auto mt-5">
+    <!-- Non-Admin Team Member Notice -->
+    <div
+      *ngIf="!isCompanyAdmin"
+      class="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 shadow-sm flex items-start gap-4"
+    >
+      <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg shrink-0 mt-0.5">
+        <i class="pi pi-shield"></i>
       </div>
+      <div class="flex-1">
+        <h3 class="text-sm font-bold text-amber-950 dark:text-amber-200">
+          Workspace Subscription Required
+        </h3>
+        <p class="text-xs text-amber-800/90 dark:text-amber-300/80 mt-1 leading-relaxed">
+          <strong>{{ companyName || 'Your company workspace' }}</strong> does not currently have an active subscription.
+          You are signed in as a team member (<strong>{{ currentUserEmail }}</strong>).
+          Only your company administrator can purchase or activate a subscription.
+        </p>
+        <p class="text-xs text-amber-700 dark:text-amber-400 mt-2 font-medium">
+          Please notify your company administrator to complete subscription activation. Once activated, workspace access will unlock for all team members automatically.
+        </p>
+      </div>
+    </div>
 
-      <!-- ========================================== -->
-      <!-- STEP 1 VIEW: BASE VOICE PLAN SELECTION     -->
-      <!-- ========================================== -->
-      <div *ngIf="currentStep === 1" class="space-y-6 animate-fade-in">
+    <!-- Admin Activation Required Banner -->
+    <div
+      *ngIf="isCompanyAdmin"
+      class="p-5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/50 shadow-sm flex items-start gap-4"
+    >
+      <div class="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg shrink-0 mt-0.5">
+        <i class="pi pi-sparkles"></i>
+      </div>
+      <div class="flex-1">
+        <h3 class="text-sm font-bold text-indigo-950 dark:text-indigo-200">
+          Activate Subscription for {{ companyName || 'Your Company Workspace' }}
+        </h3>
+        <p class="text-xs text-indigo-900/80 dark:text-indigo-300/80 mt-1 leading-relaxed">
+          Your company workspace is ready! Please select a base plan below and customize your social media add-ons to activate LeadAI and unlock access for you and your team members.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- HERO HEADER WITH SUBTLE ARCHITECTURAL GRID & CYCLE TOGGLE -->
+  <!-- ========================================================= -->
+  <div class="pricing-hero-grid max-w-5xl mx-auto pt-8 pb-10 text-center relative">
+    <h1 class="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-tight text-slate-950 dark:text-white">
+      Pricing Plans
+    </h1>
+    <p class="mt-3.5 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed font-medium">
+      Manage, track, and optimize your AI lead conversions with a plan built for your needs.
+    </p>
+  </div>
+
+  <!-- Active Plan Exclusivity Alert (Shown when client already has an active subscription) -->
+  <div
+    *ngIf="hasActivePlan && currentSummary?.active_recharge as active"
+    class="max-w-6xl mx-auto mb-8 p-5 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in"
+  >
+    <div class="flex items-start gap-3.5">
+      <div class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <i class="pi pi-exclamation-triangle text-lg"></i>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-amber-600 dark:text-amber-400">
+          Active Subscription Running: {{ active.plan_name_snapshot }}
+        </h4>
+        <p class="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+          Your account currently has an active plan with <strong>{{ active.remaining_minutes | number }}</strong> call minutes remaining. Need extra minutes or mid-cycle channel add-ons? Manage them directly from Usage &amp; Top-Ups.
+        </p>
+      </div>
+    </div>
+    <button
+      type="button"
+      (click)="navigateToUsage()"
+      class="whitespace-nowrap px-5 py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm transition flex items-center gap-1.5 self-start sm:self-center cursor-pointer"
+    >
+      <i class="pi pi-bolt text-xs"></i>
+      <span>Manage Top-Ups &amp; Add-ons</span>
+    </button>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- 3-CARD PRICING PLANS GRID (MATCHING REFERENCE SCREENSHOT) -->
+  <!-- ========================================================= -->
+  <div class="max-w-6xl mx-auto">
+    <!-- Loading Skeletons -->
+    <div *ngIf="isLoadingPlans" class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-7">
+      <div *ngFor="let i of [1, 2, 3]" class="p-8 rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5">
+        <p-skeleton width="45%" height="2rem"></p-skeleton>
+        <p-skeleton width="85%" height="1.25rem"></p-skeleton>
+        <div class="space-y-3 py-4">
+          <p-skeleton width="75%" height="1rem"></p-skeleton>
+          <p-skeleton width="80%" height="1rem"></p-skeleton>
+          <p-skeleton width="70%" height="1rem"></p-skeleton>
+          <p-skeleton width="65%" height="1rem"></p-skeleton>
+        </div>
+        <p-skeleton width="55%" height="3rem"></p-skeleton>
+        <p-skeleton width="100%" height="3.25rem" borderRadius="9999px"></p-skeleton>
+      </div>
+    </div>
+
+    <!-- Pricing Cards -->
+    <div *ngIf="!isLoadingPlans" class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-7 items-stretch">
+      <!-- ===================================================== -->
+      <!-- STANDARD PLANS FROM API (Start & Growth [Best Choice]) -->
+      <!-- ===================================================== -->
+      <div
+        *ngFor="let plan of standardPlans; let idx = index"
+        (click)="selectStandardPlan(plan, false)"
+        [ngClass]="[
+          isPopularPlan(plan, idx)
+            ? 'pricing-card-dark bg-[#0b0f19] border-[#1e293b] text-white shadow-2xl'
+            : 'pricing-card-light bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-sm',
+          isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
+            ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-950'
+            : ''
+        ]"
+        class="rounded-[28px] border p-7 lg:p-8 flex flex-col justify-between transition-all duration-300 relative cursor-pointer group"
+      >
+        <!-- Top Content: Title, Badge, Description, Feature List -->
         <div>
-          <h2 class="text-xl sm:text-2xl font-bold" style="color: var(--app-text)">
-            Step 1: Choose Your Monthly Base Plan
-          </h2>
-          <p class="text-xs sm:text-sm mt-0.5" style="color: var(--app-text-muted)">
-            Pick one of our pre-configured monthly tiers or customize your own minute quota with the interactive slider.
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <h2
+              class="text-2xl font-bold tracking-tight"
+              [ngClass]="isPopularPlan(plan, idx) ? 'text-white' : 'text-slate-950 dark:text-white'"
+            >
+              {{ getPlanTierTitle(plan, idx) }}
+            </h2>
+
+            <!-- 'best choice' pill on Growth card (matches reference image) -->
+            <span
+              *ngIf="isPopularPlan(plan, idx)"
+              class="px-3.5 py-1 rounded-full text-xs font-semibold bg-[#111d3b] text-[#4f8ff7] border border-[#1d3566] tracking-wide"
+            >
+              best choice
+            </span>
+
+            <!-- Selected indicator on non-popular card if chosen -->
+            <span
+              *ngIf="!isPopularPlan(plan, idx) && isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id"
+              class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+            >
+              selected
+            </span>
+          </div>
+
+          <p
+            class="text-xs sm:text-sm leading-relaxed min-h-[42px]"
+            [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'"
+          >
+            {{ plan.description || (idx === 0
+              ? 'Ideal for growing teams automating inbound & outbound AI voice qualification.'
+              : 'Built for high-velocity sales teams scaling multi-channel AI operations.') }}
+          </p>
+
+          <!-- Feature Checklist -->
+          <ul class="mt-6 space-y-3 text-xs sm:text-[13.5px]">
+            <li
+              *ngFor="let feat of getPlanFeatures(plan, idx)"
+              class="flex items-start gap-2.5"
+            >
+              <i
+                class="pi pi-check text-xs mt-1 font-bold flex-shrink-0"
+                [ngClass]="isPopularPlan(plan, idx) ? 'text-[#4f8ff7]' : 'text-blue-500'"
+              ></i>
+              <span
+                class="font-medium leading-snug"
+                [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-200' : 'text-slate-700 dark:text-slate-200'"
+              >
+                {{ feat }}
+              </span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Bottom Content: Price, CTA Pill Button, Sub-caption -->
+        <div class="pt-8 mt-6">
+          <div class="flex items-baseline justify-between gap-2 mb-6">
+            <div class="flex items-baseline gap-1.5">
+              <span
+                class="text-4xl lg:text-[42px] font-extrabold tracking-tight"
+                [ngClass]="isPopularPlan(plan, idx) ? 'text-white' : 'text-slate-950 dark:text-white'"
+              >
+                ₹{{ getCardDisplayMonthlyPrice(plan.price) | number }}
+              </span>
+              <span
+                class="text-xs font-medium"
+                [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-400' : 'text-slate-400 dark:text-slate-500'"
+              >
+                / per month
+              </span>
+            </div>
+
+            <span
+              class="text-xs font-semibold"
+              [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-300' : 'text-slate-700 dark:text-slate-300'"
+            >
+              {{ billingCycle === 'yearly' ? 'billed yearly' : 'billed monthly' }}
+            </span>
+          </div>
+
+          <!-- Pill CTA Button -->
+          <button
+            type="button"
+            [id]="'btn-select-plan-' + idx"
+            (click)="$event.stopPropagation(); selectStandardPlan(plan, true)"
+            [disabled]="hasActivePlan"
+            [ngClass]="hasActivePlan
+              ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+              : (isPopularPlan(plan, idx)
+                ? 'bg-white text-slate-950 hover:bg-slate-100 shadow-lg'
+                : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100')"
+            class="w-full py-3.5 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <i
+              *ngIf="isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id"
+              class="pi pi-check-circle text-sm"
+            ></i>
+            <span>
+              {{ hasActivePlan
+                ? 'Plan Active'
+                : (isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
+                  ? 'Selected • Add Social Channels ↓'
+                  : (idx === 0 ? 'Select Start' : 'Select Growth')) }}
+            </span>
+          </button>
+
+          <p
+            class="text-center text-[11px] mt-3 font-medium"
+            [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-400' : 'text-slate-400 dark:text-slate-500'"
+          >
+            {{ getPlanCycleMinutes(plan) | number }} mins included • Inclusive of 18% GST
           </p>
         </div>
-
-        <!-- Skeletons while loading -->
-        <div *ngIf="isLoadingPlans" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          <div *ngFor="let i of [1, 2, 3]" class="card-base p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <p-skeleton width="60%" height="2rem"></p-skeleton>
-            <p-skeleton width="40%" height="1.5rem"></p-skeleton>
-            <p-skeleton width="100%" height="4rem"></p-skeleton>
-            <p-skeleton width="100%" height="2.5rem"></p-skeleton>
-          </div>
-        </div>
-
-        <!-- Plans Grid -->
-        <div *ngIf="!isLoadingPlans" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          <!-- Standard Master Plans (Monthly Basic, Monthly Pro) -->
-          <div
-            *ngFor="let plan of standardPlans"
-            [ngClass]="selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
-              ? 'ring-2 ring-brand-500 shadow-xl border-brand-500/50 bg-brand-500/[0.03]'
-              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'"
-            class="card-base p-6 lg:p-7 rounded-2xl border flex flex-col justify-between transition-all duration-200 relative"
-          >
-            <!-- Top Tag -->
-            <div class="flex items-center justify-between mb-4">
-              <!-- Dynamic AutoPay Tag -->
-              <p-tag
-                *ngIf="isAutoPayPlan(plan)"
-                severity="info"
-                value="AutoPay"
-                icon="pi pi-sync"
-                [rounded]="true"
-                styleClass="text-xs font-semibold"
-              ></p-tag>
-              <p-tag
-                *ngIf="!isAutoPayPlan(plan)"
-                severity="secondary"
-                value="One-Time"
-                icon="pi pi-bolt"
-                [rounded]="true"
-                styleClass="text-xs font-semibold"
-              ></p-tag>
-
-              <!-- State Tag: Current Plan / Selected / Upgrade Available -->
-              <div>
-                <p-tag
-                  *ngIf="isCurrentPlan(plan)"
-                  severity="warn"
-                  value="Current Active Plan"
-                  [rounded]="true"
-                  styleClass="text-xs font-semibold"
-                ></p-tag>
-                <p-tag
-                  *ngIf="!isCurrentPlan(plan) && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id"
-                  severity="success"
-                  value="Selected"
-                  icon="pi pi-check"
-                  [rounded]="true"
-                  styleClass="text-xs font-semibold"
-                ></p-tag>
-                <p-tag
-                  *ngIf="!isCurrentPlan(plan) && isHigherTier(plan) && (selectedPlanType !== 'standard' || selectedStandardPlan?.id !== plan.id)"
-                  severity="help"
-                  value="Upgrade Available"
-                  icon="pi pi-arrow-up"
-                  [rounded]="true"
-                  styleClass="text-xs font-semibold"
-                ></p-tag>
-              </div>
-            </div>
-
-            <!-- Plan Info -->
-            <div>
-              <h3 class="text-xl font-black" style="color: var(--app-text)">
-                {{ getPlanDisplayTitle(plan) }}
-              </h3>
-              <p class="text-xs sm:text-sm mt-1.5 min-h-[36px]" style="color: var(--app-text-muted)">
-                {{ plan.description || ('30 days validity with ' + (plan.included_minutes | number) + ' minutes of AI voice calling.') }}
-              </p>
-
-              <!-- Price & Minutes Box -->
-              <div class="my-5 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
-                <div class="flex items-baseline gap-1">
-                  <span class="text-3xl font-black" style="color: var(--app-text)">
-                    ₹{{ plan.price | number }}
-                  </span>
-                  <span class="text-xs sm:text-sm font-medium" style="color: var(--app-text-muted)">
-                    / month
-                  </span>
-                </div>
-                <div class="flex items-center justify-between text-xs sm:text-sm mt-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-700">
-                  <span class="font-bold text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
-                    <i class="pi pi-phone text-xs"></i> {{ plan.included_minutes | number }} Call Mins
-                  </span>
-                  <span class="text-slate-400 text-xs">
-                    ≈ ₹{{ (plan.rate_per_minute || (plan.included_minutes > 0 ? (plan.price / plan.included_minutes) : 4.0)) | number:'1.2-2' }}/min
-                  </span>
-                </div>
-              </div>
-
-              <!-- Feature Bullets -->
-              <ul class="space-y-2 text-xs sm:text-sm mb-6" style="color: var(--app-text)">
-                <li class="flex items-center gap-2.5">
-                  <i class="pi pi-check text-emerald-500 font-bold text-xs sm:text-sm"></i>
-                  <span>Conversational Voice AI Agent</span>
-                </li>
-                <li class="flex items-center gap-2.5">
-                  <i class="pi pi-check text-emerald-500 font-bold text-xs sm:text-sm"></i>
-                  <span>Call Recordings & Transcription</span>
-                </li>
-                <li class="flex items-center gap-2.5">
-                  <i class="pi pi-check text-emerald-500 font-bold text-xs sm:text-sm"></i>
-                  <span>Lead Scoring & CRM Auto-Sync</span>
-                </li>
-                <li class="flex items-center gap-2.5">
-                  <i class="pi pi-check text-emerald-500 font-bold text-xs sm:text-sm"></i>
-                  <span>Priority Webhook Delivery</span>
-                </li>
-              </ul>
-            </div>
-
-            <!-- Selection Button (Exclusive Click Trigger) -->
-            <button
-              type="button"
-              (click)="selectStandardPlan(plan)"
-              [disabled]="isPlanLocked(plan)"
-              [ngClass]="isCurrentPlan(plan)
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                : (isPlanLocked(plan)
-                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                  : (selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
-                    ? 'bg-brand-600 text-white shadow-md hover:bg-brand-500'
-                    : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'))"
-              class="w-full py-3 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2"
-            >
-              <i *ngIf="isCurrentPlan(plan)" class="pi pi-check-circle text-xs text-emerald-500"></i>
-              <i *ngIf="!isCurrentPlan(plan) && isPlanLocked(plan)" class="pi pi-lock text-xs"></i>
-              <i *ngIf="!isPlanLocked(plan) && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id" class="pi pi-check text-xs"></i>
-              <i *ngIf="!isPlanLocked(plan) && isHigherTier(plan) && (selectedPlanType !== 'standard' || selectedStandardPlan?.id !== plan.id)" class="pi pi-arrow-up text-xs text-brand-500"></i>
-              <span>{{ getPlanActionLabel(plan) }}</span>
-            </button>
-          </div>
-
-          <!-- ========================================== -->
-          <!-- CUSTOM PLAN CARD WITH INTERACTIVE SLIDER   -->
-          <!-- ========================================== -->
-          <div
-            [ngClass]="selectedPlanType === 'custom'
-              ? 'ring-2 ring-indigo-500 shadow-xl border-indigo-500/50 bg-indigo-500/[0.04]'
-              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'"
-            class="card-base p-6 lg:p-7 rounded-2xl border flex flex-col justify-between transition-all duration-200 relative"
-          >
-            <!-- Top Tag -->
-            <div class="flex items-center justify-between mb-4">
-              <p-tag
-                severity="info"
-                value="AutoPay"
-                icon="pi pi-sync"
-                [rounded]="true"
-                styleClass="text-xs font-semibold"
-              ></p-tag>
-              <div>
-                <p-tag
-                  *ngIf="selectedPlanType === 'custom'"
-                  severity="success"
-                  value="Selected"
-                  icon="pi pi-check"
-                  [rounded]="true"
-                  styleClass="text-xs font-semibold"
-                ></p-tag>
-                <p-tag
-                  *ngIf="selectedPlanType !== 'custom'"
-                  severity="secondary"
-                  value="Build Your Own"
-                  [rounded]="true"
-                  styleClass="text-xs font-semibold"
-                ></p-tag>
-              </div>
-            </div>
-
-            <div>
-              <h3 class="text-xl font-black flex items-center gap-2" style="color: var(--app-text)">
-                <span>Custom Voice Bundle</span>
-                <i class="pi pi-sliders-h text-indigo-500 text-base"></i>
-              </h3>
-              <p class="text-xs sm:text-sm mt-1.5 min-h-[36px]" style="color: var(--app-text-muted)">
-                Fine-tune call minutes from 100 up to 6,000 minutes &#64; ₹4.00/min.
-              </p>
-
-              <!-- Price Box -->
-              <div class="my-5 p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/60">
-                <div class="flex items-baseline gap-1">
-                  <span class="text-3xl font-black text-indigo-600 dark:text-indigo-400">
-                    ₹{{ (customMinutes * CUSTOM_RATE_PER_MINUTE) | number }}
-                  </span>
-                  <span class="text-xs sm:text-sm font-medium" style="color: var(--app-text-muted)">
-                    / month
-                  </span>
-                </div>
-                <div class="flex items-center justify-between text-xs sm:text-sm mt-2.5 pt-2.5 border-t border-indigo-200/50 dark:border-indigo-800/50">
-                  <span class="font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
-                    <i class="pi pi-phone text-xs"></i> {{ customMinutes | number }} Call Minutes
-                  </span>
-                  <span class="text-slate-400 text-xs">
-                    Fixed &#64; ₹4.00/min
-                  </span>
-                </div>
-              </div>
-
-              <!-- Slider & Controls -->
-              <div class="space-y-3.5 mb-5">
-                <div class="flex items-center justify-between">
-                  <span class="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-300">
-                    Adjust minutes:
-                  </span>
-                  <p-inputNumber
-                    [(ngModel)]="customMinutes"
-                    [min]="MIN_CUSTOM_MINUTES"
-                    [max]="MAX_CUSTOM_MINUTES"
-                    [step]="50"
-                    [disabled]="hasActivePlan"
-                    suffix=" Mins"
-                    (ngModelChange)="onCustomMinutesChange($event)"
-                    inputStyleClass="w-28 text-right text-xs font-bold py-1 px-2 border rounded-lg"
-                  ></p-inputNumber>
-                </div>
-
-                <p-slider
-                  [(ngModel)]="customMinutes"
-                  [min]="MIN_CUSTOM_MINUTES"
-                  [max]="MAX_CUSTOM_MINUTES"
-                  [step]="50"
-                  [disabled]="hasActivePlan"
-                  (onChange)="onCustomMinutesChange(customMinutes)"
-                  styleClass="w-full"
-                ></p-slider>
-
-                <!-- Quick Presets -->
-                <div class="flex flex-wrap items-center gap-1.5 pt-1">
-                  <button
-                    type="button"
-                    *ngFor="let preset of [250, 500, 1000, 2500, 5000]"
-                    [disabled]="hasActivePlan"
-                    (click)="customMinutes = preset"
-                    [ngClass]="hasActivePlan
-                      ? 'opacity-40 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400'
-                      : (customMinutes === preset ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200')"
-                    class="px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 transition"
-                  >
-                    {{ preset }}m
-                  </button>
-                </div>
-              </div>
-
-              <!-- Custom Plan Bullets -->
-              <ul class="space-y-2 text-xs sm:text-sm mb-6" style="color: var(--app-text)">
-                <li class="flex items-center gap-2.5">
-                  <i class="pi pi-check text-emerald-500 font-bold text-xs sm:text-sm"></i>
-                  <span>Tailored minute quota</span>
-                </li>
-                <li class="flex items-center gap-2.5">
-                  <i class="pi pi-check text-emerald-500 font-bold text-xs sm:text-sm"></i>
-                  <span>Unlimited CRM contacts & leads</span>
-                </li>
-                <li class="flex items-center gap-2.5">
-                  <i class="pi pi-check text-emerald-500 font-bold text-xs sm:text-sm"></i>
-                  <span>Full Voice AI Agent & Analytics</span>
-                </li>
-              </ul>
-            </div>
-
-            <!-- Selection Button (Exclusive Click Trigger) -->
-            <button
-              type="button"
-              (click)="selectCustomPlan()"
-              [disabled]="hasActivePlan"
-              [ngClass]="hasActivePlan
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                : (selectedPlanType === 'custom'
-                  ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-500'
-                  : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800')"
-              class="w-full py-3 rounded-xl font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2"
-            >
-              <i *ngIf="hasActivePlan" class="pi pi-lock text-xs"></i>
-              <i *ngIf="!hasActivePlan && selectedPlanType === 'custom'" class="pi pi-check text-xs"></i>
-              <span>{{ hasActivePlan ? 'Plan Active (Locked)' : (selectedPlanType === 'custom' ? 'Selected Custom Bundle' : 'Select Custom Bundle') }}</span>
-            </button>
-          </div>
-        </div>
       </div>
 
-      <!-- ========================================== -->
-      <!-- STEP 2 VIEW: OMNI-CHANNEL SELECTION        -->
-      <!-- ========================================== -->
-      <div *ngIf="currentStep === 2" class="space-y-6 animate-fade-in">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-bold" style="color: var(--app-text)">
-              Step 2: Supercharge With Omni-Channel Add-ons
+      <!-- ===================================================== -->
+      <!-- CARD 3: ENTERPRISE / CUSTOM PRICING CARD              -->
+      <!-- ===================================================== -->
+      <div
+        (click)="selectCustomPlan(false)"
+        [ngClass]="[
+          'pricing-card-light bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-sm',
+          isPlanSelected && selectedPlanType === 'custom'
+            ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-950'
+            : ''
+        ]"
+        class="rounded-[28px] border p-7 lg:p-8 flex flex-col justify-between transition-all duration-300 relative cursor-pointer"
+      >
+        <div>
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <h2 class="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">
+              Enterprise
             </h2>
-            <p class="text-xs sm:text-sm mt-0.5" style="color: var(--app-text-muted)">
-              Connect social media channels with 24/7 AI conversational auto-replies. Valid for 30 days recurring.
-            </p>
-              <button
-            type="button"
-            (click)="goToStep(1)"
-            class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            <span
+              *ngIf="!isPlanSelected || selectedPlanType !== 'custom'"
+              class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 tracking-wide"
+            >
+              Custom Quota
+            </span>
+            <span
+              *ngIf="isPlanSelected && selectedPlanType === 'custom'"
+              class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+            >
+              selected
+            </span>
+          </div>
+
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed min-h-[42px]">
+            Perfect for high-volume outbound teams, enterprises, and custom AI voice minute allocations.
+          </p>
+
+          <!-- Checklist matching reference screenshot -->
+          <ul class="mt-6 space-y-2.5 text-xs sm:text-[13.5px]">
+            <li class="flex items-start gap-2.5">
+              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
+              <span class="font-medium text-slate-700 dark:text-slate-200">Everything in Growth</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
+              <span class="font-medium text-slate-700 dark:text-slate-200">
+                Custom {{ (billingCycle === 'yearly' ? customMinutes * 12 : customMinutes) | number }} call minutes ({{ customMinutes | number }} mins/mo)
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
+              <span class="font-medium text-slate-700 dark:text-slate-200">Dedicated account &amp; webhook SLA</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
+              <span class="font-medium text-slate-700 dark:text-slate-200">Multi-user role permissions</span>
+            </li>
+          </ul>
+
+          <!-- Interactive Minute Customizer Box -->
+          <div
+            (click)="$event.stopPropagation()"
+            class="mt-5 p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 space-y-3"
           >
-            <i class="pi pi-arrow-left text-xs"></i> Change Base Plan
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-slate-600 dark:text-slate-300">Custom Voice Quota:</span>
+              <span class="font-extrabold text-blue-600 dark:text-blue-400">
+                {{ customMinutes | number }} Mins / mo (&#64; ₹{{ customRatePerMinute }}/m)
+              </span>
+            </div>
+
+            <p-slider
+              [(ngModel)]="customMinutes"
+              [min]="MIN_CUSTOM_MINUTES"
+              [max]="MAX_CUSTOM_MINUTES"
+              [step]="50"
+              [disabled]="hasActivePlan"
+              (onChange)="onCustomMinutesChange(customMinutes)"
+              styleClass="w-full"
+            ></p-slider>
+
+            <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <button
+                type="button"
+                *ngFor="let preset of [500, 1500, 3000, 6000]"
+                [disabled]="hasActivePlan"
+                (click)="onCustomMinutesChange(preset)"
+                [ngClass]="customMinutes === preset
+                  ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-bold'
+                  : 'bg-slate-100 dark:bg-slate-700/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200'"
+                class="px-2.5 py-1 rounded-full text-[11px] transition cursor-pointer"
+              >
+                {{ preset | number }}m
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Content: Price, Pill CTA Button, Sub-caption -->
+        <div class="pt-8 mt-6">
+          <div class="flex items-baseline justify-between gap-2 mb-6">
+            <div class="flex items-baseline gap-1.5">
+              <span class="text-4xl lg:text-[42px] font-extrabold tracking-tight text-slate-950 dark:text-white">
+                ₹{{ getCardDisplayMonthlyPrice(customMinutes * customRatePerMinute) | number }}
+              </span>
+              <span class="text-xs font-medium text-slate-400 dark:text-slate-500">
+                / per month
+              </span>
+            </div>
+
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              {{ billingCycle === 'yearly' ? 'billed yearly' : 'billed monthly' }}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            id="btn-select-custom-plan"
+            (click)="$event.stopPropagation(); selectCustomPlan(true)"
+            [disabled]="hasActivePlan"
+            [ngClass]="hasActivePlan
+              ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+              : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100'"
+            class="w-full py-3.5 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <i *ngIf="isPlanSelected && selectedPlanType === 'custom'" class="pi pi-check-circle text-sm"></i>
+            <span>
+              {{ hasActivePlan
+                ? 'Plan Active'
+                : (isPlanSelected && selectedPlanType === 'custom'
+                  ? 'Selected • Add Social Channels ↓'
+                  : 'Select Enterprise') }}
+            </span>
+          </button>
+
+          <p class="text-center text-[11px] mt-3 font-medium text-slate-400 dark:text-slate-500">
+            {{ (billingCycle === 'yearly' ? customMinutes * 12 : customMinutes) | number }} mins included • Inclusive of 18% GST
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prompt banner if user hasn't clicked a plan yet -->
+    <div
+      *ngIf="!isLoadingPlans && !isPlanSelected && !hasActivePlan"
+      class="mt-8 p-4 rounded-2xl bg-slate-100/80 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 text-center flex items-center justify-center gap-2.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 animate-fade-in"
+    >
+      <i class="pi pi-hand-pointer text-blue-500"></i>
+      <span>
+        Select any plan above to choose optional <strong>Social Media Support Add-ons</strong> and view your <strong>Side-by-Side Tax-Inclusive Billing Summary</strong>.
+      </span>
+    </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- REVEALED WORKSPACE: SOCIAL MEDIA ADD-ONS & SIDE-BY-SIDE BILLING SUMMARY -->
+  <!-- ======================================================================= -->
+  <div
+    id="addons-billing-section"
+    *ngIf="isPlanSelected && !isLoadingPlans"
+    class="max-w-6xl mx-auto mt-12 pt-10 border-t border-slate-200 dark:border-slate-800 animate-fade-in"
+  >
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <!-- ========================================================= -->
+      <!-- LEFT COLUMN (7 Cols): SOCIAL MEDIA SUPPORT ADD-ONS        -->
+      <!-- ========================================================= -->
+      <div class="lg:col-span-7 space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div class="max-w-xl">
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-1">
+              <i class="pi pi-sparkles text-xs"></i> Optional Add-On Services
+            </span>
+            <h2 class="text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white">
+              Choose Add-On Services &amp; Channels
+            </h2>
+            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Supercharge your selected plan with dedicated voice call facilities, automated blog publishing, and 24/7 omni-channel messaging.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            (click)="toggleAllChannels()"
+            [disabled]="hasActivePlan"
+            class="self-start sm:self-center whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          >
+            {{ areAllChannelsSelected() ? 'Clear All Channels' : 'Select All Channels' }}
           </button>
         </div>
 
-        <!-- Channel Retention Banner for Voice Tier Upgrades -->
-        <div *ngIf="hasActivePlan && activeSubscriptionChannels.length > 0" class="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
-          <i class="pi pi-shield-check text-emerald-500 text-lg mt-0.5"></i>
-          <div>
-            <h4 class="text-xs sm:text-sm font-bold text-emerald-700 dark:text-emerald-300">
-              Active Omni-Channels Preserved
-            </h4>
-            <p class="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
-              Your ongoing channels ({{ activeSubscriptionChannels.join(', ') }}) remain active without interruption until your cycle renewal date ({{ currentSummary?.active_recharge?.expires_at | date:'mediumDate' }}). Upgrading your voice plan carries them forward automatically.
-            </p>
-          </div>
-        </div>
-
-        <!-- Channel Cards Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- Social Media Channels Grid (Loaded from API) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div
-            *ngFor="let ch of CHANNEL_OPTIONS"
-            [ngClass]="isChannelActiveOnSubscription(ch.key)
-              ? 'ring-2 ring-emerald-500/50 shadow-md border-emerald-500/30 bg-emerald-500/[0.02]'
-              : (hasActivePlan
-                ? 'opacity-60 border-slate-200 dark:border-slate-800'
-                : (selectedChannelsMap[ch.key]
-                  ? 'ring-2 ring-brand-500 shadow-lg border-brand-500/50 bg-brand-500/[0.03]'
-                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'))"
-            class="card-base p-5 rounded-2xl border flex flex-col justify-between transition-all duration-200 relative"
+            *ngFor="let ch of channelOptions"
+            (click)="toggleChannel(ch.key)"
+            [ngClass]="selectedChannelsMap[ch.key]
+              ? 'ring-2 ring-slate-950 dark:ring-white bg-white dark:bg-slate-900 border-transparent shadow-lg'
+              : 'bg-[#f8f9fa] dark:bg-slate-900/60 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'"
+            class="p-5 rounded-3xl border flex flex-col justify-between transition-all duration-200 cursor-pointer relative"
           >
             <div>
+              <!-- Channel Header -->
               <div class="flex items-start justify-between gap-3 mb-3">
                 <div class="flex items-center gap-3">
                   <div
-                    class="w-11 h-11 rounded-xl flex items-center justify-center text-lg shadow-sm"
-                    [style.background-color]="ch.color + '15'"
+                    class="w-11 h-11 rounded-2xl flex items-center justify-center text-lg flex-shrink-0 shadow-2xs"
+                    [style.background-color]="ch.color + '18'"
                     [style.color]="ch.color"
                   >
                     <i [class]="ch.icon"></i>
                   </div>
                   <div>
-                    <h3 class="text-base font-bold" style="color: var(--app-text)">
+                    <h3 class="text-sm sm:text-base font-bold text-slate-950 dark:text-white leading-snug">
                       {{ ch.name }}
                     </h3>
-                    <span class="text-[11px] font-semibold text-slate-500">
-                      {{ ch.durationDays }} Days Recurring
+                    <span class="text-[11px] font-medium text-slate-400">
+                      {{ billingCycle === 'yearly' ? '365 Days Sync' : (ch.durationDays + ' Days Sync') }}
                     </span>
                   </div>
                 </div>
-                <p-tag
-                  *ngIf="isChannelActiveOnSubscription(ch.key)"
-                  severity="success"
-                  value="Active on Subscription"
-                  icon="pi pi-check"
-                  [rounded]="true"
-                  styleClass="text-[10px] font-semibold"
-                ></p-tag>
-                <p-tag
-                  *ngIf="!isChannelActiveOnSubscription(ch.key)"
-                  severity="info"
-                  value="AutoPay"
-                  icon="pi pi-sync"
-                  [rounded]="true"
-                  styleClass="text-[10px] font-semibold"
-                ></p-tag>
+
+                <!-- Check Circle Indicator -->
+                <div
+                  class="w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all flex-shrink-0"
+                  [ngClass]="selectedChannelsMap[ch.key]
+                    ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                    : 'border border-slate-300 dark:border-slate-700 text-transparent'"
+                >
+                  <i class="pi pi-check text-[10px] font-bold"></i>
+                </div>
               </div>
 
-              <p class="text-xs min-h-[34px] leading-relaxed" style="color: var(--app-text-muted)">
+              <!-- Channel Description -->
+              <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4 min-h-[34px]">
                 {{ ch.description }}
               </p>
 
-              <!-- Price Box -->
-              <div class="my-3.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
-                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Channel Addon
-                </span>
-                <span class="text-lg font-black" style="color: var(--app-text)">
-                  + ₹{{ ch.monthlyPrice | number }} <span class="text-xs text-slate-400 font-normal">/ mo</span>
-                </span>
-              </div>
-
-              <!-- Features -->
-              <ul class="space-y-1.5 text-xs mb-5" style="color: var(--app-text)">
-                <li *ngFor="let feat of ch.features" class="flex items-center gap-2">
-                  <i class="pi pi-check-circle text-emerald-500 text-xs"></i>
-                  <span>{{ feat }}</span>
+              <!-- Feature Bullets -->
+              <ul class="space-y-1.5 text-xs mb-5">
+                <li
+                  *ngFor="let feat of ch.features"
+                  class="flex items-center gap-2 text-slate-700 dark:text-slate-300"
+                >
+                  <i class="pi pi-check text-blue-500 text-[10px] font-bold"></i>
+                  <span class="truncate">{{ feat }}</span>
                 </li>
               </ul>
             </div>
 
-            <!-- Button Toggle (Only click trigger) -->
-            <button
-              type="button"
-              (click)="toggleChannel(ch.key)"
-              [disabled]="hasActivePlan"
-              [ngClass]="isChannelActiveOnSubscription(ch.key)
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold cursor-default'
-                : (hasActivePlan
-                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
-                  : (selectedChannelsMap[ch.key]
-                    ? 'bg-brand-600 text-white'
-                    : 'border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'))"
-              class="w-full py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2"
-            >
-              <i *ngIf="isChannelActiveOnSubscription(ch.key)" class="pi pi-check-circle text-xs text-emerald-500"></i>
-              <i *ngIf="!isChannelActiveOnSubscription(ch.key) && hasActivePlan" class="pi pi-lock text-xs"></i>
-              <i *ngIf="!hasActivePlan" [class]="selectedChannelsMap[ch.key] ? 'pi pi-check' : 'pi pi-plus'"></i>
-              <span>{{ isChannelActiveOnSubscription(ch.key) ? 'Active on Subscription' : (hasActivePlan ? 'Plan Active (Locked)' : (selectedChannelsMap[ch.key] ? 'Channel Included' : 'Add to Subscription')) }}</span>
-            </button>
+            <!-- Bottom Price & Add Action -->
+            <div class="pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <span class="text-lg font-extrabold text-slate-950 dark:text-white">
+                  +₹{{ getCardDisplayMonthlyPrice(ch.monthlyPrice) | number }}
+                </span>
+                <span class="text-[11px] text-slate-400 font-medium"> / mo</span>
+              </div>
+
+              <span
+                class="px-3 py-1 rounded-full text-xs font-bold transition"
+                [ngClass]="selectedChannelsMap[ch.key]
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300'"
+              >
+                {{ selectedChannelsMap[ch.key] ? 'Added ✓' : '+ Add Support' }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ========================================================= -->
-    <!-- RIGHT COLUMN: Sticky Order Summary & AutoPay Dock        -->
-    <!-- ========================================================= -->
-    <div class="lg:col-span-4 xl:col-span-3 sticky top-6">
-      <div class="card-base rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-xl space-y-6">
-        <!-- Summary Header -->
-        <div class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
-          <div class="flex items-center gap-2">
-            <i class="pi pi-receipt text-brand-600 dark:text-brand-400 text-base"></i>
-            <h3 class="font-extrabold text-base" style="color: var(--app-text)">
-              Summary & AutoPay
-            </h3>
-          </div>
-          <p-tag severity="info" [value]="'Step ' + currentStep + ' of 2'"></p-tag>
-        </div>
-
-        <!-- Section 1: Selected Base Voice Plan -->
-        <div>
-          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-            1. Base Voice Plan
-          </span>
-          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-start justify-between gap-2">
+      <!-- ========================================================= -->
+      <!-- RIGHT COLUMN (5 Cols): SIDE-BY-SIDE TAX-INCLUSIVE BILLING -->
+      <!-- ========================================================= -->
+      <div class="lg:col-span-5 sticky top-6">
+        <div class="rounded-[28px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-xl space-y-5">
+          <!-- Header -->
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
             <div>
-              <h4 class="text-sm font-bold flex items-center gap-1.5" style="color: var(--app-text)">
-                <i class="pi pi-phone text-brand-600 dark:text-brand-400 text-xs"></i>
-                <span>{{ getBasePlanName() }}</span>
-              </h4>
-              <span class="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                {{ getBasePlanMinutes() | number }} Call Minutes • 30 Days
-              </span>
+              <h3 class="text-lg font-extrabold text-slate-950 dark:text-white">
+                Billing Summary
+              </h3>
+              <p class="text-xs text-slate-400 mt-0.5">
+                Side-by-side itemized statement (Inclusive of 18% GST)
+              </p>
             </div>
-            <span class="text-sm font-extrabold" style="color: var(--app-text)">
-              ₹{{ getBasePlanPrice() | number }}
-            </span>
-          </div>
-        </div>
-
-        <!-- Section 2: Selected Omni-Channels -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-              2. Omni-Channels (30 Days)
-            </span>
-            <span class="text-xs font-semibold text-brand-600 dark:text-brand-400" *ngIf="getSelectedChannels().length > 0">
-              {{ getSelectedChannels().length }} selected
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 capitalize">
+              {{ billingCycle }} Cycle
             </span>
           </div>
 
-          <div *ngIf="getSelectedChannels().length === 0" class="p-3.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center">
-            <span class="text-xs text-slate-400 italic">No channel add-ons selected</span>
+          <!-- 1. Selected Base Voice Plan Line Item -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span>1. Selected Base Plan</span>
+              <span>Amount (Incl. GST)</span>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-[#f8f9fa] dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-start justify-between gap-3">
+              <div>
+                <div class="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
+                  <i class="pi pi-phone text-blue-500 text-xs"></i>
+                  <span>{{ getBasePlanName() }}</span>
+                </div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  {{ getBasePlanMinutes() | number }} AI Voice Minutes • {{ billingCycle === 'yearly' ? '365 Days' : '30 Days' }}
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <span class="text-sm font-extrabold text-slate-950 dark:text-white">
+                  ₹{{ getBasePlanGrossCyclePrice() | number }}
+                </span>
+                <span class="block text-[10px] text-slate-400">
+                  {{ billingCycle === 'yearly' ? '/ year' : '/ month' }}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div *ngIf="getSelectedChannels().length > 0" class="space-y-2">
+          <!-- 2. Selected Add-On Services Line Items -->
+          <div class="space-y-2">
+            <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <span>2. Add-On Services ({{ getSelectedChannels().length }})</span>
+              <span *ngIf="getSelectedChannels().length > 0">₹{{ getChannelsGrossCycleTotal() | number }}</span>
+            </div>
+
             <div
-              *ngFor="let ch of getSelectedChannels()"
-              class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between gap-2"
+              *ngIf="getSelectedChannels().length === 0"
+              class="p-3.5 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-center"
             >
-              <div class="flex items-center gap-2">
-                <i [class]="ch.icon" [style.color]="ch.color"></i>
-                <span class="text-xs font-semibold" style="color: var(--app-text)">
-                  {{ ch.name.split(' ')[0] }}
+              <span class="text-xs text-slate-400">
+                No add-on services selected (Base Voice Plan only)
+              </span>
+            </div>
+
+            <div *ngIf="getSelectedChannels().length > 0" class="space-y-2">
+              <div
+                *ngFor="let ch of getSelectedChannels()"
+                class="px-3.5 py-2.5 rounded-2xl bg-[#f8f9fa] dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between gap-2"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <i [class]="ch.icon" [style.color]="ch.color" class="text-sm flex-shrink-0"></i>
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                    {{ ch.name }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <span class="text-xs font-bold text-slate-900 dark:text-white">
+                    +₹{{ (billingCycle === 'yearly' ? ch.monthlyPrice * 12 : ch.monthlyPrice) | number }}
+                  </span>
+                  <button
+                    type="button"
+                    (click)="toggleChannel(ch.key)"
+                    class="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition cursor-pointer"
+                    pTooltip="Remove service"
+                  >
+                    <i class="pi pi-times text-[10px]"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Tax & Total Breakdown Box (18% GST Back-Calculated from Inclusive Price) -->
+          <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-2.5 text-xs">
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <span>Base Voice Plan (Incl. GST)</span>
+              <span class="font-semibold">₹{{ getBasePlanGrossCyclePrice() | number:'1.2-2' }}</span>
+            </div>
+
+            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+              <span>Add-On Services ({{ getSelectedChannels().length }})</span>
+              <span class="font-semibold">₹{{ getChannelsGrossCycleTotal() | number:'1.2-2' }}</span>
+            </div>
+
+            <div
+              *ngIf="billingCycle === 'yearly' && getYearlyDiscountAmount() > 0"
+              class="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-semibold"
+            >
+              <span>Yearly Billing Discount (15% Off)</span>
+              <span>-₹{{ getYearlyDiscountAmount() | number:'1.2-2' }}</span>
+            </div>
+
+            <div class="border-t border-dashed border-slate-200 dark:border-slate-700 my-1"></div>
+
+            <!-- Back-Calculated Net Taxable & 18% GST Breakdown -->
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+              <span>Net Taxable Amount (Excl. GST)</span>
+              <span class="font-medium">₹{{ getTaxableSubtotalExclTax() | number:'1.2-2' }}</span>
+            </div>
+
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+              <span>Included GST ({{ GST_TAX_RATE }}% Tax)</span>
+              <span class="font-medium">₹{{ getIncludedGstAmount() | number:'1.2-2' }}</span>
+            </div>
+
+            <!-- Grand Total Inclusive of Taxes -->
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-baseline justify-between">
+              <div>
+                <span class="text-sm font-extrabold text-slate-950 dark:text-white block">
+                  Total Amount (Incl. Taxes)
+                </span>
+                <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Includes ₹{{ getIncludedGstAmount() | number:'1.2-2' }} GST (No extra tax added)
                 </span>
               </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold" style="color: var(--app-text)">
-                  +₹{{ ch.monthlyPrice | number }}
+              <div class="text-right">
+                <span class="text-2xl sm:text-3xl font-black text-slate-950 dark:text-white">
+                  ₹{{ getTotalPayableInclusiveTax() | number }}
                 </span>
-                <button
-                  type="button"
-                  (click)="toggleChannel(ch.key)"
-                  [disabled]="hasActivePlan"
-                  [ngClass]="hasActivePlan ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-red-500'"
-                  class="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 transition"
-                  pTooltip="Remove channel"
-                >
-                  <i class="pi pi-times text-[10px]"></i>
-                </button>
+                <span class="block text-[11px] text-slate-400">
+                  /{{ billingCycle === 'yearly' ? 'year' : 'month' }}
+                </span>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="border-t border-slate-200 dark:border-slate-800"></div>
-
-        <!-- Pricing Breakdown & Total -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span>Base Voice Plan</span>
-            <span>₹{{ getBasePlanPrice() | number }}</span>
-          </div>
-          <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-            <span>Channel Add-ons</span>
-            <span>₹{{ getChannelsTotal() | number }}</span>
-          </div>
-          <div class="flex items-baseline justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
-            <div>
-              <span class="text-xs font-bold uppercase tracking-wider block" style="color: var(--app-text)">
-                Total AutoPay
-              </span>
-              <span class="text-[11px] text-slate-400 font-medium">Renews every 30 days</span>
-            </div>
-            <div class="text-right">
-              <span class="text-2xl font-black text-brand-600 dark:text-brand-400">
-                ₹{{ getTotalMonthlyPrice() | number }}
-              </span>
-              <span class="text-xs text-slate-400 block font-normal">/ month</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="space-y-2 pt-2">
-          <p-button
-            *ngIf="currentStep === 1"
-            [label]="selectedStandardPlan && isCurrentPlan(selectedStandardPlan) ? 'Current Plan Active' : ((hasActivePlan && selectedStandardPlan && isHigherTier(selectedStandardPlan)) ? 'Continue to Upgrade' : 'Continue to Channels')"
-            [icon]="(selectedStandardPlan && isPlanLocked(selectedStandardPlan)) ? 'pi pi-lock' : 'pi pi-arrow-right'"
-            iconPos="right"
-            (click)="goToStep(2)"
-            [disabled]="selectedStandardPlan ? isPlanLocked(selectedStandardPlan) : false"
-            styleClass="w-full font-bold py-3 rounded-xl"
-          ></p-button>
-
-          <p-button
-            *ngIf="currentStep === 2"
-            [label]="hasActivePlan && selectedStandardPlan && isHigherTier(selectedStandardPlan) ? ('Upgrade to ' + selectedStandardPlan.name + ' (₹' + (getTotalMonthlyPrice() | number) + '/mo)') : ('Pay ₹' + (getTotalMonthlyPrice() | number) + ' with AutoPay')"
-            [icon]="'pi pi-shield'"
-            [loading]="isCheckingOut"
+          <!-- Primary Checkout CTA Button -->
+          <button
+            type="button"
+            id="btn-proceed-autopay"
             (click)="initiateAutoPayCheckout()"
-            [disabled]="selectedStandardPlan ? isPlanLocked(selectedStandardPlan) : false"
-            styleClass="w-full font-bold py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 border-none"
-          ></p-button>
-
-          <button
-            *ngIf="currentStep === 2"
-            type="button"
-            (click)="goToStep(1)"
-            class="w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 py-1.5 transition"
+            [disabled]="hasActivePlan || isCheckingOut || !isCompanyAdmin"
+            [ngClass]="hasActivePlan || !isCompanyAdmin
+              ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+              : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg'"
+            class="w-full py-4 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
-            ← Change Base Plan
+            <i *ngIf="isCheckingOut" class="pi pi-spin pi-spinner text-sm"></i>
+            <i *ngIf="!isCheckingOut && !hasActivePlan && isCompanyAdmin" class="pi pi-shield text-sm"></i>
+            <i *ngIf="!isCompanyAdmin" class="pi pi-lock text-sm"></i>
+            <span>
+              {{ hasActivePlan
+                ? 'Active Plan Running'
+                : (!isCompanyAdmin
+                    ? 'Admin Action Required to Purchase'
+                    : ('Pay ₹' + (getTotalPayableInclusiveTax() | number) + ' (Incl. Taxes)')) }}
+            </span>
           </button>
-        </div>
 
-        <!-- Active Plan Locked Notice (Only show Top-Up booster note when on current tier) -->
-        <div *ngIf="hasActiveAutoPay && selectedStandardPlan && isCurrentPlan(selectedStandardPlan)" class="p-3.5 rounded-xl bg-slate-500/10 border border-slate-500/20 text-center space-y-2">
-          <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-center gap-1.5">
-            <i class="pi pi-check-circle text-xs text-emerald-500"></i> Current Tier Active
-          </span>
-          <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-            To add more minutes to this tier right now, use Top-Up Boosters. Or select a higher plan to upgrade.
+          <p *ngIf="!isCompanyAdmin" class="text-center text-xs text-amber-600 dark:text-amber-400 font-semibold">
+            Only company administrators can authorize and purchase subscriptions.
           </p>
-          <button
-            type="button"
-            (click)="navigateToUsage()"
-            class="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm transition flex items-center justify-center gap-1.5"
-          >
-            <i class="pi pi-bolt text-xs"></i>
-            <span>Top-Up Calling Minutes</span>
-          </button>
-        </div>
 
-        <!-- Trust Note -->
-        <div class="text-center pt-2">
-          <p class="text-[11px] text-slate-400 leading-relaxed">
+          <!-- Security & Mandate Footnote -->
+          <p class="text-center text-[11px] text-slate-400 leading-relaxed">
             <i class="pi pi-lock text-[10px] text-emerald-500 mr-1"></i>
-            Secured via Razorpay 30-Day AutoPay e-Mandate. You can cancel auto-renewal anytime from Usage & Invoices.
+            Secured via Razorpay AutoPay e-Mandate. Cancel auto-renewal or individual social channels anytime from Usage &amp; Invoices.
           </p>
         </div>
       </div>
@@ -709,11 +742,11 @@
     <div class="flex justify-center">
       <p-progressSpinner styleClass="w-14 h-14" strokeWidth="4"></p-progressSpinner>
     </div>
-    <h3 class="text-xl font-extrabold" style="color: var(--app-text)">
+    <h3 class="text-xl font-extrabold text-slate-950 dark:text-white">
       Authenticating AutoPay Mandate
     </h3>
-    <p class="text-xs sm:text-sm" style="color: var(--app-text-muted)">
-      {{ verificationMessage || 'Verifying transaction signature with Razorpay and updating your quotas...' }}
+    <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+      {{ verificationMessage || 'Verifying transaction signature with Razorpay and activating your quotas...' }}
     </p>
     <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
       Please do not close or refresh this tab while we finalize your subscription.

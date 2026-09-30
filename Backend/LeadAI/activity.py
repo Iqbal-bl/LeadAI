@@ -99,6 +99,8 @@ class A:
     CAMPAIGN_UPDATED = "campaign.updated"
     CAMPAIGN_BUILT = "campaign.audience_built"
     CAMPAIGN_STARTED = "campaign.started"
+    CAMPAIGN_BATCH_PROCESSED = "campaign.batch_processed"
+    CAMPAIGN_DEFERRED = "campaign.deferred"
     CAMPAIGN_PAUSED = "campaign.paused"
     CAMPAIGN_RESUMED = "campaign.resumed"
     CAMPAIGN_CANCELLED = "campaign.cancelled"

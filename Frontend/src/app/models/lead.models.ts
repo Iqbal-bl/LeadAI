@@ -26,6 +26,9 @@ export interface Lead {
   channel: string;
   leadStatus: string;
   aboveThreshold: boolean;
+  data_points_json?: Record<string, any> | null;
+  DataPointsJson?: Record<string, any> | null;
+  data_points?: Record<string, any> | null;
 }
 
 export interface TimelineEvent {

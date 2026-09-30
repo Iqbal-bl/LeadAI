@@ -77,6 +77,12 @@ def company_out(db: Session, client: Client, with_counts: bool = True) -> Compan
             .filter(LeadConversation.ClientId == client.Id,
                     LeadConversation.IsDeleted == False).count(),  # noqa: E712
         }
+    has_sub = None
+    if with_counts:
+        from .services import billing as billing_svc
+        active = billing_svc.get_active_recharge(db, client.Id)
+        has_sub = bool(active and active.Status == "active")
+
     return CompanyOut(
         id=client.Id,
         name=client.Name,
@@ -85,6 +91,7 @@ def company_out(db: Session, client: Client, with_counts: bool = True) -> Compan
         description=client.Description,
         is_active=bool(client.IsActive),
         created_at=client.CreatedAt,
+        has_active_subscription=has_sub,
         **counts,
     )
 

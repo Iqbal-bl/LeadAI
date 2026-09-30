@@ -103,6 +103,7 @@ class CompanyOut(BaseModel):
     chunk_count: int = 0
     script_count: int = 0
     conversation_count: int = 0
+    has_active_subscription: bool | None = None
 
     @field_serializer('created_at')
     def serialize_created_at(self, dt: datetime | None, _info):
@@ -198,6 +199,8 @@ class MeOut(BaseModel):
     client_name: str | None = None
     permissions: list[str]
     accessible_companies: list[CompanyOut] = []
+    has_active_subscription: bool = False
+    active_subscription_plan: str | None = None
 
 
 class UserProfileUpdate(BaseModel):
@@ -877,7 +880,6 @@ class MemberCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=100)
-    phone: str | None = Field(default=None, max_length=40)
     role: str = Field(
         default="employee",
         description="Role to grant: employee, manager",
@@ -889,14 +891,9 @@ class MemberOut(BaseModel):
     id: str
     email: str
     name: str | None = None
-    phone: str | None = None
     role: str
     client_id: str
     is_active: bool = True
-    # Conversations currently assigned to this person (LeadConversation.AssignedUserEmail),
-    # not a lifetime total — matches what "Team Management" actually needs to show: who's
-    # carrying how much right now.
-    assigned_leads: int = 0
     created_at: datetime | None = None
 
     @field_serializer('created_at')
@@ -910,7 +907,6 @@ class MemberOut(BaseModel):
 
 class MemberUpdate(BaseModel):
     full_name: str | None = None
-    phone: str | None = None
     role: RoleName | None = None
     is_active: bool | None = None
 

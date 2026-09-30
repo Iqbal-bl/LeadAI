@@ -48,14 +48,19 @@ router = APIRouter(prefix="/access", tags=["LeadAI • Access control"])
 
 @router.get("/me", response_model=MeOut, summary="Who am I and what may I do")
 def me(
+    client_id: str | None = Query(None, description="Optional company ID to scope check"),
     principal: Principal = Depends(current_principal),
     db: Session = Depends(get_leadai_db),
 ):
     """The first call any frontend should make: it drives menu visibility,
-    button enablement and the company switcher."""
+    button enablement, company switcher and subscription check."""
+    effective_client_id = principal.client_id
+    if client_id and (principal.is_platform_admin or client_id in (principal.accessible_client_ids or [])):
+        effective_client_id = client_id
+
     client_name = None
-    if principal.client_id:
-        client = db.get(Client, principal.client_id)
+    if effective_client_id:
+        client = db.get(Client, effective_client_id)
         client_name = client.Name if client else None
 
     companies: list[CompanyOut] = []
@@ -76,14 +81,28 @@ def me(
         )
         companies = [company_out(db, c, with_counts=False) for c in rows]
 
+    # Check active subscription
+    has_active_subscription = False
+    active_subscription_plan = None
+    if principal.is_platform_admin:
+        has_active_subscription = True
+    elif effective_client_id:
+        from ..services import billing as billing_svc
+        active_sub = billing_svc.get_active_recharge(db, effective_client_id)
+        if active_sub and active_sub.Status == "active":
+            has_active_subscription = True
+            active_subscription_plan = active_sub.PlanNameSnapshot
+
     return MeOut(
         email=principal.email,
         full_name=principal.full_name,
         role=principal.role,
-        client_id=principal.client_id,
+        client_id=effective_client_id,
         client_name=client_name,
         permissions=sorted(principal.permissions),
         accessible_companies=companies,
+        has_active_subscription=has_active_subscription,
+        active_subscription_plan=active_subscription_plan,
     )
 
 
@@ -139,6 +158,18 @@ def update_profile(
         )
         companies = [company_out(db, c, with_counts=False) for c in rows]
 
+    # Check active subscription
+    has_active_subscription = False
+    active_subscription_plan = None
+    if principal.is_platform_admin:
+        has_active_subscription = True
+    elif principal.client_id:
+        from ..services import billing as billing_svc
+        active_sub = billing_svc.get_active_recharge(db, principal.client_id)
+        if active_sub and active_sub.Status == "active":
+            has_active_subscription = True
+            active_subscription_plan = active_sub.PlanNameSnapshot
+
     return MeOut(
         email=principal.email,
         full_name=updated_name,
@@ -147,6 +178,8 @@ def update_profile(
         client_name=client_name,
         permissions=sorted(principal.permissions),
         accessible_companies=companies,
+        has_active_subscription=has_active_subscription,
+        active_subscription_plan=active_subscription_plan,
     )
 
 

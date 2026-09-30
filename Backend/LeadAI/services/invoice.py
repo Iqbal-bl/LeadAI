@@ -114,17 +114,6 @@ def render_invoice_html(
     contact_email = user_email or getattr(client, "ContactEmail", "") or ""
     customer_address = getattr(client, "Address", "") or ""
 
-    # Tax / GST handling (toggleable via settings.enable_gst)
-    if getattr(settings, "enable_gst", False) and getattr(settings, "gst_rate", 0.0) > 0:
-        rate = float(settings.gst_rate)
-        subtotal_val = round(amount / (1.0 + rate), 2)
-        gst_val = round(amount - subtotal_val, 2)
-        subtotal_formatted = f"{curr_symbol}{subtotal_val:,.2f}"
-        tax_formatted = f"{curr_symbol}{gst_val:,.2f} ({int(rate * 100)}% GST - SAC 9984)"
-    else:
-        subtotal_formatted = f"{curr_symbol}{amount:,.2f}"
-        tax_formatted = ""
-
     formatted_rate = f"{curr_symbol}{amount:,.2f}"
     formatted_total = f"{curr_symbol}{amount:,.2f}"
     formatted_paid = f"{curr_symbol}{amount:,.2f}"
@@ -137,36 +126,6 @@ def render_invoice_html(
     validity_str = f" • Validity: {validity} Days" if validity else ""
 
     booking_code = str(recharge_id).replace("-", "")[-6:].upper()
-
-    # Line items itemization
-    active_channels = list(getattr(recharge, "ActiveChannels", None) or [])
-    line_items = []
-    if active_channels and mins > 0:
-        channel_cost_total = len(active_channels) * 2000.0
-        voice_cost = max(0.0, amount - channel_cost_total)
-        line_items.append({
-            "title": f"LeadAI Voice Calling Plan — {plan_name}",
-            "description": f"{mins_str}{validity_str}",
-            "quantity": 1,
-            "rate_formatted": f"{curr_symbol}{voice_cost:,.2f}",
-            "amount_formatted": f"{curr_symbol}{voice_cost:,.2f}",
-        })
-        for ch in active_channels:
-            line_items.append({
-                "title": f"{ch.title()} Bot Automation",
-                "description": f"Automated 24/7 AI-driven {ch.title()} lead conversations and CRM qualification.",
-                "quantity": 1,
-                "rate_formatted": f"{curr_symbol}2,000.00",
-                "amount_formatted": f"{curr_symbol}2,000.00",
-            })
-    else:
-        line_items.append({
-            "title": f"LeadAI Platform Recharge — {plan_name}",
-            "description": f"{client_name} • {mins_str}{validity_str}",
-            "quantity": 1,
-            "rate_formatted": formatted_rate,
-            "amount_formatted": formatted_rate,
-        })
 
     context = {
         "leadai_company_name": "LeadAI Technologies",
@@ -195,9 +154,8 @@ def render_invoice_html(
         "quantity": 1,
         "rate_formatted": formatted_rate,
         "amount_formatted": formatted_rate,
-        "line_items": line_items,
-        "subtotal_formatted": subtotal_formatted,
-        "tax_formatted": tax_formatted,
+        "subtotal_formatted": formatted_rate,
+        "tax_formatted": "",
         "total_formatted": formatted_total,
         "amount_paid_formatted": formatted_paid,
         "balance_due_formatted": formatted_due,
@@ -277,3 +235,4 @@ def send_invoice_email(
     except Exception as exc:
         logger.error(f"Failed to deliver invoice email to {to_email}: {exc}", exc_info=True)
         return False
+
