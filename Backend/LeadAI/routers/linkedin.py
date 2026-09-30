@@ -1008,38 +1008,23 @@ async def post_linkedin_comment_reply(
     reply_success = False
     reply_urn = None
 
-    # Try Official OAuth API first if access token available
-    if account.AccessTokenEnc:
-        try:
-            from ..security import decrypt_pii
-            token = decrypt_pii(account.AccessTokenEnc)
-            person_urn = account.ExternalId
-            if token and person_urn:
-                res = await linkedin_oauth.reply_to_post_comment(
-                    access_token=token,
-                    person_urn=person_urn,
-                    post_urn=comment.PostUrn,
-                    reply_text=reply_text,
-                    parent_comment_urn=comment.CommentUrn if comment.CommentUrn and comment.CommentUrn.startswith("urn:") else None,
-                )
-                if res.get("success"):
-                    reply_success = True
-                    reply_urn = res.get("reply_urn")
-        except Exception as oauth_exc:
-            logger.info(f"OAuth comment reply fallback to browser automation: {oauth_exc}")
-
-    # Fallback to browser session automation if cookie configured
-    if not reply_success and (account.LinkedinCookieEnc or (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):
+    # Post comment reply directly via browser session automation
+    # (LinkedIn's OAuth API restricts comment replies to Enterprise Partners and returns 403 ACCESS_DENIED)
+    if account.LinkedinCookieEnc or (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         try:
             bot_res = await linkedin_bot.post_comment_reply_browser(
                 account=account,
                 post_urn_or_url=comment.PostUrn,
                 comment_urn=comment.CommentUrn,
                 reply_text=reply_text,
+                target_comment_text=comment.CommentText,
+                target_author=comment.AuthorName,
             )
             if bot_res.get("success"):
                 reply_success = True
                 reply_urn = bot_res.get("reply_urn") or f"reply-{comment.CommentUrn}"
+                if bot_res.get("posted_text"):
+                    reply_text = bot_res["posted_text"]
             else:
                 err_msg = bot_res.get("error") or "Failed to post comment reply via browser."
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, err_msg)
@@ -1048,6 +1033,11 @@ async def post_linkedin_comment_reply(
         except Exception as bot_exc:
             logger.error(f"Browser comment reply failed: {bot_exc}")
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Comment reply failed: {bot_exc}")
+    else:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "LinkedIn session token (li_at) is required to post comment replies. Please connect your session cookie in the Connection tab."
+        )
 
     if not reply_success:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Could not post reply. Verify LinkedIn connection credentials.")
