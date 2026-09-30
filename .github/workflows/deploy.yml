@@ -78,16 +78,22 @@ jobs:
       # (mysqlclient, numba/llvmlite) from scratch AND produced brand-new layer
       # digests even when requirements.txt hadn't changed, so the registry had
       # nothing to recognise and the FULL multi-GB image was re-pushed through
-      # the tunnel every time. GitHub's own Actions cache (type=gha) persists
-      # BuildKit layers across runs, so an unchanged dependency layer neither
-      # rebuilds nor re-uploads — only actual code/dependency changes do.
+      # the tunnel every time.
+      #
+      # Cache lives in OUR OWN registry (localhost:5000, the same one behind the
+      # tunnel), not GitHub's `type=gha` cache — that has a 10GB-per-repo cap
+      # with oldest-entry eviction, and this image alone is multi-GB; it would
+      # get evicted between deploys and every run would pay the full "cold
+      # cache" cost again, backend AND frontend competing for the same 10GB.
+      # Our own registry has no such ceiling.
       #
       # network=host: the docker-container builder runs in its own network
       # namespace by default and couldn't otherwise reach the SSH tunnel, which
       # is bound to the RUNNER's own localhost:5000.
       # buildkitd-config-inline: that builder has its own internal buildkitd,
       # which does not read the host's /etc/docker/daemon.json — it needs its
-      # own explicit "trust this registry as plain HTTP" for localhost:5000.
+      # own explicit "trust this registry as plain HTTP" for localhost:5000,
+      # for the cache blobs exactly as much as for the image itself.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -104,8 +110,8 @@ jobs:
           tags: |
             localhost:5000/${{ env.IMAGE_NAME }}:latest
             localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
       - name: Pull and restart container on server
         uses: appleboy/ssh-action@v1.0.3
@@ -213,8 +219,10 @@ jobs:
           echo "VERSION_TAG=v$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "Next version: v$NEXT_VERSION"
 
-      # Same reasoning as the backend job: GHA-cached BuildKit layers mean an
-      # unchanged npm-install layer neither rebuilds nor re-uploads.
+      # Same reasoning as the backend job: cached BuildKit layers mean an
+      # unchanged npm-install layer neither rebuilds nor re-uploads. Cache lives
+      # in our own registry rather than GitHub's `type=gha` (10GB/repo cap,
+      # shared with the backend job's much larger cache) for the same reason.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -231,8 +239,8 @@ jobs:
           tags: |
             localhost:5000/${{ env.IMAGE_NAME }}:latest
             localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
       - name: Pull and restart container on server
         uses: appleboy/ssh-action@v1.0.3
