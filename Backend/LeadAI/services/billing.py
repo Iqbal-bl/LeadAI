@@ -237,7 +237,7 @@ def get_active_recharge(db: Session, client_id: str) -> Optional[LeadClientRecha
 
             # Approach 1: If upgraded mid-cycle, inherit ongoing active channels and anchor date from superseded plan
             if not active.ActiveChannels:
-                prior = (
+                priors = (
                     db.query(LeadClientRecharge)
                     .filter(
                         LeadClientRecharge.ClientId == client_id,
@@ -245,16 +245,18 @@ def get_active_recharge(db: Session, client_id: str) -> Optional[LeadClientRecha
                         LeadClientRecharge.Id != active.Id,
                     )
                     .order_by(LeadClientRecharge.CreatedAt.desc())
-                    .first()
+                    .all()
                 )
-                if prior and prior.ActiveChannels:
-                    active.ActiveChannels = list(prior.ActiveChannels)
-                    active.NextCycleChannels = list(prior.NextCycleChannels or prior.ActiveChannels)
-                    if prior.ExpiresAt and not _is_expired(prior.ExpiresAt, now):
-                        active.ExpiresAt = prior.ExpiresAt
-                    db.add(active)
-                    db.commit()
-                    logger.info(f"[Billing] Restored {active.ActiveChannels} and cycle anchor {active.ExpiresAt} from prior plan {prior.Id}")
+                for prior in priors:
+                    if prior.ActiveChannels:
+                        active.ActiveChannels = list(prior.ActiveChannels)
+                        active.NextCycleChannels = list(prior.NextCycleChannels or prior.ActiveChannels)
+                        if prior.ExpiresAt and not _is_expired(prior.ExpiresAt, now):
+                            active.ExpiresAt = prior.ExpiresAt
+                        db.add(active)
+                        db.commit()
+                        logger.info(f"[Billing] Restored {active.ActiveChannels} and cycle anchor {active.ExpiresAt} from prior plan {prior.Id}")
+                        break
 
     return active
 
@@ -943,6 +945,24 @@ def verify_razorpay_payment(
         # Approach 1: Inherit ongoing active channels from existing plan
         prior_active = list(existing_active.ActiveChannels or []) if existing_active else []
         prior_next = list(existing_active.NextCycleChannels or prior_active) if existing_active else []
+
+        if not prior_active:
+            past_superseded = (
+                db.query(LeadClientRecharge)
+                .filter(
+                    LeadClientRecharge.ClientId == client_id,
+                    LeadClientRecharge.Status == RECHARGE_STATUS_SUPERSEDED,
+                    LeadClientRecharge.Id != recharge.Id,
+                )
+                .order_by(LeadClientRecharge.CreatedAt.desc())
+                .all()
+            )
+            for p in past_superseded:
+                if p.ActiveChannels:
+                    prior_active = list(p.ActiveChannels)
+                    prior_next = list(p.NextCycleChannels or prior_active)
+                    break
+
         current_active = list(template.AddonChannels or []) if (template and template.AddonChannels) else list(recharge.ActiveChannels or [])
         current_next = list(template.AddonChannels or []) if (template and template.AddonChannels) else list(recharge.NextCycleChannels or current_active)
         recharge.ActiveChannels = list(dict.fromkeys(prior_active + current_active))
@@ -1356,6 +1376,23 @@ def verify_razorpay_subscription_payment(
     # Retain all ongoing active channels from existing plan so voice upgrade doesn't wipe them!
     prior_active = list(existing_active.ActiveChannels or []) if existing_active else []
     prior_next = list(existing_active.NextCycleChannels or prior_active) if existing_active else []
+
+    if not prior_active:
+        past_superseded = (
+            db.query(LeadClientRecharge)
+            .filter(
+                LeadClientRecharge.ClientId == client_id,
+                LeadClientRecharge.Status == RECHARGE_STATUS_SUPERSEDED,
+                LeadClientRecharge.Id != recharge.Id,
+            )
+            .order_by(LeadClientRecharge.CreatedAt.desc())
+            .all()
+        )
+        for p in past_superseded:
+            if p.ActiveChannels:
+                prior_active = list(p.ActiveChannels)
+                prior_next = list(p.NextCycleChannels or prior_active)
+                break
 
     current_active = list(recharge.ActiveChannels or [])
     current_next = list(recharge.NextCycleChannels or current_active)
