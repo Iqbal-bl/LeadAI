@@ -120,7 +120,7 @@ export class LivePreview {
     { name: 'Instagram', key: 'instagram', icon: 'fa-brands fa-instagram' },
     { name: 'Facebook', key: 'facebook', icon: 'fa-brands fa-facebook' },
     { name: 'Threads', key: 'threads', icon: 'fa-solid fa-at' },
-    { name: 'Twitter', key: 'twitter', icon: 'fa-brands fa-x-twitter' },
+    { name: 'Twitter/X', key: 'twitter', icon: 'fa-brands fa-x-twitter' },
     { name: 'LinkedIn', key: 'linkedin', icon: 'fa-brands fa-linkedin' },
   ];
 

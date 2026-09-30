@@ -8,23 +8,41 @@ export interface CustomerConsent {
 
 export interface Customer {
   id: string;
-  name: string;
-  email_masked: string | null;
+  client_id?: string;
+  display_name: string;
+  name?: string; // backwards-compatible alias
+  company_name: string | null;
+  company?: string | null; // backwards-compatible alias
   phone_masked: string | null;
-  company: string | null;
-  stage: 'new' | 'active' | 'churned' | 'vip' | string;
+  email_masked: string | null;
+  stage: 'new' | 'active' | 'churned' | 'vip' | 'opportunity' | string;
   status: 'active' | 'inactive' | string;
   owner_email: string | null;
-  owner_name: string | null;
-  tags: string[];
-  consent: CustomerConsent;
-  lead_id: string | null;
-  lead_score: number | null;
-  follow_up_due: string | null;
-  birthday: string | null;
-  anniversary: string | null;
+  owner_name?: string | null;
+  product?: string | null;
+  value?: number;
+  currency?: string;
+  source?: string | null;
+  tags?: any;
+  notes?: string | null;
+  opt_in_whatsapp: boolean;
+  opt_in_sms: boolean;
+  opt_in_email: boolean;
+  opt_in_call: boolean;
+  do_not_disturb: boolean;
+  converted_at?: string | null;
+  last_contacted_at?: string | null;
+  next_follow_up_at?: string | null;
+  birthday?: string | null;
+  anniversary?: string | null;
+  source_conversation_id?: string | null;
+  fields?: Record<string, any> | null;
+  lead_id?: string | null;
+  lead_score?: number | null;
+  follow_up_due?: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
+  consent?: CustomerConsent;
 }
 
 export interface CustomerRevealResponse {

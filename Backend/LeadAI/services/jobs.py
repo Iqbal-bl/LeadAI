@@ -410,9 +410,9 @@ def handle_linkedin_sync_comments(db: Session, payload: dict) -> dict:
             logger.warning("[LeadAI jobs] LinkedIn comment sync error for client %s: %s", account.ClientId, exc)
             results[account.ClientId] = {"error": str(exc)}
 
-    # Schedule next check in ~45-60 minutes with human jitter (safe anti-bot cadence)
+    # Schedule next check in ~1 hour (45-75 minutes) with wide human jitter (safe anti-bot cadence)
     if not company_id:
-        run_at = calculate_next_periodic_run(base_minutes=50, jitter_minutes=15, min_minutes=35)
+        run_at = calculate_next_periodic_run(base_minutes=60, jitter_minutes=15, min_minutes=45)
         enqueue(db, "linkedin.sync_comments", run_at=run_at)
         logger.info("[LeadAI jobs] Scheduled next periodic linkedin.sync_comments at %s", run_at)
 
@@ -421,7 +421,8 @@ def handle_linkedin_sync_comments(db: Session, payload: dict) -> dict:
 
 def bootstrap_linkedin_job(db) -> None:
     """Ensure that the recurring LinkedIn connection request and comment sync jobs exist."""
-    # 1. Connection requests sync (~2 hours)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    # 1. Connection requests sync (~90-120 mins)
     existing_invites = (
         db.query(LeadJob)
         .filter(
@@ -432,11 +433,11 @@ def bootstrap_linkedin_job(db) -> None:
         .first()
     )
     if not existing_invites:
-        run_at = calculate_next_periodic_run(base_minutes=120, jitter_minutes=15, min_minutes=60)
+        run_at = now + timedelta(seconds=25)
         enqueue(db, "linkedin.process_invitations", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.process_invitations at %s", run_at)
 
-    # 2. Comments & AI Replies scanner (~45-60 mins, safe anti-bot cadence)
+    # 2. Comments & AI Replies scanner (~1 hour, 45-75 mins with wide jitter)
     existing_comments = (
         db.query(LeadJob)
         .filter(
@@ -447,7 +448,7 @@ def bootstrap_linkedin_job(db) -> None:
         .first()
     )
     if not existing_comments:
-        run_at = calculate_next_periodic_run(base_minutes=50, jitter_minutes=15, min_minutes=35)
+        run_at = now + timedelta(seconds=10)
         enqueue(db, "linkedin.sync_comments", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.sync_comments at %s", run_at)
 

@@ -71,7 +71,7 @@ export interface TeamMember {
   status: 'Active' | 'Inactive' | 'On Leave';
   phone: string;
   avatar: string;
-  lastActive: string;
+  lastActive?: string;
   assignedLeads: number;
 }
 

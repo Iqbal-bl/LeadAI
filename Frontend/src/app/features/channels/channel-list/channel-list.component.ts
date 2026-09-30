@@ -93,7 +93,9 @@ export class ChannelListComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    window.removeEventListener('message', this.messageEventListener);
+    if (this.messageEventListener) {
+      window.removeEventListener('message', this.messageEventListener);
+    }
     if (this.linkedinPollingInterval) {
       clearInterval(this.linkedinPollingInterval);
     }

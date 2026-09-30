@@ -8,8 +8,14 @@ export class ClientPermissionService {
   /**
    * Check if user permissions contains the required permission
    */
-  hasPermission(userPermissions: string[], permission: string): boolean {
-    return userPermissions.includes(permission);
+  hasPermission(userPermissions: string[], permission: string, role?: string): boolean {
+    if (!permission) return true;
+    const r = (role || '').toLowerCase();
+    if (r === 'admin' || r === 'company_admin' || r === 'platform_admin' || r === 'companyadmin') {
+      return true;
+    }
+    const permissions = userPermissions || [];
+    return permissions.includes(permission) || permissions.includes('*') || false;
   }
 
   /**

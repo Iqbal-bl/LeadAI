@@ -117,6 +117,31 @@ export class AuthService {
     return role === 'admin';
   }
 
+  // Helper to check if current user is company admin (or platform/super admin)
+  public isCompanyAdmin(): boolean {
+    const role = this.getUserRole()?.toLowerCase();
+    return (
+      role === 'company_admin' ||
+      role === 'admin' ||
+      role === 'platform_admin'
+    );
+  }
+
+  // Check if current user has a specific permission
+  public hasPermission(permission: string): boolean {
+    const user = this.currentUserSubject.value;
+    if (!user) return false;
+    const role = (user.role || '').toLowerCase();
+    if (
+      role === 'admin' ||
+      role === 'platform_admin' ||
+      role === 'company_admin'
+    ) {
+      return true;
+    }
+    return user.permissions?.includes(permission) ?? false;
+  }
+
   // Initiate OIDC login flow using redirect
   public async initiateOidcLogin(): Promise<void> {
     const url = await this.buildAuthorizeUrl(environment.authConfig);

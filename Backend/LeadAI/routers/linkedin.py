@@ -17,9 +17,31 @@ from ..models import LeadChannelAccount, utcnow
 from ..rbac import Principal, assert_owns, scoped
 from ..security import encrypt_pii
 
+import time
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/linkedin", tags=["LeadAI • LinkedIn"])
+
+_LAST_COMMENT_SYNC_BY_CLIENT: dict[str, float] = {}
+
+async def _bg_auto_sync_comments(company_id: str):
+    from core.database import SessionLocalAdmin
+    from ..social import linkedin_bot
+    from ..models_ext import LeadChannelAccount
+    db_bg = SessionLocalAdmin()
+    try:
+        account = db_bg.query(LeadChannelAccount).filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False
+        ).first()
+        if account and (account.LinkedinCookieEnc or (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):
+            await linkedin_bot.fetch_recent_posts_and_comments_browser(db_bg, account)
+    except Exception as exc:
+        logger.debug("[LinkedIn Auto-Sync] Background refresh notice for client %s: %s", company_id, exc)
+    finally:
+        db_bg.close()
 
 # ===========================================================================
 # LinkedIn OAuth & Status
@@ -99,6 +121,7 @@ async def linkedin_disconnect(
     db: Session = Depends(get_leadai_db),
 ):
     from ..models_ext import LeadChannelAccount
+    from ..models_blog import LeadSocialComment
 
     principal, client_id = scope
     cred = db.query(LeadChannelAccount).filter(
@@ -109,8 +132,22 @@ async def linkedin_disconnect(
 
     if cred:
         cred.IsDeleted = True
+        cred.LinkedinCookieEnc = None
+        cred.LinkedinUsernameEnc = None
+        cred.LinkedinPasswordEnc = None
         cred.UpdatedAt = utcnow()
         
+        # Soft-delete all existing comments for this company & channel so old account comments do not persist
+        db.query(LeadSocialComment).filter(
+            LeadSocialComment.ClientId == client_id,
+            LeadSocialComment.Channel == "linkedin",
+            LeadSocialComment.IsDeleted == False
+        ).update(
+            {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
+            synchronize_session=False
+        )
+        _LAST_COMMENT_SYNC_BY_CLIENT.pop(client_id, None)
+
         activity.log_principal(
             db,
             principal,
@@ -270,6 +307,7 @@ async def linkedin_callback_json(
 )
 async def save_linkedin_credentials(
     payload: LinkedInBotCredentialsInput,
+    background_tasks: BackgroundTasks = None,
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -320,8 +358,25 @@ async def save_linkedin_credentials(
                 "LinkedIn triggered a security check (CAPTCHA / 2FA code) or invalid login. Please switch to 'Mode B: Session Token (li_at)' and paste your li_at token directly."
             )
 
+    # Soft delete existing comments for this company & channel so that previous account comments are isolated
+    from ..models_blog import LeadSocialComment
+    db.query(LeadSocialComment).filter(
+        LeadSocialComment.ClientId == company_id,
+        LeadSocialComment.Channel == "linkedin",
+        LeadSocialComment.IsDeleted == False
+    ).update(
+        {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
+        synchronize_session=False
+    )
+    _LAST_COMMENT_SYNC_BY_CLIENT.pop(company_id, None)
+
     row.UpdatedAt = utcnow()
     db.commit()
+
+    # Trigger fresh background sync for the newly connected credentials/account
+    if background_tasks is not None:
+        background_tasks.add_task(_bg_auto_sync_comments, company_id)
+
     return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
 
 
@@ -351,6 +406,18 @@ async def disconnect_linkedin_credentials(
         row.LinkedinPasswordEnc = None
         row.UpdatedAt = utcnow()
         
+        # Soft-delete all existing comments for this company & channel so disconnected account data is wiped
+        from ..models_blog import LeadSocialComment
+        db.query(LeadSocialComment).filter(
+            LeadSocialComment.ClientId == client_id,
+            LeadSocialComment.Channel == "linkedin",
+            LeadSocialComment.IsDeleted == False
+        ).update(
+            {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
+            synchronize_session=False
+        )
+        _LAST_COMMENT_SYNC_BY_CLIENT.pop(client_id, None)
+
         activity.log_principal(
             db,
             principal,
@@ -752,7 +819,10 @@ async def sync_linkedin_messages(
 
     try:
         import asyncio
-        result = await asyncio.to_thread(linkedin_bot.sync_linkedin_conversations, db, row)
+        if asyncio.iscoroutinefunction(linkedin_bot.sync_linkedin_conversations):
+            result = await linkedin_bot.sync_linkedin_conversations(db, row)
+        else:
+            result = await asyncio.to_thread(linkedin_bot.sync_linkedin_conversations, db, row)
         return result
     except Exception as exc:
         logger.error("Failed to sync LinkedIn conversations: %s", exc)
@@ -846,11 +916,19 @@ async def get_linkedin_comments(
     sentiment: Optional[str] = None,
     is_lead_only: bool = False,
     limit: int = 50,
+    background_tasks: BackgroundTasks = None,
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
     from ..models_blog import LeadSocialComment
+
+    # Automatically trigger non-blocking background sync if last sync was > 30 minutes ago
+    last_sync = _LAST_COMMENT_SYNC_BY_CLIENT.get(company_id, 0)
+    if time.time() - last_sync > 1800:
+        _LAST_COMMENT_SYNC_BY_CLIENT[company_id] = time.time()
+        if background_tasks is not None:
+            background_tasks.add_task(_bg_auto_sync_comments, company_id)
 
     q = db.query(LeadSocialComment).filter(
         LeadSocialComment.ClientId == company_id,

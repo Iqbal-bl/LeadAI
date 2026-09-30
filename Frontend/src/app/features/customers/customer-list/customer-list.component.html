@@ -4,7 +4,7 @@
       Customers
     </h1>
     <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
-      Manage your customer relationships and outreach
+      Manage your customer relationships, lifecycle stages, and outreach
     </p>
   </div>
   <p-button
@@ -70,13 +70,14 @@
 
 <!-- Filters -->
 <div class="flex flex-wrap gap-3 mb-4 items-center">
-  <div class="flex-1 min-w-[200px]">
+  <div class="flex-1 min-w-[240px]">
     <span class="p-input-icon-left w-full">
+      <i class="pi pi-search"></i>
       <input
         pInputText
         type="text"
         [(ngModel)]="searchText"
-        placeholder="Search customers..."
+        placeholder="Search customers by name, phone, or email..."
         class="w-full"
         (keyup.enter)="onSearch()"
       />
@@ -88,7 +89,7 @@
     optionLabel="label"
     optionValue="value"
     (onChange)="onSearch()"
-    [style]="{ width: '150px' }"
+    [style]="{ width: '160px' }"
     appendTo="body"
   ></p-dropdown>
   <p-dropdown
@@ -100,15 +101,15 @@
     [style]="{ width: '150px' }"
     appendTo="body"
   ></p-dropdown>
-  <div class="flex items-center gap-2">
-    <p-inputSwitch
-      [(ngModel)]="followUpDueOnly"
-      (onChange)="onSearch()"
-    ></p-inputSwitch>
-    <label class="text-sm" style="color: var(--app-text-muted)"
-      >Follow-up due</label
-    >
-  </div>
+  <p-button
+    *ngIf="hasActiveFilters()"
+    icon="pi pi-filter-slash"
+    label="Clear"
+    [text]="true"
+    severity="secondary"
+    (onClick)="clearFilters()"
+    pTooltip="Reset filters"
+  ></p-button>
 </div>
 
 <!-- Customer Table -->
@@ -120,125 +121,118 @@
     [rows]="10"
     [rowHover]="true"
     dataKey="id"
-    [tableStyle]="{ 'min-width': '60rem' }"
+    [tableStyle]="{ 'min-width': '55rem' }"
   >
     <ng-template pTemplate="header">
       <tr>
-        <th pSortableColumn="name">
-          Name <p-sortIcon field="name"></p-sortIcon>
-        </th>
-        <th>Stage</th>
-        <th>Owner</th>
-        <th>Tags</th>
-        <th>Consent</th>
-        <th>Follow-up</th>
-        <th>Actions</th>
+        <th style="width: 26%">Customer</th>
+        <th style="width: 14%">Stage</th>
+        <th style="width: 12%">Status</th>
+        <th style="width: 18%">Product & Value</th>
+        <th style="width: 12%">Source</th>
+        <th style="width: 12%">Owner</th>
+        <th style="width: 6%; text-align: center">Action</th>
       </tr>
     </ng-template>
+
     <ng-template pTemplate="body" let-customer>
-      <tr class="cursor-pointer" (click)="viewCustomer(customer)">
+      <tr class="cursor-pointer transition-colors" (click)="viewCustomer(customer)">
+        <!-- Customer Info -->
         <td>
-          <div>
-            <span class="font-medium" style="color: var(--app-text)">{{
-              customer.name
-            }}</span>
-            <p class="text-xs" style="color: var(--app-text-muted)">
-              {{ customer.phone_masked || customer.email_masked }}
-            </p>
+          <div class="flex items-center gap-3">
+            <div
+              class="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm shrink-0"
+              style="background: var(--app-surface-alt); color: var(--app-primary); border: 1px solid var(--app-border)"
+            >
+              {{ (customer.name || customer.display_name || 'C')[0] | uppercase }}
+            </div>
+            <div class="min-w-0">
+              <div class="font-semibold text-sm truncate" style="color: var(--app-text)">
+                {{ customer.display_name || customer.name || '—' }}
+              </div>
+              <div *ngIf="customer.company_name" class="text-xs truncate" style="color: var(--app-text-muted)">
+                {{ customer.company_name }}
+              </div>
+              <div class="text-xs truncate font-mono" style="color: var(--app-text-muted)">
+                {{ customer.phone_masked || customer.email_masked || '—' }}
+              </div>
+            </div>
           </div>
         </td>
+
+        <!-- Stage -->
         <td>
           <p-tag
-            [value]="customer.stage"
+            [value]="customer.stage || '—'"
             [severity]="getStageSeverity(customer.stage)"
             [rounded]="true"
           ></p-tag>
         </td>
+
+        <!-- Status -->
         <td>
-          <span class="text-sm" style="color: var(--app-text-secondary)">{{
-            customer.owner_name || "—"
-          }}</span>
-        </td>
-        <td>
-          <div class="flex flex-wrap gap-1">
+          <span
+            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize"
+            [ngClass]="{
+              'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20': customer.status === 'active',
+              'bg-slate-500/10 text-slate-400 border border-slate-500/20': customer.status !== 'active'
+            }"
+          >
             <span
-              *ngFor="let tag of customer.tags?.slice(0, 3)"
-              class="px-2 py-0.5 rounded text-xs"
-              style="
-                background: var(--app-surface-alt);
-                color: var(--app-text-muted);
-              "
-              >{{ tag }}</span
-            >
+              class="w-1.5 h-1.5 rounded-full"
+              [ngClass]="{
+                'bg-emerald-400': customer.status === 'active',
+                'bg-slate-400': customer.status !== 'active'
+              }"
+            ></span>
+            {{ customer.status || '—' }}
+          </span>
+        </td>
+
+        <!-- Product & Value -->
+        <td>
+          <div>
+            <div class="text-sm font-medium" style="color: var(--app-text)">
+              {{ customer.product || '—' }}
+            </div>
+            <div class="text-xs font-semibold" style="color: var(--app-text-muted)">
+              {{ formatCurrency(customer.value, customer.currency) }}
+            </div>
           </div>
         </td>
+
+        <!-- Source -->
         <td>
-          <div class="flex gap-1">
-            <i
-              class="pi pi-whatsapp text-xs"
-              [style.color]="
-                customer.consent?.whatsapp_opt_in ? '#22c55e' : '#6b7280'
-              "
-              [style.opacity]="customer.consent?.whatsapp_opt_in ? 1 : 0.3"
-              pTooltip="WhatsApp"
-            ></i>
-            <i
-              class="pi pi-envelope text-xs"
-              [style.color]="
-                customer.consent?.email_opt_in ? '#3b82f6' : '#6b7280'
-              "
-              [style.opacity]="customer.consent?.email_opt_in ? 1 : 0.3"
-              pTooltip="Email"
-            ></i>
-            <i
-              class="pi pi-mobile text-xs"
-              [style.color]="
-                customer.consent?.sms_opt_in ? '#8b5cf6' : '#6b7280'
-              "
-              [style.opacity]="customer.consent?.sms_opt_in ? 1 : 0.3"
-              pTooltip="SMS"
-            ></i>
-            <i
-              class="pi pi-phone text-xs"
-              [style.color]="
-                customer.consent?.voice_opt_in ? '#f59e0b' : '#6b7280'
-              "
-              [style.opacity]="customer.consent?.voice_opt_in ? 1 : 0.3"
-              pTooltip="Voice"
-            ></i>
-            <i
-              *ngIf="customer.consent?.do_not_disturb"
-              class="pi pi-ban text-xs text-red-400"
-              pTooltip="Do Not Disturb"
-            ></i>
+          <div class="flex items-center gap-1.5 text-sm" style="color: var(--app-text-secondary)">
+            <i [class]="getSourceIcon(customer.source)" class="text-xs"></i>
+            <span class="capitalize">{{ customer.source || '—' }}</span>
           </div>
         </td>
+
+        <!-- Owner -->
         <td>
-          <span
-            *ngIf="customer.follow_up_due"
-            class="text-sm"
-            style="color: #f59e0b"
-            >{{ customer.follow_up_due }}</span
-          >
-          <span
-            *ngIf="!customer.follow_up_due"
-            class="text-sm"
-            style="color: var(--app-text-muted)"
-            >—</span
-          >
+          <span class="text-xs truncate block max-w-[140px]" style="color: var(--app-text-secondary)" [pTooltip]="customer.owner_email || customer.owner_name">
+            {{ customer.owner_name || customer.owner_email || '—' }}
+          </span>
         </td>
-        <td (click)="$event.stopPropagation()">
-          <p-button
-            icon="pi pi-eye"
+
+        <!-- Menu Action -->
+        <td style="text-align: center" (click)="$event.stopPropagation()">
+          <button
+            pButton
+            icon="pi pi-ellipsis-v"
             [rounded]="true"
             [text]="true"
             severity="secondary"
-            pTooltip="View Details"
-            (onClick)="viewCustomer(customer)"
-          ></p-button>
+            class="p-button-sm"
+            (click)="openCustomerMenu($event, customer)"
+            pTooltip="Actions"
+            tooltipPosition="left"
+          ></button>
         </td>
       </tr>
     </ng-template>
+
     <ng-template pTemplate="emptymessage">
       <tr>
         <td colspan="7">
@@ -247,11 +241,11 @@
               class="pi pi-users text-4xl"
               style="color: var(--app-text-muted)"
             ></i>
-            <p class="text-lg font-medium" style="color: var(--app-text-muted)">
+            <p class="text-lg font-medium" style="color: var(--app-text)">
               No customers found
             </p>
             <p class="text-sm" style="color: var(--app-text-muted)">
-              Convert qualified leads to build your customer base
+              Convert qualified leads or click 'Add Customer' to start managing your clientele
             </p>
           </div>
         </td>
@@ -260,6 +254,120 @@
   </p-table>
 </div>
 
+<!-- Shared Menu for Row Actions -->
+<p-menu #customerActionMenu [popup]="true" appendTo="body" [model]="activeCustomerMenuItems"></p-menu>
+
+<!-- Quick Message Dialog from Action Menu -->
+<p-dialog
+  header="Send Outreach Message"
+  [(visible)]="showMessageDialog"
+  [modal]="true"
+  [style]="{ width: '450px' }"
+  [draggable]="false"
+  [resizable]="false"
+  appendTo="body"
+>
+  <div class="space-y-4 pt-2" *ngIf="selectedCustomer">
+    <div>
+      <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted)">Recipient</label>
+      <div class="text-sm font-semibold" style="color: var(--app-text)">
+        {{ selectedCustomer.display_name || selectedCustomer.name }}
+      </div>
+      <div class="text-xs font-mono" style="color: var(--app-text-muted)">
+        {{ selectedCustomer.phone_masked || selectedCustomer.email_masked }}
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-semibold mb-1.5" style="color: var(--app-text-muted)">Channel</label>
+      <div class="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
+          [disabled]="!selectedCustomer.opt_in_whatsapp"
+          [style.opacity]="selectedCustomer.opt_in_whatsapp ? 1 : 0.4"
+          [ngClass]="{
+            'border-emerald-500 bg-emerald-500/10 text-emerald-400 font-semibold': messageChannel === 'whatsapp',
+            'border-white/10 text-slate-300': messageChannel !== 'whatsapp'
+          }"
+          (click)="messageChannel = 'whatsapp'"
+        >
+          <i class="pi pi-whatsapp"></i> WhatsApp
+        </button>
+        <button
+          type="button"
+          class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
+          [disabled]="!selectedCustomer.opt_in_sms"
+          [style.opacity]="selectedCustomer.opt_in_sms ? 1 : 0.4"
+          [ngClass]="{
+            'border-indigo-500 bg-indigo-500/10 text-indigo-400 font-semibold': messageChannel === 'sms',
+            'border-white/10 text-slate-300': messageChannel !== 'sms'
+          }"
+          (click)="messageChannel = 'sms'"
+        >
+          <i class="pi pi-mobile"></i> SMS
+        </button>
+        <button
+          type="button"
+          class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
+          [disabled]="!selectedCustomer.opt_in_email"
+          [style.opacity]="selectedCustomer.opt_in_email ? 1 : 0.4"
+          [ngClass]="{
+            'border-sky-500 bg-sky-500/10 text-sky-400 font-semibold': messageChannel === 'email',
+            'border-white/10 text-slate-300': messageChannel !== 'email'
+          }"
+          (click)="messageChannel = 'email'"
+        >
+          <i class="pi pi-envelope"></i> Email
+        </button>
+        <button
+          type="button"
+          class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
+          [disabled]="!selectedCustomer.opt_in_call"
+          [style.opacity]="selectedCustomer.opt_in_call ? 1 : 0.4"
+          [ngClass]="{
+            'border-amber-500 bg-amber-500/10 text-amber-400 font-semibold': messageChannel === 'voice',
+            'border-white/10 text-slate-300': messageChannel !== 'voice'
+          }"
+          (click)="messageChannel = 'voice'"
+        >
+          <i class="pi pi-phone"></i> Voice
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted)">Message</label>
+      <textarea
+        pInputText
+        [(ngModel)]="messageText"
+        rows="4"
+        class="w-full text-sm"
+        placeholder="Type outreach message..."
+      ></textarea>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex justify-end gap-2">
+      <p-button
+        label="Cancel"
+        [text]="true"
+        severity="secondary"
+        (onClick)="showMessageDialog = false"
+      ></p-button>
+      <p-button
+        label="Send Message"
+        icon="pi pi-send"
+        [loading]="sendingMessage"
+        [disabled]="!messageText.trim() || sendingMessage"
+        (onClick)="sendMessage()"
+      ></p-button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Create Customer Dialog -->
 <app-create-customer
   [visible]="showCreateDialog"
   (close)="showCreateDialog = false"

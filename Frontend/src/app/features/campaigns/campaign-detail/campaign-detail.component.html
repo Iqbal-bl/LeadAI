@@ -5,184 +5,115 @@
   ></p-progressSpinner>
 </div>
 
-<div *ngIf="!loading && campaign">
+<div *ngIf="!loading && campaign" class="space-y-6">
   <!-- Header -->
-  <div class="flex items-center gap-3 mb-6">
-    <p-button
-      icon="pi pi-arrow-left"
-      [rounded]="true"
-      [text]="true"
-      severity="secondary"
-      (onClick)="goBack()"
-    ></p-button>
-    <div class="flex-1">
-      <h1
-        class="text-2xl font-bold tracking-tight"
-        style="color: var(--app-text)"
-      >
-        {{ campaign.name }}
-      </h1>
-      <div class="flex items-center gap-2 mt-1">
-        <p-tag
-          [value]="campaign.status"
-          [severity]="
-            campaign.status === 'running'
-              ? 'success'
-              : campaign.status === 'paused'
-                ? 'warn'
-                : campaign.status === 'cancelled' ||
-                    campaign.status === 'failed'
-                  ? 'danger'
-                  : 'secondary'
-          "
-          [rounded]="true"
-        ></p-tag>
-        <span class="text-sm capitalize" style="color: var(--app-text-muted)"
-          >{{ campaign.channel }} · {{ campaign.kind }} ·
-          {{ campaign.purpose }}</span
-        >
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <p-button
+        icon="pi pi-arrow-left"
+        [rounded]="true"
+        [text]="true"
+        severity="secondary"
+        (onClick)="goBack()"
+      ></p-button>
+      <div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <h1
+            class="text-2xl font-bold tracking-tight"
+            style="color: var(--app-text)"
+          >
+            {{ campaign.name }}
+          </h1>
+          <p-tag
+            [value]="campaign.status | titlecase"
+            [severity]="getStatusSeverity(campaign.status)"
+            [rounded]="true"
+          ></p-tag>
+        </div>
+        <div class="flex items-center gap-2 mt-1 text-sm flex-wrap" style="color: var(--app-text-muted)">
+          <span *ngIf="campaign.status_message" class="font-medium text-slate-700 dark:text-slate-300">
+            {{ campaign.status_message }}
+          </span>
+          <span *ngIf="campaign.status_message">·</span>
+          <span class="capitalize">{{ campaign.channel || '—' }}</span>
+          <span>·</span>
+          <span class="capitalize">{{ campaign.kind || '—' }}</span>
+          <span>·</span>
+          <span class="capitalize">{{ campaign.purpose || '—' }}</span>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Counters -->
-  <div
-    class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6"
-    *ngIf="campaign.counters"
-  >
-    <div class="card-base p-4 text-center">
-      <p class="text-2xl font-bold" style="color: var(--app-text)">
-        {{ campaign.counters.total | number }}
-      </p>
-      <p
-        class="text-xs uppercase tracking-wider"
-        style="color: var(--app-text-muted)"
-      >
-        Total
-      </p>
+    <!-- Header Action Buttons -->
+    <div class="flex flex-wrap items-center gap-2">
+      <p-button
+        *ngIf="campaign.status === 'draft'"
+        label="Build Audience"
+        icon="pi pi-cog"
+        severity="info"
+        size="small"
+        (onClick)="buildCampaign()"
+      ></p-button>
+
+      <p-button
+        *ngIf="canStartCampaign()"
+        label="Start Campaign"
+        icon="pi pi-send"
+        size="small"
+        [loading]="startingCampaign"
+        [disabled]="!canSend || startingCampaign"
+        [pTooltip]="
+          !canSend
+            ? 'You need the campaign.send permission to start campaigns'
+            : ''
+        "
+        (onClick)="startCampaign()"
+      ></p-button>
+
+      <p-button
+        *ngIf="campaign.status === 'running'"
+        label="Pause"
+        icon="pi pi-pause"
+        severity="warn"
+        size="small"
+        (onClick)="pauseCampaign()"
+      ></p-button>
+
+      <p-button
+        *ngIf="campaign.status === 'paused'"
+        label="Resume"
+        icon="pi pi-play"
+        severity="success"
+        size="small"
+        (onClick)="resumeCampaign()"
+      ></p-button>
+
+      <p-button
+        *ngIf="campaign.status === 'running' || campaign.status === 'paused'"
+        label="Cancel"
+        icon="pi pi-times"
+        severity="danger"
+        size="small"
+        [outlined]="true"
+        (onClick)="cancelCampaign()"
+      ></p-button>
+
+      <p-button
+        *ngIf="((campaign?.counters?.failed ?? 0) > 0) || ((campaign?.failed_count ?? 0) > 0)"
+        label="Retry Failed"
+        icon="pi pi-replay"
+        severity="warn"
+        size="small"
+        [outlined]="true"
+        (onClick)="retryFailed()"
+      ></p-button>
     </div>
-    <div class="card-base p-4 text-center">
-      <p class="text-2xl font-bold" style="color: #3b82f6">
-        {{ campaign.counters.sent | number }}
-      </p>
-      <p
-        class="text-xs uppercase tracking-wider"
-        style="color: var(--app-text-muted)"
-      >
-        Sent
-      </p>
-    </div>
-    <div class="card-base p-4 text-center">
-      <p class="text-2xl font-bold text-green-500">
-        {{ campaign.counters.delivered | number }}
-      </p>
-      <p
-        class="text-xs uppercase tracking-wider"
-        style="color: var(--app-text-muted)"
-      >
-        Delivered
-      </p>
-    </div>
-    <div class="card-base p-4 text-center">
-      <p class="text-2xl font-bold text-red-400">
-        {{ campaign.counters.failed | number }}
-      </p>
-      <p
-        class="text-xs uppercase tracking-wider"
-        style="color: var(--app-text-muted)"
-      >
-        Failed
-      </p>
-    </div>
-    <div class="card-base p-4 text-center">
-      <p class="text-2xl font-bold" style="color: #8b5cf6">
-        {{ campaign.counters.replied | number }}
-      </p>
-      <p
-        class="text-xs uppercase tracking-wider"
-        style="color: var(--app-text-muted)"
-      >
-        Replied
-      </p>
-    </div>
-  </div>
-
-  <!-- Progress Bar -->
-  <div
-    class="mb-6"
-    *ngIf="campaign.status === 'running' || progressPercent > 0"
-  >
-    <p-progressBar
-      [value]="progressPercent"
-      [style]="{ height: '10px' }"
-    ></p-progressBar>
-    <p class="text-xs mt-1 text-right" style="color: var(--app-text-muted)">
-      {{ progressPercent }}% processed
-    </p>
-  </div>
-
-  <!-- Action Buttons -->
-  <div class="flex flex-wrap gap-2 mb-6">
-    <p-button
-      *ngIf="campaign.status === 'draft'"
-      label="Build Audience"
-      icon="pi pi-cog"
-      severity="info"
-      (onClick)="buildCampaign()"
-    ></p-button>
-
-    <p-button
-      *ngIf="campaign.status === 'ready'"
-      label="Start Campaign"
-      icon="pi pi-send"
-      [disabled]="!canSend"
-      [pTooltip]="
-        !canSend
-          ? 'You need the campaign.send permission to start campaigns'
-          : ''
-      "
-      (onClick)="startCampaign()"
-    ></p-button>
-
-    <p-button
-      *ngIf="campaign.status === 'running'"
-      label="Pause"
-      icon="pi pi-pause"
-      severity="warn"
-      (onClick)="pauseCampaign()"
-    ></p-button>
-
-    <p-button
-      *ngIf="campaign.status === 'paused'"
-      label="Resume"
-      icon="pi pi-play"
-      severity="success"
-      (onClick)="resumeCampaign()"
-    ></p-button>
-
-    <p-button
-      *ngIf="campaign.status === 'running' || campaign.status === 'paused'"
-      label="Cancel"
-      icon="pi pi-times"
-      severity="danger"
-      [outlined]="true"
-      (onClick)="cancelCampaign()"
-    ></p-button>
-
-    <p-button
-      *ngIf="campaign?.counters && campaign.counters.failed > 0"
-      label="Retry Failed"
-      icon="pi pi-replay"
-      severity="warn"
-      [outlined]="true"
-      (onClick)="retryFailed()"
-    ></p-button>
   </div>
 
   <!-- Building Status Panel -->
   <div
     *ngIf="campaign?.status === 'building'"
-    class="card-base p-8 text-center mb-6 flex flex-col items-center justify-center gap-3"
+    class="card-base p-8 text-center flex flex-col items-center justify-center gap-3"
   >
     <p-progressSpinner
       strokeWidth="3"
@@ -197,10 +128,303 @@
     </p>
   </div>
 
-  <!-- Preview Section -->
-  <div *ngIf="preview" class="card-base p-5 mb-6">
+  <!-- Deferred / Quiet Hours Alert Banner -->
+  <div
+    *ngIf="isDeferred"
+    class="p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 flex items-start gap-3.5 shadow-sm"
+  >
+    <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/20 text-amber-400 shrink-0">
+      <i class="pi pi-clock text-xl animate-pulse"></i>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <h3 class="text-sm font-bold text-amber-400">Campaign Outreach Deferred — Quiet Hours Active</h3>
+        <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+          Will resume automatically
+        </span>
+      </div>
+      <p class="text-xs text-amber-200/90 mt-1 leading-relaxed">
+        This campaign is active and healthy. The delivery worker paused sends to respect recipient quiet hours, and is queued to resume automatically
+        <span *ngIf="deferredResumeTime" class="font-semibold text-white">at {{ deferredResumeTime }}</span>.
+        It is not stuck or failed.
+      </p>
+    </div>
+  </div>
+
+  <!-- Delivery / Campaign Statistics -->
+  <div class="card-base p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold" style="color: var(--app-text)">
+        <i class="pi pi-chart-bar mr-2" style="color: var(--brand-500, #3b82f6)"></i>Delivery & Campaign Statistics
+      </h2>
+      <span class="text-xs" style="color: var(--app-text-muted)">Real-time API counters</span>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-3">
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold" style="color: var(--app-text)">
+          {{ (campaign.total_count ?? campaign.counters?.total ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Total</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-amber-500">
+          {{ (campaign.queued_count ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Queued</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-blue-500">
+          {{ (campaign.sent_count ?? campaign.counters?.sent ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Sent</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-emerald-500">
+          {{ (campaign.delivered_count ?? campaign.counters?.delivered ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Delivered</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-cyan-500">
+          {{ (campaign.read_count ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Read</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-purple-500">
+          {{ (campaign.replied_count ?? campaign.counters?.replied ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Replied</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-rose-500">
+          {{ (campaign.failed_count ?? campaign.counters?.failed ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Failed</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-slate-500">
+          {{ (campaign.skipped_count ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Skipped</p>
+      </div>
+
+      <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl">
+        <p class="text-xl font-bold text-teal-500">
+          {{ (campaign.leads_created ?? 0) | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5" style="color: var(--app-text-muted)">Leads Created</p>
+      </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div
+      class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800"
+      *ngIf="campaign.status === 'running' || progressPercent > 0"
+    >
+      <p-progressBar
+        [value]="progressPercent"
+        [style]="{ height: '8px' }"
+      ></p-progressBar>
+      <p class="text-xs mt-1.5 text-right" style="color: var(--app-text-muted)">
+        {{ progressPercent }}% processed
+      </p>
+    </div>
+  </div>
+
+  <!-- Campaign Detail Cards Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- 1. Campaign Overview -->
+    <div class="card-base p-5">
+      <h2 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--app-text)">
+        <i class="pi pi-info-circle text-blue-500"></i>Campaign Overview
+      </h2>
+      <dl class="space-y-3 text-sm">
+        <div class="flex justify-between items-start py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Campaign Name</dt>
+          <dd class="font-medium text-right" style="color: var(--app-text)">{{ campaign.name || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-start py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Description</dt>
+          <dd class="font-medium text-right max-w-[60%]" style="color: var(--app-text)">{{ campaign.description || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Campaign Type</dt>
+          <dd class="font-medium capitalize" style="color: var(--app-text)">{{ campaign.kind || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Channel</dt>
+          <dd class="font-medium capitalize" style="color: var(--app-text)">{{ campaign.channel || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Purpose</dt>
+          <dd class="font-medium capitalize" style="color: var(--app-text)">{{ campaign.purpose || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Status</dt>
+          <dd>
+            <p-tag [value]="campaign.status | titlecase" [severity]="getStatusSeverity(campaign.status)" [rounded]="true"></p-tag>
+          </dd>
+        </div>
+        <div class="flex justify-between items-start py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Status Message</dt>
+          <dd class="font-medium text-right" style="color: var(--app-text)">{{ campaign.status_message || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-start py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Created By</dt>
+          <dd class="font-mono text-xs font-medium text-right" style="color: var(--app-text)">{{ campaign.created_by || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5">
+          <dt style="color: var(--app-text-muted)">Created Date</dt>
+          <dd class="font-medium" style="color: var(--app-text)">
+            {{ campaign.created_at ? (campaign.created_at | date: 'd MMM y, h:mm a') : '—' }}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- 2. Audience -->
+    <div class="card-base p-5">
+      <h2 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--app-text)">
+        <i class="pi pi-users text-emerald-500"></i>Audience
+      </h2>
+      <dl class="space-y-3 text-sm">
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Audience Type</dt>
+          <dd class="font-medium capitalize" style="color: var(--app-text)">{{ campaign.audience_type || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-start py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">List ID</dt>
+          <dd class="font-mono text-xs font-medium text-right max-w-[60%] truncate" [pTooltip]="campaign.list_id || undefined" style="color: var(--app-text)">
+            {{ campaign.list_id || '—' }}
+          </dd>
+        </div>
+        <div class="flex justify-between items-start py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Audience Filter</dt>
+          <dd class="font-medium text-right" style="color: var(--app-text)">
+            {{ campaign.audience_filter ? (campaign.audience_filter | json) : '—' }}
+          </dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5">
+          <dt style="color: var(--app-text-muted)">Total Audience</dt>
+          <dd class="font-bold text-base" style="color: var(--app-text)">
+            {{ (campaign.total_count ?? 0) | number }}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- 3. Message -->
+    <div class="card-base p-5">
+      <h2 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--app-text)">
+        <i class="pi pi-envelope text-indigo-500"></i>Message Content
+      </h2>
+      <div class="mb-4">
+        <label class="text-xs uppercase tracking-wider block mb-1.5" style="color: var(--app-text-muted)">Message Body</label>
+        <div
+          class="p-3.5 rounded-xl text-sm whitespace-pre-wrap leading-relaxed border"
+          style="background: var(--app-surface-alt, rgba(0,0,0,0.02)); border-color: var(--app-border, #e2e8f0); color: var(--app-text)"
+        >
+          {{ campaign.message_body || campaign.body || '—' }}
+        </div>
+      </div>
+      <dl class="space-y-3 text-sm">
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Template Name</dt>
+          <dd class="font-medium" style="color: var(--app-text)">{{ campaign.template_name || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Template Language</dt>
+          <dd class="font-medium uppercase" style="color: var(--app-text)">{{ campaign.template_language || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Language</dt>
+          <dd class="font-medium uppercase" style="color: var(--app-text)">{{ campaign.language || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5">
+          <dt style="color: var(--app-text-muted)">Script Information</dt>
+          <dd class="font-medium" style="color: var(--app-text)">{{ campaign.script_id || '—' }}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- 4. Schedule -->
+    <div class="card-base p-5">
+      <h2 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--app-text)">
+        <i class="pi pi-calendar text-amber-500"></i>Schedule & Timing
+      </h2>
+      <dl class="space-y-3 text-sm">
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Scheduled Date/Time</dt>
+          <dd class="font-medium" style="color: var(--app-text)">
+            {{ campaign.scheduled_at ? (campaign.scheduled_at | date: 'd MMM y, h:mm a') : '—' }}
+          </dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Timezone</dt>
+          <dd class="font-medium" style="color: var(--app-text)">{{ campaign.timezone || '—' }}</dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Started At</dt>
+          <dd class="font-medium" style="color: var(--app-text)">
+            {{ campaign.started_at ? (campaign.started_at | date: 'd MMM y, h:mm a') : '—' }}
+          </dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5 border-b border-slate-100 dark:border-slate-800/60">
+          <dt style="color: var(--app-text-muted)">Completed At</dt>
+          <dd class="font-medium" style="color: var(--app-text)">
+            {{ campaign.completed_at ? (campaign.completed_at | date: 'd MMM y, h:mm a') : '—' }}
+          </dd>
+        </div>
+        <div class="flex justify-between items-center py-1.5">
+          <dt style="color: var(--app-text-muted)">Quiet Hours</dt>
+          <dd class="font-medium" style="color: var(--app-text)">
+            {{ (campaign.quiet_hours_start && campaign.quiet_hours_end) ? (campaign.quiet_hours_start + ' – ' + campaign.quiet_hours_end) : '—' }}
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <!-- 5. Campaign Configuration -->
+    <div class="card-base p-5 md:col-span-2">
+      <h2 class="text-base font-semibold mb-4 flex items-center gap-2" style="color: var(--app-text)">
+        <i class="pi pi-sliders-h text-purple-500"></i>Campaign Configuration
+      </h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/40">
+          <span class="text-xs" style="color: var(--app-text-muted)">Concurrency</span>
+          <p class="text-lg font-bold mt-1" style="color: var(--app-text)">
+            {{ campaign.concurrency ?? '—' }}
+          </p>
+        </div>
+        <div class="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/40">
+          <span class="text-xs" style="color: var(--app-text-muted)">Rate Per Minute</span>
+          <p class="text-lg font-bold mt-1" style="color: var(--app-text)">
+            {{ campaign.rate_per_minute ?? campaign.rate_limit ?? '—' }}
+          </p>
+        </div>
+        <div class="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/40">
+          <span class="text-xs" style="color: var(--app-text-muted)">Respect Opt-Out</span>
+          <p class="text-lg font-bold mt-1" [ngClass]="campaign.respect_opt_out ? 'text-emerald-500' : 'text-slate-400'">
+            {{ campaign.respect_opt_out ? 'Enabled (Yes)' : 'Disabled (No)' }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview Section (if available) -->
+  <div *ngIf="preview" class="card-base p-5">
     <h2 class="text-lg font-semibold mb-4" style="color: var(--app-text)">
-      <i class="pi pi-eye mr-2" style="color: #6366f1"></i>Preview
+      <i class="pi pi-eye mr-2" style="color: #6366f1"></i>Audience Preview
     </h2>
 
     <div class="grid grid-cols-3 gap-4 mb-4">
@@ -266,54 +490,240 @@
     </div>
   </div>
 
-  <!-- Failed Recipients -->
-  <div *ngIf="failedRecipients.length > 0" class="card-base overflow-hidden">
-    <div
-      class="p-4 flex items-center gap-2"
-      style="border-bottom: 1px solid var(--app-border)"
-    >
-      <i class="pi pi-exclamation-triangle text-red-400"></i>
-      <h2 class="text-base font-semibold" style="color: var(--app-text)">
-        Failed Recipients
-      </h2>
-    </div>
-    <p-table
-      [value]="failedRecipients"
-      [paginator]="true"
-      [rows]="10"
-      [rowHover]="true"
-    >
-      <ng-template pTemplate="header">
-        <tr>
-          <th>Recipient</th>
-          <th>Name</th>
-          <th>Reason</th>
-          <th>Sent At</th>
-        </tr>
-      </ng-template>
-      <ng-template pTemplate="body" let-r>
-        <tr>
-          <td>
-            <span class="font-mono text-sm" style="color: var(--app-text)">{{
-              r.identifier_masked
-            }}</span>
-          </td>
-          <td>
-            <span class="text-sm" style="color: var(--app-text)">{{
-              r.name || "—"
-            }}</span>
-          </td>
-          <td>
-            <span class="text-sm text-red-400">{{ r.failure_reason }}</span>
-          </td>
-          <td>
-            <span class="text-sm" style="color: var(--app-text-muted)">{{
-              r.sent_at || "—"
-            }}</span>
-          </td>
-        </tr>
-      </ng-template>
-    </p-table>
+  <!-- Activity & Recipients Section (Tabs) -->
+  <div class="card-base p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+    <p-tabs [(value)]="activeTab">
+      <p-tablist class="mb-5 border-b border-slate-100 dark:border-slate-800">
+        <p-tab value="history">
+          <i class="pi pi-history mr-2"></i>Run History ({{ historyTotal }})
+        </p-tab>
+        <p-tab value="recipients">
+          <i class="pi pi-users mr-2"></i>Recipients ({{ allRecipients.length }})
+        </p-tab>
+      </p-tablist>
+
+      <p-tabpanels>
+        <!-- TAB 1: RUN HISTORY TIMELINE -->
+        <p-tabpanel value="history">
+          <div class="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 dark:border-slate-800/60">
+            <div>
+              <h2 class="text-base font-semibold" style="color: var(--app-text)">Run History & Audit Timeline</h2>
+              <p class="text-xs" style="color: var(--app-text-muted)">
+                Newest-first chronological event trail explaining everything that occurred during this campaign
+              </p>
+            </div>
+            <p-button
+              icon="pi pi-refresh"
+              [rounded]="true"
+              [text]="true"
+              severity="secondary"
+              [loading]="historyLoading"
+              (onClick)="loadHistory(campaign.id)"
+              pTooltip="Refresh History"
+            ></p-button>
+          </div>
+
+          <!-- Loading State -->
+          <div *ngIf="historyLoading && historyItems.length === 0" class="flex flex-col items-center justify-center py-12 gap-3">
+            <p-progressSpinner strokeWidth="3" [style]="{ width: '36px', height: '36px' }"></p-progressSpinner>
+            <span class="text-xs" style="color: var(--app-text-muted)">Loading campaign run history...</span>
+          </div>
+
+          <!-- Empty State -->
+          <div *ngIf="!historyLoading && historyItems.length === 0" class="text-center py-12">
+            <div class="w-12 h-12 rounded-full mx-auto flex items-center justify-center bg-slate-100 dark:bg-slate-800 mb-3 text-slate-400">
+              <i class="pi pi-history text-xl"></i>
+            </div>
+            <p class="text-sm font-medium" style="color: var(--app-text)">No execution history yet</p>
+            <p class="text-xs mt-1 max-w-sm mx-auto" style="color: var(--app-text-muted)">
+              Events such as audience creation, message batch dispatches, and quiet-hour deferrals will be tracked here once the campaign begins.
+            </p>
+          </div>
+
+          <!-- Vertical Timeline (Order-tracking view) -->
+          <div *ngIf="historyItems.length > 0" class="relative pl-7 sm:pl-9 space-y-5 before:absolute before:left-3.5 sm:before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
+            <div *ngFor="let item of historyItems; let last = last" class="relative group">
+              <!-- Node Icon -->
+              <div
+                class="absolute -left-7 sm:-left-9 top-1 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900 shadow-sm transition-transform group-hover:scale-110"
+                [style.background]="getActionBg(item.action)"
+                [style.color]="getActionColor(item.action)"
+              >
+                <i [class]="getActionIcon(item.action)" class="text-xs"></i>
+              </div>
+
+              <!-- Event Card -->
+              <div class="card-base p-4 rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/40 transition-all hover:border-slate-300 dark:hover:border-slate-700">
+                <!-- Header: Action Name, Actor, Relative Time -->
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-bold tracking-tight" style="color: var(--app-text)">
+                      {{ getActionLabel(item.action) }}
+                    </span>
+                    <p-tag
+                      [value]="item.action"
+                      [severity]="getActionSeverity(item.action)"
+                      [rounded]="true"
+                      class="text-[10px] font-mono"
+                    ></p-tag>
+                    <span *ngIf="item.actor_email" class="text-[11px] px-2 py-0.5 rounded bg-slate-200/60 dark:bg-slate-700/60 font-mono text-slate-600 dark:text-slate-300">
+                      {{ item.actor_email }}
+                    </span>
+                  </div>
+
+                  <span
+                    class="text-xs font-medium text-slate-400 dark:text-slate-500 whitespace-nowrap cursor-help"
+                    [pTooltip]="formatFullDate(item.created_at)"
+                  >
+                    <i class="pi pi-clock mr-1 text-[10px]"></i>{{ getRelativeTime(item.created_at) }}
+                  </span>
+                </div>
+
+                <!-- Special Banner for Deferred (Quiet Hours) -->
+                <div *ngIf="item.action === 'campaign.deferred'" class="mt-2.5 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200">
+                  <div class="flex items-center gap-2 font-medium text-xs text-amber-300">
+                    <i class="pi pi-clock text-amber-400"></i>
+                    <span>Campaign Deferred — Quiet Hours Active</span>
+                  </div>
+                  <p class="text-xs mt-1 text-amber-100/90 leading-relaxed">
+                    {{ item.message }}
+                  </p>
+                  <div class="flex items-center gap-2 mt-2 text-[11px] text-amber-300/80">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    <span>The campaign is alive and will resume delivery automatically. No manual intervention needed.</span>
+                  </div>
+                </div>
+
+                <!-- Special Rendering for Batch Processed Meta Counts -->
+                <div *ngIf="item.action === 'campaign.batch_processed'" class="mt-2.5 p-3 rounded-lg bg-slate-900/60 dark:bg-slate-950/70 border border-slate-700/70">
+                  <div class="text-xs font-semibold text-slate-200 flex items-center gap-2 font-mono">
+                    <i class="pi pi-bolt text-cyan-400"></i>
+                    <span>Batch: {{ item.meta?.sent ?? 0 }} sent, {{ item.meta?.failed ?? 0 }} failed, {{ item.meta?.skipped ?? 0 }} skipped — {{ item.meta?.remaining ?? 0 }} remaining</span>
+                  </div>
+
+                  <div class="flex flex-wrap items-center gap-2 mt-2 text-xs font-mono">
+                    <span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
+                      ✓ {{ item.meta?.sent ?? 0 }} sent
+                    </span>
+                    <span *ngIf="(item.meta?.failed ?? 0) > 0" class="px-2 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 font-semibold">
+                      ✗ {{ item.meta?.failed ?? 0 }} failed
+                    </span>
+                    <span *ngIf="(item.meta?.skipped ?? 0) > 0" class="px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      ⊘ {{ item.meta?.skipped ?? 0 }} skipped
+                    </span>
+                    <span class="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                      ⏳ {{ item.meta?.remaining ?? 0 }} remaining
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Generic message for other events -->
+                <div *ngIf="item.action !== 'campaign.deferred' && item.action !== 'campaign.batch_processed'" class="mt-1.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {{ item.message }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </p-tabpanel>
+
+        <!-- TAB 2: RECIPIENTS TABLE -->
+        <p-tabpanel value="recipients">
+          <div class="p-3 mb-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800">
+            <div class="flex items-center gap-2">
+              <i class="pi pi-users text-indigo-500"></i>
+              <h2 class="text-sm font-semibold" style="color: var(--app-text)">Recipient Deliveries</h2>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-slate-200/60 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 font-medium">
+                {{ allRecipients.length }} rows
+              </span>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <p-dropdown
+                [options]="recipientStatusOptions"
+                [(ngModel)]="recipientStatusFilter"
+                optionLabel="label"
+                optionValue="value"
+                (onChange)="onRecipientStatusChange()"
+                [style]="{ width: '150px' }"
+                placeholder="Filter Status"
+                appendTo="body"
+              ></p-dropdown>
+              <p-button
+                icon="pi pi-refresh"
+                [rounded]="true"
+                [text]="true"
+                severity="secondary"
+                [loading]="recipientsLoading"
+                (onClick)="loadRecipients(campaign.id)"
+                pTooltip="Refresh Recipients"
+              ></p-button>
+            </div>
+          </div>
+
+          <p-table
+            [value]="allRecipients"
+            [loading]="recipientsLoading"
+            [paginator]="true"
+            [rows]="10"
+            [rowHover]="true"
+            [tableStyle]="{ 'min-width': '50rem' }"
+          >
+            <ng-template pTemplate="header">
+              <tr>
+                <th>Recipient</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Result / Failure Reason</th>
+                <th>Sent At</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-r>
+              <tr>
+                <td>
+                  <span class="font-mono text-sm font-semibold" style="color: var(--app-text)">
+                    {{ r.identifier_masked || r.phone || r.email || '—' }}
+                  </span>
+                </td>
+                <td>
+                  <span class="text-sm font-medium" style="color: var(--app-text)">
+                    {{ r.name || '—' }}
+                  </span>
+                </td>
+                <td>
+                  <p-tag
+                    [value]="r.status | uppercase"
+                    [severity]="getRecipientSeverity(r.status)"
+                    [rounded]="true"
+                    class="text-[11px]"
+                  ></p-tag>
+                </td>
+                <td>
+                  <span
+                    class="text-xs"
+                    [style.color]="r.status === 'failed' ? '#f87171' : (r.status === 'skipped' ? '#fbbf24' : 'var(--app-text-muted)')"
+                  >
+                    {{ r.failure_reason || (r.status === 'sent' || r.status === 'delivered' ? 'Delivered successfully' : '—') }}
+                  </span>
+                </td>
+                <td>
+                  <span class="text-xs" style="color: var(--app-text-muted)">
+                    {{ r.sent_at ? (r.sent_at | date: 'd MMM y, h:mm a') : '—' }}
+                  </span>
+                </td>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="emptymessage">
+              <tr>
+                <td colspan="5" class="text-center py-10">
+                  <i class="pi pi-inbox text-3xl text-slate-400 mb-2"></i>
+                  <p class="text-sm" style="color: var(--app-text-muted)">No recipient records found.</p>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </p-tabpanel>
+      </p-tabpanels>
+    </p-tabs>
   </div>
 </div>
 

@@ -28,11 +28,16 @@ export class CustomerDetailComponent implements OnInit {
   messageText = '';
   sendingMessage = false;
 
-  channelOptions: { label: string; value: 'whatsapp' | 'sms' | 'email' | 'voice'; icon: string; consentKey: string }[] = [
-    { label: 'WhatsApp', value: 'whatsapp', icon: 'pi pi-whatsapp', consentKey: 'whatsapp_opt_in' },
-    { label: 'SMS', value: 'sms', icon: 'pi pi-mobile', consentKey: 'sms_opt_in' },
-    { label: 'Email', value: 'email', icon: 'pi pi-envelope', consentKey: 'email_opt_in' },
-    { label: 'Voice', value: 'voice', icon: 'pi pi-phone', consentKey: 'voice_opt_in' },
+  channelOptions: {
+    label: string;
+    value: 'whatsapp' | 'sms' | 'email' | 'voice';
+    icon: string;
+    key: 'opt_in_whatsapp' | 'opt_in_sms' | 'opt_in_email' | 'opt_in_call';
+  }[] = [
+    { label: 'WhatsApp', value: 'whatsapp', icon: 'pi pi-whatsapp', key: 'opt_in_whatsapp' },
+    { label: 'SMS', value: 'sms', icon: 'pi pi-mobile', key: 'opt_in_sms' },
+    { label: 'Email', value: 'email', icon: 'pi pi-envelope', key: 'opt_in_email' },
+    { label: 'Call', value: 'voice', icon: 'pi pi-phone', key: 'opt_in_call' },
   ];
 
   constructor(
@@ -90,15 +95,52 @@ export class CustomerDetailComponent implements OnInit {
   }
 
   hasConsent(channel: string): boolean {
-    if (!this.customer?.consent) return false;
-    if (this.customer.consent.do_not_disturb) return false;
-    const map: Record<string, keyof typeof this.customer.consent> = {
-      whatsapp: 'whatsapp_opt_in',
-      sms: 'sms_opt_in',
-      email: 'email_opt_in',
-      voice: 'voice_opt_in',
+    if (!this.customer) return false;
+    if (this.customer.do_not_disturb) return false;
+    if (channel === 'whatsapp') return Boolean(this.customer.opt_in_whatsapp);
+    if (channel === 'sms') return Boolean(this.customer.opt_in_sms);
+    if (channel === 'email') return Boolean(this.customer.opt_in_email);
+    if (channel === 'voice' || channel === 'call') return Boolean(this.customer.opt_in_call);
+    return false;
+  }
+
+  getStageSeverity(stage: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    const s = (stage || '').toLowerCase();
+    const map: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary'> = {
+      opportunity: 'info',
+      new: 'info',
+      active: 'success',
+      customer: 'success',
+      vip: 'warn',
+      churned: 'danger',
     };
-    return !!this.customer.consent[map[channel]];
+    return map[s] || 'secondary';
+  }
+
+  getSourceIcon(source: string | null | undefined): string {
+    const s = (source || '').toLowerCase();
+    const icons: Record<string, string> = {
+      instagram: 'pi pi-instagram',
+      facebook: 'pi pi-facebook',
+      messenger: 'pi pi-comments',
+      whatsapp: 'pi pi-whatsapp',
+      linkedin: 'pi pi-linkedin',
+      voice: 'pi pi-phone',
+      call: 'pi pi-phone',
+      web: 'pi pi-globe',
+      email: 'pi pi-envelope',
+      sms: 'pi pi-mobile',
+    };
+    return icons[s] || 'pi pi-share-alt';
+  }
+
+  formatCurrency(val: number | null | undefined, curr: string | null | undefined): string {
+    const amount = Number(val ?? 0).toFixed(2);
+    const currency = curr || 'INR';
+    if (currency === 'INR') {
+      return `₹${amount}`;
+    }
+    return `${amount} ${currency}`;
   }
 
   sendMessage(): void {
