@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 
 # ===========================================================================
 # generic
@@ -393,6 +393,67 @@ class ScriptDetail(ScriptOut):
     rendered_prompt: str | None = None
 
 
+# =========================================================================== #
+# company-defined data points ("what the AI should collect for us")
+# =========================================================================== #
+DataPointType = Literal["text", "number", "boolean", "select", "date", "email"]
+
+
+class DataPointCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=60, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=160)
+    data_type: DataPointType = "text"
+    options: list[str] | None = None      # required (2+) when data_type == "select"
+    description: str | None = Field(default=None, max_length=300)
+    required: bool = False
+    display_order: int = 0
+
+    @field_validator("options")
+    @classmethod
+    def _clean_options(cls, v):
+        if not v:
+            return None
+        seen: set[str] = set()
+        out = []
+        for opt in v:
+            opt = str(opt).strip()
+            if opt and opt.lower() not in seen:
+                seen.add(opt.lower())
+                out.append(opt[:80])
+        return out or None
+
+
+class DataPointUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=160)
+    data_type: DataPointType | None = None
+    options: list[str] | None = None
+    description: str | None = None
+    required: bool | None = None
+    display_order: int | None = None
+    is_active: bool | None = None
+
+
+class DataPointOut(BaseModel):
+    id: str
+    key: str
+    label: str
+    data_type: str
+    options: list[str] | None = None
+    description: str | None = None
+    required: bool
+    display_order: int
+    is_active: bool
+    created_at: datetime | None = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
 class ScriptImportRequest(BaseModel):
     filename: str = Field(description="A file present in the app's scripts/ folder")
 
@@ -501,6 +562,11 @@ class LeadOut(BaseModel):
     sentiment: str
     score_breakdown: dict[str, Any] | None = None
     qualified_at: datetime | None = None
+    # Raw {data_point_key: value} for this company's admin-defined data points
+    # (see /data-points). Deliberately not label/type-resolved here — the
+    # frontend already has that schema from GET /data-points and joins by key,
+    # so this stays a plain read of Lead.DataPointsJson with no extra query.
+    data_points: dict[str, Any] | None = None
 
     @field_serializer('qualified_at')
     def serialize_qualified_at(self, dt: datetime | None, _info):

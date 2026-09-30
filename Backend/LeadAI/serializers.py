@@ -39,6 +39,7 @@ from .schemas import (
     CompanyOut,
     ConversationDetail,
     ConversationOut,
+    DataPointOut,
     DocumentDetailOut,
     DocumentOut,
     LeadOut,
@@ -169,6 +170,21 @@ def script_out(row: LeadCompanyScript) -> ScriptOut:
     )
 
 
+def data_point_out(row) -> DataPointOut:
+    return DataPointOut(
+        id=row.Id,
+        key=row.Key,
+        label=row.Label,
+        data_type=row.DataType,
+        options=row.OptionsJson,
+        description=row.Description,
+        required=bool(row.Required),
+        display_order=row.DisplayOrder or 0,
+        is_active=bool(row.IsActive),
+        created_at=row.CreatedAt,
+    )
+
+
 def script_detail(row: LeadCompanyScript, include_prompt: bool = True) -> ScriptDetail:
     sections = script_engine.sections_of(row)
     base = script_out(row)
@@ -221,6 +237,7 @@ def lead_out(row: Lead | None) -> LeadOut | None:
         sentiment=row.Sentiment or "neutral",
         score_breakdown=row.ScoreBreakdown,
         qualified_at=row.QualifiedAt,
+        data_points=row.DataPointsJson,
     )
 
 

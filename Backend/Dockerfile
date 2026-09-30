@@ -54,7 +54,7 @@ ENV PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     TZ=Asia/Kolkata \
-    PORT=6789
+    PORT=7011
 
 # Runtime libraries only — no compilers.
 #   libmysqlclient21 : mysqlclient at runtime
@@ -73,19 +73,23 @@ COPY requirements.txt ./
 RUN pip install --no-index --find-links=/wheels/dist -r requirements.txt \
     && rm -rf /wheels
 
-# Run as a non-root user. The app writes only to ./scripts (mounted) and to the
-# LeadAI local storage fallback, both of which are chowned below.
+# Run as a non-root user. `COPY --chown` only covers what's already in the
+# build context — anything the app creates fresh under /app at runtime
+# (outbound/batching.py's TEMP_DIR, linkedin_bot.py's cookies dir) hits
+# PermissionError otherwise, because /app itself is still root-owned and
+# appuser can't create new entries in it. Pre-create and chown every such
+# directory here instead of discovering each one from a crash.
 RUN useradd --create-home --uid 10001 appuser
 WORKDIR /app
 
 COPY --chown=appuser:appuser . /app
 
-RUN mkdir -p /app/storage_local /app/scripts \
-    && chown -R appuser:appuser /app/storage_local /app/scripts
+RUN mkdir -p /app/storage_local /app/scripts /app/temp /app/.linkedin_cookies \
+    && chown -R appuser:appuser /app/storage_local /app/scripts /app/temp /app/.linkedin_cookies
 
 USER appuser
 
-EXPOSE 6789
+EXPOSE 7011
 
 # The health endpoint is in PUBLIC_PATHS, so this needs no credentials.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \

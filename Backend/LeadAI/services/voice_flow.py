@@ -329,6 +329,8 @@ def handle_voice_turn(
         # (facts, summary), exactly as chat does. Without it a returning caller's earlier
         # details were invisible to the phone brain.
         state_note = memory.thread_state_note(db, conversation, history)
+        existing_lead = db.query(Lead).filter(Lead.ConversationId == conversation.Id).one_or_none()
+        datapoints_note = memory.missing_data_points_note(db, client_id, existing_lead)
         trace_step(trace, "memory", "context for the model",
                    carryover_chars=len(carryover), state_note_chars=len(state_note),
                    thread_truncated=memory.thread_is_truncated(history))
@@ -338,11 +340,21 @@ def handle_voice_turn(
                    code=language)
         english = english_query(utterance, trace)
 
+        if superseded is not None and superseded():
+            # Already stale before the expensive call even starts — the caller spoke again,
+            # or (a live hangup mid-turn) the call itself ended, while the cheap prep above was
+            # still running. A live call was seen paying for a full retrieve+generate cycle
+            # (several seconds, two OpenAI calls) for a reply that was always going to be
+            # discarded at the existing post-generate check below.
+            db.rollback()
+            trace_step(trace, "superseded", "the caller spoke again first: reply dropped, nothing saved")
+            return VoiceTurnResult("", {}, handed_off=False, superseded=True, history=history, trace=trace)
+
         # channel="voice" selects the voice prompt template and the tighter token cap.
         result = ai_engine.answer(
             db, client_id, client.Name, utterance, history=history, channel="voice",
             script=None, trace=trace, carryover=carryover,
-            session_note="\n\n".join(n for n in (state_note, lang_note) if n),
+            session_note="\n\n".join(n for n in (state_note, lang_note, datapoints_note) if n),
             query_override=english,
             reply_language=language,
         )

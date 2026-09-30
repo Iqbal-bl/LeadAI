@@ -234,6 +234,7 @@ def build_system_prompt(
 
     script = script or resolve_script(db, client_id, channel=channel)
     script_prompt = sections_to_system_prompt(sections_of(script))
+    base_prompt += _gender_note(channel, script)
 
     if script_prompt:
         combined = (
@@ -244,6 +245,29 @@ def build_system_prompt(
         )
         return combined, script
     return base_prompt, script
+
+
+def _gender_note(channel: str, script: LeadCompanyScript | None) -> str:
+    """Gendered languages (Hindi, Punjabi, ...) inflect first-person verbs by the
+    speaker's gender. The model only ever saw the persona's NAME (in the script
+    header below) and had to guess from that alone — a script literally named
+    "Ritu" still came back "main chahta hoon" (masculine) instead of "chahti
+    hoon" (feminine) on a real call. VoiceGender already exists on the script
+    for picking the TTS voice; it just never reached the prompt that generates
+    the words being spoken.
+    """
+    if channel != "voice" or script is None:
+        return ""
+    gender = (getattr(script, "VoiceGender", None) or "female").strip().lower()
+    if gender not in ("female", "male"):
+        return ""
+    example = "chahti hoon, kar rahi hoon" if gender == "female" else "chahta hoon, kar raha hoon"
+    return (
+        f"\n\nYou are voiced as a {gender} assistant. In Hindi, Punjabi and any other "
+        f"grammatically gendered language, always use {gender} first-person verb forms "
+        f"(e.g. \"{example}\", never the other gender's forms), regardless of what your name "
+        f"might suggest on its own."
+    )
 
 
 def set_default(db: Session, client_id: str, script: LeadCompanyScript) -> None:

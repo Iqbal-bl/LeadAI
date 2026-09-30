@@ -39,7 +39,7 @@ from ..config import settings
 from ..engine.text import split_sentences
 from ..engine.trace import TurnTrace
 from ..engine.trace import step as trace_step
-from ..models import Lead, LeadCompanySettings, LeadConversation, LeadMessage
+from ..models import Lead, LeadCompanyDataPoint, LeadCompanySettings, LeadConversation, LeadMessage
 from . import language, llm, memory, reply_cleanup, script_engine, vectorstore
 
 logger = logging.getLogger(__name__)
@@ -613,7 +613,67 @@ def merge_facts(existing: list[str], proposed: list[str]) -> list[str]:
     return proposed
 
 
-def _llm_analysis(messages: list[LeadMessage], known_facts: list[str] | None = None) -> dict | None:
+def _data_points_instruction(data_points: list[LeadCompanyDataPoint]) -> str:
+    """Extra JSON-schema instructions for this company's admin-defined fields.
+
+    Appended to the fixed analysis prompt only when the company has any, so a
+    company with none defined pays no extra tokens and sees no behaviour change.
+    """
+    if not data_points:
+        return ""
+    type_hints = {
+        "text": "free text",
+        "number": "a number only, no currency symbol or units",
+        "boolean": "true or false",
+        "date": "a date, as YYYY-MM-DD if you can tell",
+        "email": "an email address",
+    }
+    lines = []
+    for dp in data_points:
+        if dp.DataType == "select":
+            hint = f"exactly one of: {', '.join(dp.OptionsJson or [])}"
+        else:
+            hint = type_hints.get(dp.DataType, "free text")
+        extra = f" ({dp.Description})" if dp.Description else ""
+        lines.append(f'  "{dp.Key}" ["{dp.Label}"{extra}]: {hint}')
+    return (
+        '\n"data_points": a JSON object with exactly these keys, each set from what the '
+        'customer stated. Use null for any not yet known — never invent one:\n'
+        + "\n".join(lines)
+    )
+
+
+def _validate_data_point_value(value, dp: LeadCompanyDataPoint):
+    """None means "not extracted this turn, leave whatever is already stored"."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if dp.DataType == "number":
+        try:
+            return float(value) if not float(value).is_integer() else int(float(value))
+        except (TypeError, ValueError):
+            return None
+    if dp.DataType == "boolean":
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ("true", "yes", "y")
+    if dp.DataType == "select":
+        options = dp.OptionsJson or []
+        for opt in options:
+            if str(value).strip().lower() == opt.lower():
+                return opt
+        return None
+    if dp.DataType == "email":
+        text_value = str(value).strip()[:160]
+        return text_value if "@" in text_value and "." in text_value.split("@")[-1] else None
+    # text / date: trust the model's formatting, just bound the length.
+    return str(value).strip()[:160]
+
+
+def _llm_analysis(
+    messages: list[LeadMessage],
+    known_facts: list[str] | None = None,
+    data_points: list[LeadCompanyDataPoint] | None = None,
+) -> dict | None:
     """Ask the LLM to read the conversation. Returns a validated dict, or None.
 
     None (LLM off, call failed, unusable output) means "use the keyword rules"; this
@@ -634,8 +694,9 @@ def _llm_analysis(messages: list[LeadMessage], known_facts: list[str] | None = N
     )
     if known_facts:
         transcript += "\n\nAlready known facts: " + json.dumps(known_facts, ensure_ascii=False)
+    prompt = _ANALYSIS_PROMPT + _data_points_instruction(data_points or [])
     try:
-        data, _ = llm.complete_json(_ANALYSIS_PROMPT, [{"role": "user", "content": transcript}])
+        data, _ = llm.complete_json(prompt, [{"role": "user", "content": transcript}])
     except Exception as exc:  # noqa: BLE001
         logger.warning("[LeadAI qualify] LLM analysis failed (%s) — using keyword rules", exc)
         return None
@@ -654,6 +715,13 @@ def _llm_analysis(messages: list[LeadMessage], known_facts: list[str] | None = N
         value = text(key, 120)
         return value if value and value.lower() not in ("unknown", "none", "n/a", "null") else "unknown"
 
+    raw_values = data.get("data_points") if isinstance(data.get("data_points"), dict) else {}
+    data_point_values = {
+        dp.Key: validated
+        for dp in (data_points or [])
+        if (validated := _validate_data_point_value(raw_values.get(dp.Key), dp)) is not None
+    }
+
     return {
         "intent": pick("intent", _VALID_INTENTS),
         "timeline": pick("timeline", _VALID_TIMELINES) or "unknown",
@@ -663,6 +731,7 @@ def _llm_analysis(messages: list[LeadMessage], known_facts: list[str] | None = N
         "summary": text("summary", 2000),
         "next_step": text("next_step", 500),
         "facts": clean_facts(data.get("facts")),
+        "data_point_values": data_point_values,
     }
 
 
@@ -721,9 +790,25 @@ def qualify(
     # take the business loan" plus an amount and company details means the customer is
     # ready to proceed. Anything the model is unsure of stays as the rules found it.
     known_facts = clean_facts(lead.FactsJson)
-    analysis = _llm_analysis(messages, known_facts)
+    data_points = (
+        db.query(LeadCompanyDataPoint)
+        .filter(
+            LeadCompanyDataPoint.ClientId == client_id,
+            LeadCompanyDataPoint.IsActive == True,  # noqa: E712
+            LeadCompanyDataPoint.IsDeleted == False,  # noqa: E712
+        )
+        .all()
+    )
+    analysis = _llm_analysis(messages, known_facts, data_points)
     if analysis:
         lead.FactsJson = merge_facts(known_facts, analysis["facts"]) or None
+        if analysis["data_point_values"]:
+            # Extracted values only ever ADD to or correct what's already known — a
+            # turn where the customer didn't repeat something already answered must
+            # not blank it out.
+            merged = dict(lead.DataPointsJson or {})
+            merged.update(analysis["data_point_values"])
+            lead.DataPointsJson = merged
         intent = analysis["intent"] or intent
         if analysis["timeline"] != "unknown":
             timeline = analysis["timeline"]
@@ -801,6 +886,7 @@ def qualify(
         after={k: v for k, v in after.items() if k != "score"},
         changed={k: [before[k], after[k]] for k in after if before.get(k) != after[k]},
         facts_stored=len(lead.FactsJson or []), signals_known=known,
+        data_points_defined=len(data_points), data_points_collected=len(lead.DataPointsJson or {}),
     )
     return lead
 

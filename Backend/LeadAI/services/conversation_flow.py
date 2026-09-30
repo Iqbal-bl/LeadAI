@@ -938,13 +938,15 @@ def _run_customer_turn(
         trace_step(trace, "state_note",
                    "added: thread outgrew the model window" if state_note else "not needed",
                    chars=len(state_note), already_completed=already_completed)
+        datapoints_note = memory.missing_data_points_note(db, client_id, lead)
         result = ai_engine.answer(
             db, client_id, client.Name, text, history=history, channel="chat",
             carryover=carryover,
             # A customer who keeps talking after completion asked something real:
             # continue from where we stopped, do not start over.
             session_note="\n\n".join(
-                n for n in (state_note, reply_cleanup.COMPLETED_NOTE if already_completed else "") if n
+                n for n in (state_note, reply_cleanup.COMPLETED_NOTE if already_completed else "",
+                            datapoints_note) if n
             ),
             trace=trace,
         )
