@@ -1,7 +1,8 @@
 export interface ContactList {
   id: string;
   name: string;
-  total_rows: number;
+  total_rows?: number;
+  total_count?: number;
   valid_count: number;
   invalid_count: number;
   duplicate_count: number;

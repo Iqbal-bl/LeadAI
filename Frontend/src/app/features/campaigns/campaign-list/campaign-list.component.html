@@ -130,12 +130,13 @@
               (onClick)="buildCampaign(campaign)"
             ></p-button>
             <p-button
-              *ngIf="campaign.status === 'ready'"
+              *ngIf="campaign.status === 'ready' || campaign.status === 'scheduled'"
               icon="pi pi-send"
               [rounded]="true"
               [text]="true"
               severity="success"
-              [disabled]="!canSend"
+              [loading]="startingCampaignId === campaign.id"
+              [disabled]="!canSend || startingCampaignId !== null"
               [pTooltip]="
                 !canSend
                   ? 'You need the campaign.send permission to start campaigns'
@@ -321,7 +322,8 @@
         label="Start Campaign"
         icon="pi pi-send"
         severity="success"
-        [disabled]="!canSend"
+        [loading]="startingCampaignId === activePreviewCampaign.id"
+        [disabled]="!canSend || startingCampaignId !== null"
         [pTooltip]="
           !canSend
             ? 'You need the campaign.send permission to start campaigns'

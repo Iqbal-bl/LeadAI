@@ -254,6 +254,11 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.profiles = [];
             this.invitations = [];
             this.invitationResults = null;
+            this.comments = [];
+            this.filteredComments = [];
+            this.conversations = [];
+            this.selectedConversation = null;
+            this.messages = [];
           },
           error: (err) => {
             this.messageService.add({
@@ -309,6 +314,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.loadStatus();
         this.loadConversations();
         this.loadInvitations();
+        this.loadComments();
       },
       error: (err) => {
         this.savingCredentials = false;
@@ -341,6 +347,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.selectedConversation = null;
             this.messages = [];
             this.invitations = [];
+            this.comments = [];
+            this.filteredComments = [];
             this.messageService.add({
               severity: 'success',
               summary: 'Credentials Removed',

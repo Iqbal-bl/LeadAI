@@ -8,7 +8,6 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 
 import { AccountSelector } from '../../composer/account-selector/account-selector';
-import { AiTools } from '../../composer/ai-tools/ai-tools';
 import { ScheduleBar } from '../../composer/schedule-bar/schedule-bar';
 import { PostEditor } from '../../composer/post-editor/post-editor';
 
@@ -23,6 +22,7 @@ import { LivePreview } from '../../composer/live-preview/live-preview';
 import { PublishService } from '../../services/publish.services';
 
 import { ToastModule } from 'primeng/toast';
+import { ButtonModule } from 'primeng/button';
 import { MessageService } from 'primeng/api';
 
 
@@ -35,7 +35,7 @@ import { MessageService } from 'primeng/api';
     RouterModule,
     AccountSelector,
     ToastModule,
-    AiTools,
+    ButtonModule,
     ScheduleBar,
     PostEditor,
     MediaToolbar,
@@ -51,6 +51,10 @@ import { MessageService } from 'primeng/api';
   styleUrl: './composer.scss'
 })
 export class ComposerComponent {
+
+  goBack(): void {
+    window.history.back();
+  }
 
   @ViewChild(ScheduleBar)
   scheduleBar?: ScheduleBar;

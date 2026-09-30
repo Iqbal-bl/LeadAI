@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { ContactListService } from '../../../services/contact-list.service';
@@ -6,7 +6,8 @@ import {
   ContactList,
   ContactListPreview,
 } from '../../../models/contact-list.models';
-import { MessageService } from 'primeng/api';
+import { MessageService, MenuItem } from 'primeng/api';
+import { Menu } from 'primeng/menu';
 import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { ContactListUploadComponent } from '../contact-list-upload/contact-list-upload.component';
 
@@ -18,6 +19,9 @@ import { ContactListUploadComponent } from '../contact-list-upload/contact-list-
   styleUrl: './contact-list-list.component.scss',
 })
 export class ContactListListComponent implements OnInit {
+  @ViewChild('listActionMenu') listActionMenu!: Menu;
+  activeListMenuItems: MenuItem[] = [];
+
   lists: ContactList[] = [];
   loading = true;
 
@@ -42,6 +46,34 @@ export class ContactListListComponent implements OnInit {
     private router: Router,
   ) {}
 
+  get totalRecordsCount(): number {
+    return this.lists.reduce((acc, curr) => acc + (curr.total_rows ?? curr.total_count ?? 0), 0);
+  }
+
+  openRowMenu(event: Event, list: ContactList): void {
+    event.stopPropagation();
+    this.activeListMenuItems = [
+      {
+        label: 'Launch Campaign',
+        icon: 'pi pi-megaphone',
+        command: () => this.launchCampaign(list),
+      },
+      {
+        label: 'View Contacts',
+        icon: 'pi pi-eye',
+        command: () => this.viewItems(list),
+      },
+      { separator: true },
+      {
+        label: 'Delete List',
+        icon: 'pi pi-trash',
+        styleClass: 'text-red-500',
+        command: () => this.deleteList(list),
+      },
+    ];
+    this.listActionMenu.toggle(event);
+  }
+
   launchCampaign(list: ContactList): void {
     this.router.navigate(['/client/campaigns'], {
       queryParams: { audienceId: list.id, create: 'true' },
@@ -56,7 +88,11 @@ export class ContactListListComponent implements OnInit {
     this.loading = true;
     this.contactListService.getLists().subscribe({
       next: (res: any) => {
-        this.lists = Array.isArray(res) ? res : res?.items || [];
+        const raw = Array.isArray(res) ? res : res?.items || [];
+        this.lists = raw.map((l: any) => ({
+          ...l,
+          total_rows: l.total_rows ?? l.total_count ?? 0,
+        }));
         this.loading = false;
       },
       error: () => {

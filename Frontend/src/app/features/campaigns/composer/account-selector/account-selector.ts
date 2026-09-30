@@ -55,25 +55,11 @@ export class AccountSelector implements OnInit, OnChanges {
       key: 'facebook',
       icon: 'fa-brands fa-facebook-f',
     },
-
     {
       name: 'Instagram',
       key: 'instagram',
       icon: 'fa-brands fa-instagram',
     },
-
-    {
-      name: 'Threads',
-      key: 'threads',
-      icon: 'fa-solid fa-at',
-    },
-
-    {
-      name: 'Twitter',
-      key: 'twitter',
-      icon: 'fa-brands fa-x-twitter',
-    },
-
     {
       name: 'LinkedIn',
       key: 'linkedin',
@@ -86,16 +72,10 @@ export class AccountSelector implements OnInit, OnChanges {
   ========================================================== */
 
   constructor() {
-    /*
-      Default selected platforms
-
-      Currently:
-      Facebook
-      Instagram
-      LinkedIn
-    */
-
-    this.selectedAccounts = [this.accounts[0], this.accounts[1], this.accounts[4]];
+    // Default select active platforms safely without hardcoded index
+    this.selectedAccounts = this.accounts.filter(
+      (a) => a && (a.key === 'facebook' || a.key === 'instagram'),
+    );
   }
 
   /* ==========================================================
@@ -124,8 +104,8 @@ export class AccountSelector implements OnInit, OnChanges {
 
     const previousLength = this.selectedAccounts.length;
 
-    this.selectedAccounts = this.selectedAccounts.filter((account) =>
-      this.isPlatformSupported(account),
+    this.selectedAccounts = (this.selectedAccounts || []).filter(
+      (account) => account && this.isPlatformSupported(account),
     );
 
     /*
@@ -145,7 +125,7 @@ export class AccountSelector implements OnInit, OnChanges {
   ========================================================== */
 
   private emitSelectedAccounts(): void {
-    this.accountsChange.emit([...this.selectedAccounts]);
+    this.accountsChange.emit([...this.selectedAccounts.filter(Boolean)]);
   }
 
   /* ==========================================================
@@ -153,7 +133,10 @@ export class AccountSelector implements OnInit, OnChanges {
   ========================================================== */
 
   isSelected(account: any): boolean {
-    return this.selectedAccounts.some((selected) => selected.key === account.key);
+    if (!account) return false;
+    return this.selectedAccounts.some(
+      (selected) => selected?.key === account.key,
+    );
   }
 
   /* ==========================================================
@@ -244,7 +227,9 @@ export class AccountSelector implements OnInit, OnChanges {
        Find Account
     -------------------------------------------------------- */
 
-    const index = this.selectedAccounts.findIndex((selected) => selected.key === account.key);
+    const index = this.selectedAccounts.findIndex(
+      (selected) => selected?.key === account.key,
+    );
 
     /* --------------------------------------------------------
        Remove Account
@@ -252,12 +237,10 @@ export class AccountSelector implements OnInit, OnChanges {
 
     if (index > -1) {
       this.selectedAccounts.splice(index, 1);
-    }
-
-    /* --------------------------------------------------------
+    } else {
+      /* --------------------------------------------------------
        Add Account
     -------------------------------------------------------- */
-    else {
       this.selectedAccounts.push(account);
     }
 

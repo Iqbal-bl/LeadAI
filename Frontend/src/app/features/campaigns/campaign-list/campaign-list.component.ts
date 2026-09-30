@@ -233,17 +233,23 @@ export class CampaignListComponent implements OnInit {
     return map[status] || 'secondary';
   }
 
+  startingCampaignId: string | null = null;
+
   startCampaign(campaign: Campaign): void {
+    if (this.startingCampaignId) return;
+    this.startingCampaignId = campaign.id;
     this.campaignService.startCampaign(campaign.id).subscribe({
       next: () => {
+        this.startingCampaignId = null;
         this.messageService.add({
           severity: 'success',
           summary: 'Campaign Started',
-          detail: `Campaign "${campaign.name}" is now running.`,
+          detail: `Campaign "${campaign.name}" is now queued and sending.`,
         });
         this.loadCampaigns();
       },
       error: (err) => {
+        this.startingCampaignId = null;
         this.messageService.add({
           severity: 'error',
           summary: 'Error',

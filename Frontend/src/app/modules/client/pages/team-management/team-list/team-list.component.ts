@@ -78,7 +78,6 @@ export class TeamListComponent implements OnInit {
         icon: 'pi pi-user-edit',
         command: () => this.editMember(member),
       },
-      { label: 'Reassign Leads', icon: 'pi pi-arrow-right-left' },
       { separator: true },
       {
         label: 'Remove',
@@ -115,31 +114,39 @@ export class TeamListComponent implements OnInit {
     this.loadTeamMembers();
   }
 
+  private normalizeRoleValue(role: string): string {
+    const r = (role || '').toLowerCase();
+    if (r === 'admin' || r === 'companyadmin' || r === 'company_admin' || r === 'platform_admin') {
+      return 'company_admin';
+    }
+    if (r === 'manager') {
+      return 'manager';
+    }
+    return 'employee';
+  }
+
   loadTeamMembers(): void {
     this.tmService.getEmployees().subscribe({
       next: (data) => {
-        const grants = data.items;
-        const roleMap: Record<string, 'Admin' | 'Manager' | 'Employee'> = {
-          [ROLE_COMPANY_ADMIN]: 'Admin',
-          platform_admin: 'Admin',
-          [ROLE_MANAGER]: 'Manager',
-          [ROLE_EMPLOYEE]: 'Employee',
-          Admin: 'Admin',
-          Manager: 'Manager',
-        };
-
-        this.team = grants.map((g, idx) => ({
-          id: idx + 1,
-          name: (g as any).name || (g as any).full_name || '',
-          email: (g as any).email || (g as any).user_email || '',
-          role: roleMap[g.role] || (g.role as any) || 'Agent',
-          status: g.is_active !== false ? 'Active' : 'Inactive',
-          phone: '+1 (555) 000-0000',
-          avatar: '',
-          lastActive: 'Active',
-          assignedLeads: 0,
-          grantId: g.id,
-        }));
+        const grants = data.items || [];
+        this.team = grants.map((g, idx) => {
+          const rawRole = (g as any).role || '';
+          const normValue = this.normalizeRoleValue(rawRole);
+          const displayRole = normValue === 'company_admin' ? 'Admin' : normValue === 'manager' ? 'Manager' : 'Employee';
+          return {
+            id: idx + 1,
+            name: (g as any).name || (g as any).full_name || '',
+            email: (g as any).email || (g as any).user_email || '',
+            role: displayRole,
+            roleValue: normValue,
+            status: g.is_active !== false ? 'Active' : 'Inactive',
+            phone: (g as any).phone || '+1 (555) 000-0000',
+            avatar: '',
+            lastActive: '',
+            assignedLeads: 0,
+            grantId: g.id,
+          };
+        });
       },
       error: () => {},
     });
@@ -160,7 +167,7 @@ export class TeamListComponent implements OnInit {
       email: member.email,
       password: '',
       confirmPassword: '',
-      role: member.role,
+      role: (member.roleValue || this.normalizeRoleValue(member.role)) as any,
       phone: member.phone || '',
       status: member.status,
     };
