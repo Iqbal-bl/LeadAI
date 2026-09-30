@@ -69,7 +69,7 @@
 </div>
 
 <!-- Tabs Navigation -->
-<p-tabs [(value)]="activeTab" [lazy]="true">
+<p-tabs [(value)]="activeTab" [lazy]="true" (valueChange)="onTabChange($event)">
   <p-tablist>
     <p-tab value="connection">
       <i class="pi pi-shield mr-2"></i> Connection & Bot Auth
@@ -1390,6 +1390,13 @@
                       [rounded]="true"
                     ></p-tag>
                     <p-tag
+                      *ngIf="loadingConversations"
+                      value="Loading conversations..."
+                      severity="info"
+                      [rounded]="true"
+                      icon="pi pi-spin pi-spinner"
+                    ></p-tag>
+                    <p-tag
                       value="Safe Periodic Retrieval"
                       severity="secondary"
                       [rounded]="true"
@@ -1479,12 +1486,23 @@
                 </div>
               </div>
 
+              <!-- Top progress bar for conversation list loading -->
+              <p-progressBar
+                *ngIf="loadingConversations"
+                mode="indeterminate"
+                [style]="{ height: '3px' }"
+              ></p-progressBar>
+
               <!-- Thread Items List -->
               <div
                 class="flex-1 overflow-y-auto max-h-[540px] divide-y divide-black/5 dark:divide-white/5"
               >
                 <!-- Loading Skeleton -->
                 <div *ngIf="loadingConversations" class="p-4 space-y-4">
+                  <div class="flex items-center gap-2 text-xs font-medium text-brand-600 dark:text-brand-400 p-2.5 bg-brand-500/10 rounded-lg">
+                    <i class="pi pi-spin pi-spinner text-sm"></i>
+                    <span>Loading conversations...</span>
+                  </div>
                   <div
                     *ngFor="let i of [1, 2, 3, 4]"
                     class="flex items-center gap-3"
@@ -1577,7 +1595,28 @@
                         {{ conv.contact_name }}
                       </span>
                       <span
-                        *ngIf="conv.last_activity_at"
+                        *ngIf="
+                          loadingMessages &&
+                          (selectedConversation?.conversation_id ===
+                            conv.conversation_id ||
+                            selectedConversation?.conversation_urn ===
+                              conv.conversation_urn)
+                        "
+                        class="text-[10px] shrink-0 text-brand-600 font-semibold flex items-center gap-1"
+                      >
+                        <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                        Loading...
+                      </span>
+                      <span
+                        *ngIf="
+                          !(
+                            loadingMessages &&
+                            (selectedConversation?.conversation_id ===
+                              conv.conversation_id ||
+                              selectedConversation?.conversation_urn ===
+                                conv.conversation_urn)
+                          ) && conv.last_activity_at
+                        "
                         class="text-[10px] shrink-0 text-muted"
                       >
                         {{ conv.last_activity_at | date: "MMM d, h:mm a" }}
@@ -1664,6 +1703,14 @@
                 </div>
 
                 <div class="flex items-center gap-2 shrink-0">
+                  <span
+                    *ngIf="loadingMessages || syncingThreadMessages"
+                    class="px-2.5 py-0.5 text-[11px] font-medium rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1.5"
+                  >
+                    <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                    {{ loadingMessages ? 'Loading messages...' : 'Updating...' }}
+                  </span>
+
                   <p-button
                     icon="pi pi-refresh"
                     [rounded]="true"
@@ -1671,11 +1718,18 @@
                     severity="secondary"
                     size="small"
                     pTooltip="Refresh Thread"
-                    [loading]="loadingMessages"
+                    [loading]="loadingMessages || syncingThreadMessages"
                     (onClick)="selectConversation(selectedConversation)"
                   ></p-button>
                 </div>
               </div>
+
+              <!-- Top progress bar for active message loading -->
+              <p-progressBar
+                *ngIf="loadingMessages || syncingThreadMessages"
+                mode="indeterminate"
+                [style]="{ height: '3px' }"
+              ></p-progressBar>
 
               <!-- Messages Stream Area -->
               <div
@@ -1708,15 +1762,83 @@
                   </p>
                 </div>
 
-                <!-- Loading Messages Spinner -->
+                <!-- Loading Messages Skeleton Chat State -->
+                <div *ngIf="loadingMessages" class="p-4 space-y-4">
+                  <!-- Incoming message skeleton -->
+                  <div class="flex items-start gap-2.5 max-w-[75%]">
+                    <p-skeleton shape="circle" size="2rem"></p-skeleton>
+                    <div class="space-y-1.5 flex-1">
+                      <p-skeleton width="30%" height="0.75rem"></p-skeleton>
+                      <p-skeleton width="80%" height="2.2rem" borderRadius="1rem"></p-skeleton>
+                    </div>
+                  </div>
+
+                  <!-- Outgoing message skeleton -->
+                  <div class="flex items-end justify-end gap-2 ml-auto max-w-[75%]">
+                    <div class="space-y-1.5 flex-1 flex flex-col items-end">
+                      <p-skeleton width="65%" height="2rem" borderRadius="1rem"></p-skeleton>
+                    </div>
+                  </div>
+
+                  <!-- Another incoming skeleton -->
+                  <div class="flex items-start gap-2.5 max-w-[75%]">
+                    <p-skeleton shape="circle" size="2rem"></p-skeleton>
+                    <div class="space-y-1.5 flex-1">
+                      <p-skeleton width="25%" height="0.75rem"></p-skeleton>
+                      <p-skeleton width="90%" height="2.4rem" borderRadius="1rem"></p-skeleton>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-center gap-2 pt-3 text-xs text-muted">
+                    <i class="pi pi-spin pi-spinner text-brand-500"></i>
+                    <span>Loading conversation history...</span>
+                  </div>
+                </div>
+
+                <!-- Updating Indicator Banner when thread already has messages -->
                 <div
-                  *ngIf="loadingMessages"
-                  class="h-full flex flex-col items-center justify-center p-8"
+                  *ngIf="syncingThreadMessages && messages.length > 0"
+                  class="sticky top-0 z-10 flex items-center justify-center py-1"
                 >
-                  <i
-                    class="pi pi-spin pi-spinner text-2xl text-brand-500 mb-2"
-                  ></i>
-                  <p class="text-xs text-muted">Loading message history...</p>
+                  <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[11px] font-medium shadow-sm backdrop-blur-sm">
+                    <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                    <span>Checking for new messages...</span>
+                  </div>
+                </div>
+
+                <!-- Previous Messages Loading Indicator & Trigger -->
+                <div
+                  *ngIf="selectedConversation && !loadingMessages && messages.length > 0"
+                  class="flex flex-col items-center justify-center pt-1 pb-3 gap-1.5"
+                >
+                  <!-- Active Fetching Previous Messages Indicator -->
+                  <div
+                    *ngIf="loadingPreviousMessages"
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-medium shadow-sm animate-pulse"
+                  >
+                    <i class="pi pi-spin pi-spinner text-xs"></i>
+                    <span>Fetching previous messages...</span>
+                  </div>
+
+                  <!-- Button to load earlier messages -->
+                  <button
+                    *ngIf="!loadingPreviousMessages && !hasNoEarlierMessages"
+                    pButton
+                    type="button"
+                    label="Load previous messages"
+                    icon="pi pi-history"
+                    class="p-button-text p-button-sm p-button-secondary text-xs rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                    (click)="loadPreviousMessages()"
+                  ></button>
+
+                  <!-- Clear indication when all messages are fetched / beginning reached -->
+                  <div
+                    *ngIf="hasNoEarlierMessages"
+                    class="flex items-center gap-1.5 text-[11px] text-muted py-1.5 border-b border-black/5 dark:border-white/5 w-full justify-center"
+                  >
+                    <i class="pi pi-check-circle text-emerald-500 text-[10px]"></i>
+                    <span>Beginning of conversation with {{ selectedConversation.contact_name }}</span>
+                  </div>
                 </div>
 
                 <!-- Empty Messages in Thread -->

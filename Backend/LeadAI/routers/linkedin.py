@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional, Any, List, Dict
-from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks, Query
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -672,6 +672,7 @@ async def get_linkedin_conversations(
 )
 async def get_linkedin_conversation_messages(
     conversation_urn_id: str,
+    load_earlier: bool = Query(default=False),
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -687,7 +688,7 @@ async def get_linkedin_conversation_messages(
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
 
     try:
-        messages = await linkedin_bot.fetch_conversation_messages_api(row, conversation_urn_id)
+        messages = await linkedin_bot.fetch_conversation_messages_api(row, conversation_urn_id, load_earlier=load_earlier)
         return {"messages": messages}
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))

@@ -196,11 +196,15 @@ export class LinkedinService {
    * Fetch message history for a specific LinkedIn thread
    */
   public getConversationMessages(
-    conversationUrnId: string
+    conversationUrnId: string,
+    loadEarlier: boolean = false
   ): Observable<GetConversationMessagesResponse> {
     return this.apiService.get<GetConversationMessagesResponse>(
       `linkedin/conversations/${encodeURIComponent(conversationUrnId)}/messages`,
-      { companyScoped: true }
+      {
+        params: loadEarlier ? { load_earlier: 'true' } : {},
+        companyScoped: true,
+      }
     );
   }
 

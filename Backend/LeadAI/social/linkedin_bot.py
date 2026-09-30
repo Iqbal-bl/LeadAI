@@ -919,7 +919,7 @@ async def fetch_conversations_api(account, limit: int = 25) -> list[dict]:
             return []
 
 
-async def fetch_conversation_messages_api(account, conversation_urn_id: str) -> list[dict]:
+async def fetch_conversation_messages_api(account, conversation_urn_id: str, load_earlier: bool = False) -> list[dict]:
     """Fetch full message events history for a given conversation thread."""
     clean_id = extract_clean_conversation_id(conversation_urn_id)
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
@@ -955,9 +955,34 @@ async def fetch_conversation_messages_api(account, conversation_urn_id: str) -> 
                 else:
                     await page.goto(f"https://www.linkedin.com/messaging/thread/{clean_id}/", wait_until="domcontentloaded", timeout=15000)
 
-            # 3. Wait for messages to load in the active pane
+            # 3. Wait for messages to load in the active pane and scroll to trigger all messages
             try:
-                await page.wait_for_selector("li.msg-s-message-list__event, .msg-s-message-list__event", timeout=10000)
+                await page.wait_for_selector("li.msg-s-message-list__event, .msg-s-message-list__event", timeout=8000)
+                
+                # If loading earlier messages, scroll to the top multiple times to fetch older chunks
+                if load_earlier:
+                    for _ in range(3):
+                        await page.evaluate('''() => {
+                            const scroller = document.querySelector('.msg-s-message-list, .msg-s-message-list-container');
+                            if (scroller) scroller.scrollTop = 0;
+                            const btn = document.querySelector('button.msg-s-message-list__load-more-button, .msg-s-message-list__loader button');
+                            if (btn) btn.click();
+                        }''')
+                        await asyncio.sleep(0.8)
+                else:
+                    # Brief scroll to top to trigger any immediate previous messages
+                    await page.evaluate('''() => {
+                        const scroller = document.querySelector('.msg-s-message-list, .msg-s-message-list-container');
+                        if (scroller) scroller.scrollTop = 0;
+                    }''')
+                    await asyncio.sleep(0.3)
+
+                # Ensure scrolled to bottom so latest messages are visible
+                await page.evaluate('''() => {
+                    const scroller = document.querySelector('.msg-s-message-list, .msg-s-message-list-container');
+                    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+                }''')
+                await asyncio.sleep(0.3)
             except Exception:
                 pass
 
