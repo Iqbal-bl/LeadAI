@@ -1254,6 +1254,25 @@ class BillingSummaryOut(BaseModel):
 # ===========================================================================
 
 
+class BoundKbDocOut(BaseModel):
+    id: str
+    title: str
+    file_name: str | None = None
+    content_type: str | None = None
+    chunk_count: int = 0
+    status: str = "indexed"
+    is_primary: bool = False
+    created_at: datetime | None = None
+
+    @field_serializer("created_at")
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
 class ProductOut(BaseModel):
     id: str
     client_id: str
@@ -1261,6 +1280,8 @@ class ProductOut(BaseModel):
     product_type: str
     knowledge_base_file: str | None = None
     kb_document_id: str | None = None
+    bound_kb_document_ids: list[str] = []
+    bound_kb_documents: list[BoundKbDocOut] = []
     created_at: datetime | None = None
     created_by: str | None = None
     updated_at: datetime | None = None
@@ -1284,6 +1305,10 @@ class ProductListOut(BaseModel):
 class ProductUpdate(BaseModel):
     product_name: str | None = None
     product_type: str | None = None
+
+
+class BindExistingKbRequest(BaseModel):
+    kb_document_id: str
 
 
 ConversationDetail.model_rebuild()

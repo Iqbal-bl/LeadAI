@@ -236,6 +236,7 @@ class LeadProduct(LeadAIBase):
     ProductType = Column(String(100), nullable=False)
     KnowledgeBaseFile = Column(String(500), nullable=True)
     KbDocumentId = Column(String(36), nullable=True)
+    BoundKbDocumentIds = Column(JSON, default=list, nullable=True)
 
 
 # ===========================================================================

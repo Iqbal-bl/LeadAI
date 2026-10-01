@@ -1,7 +1,9 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { SharedModule } from '../../../../../shared/shared.module';
 import { ProductService } from '../../../../../services/product.service';
+import { KbService } from '../../../../../services/kb.service';
 import { Product } from '../../../../../models/product.models';
+import { KbDocument } from '../../../../../models/kb.models';
 import { CLIENT_PERMISSIONS } from '../../../constants/permission.constants';
 import { ConfirmationService } from '../../../../../shared/services/confirmation.service';
 import { ToastService } from '../../../../../shared/services/toast.service';
@@ -25,10 +27,20 @@ export class ProductListComponent implements OnInit {
   searchQuery = '';
   selectedTypeFilter = '';
 
-  // Dialog state
+  // Add / Edit Product Dialog state
   showProductDialog = false;
   isEditMode = false;
   editingProductId: string | null = null;
+
+  // Manage / Bind Knowledge Base Dialog state
+  showBindDialog = false;
+  managingProduct: Product | null = null;
+  companyKbDocs: KbDocument[] = [];
+  isLoadingKbDocs = false;
+  isBinding = false;
+  bindMode: 'existing' | 'upload' = 'existing';
+  selectedExistingKbId = '';
+  bindUploadFile: File | null = null;
 
   form: {
     product_name: string;
@@ -58,6 +70,7 @@ export class ProductListComponent implements OnInit {
 
   constructor(
     private productService: ProductService,
+    private kbService: KbService,
     private confirmationService: ConfirmationService,
     private toastService: ToastService,
   ) {}
@@ -178,6 +191,11 @@ export class ProductListComponent implements OnInit {
     this.selectedProduct = product;
     this.activeActionMenuItems = [
       {
+        label: 'Manage & Bind KB',
+        icon: 'pi pi-book',
+        command: () => this.openBindDialog(product),
+      },
+      {
         label: 'Edit Product',
         icon: 'pi pi-pencil',
         command: () => this.openEditDialog(product),
@@ -193,6 +211,133 @@ export class ProductListComponent implements OnInit {
       },
     ];
     this.productActionMenu.toggle(event);
+  }
+
+  // -------------------------------------------------------------------------
+  // KB Binding & Management Methods
+  // -------------------------------------------------------------------------
+
+  openBindDialog(product: Product): void {
+    this.managingProduct = product;
+    this.bindMode = 'existing';
+    this.selectedExistingKbId = '';
+    this.bindUploadFile = null;
+    this.showBindDialog = true;
+    this.loadCompanyKbDocs();
+  }
+
+  loadCompanyKbDocs(): void {
+    this.isLoadingKbDocs = true;
+    this.kbService.getDocuments().subscribe({
+      next: (docs) => {
+        this.companyKbDocs = docs || [];
+        this.isLoadingKbDocs = false;
+      },
+      error: (err) => {
+        this.isLoadingKbDocs = false;
+        console.error('Failed to load KB documents', err);
+      },
+    });
+  }
+
+  get availableKbOptions(): { label: string; value: string }[] {
+    if (!this.managingProduct) return [];
+    const boundIds = new Set<string>();
+    if (this.managingProduct.kb_document_id) {
+      boundIds.add(this.managingProduct.kb_document_id);
+    }
+    if (this.managingProduct.bound_kb_documents) {
+      this.managingProduct.bound_kb_documents.forEach((d) => boundIds.add(d.id));
+    }
+    return this.companyKbDocs
+      .filter((d) => !boundIds.has(d.id))
+      .map((d) => ({
+        label: `${d.title} ${d.file_name ? '• ' + d.file_name : ''} (${d.chunk_count} chunks)`,
+        value: d.id,
+      }));
+  }
+
+  onBindFileSelected(event: any): void {
+    const file = event.target?.files?.[0] || event.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        this.toastService.error('File size exceeds the 10MB limit.');
+        return;
+      }
+      this.bindUploadFile = file;
+    }
+  }
+
+  removeBindUploadFile(): void {
+    this.bindUploadFile = null;
+  }
+
+  bindSelectedExistingKb(): void {
+    if (!this.managingProduct) return;
+    if (!this.selectedExistingKbId) {
+      this.toastService.warn('Please select a knowledge base document to bind.');
+      return;
+    }
+    this.isBinding = true;
+    this.productService.bindExistingKb(this.managingProduct.id, this.selectedExistingKbId).subscribe({
+      next: (updatedProduct) => {
+        this.isBinding = false;
+        this.managingProduct = updatedProduct;
+        this.toastService.success('Knowledge base successfully bound to product.');
+        this.selectedExistingKbId = '';
+        this.loadProducts();
+      },
+      error: (err) => {
+        this.isBinding = false;
+        const msg = err?.error?.detail || 'Failed to bind knowledge base.';
+        this.toastService.error(msg);
+      },
+    });
+  }
+
+  uploadAndBindNewKb(): void {
+    if (!this.managingProduct) return;
+    if (!this.bindUploadFile) {
+      this.toastService.warn('Please choose a file to upload and bind.');
+      return;
+    }
+    this.isBinding = true;
+    this.productService.uploadAndBindKb(this.managingProduct.id, this.bindUploadFile).subscribe({
+      next: (updatedProduct) => {
+        this.isBinding = false;
+        this.managingProduct = updatedProduct;
+        this.toastService.success(`"${this.bindUploadFile?.name}" indexed and bound to product.`);
+        this.bindUploadFile = null;
+        this.loadProducts();
+      },
+      error: (err) => {
+        this.isBinding = false;
+        const msg = err?.error?.detail || 'Failed to upload and bind knowledge base.';
+        this.toastService.error(msg);
+      },
+    });
+  }
+
+  unbindKb(docId: string, docTitle?: string): void {
+    if (!this.managingProduct) return;
+    const title = docTitle || 'this knowledge base';
+    this.confirmationService.confirmDelete(
+      `Are you sure you want to unbind "${title}" from ${this.managingProduct.product_name}? (The document will remain in your company knowledge library)`,
+      () => {
+        if (!this.managingProduct) return;
+        this.productService.unbindKb(this.managingProduct.id, docId).subscribe({
+          next: (updatedProduct) => {
+            this.managingProduct = updatedProduct;
+            this.toastService.success('Knowledge base unbound from product.');
+            this.loadProducts();
+          },
+          error: (err) => {
+            const msg = err?.error?.detail || 'Failed to unbind document.';
+            this.toastService.error(msg);
+          },
+        });
+      },
+    );
   }
 
   confirmDelete(product: Product): void {

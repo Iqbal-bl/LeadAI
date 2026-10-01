@@ -213,6 +213,145 @@ def test_delete_product_soft_deletes_and_cleans_kb():
     assert len(listed.items) == 0
 
 
+def test_bind_existing_kb_to_product():
+    from LeadAI.routers.knowledge import _index
+    from LeadAI.schemas import BindExistingKbRequest
+
+    db, client, principal = setup()
+
+    # 1. Create a product with initial KB
+    initial_file = UploadFile(
+        file=io.BytesIO(b"Commercial plot base specifications and layout details."),
+        filename="plot_specs.txt",
+        headers={"content-type": "text/plain"},
+    )
+    p = asyncio.run(
+        products.create_product(
+            request=None,
+            product_name="Commercial Plot Sector 50",
+            product_type="Real Estate / Property",
+            file=initial_file,
+            principal=principal,
+            db=db,
+        )
+    )
+    assert p.kb_document_id is not None
+    assert len(p.bound_kb_documents) == 1
+    assert p.bound_kb_documents[0].is_primary is True
+
+    # 2. Index a separate KB doc in company (e.g. payment schedule)
+    payment_doc = _index(
+        db,
+        client.Id,
+        principal,
+        title="Commercial Plots 2026 Payment Schedule",
+        filename="payment_schedule.txt",
+        content_type="text/plain",
+        source_type="upload",
+        text="Flexible 36-month installment plan with 10% down payment for commercial plots.",
+        tags="commercial,finance,payment",
+    )
+
+    # 3. Bind the payment KB document to the existing product
+    bound_p = products.bind_existing_kb(
+        product_id=p.id,
+        payload=BindExistingKbRequest(kb_document_id=payment_doc.Id),
+        request=None,
+        principal=principal,
+        db=db,
+    )
+
+    assert payment_doc.Id in bound_p.bound_kb_document_ids
+    assert len(bound_p.bound_kb_documents) == 2
+    # Verify primary and bound docs are reflected
+    doc_titles = [d.title for d in bound_p.bound_kb_documents]
+    assert "Commercial Plots 2026 Payment Schedule" in doc_titles
+
+
+def test_bind_uploaded_kb_to_product():
+    db, client, principal = setup()
+
+    p = asyncio.run(
+        products.create_product(
+            request=None,
+            product_name="Industrial Warehouse",
+            product_type="Real Estate / Property",
+            file=None,
+            principal=principal,
+            db=db,
+        )
+    )
+
+    # Bind a new uploaded KB document
+    additional_file = UploadFile(
+        file=io.BytesIO(b"Fire safety norms and clearance certificate details for warehouse."),
+        filename="safety_clearance.txt",
+        headers={"content-type": "text/plain"},
+    )
+    bound_p = asyncio.run(
+        products.bind_kb(
+            product_id=p.id,
+            request=None,
+            kb_document_id=None,
+            file=additional_file,
+            principal=principal,
+            db=db,
+        )
+    )
+
+    assert len(bound_p.bound_kb_documents) >= 1
+    assert any("safety_clearance.txt" in (d.file_name or "") for d in bound_p.bound_kb_documents)
+
+
+def test_unbind_kb_from_product():
+    from LeadAI.routers.knowledge import _index
+    from LeadAI.schemas import BindExistingKbRequest
+
+    db, client, principal = setup()
+
+    p = asyncio.run(
+        products.create_product(
+            request=None,
+            product_name="Executive Office Suite",
+            product_type="Real Estate / Property",
+            file=None,
+            principal=principal,
+            db=db,
+        )
+    )
+
+    extra_doc = _index(
+        db,
+        client.Id,
+        principal,
+        title="Parking Rules and Passes",
+        filename="parking.txt",
+        content_type="text/plain",
+        source_type="upload",
+        text="Reserved underground parking bay with 24/7 EV charging stations.",
+        tags="office,amenities",
+    )
+
+    # Bind
+    products.bind_existing_kb(
+        product_id=p.id,
+        payload=BindExistingKbRequest(kb_document_id=extra_doc.Id),
+        request=None,
+        principal=principal,
+        db=db,
+    )
+
+    # Unbind
+    unbound_p = products.unbind_kb(
+        product_id=p.id,
+        kb_document_id=extra_doc.Id,
+        request=None,
+        principal=principal,
+        db=db,
+    )
+    assert extra_doc.Id not in unbound_p.bound_kb_document_ids
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

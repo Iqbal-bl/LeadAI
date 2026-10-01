@@ -66,4 +66,38 @@ export class ProductService {
       companyScoped: true,
     });
   }
+
+  /**
+   * Bind an existing company knowledge base document to a product
+   * POST /api/leadai/products/{id}/bind-existing-kb
+   */
+  public bindExistingKb(productId: string, kbDocumentId: string): Observable<Product> {
+    return this.apiService.post<Product>(
+      `products/${productId}/bind-existing-kb`,
+      { kb_document_id: kbDocumentId },
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Upload and bind a new knowledge base file to a product
+   * POST /api/leadai/products/{id}/bind-kb (multipart/form-data)
+   */
+  public uploadAndBindKb(productId: string, file: File): Observable<Product> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.apiService.post<Product>(`products/${productId}/bind-kb`, formData, {
+      companyScoped: true,
+    });
+  }
+
+  /**
+   * Unbind a knowledge base document from a product
+   * DELETE /api/leadai/products/{id}/bind-kb/{kb_document_id}
+   */
+  public unbindKb(productId: string, kbDocumentId: string): Observable<Product> {
+    return this.apiService.delete<Product>(`products/${productId}/bind-kb/${kbDocumentId}`, {
+      companyScoped: true,
+    });
+  }
 }
