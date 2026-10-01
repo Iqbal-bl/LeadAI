@@ -42,7 +42,15 @@
             </p>
           </div>
         </div>
+        <div
+          *ngIf="platform.isConnected"
+          class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+        >
+          <i class="pi pi-check-circle text-xs text-emerald-600 dark:text-emerald-400"></i>
+          <span>Connected</span>
+        </div>
         <p-button
+          *ngIf="!platform.isConnected"
           [label]="platform.actionLabel"
           icon="pi pi-arrow-right"
           iconPos="right"

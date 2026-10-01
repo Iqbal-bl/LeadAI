@@ -437,7 +437,7 @@ export class FacebookCallbackComponent implements OnInit {
             type,
             ...payload,
           },
-          window.location.origin
+          '*'
         );
       }
     } catch (e) {
@@ -466,7 +466,7 @@ export class FacebookCallbackComponent implements OnInit {
         window.close();
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Fallback if not inside a popup
     this.router.navigate(['/client/channels']);

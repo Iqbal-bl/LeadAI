@@ -43,10 +43,7 @@ export class CustomerListComponent implements OnInit {
   stageOptions = [
     { label: 'All Stages', value: '' },
     { label: 'Opportunity', value: 'opportunity' },
-    { label: 'New', value: 'new' },
-    { label: 'Active', value: 'active' },
-    { label: 'VIP', value: 'vip' },
-    { label: 'Churned', value: 'churned' },
+    { label: 'Customer', value: 'customer' },
   ];
 
   statusOptions = [
@@ -60,7 +57,7 @@ export class CustomerListComponent implements OnInit {
     private authService: AuthService,
     private messageService: MessageService,
     private router: Router,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     const user = this.authService.getCurrentUser();

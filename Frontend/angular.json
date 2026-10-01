@@ -78,6 +78,8 @@
           "options": {
             "allowedHosts": [
               ".ngrok-free.app",
+              ".ngrok-free.dev",
+              "sporting-zombie-kennel.ngrok-free.dev",
               "tuna-next-internally.ngrok-free.app",
               "localhost",
               "127.0.0.1"

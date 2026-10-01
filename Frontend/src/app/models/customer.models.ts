@@ -46,9 +46,19 @@ export interface Customer {
 }
 
 export interface CustomerRevealResponse {
+  id?: string;
+  display_name?: string;
   phone: string | null;
   email: string | null;
-  revealed_at: string;
+  whatsapp?: string | null;
+  social_identities?: Array<{
+    channel: string;
+    external_user_id?: string;
+    profile_name?: string;
+    handle?: string;
+    profile_url?: string;
+  }>;
+  revealed_at?: string;
 }
 
 export interface CustomerConvertRequest {
