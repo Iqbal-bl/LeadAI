@@ -2004,6 +2004,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
 
                 existing_comment = db.query(LeadSocialComment).filter(
                     LeadSocialComment.ClientId == account.ClientId,
+                    LeadSocialComment.AccountId == account.Id,
                     LeadSocialComment.CommentUrn == c_urn,
                     LeadSocialComment.IsDeleted == False
                 ).first()
@@ -2011,6 +2012,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                 if not existing_comment:
                     new_comment = LeadSocialComment(
                         ClientId=account.ClientId,
+                        AccountId=account.Id,
                         Channel="linkedin",
                         PostUrn=post_urn,
                         PostTitle=post_title,

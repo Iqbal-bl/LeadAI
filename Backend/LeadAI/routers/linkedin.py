@@ -813,7 +813,8 @@ async def sync_linkedin_messages(
 
     row = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
     ).first()
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
@@ -932,11 +933,21 @@ async def get_linkedin_comments(
         if background_tasks is not None:
             background_tasks.add_task(_bg_auto_sync_comments, company_id)
 
+    active_account = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
+    ).first()
+
     q = db.query(LeadSocialComment).filter(
         LeadSocialComment.ClientId == company_id,
         LeadSocialComment.Channel == "linkedin",
         LeadSocialComment.IsDeleted == False,
     )
+
+    if active_account:
+        from sqlalchemy import or_
+        q = q.filter(or_(LeadSocialComment.AccountId == active_account.Id, LeadSocialComment.AccountId == None))
 
     if status_filter:
         q = q.filter(LeadSocialComment.Status == status_filter)
@@ -1045,6 +1056,7 @@ async def post_linkedin_comment_reply(
     account = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
         LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
     ).first()
 
     if not account:
@@ -1171,6 +1183,7 @@ async def sync_linkedin_comments(
     account = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
         LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
     ).first()
 
     if not account or (not account.LinkedinCookieEnc and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):

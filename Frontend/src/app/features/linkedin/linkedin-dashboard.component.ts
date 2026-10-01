@@ -845,18 +845,20 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     this.stopChatPolling();
     if (this.activeTab !== 'messages') return;
     this.chatPollingInterval = setInterval(() => {
-      if (this.activeTab !== 'messages') {
-        this.stopChatPolling();
+      // Pause polling if tab is not messages or browser window is hidden/minimized
+      if (this.activeTab !== 'messages' || typeof document !== 'undefined' && document.hidden) {
+        if (this.activeTab !== 'messages') this.stopChatPolling();
         return;
       }
       if (
         this.selectedConversation &&
         !this.loadingMessages &&
+        !this.syncingThreadMessages &&
         !this.sendingMessage
       ) {
         this.selectConversation(this.selectedConversation, true);
       }
-    }, 15000);
+    }, 20000);
   }
 
   private stopChatPolling(): void {
