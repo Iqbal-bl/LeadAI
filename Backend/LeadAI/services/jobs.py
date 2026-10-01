@@ -57,6 +57,7 @@ logger = logging.getLogger(__name__)
 _HANDLERS: dict[str, Callable[[Any, dict], dict | None]] = {}
 _worker_task: asyncio.Task | None = None
 _stopping = False
+_main_loop: asyncio.AbstractEventLoop | None = None
 
 
 def worker_id() -> str:
@@ -205,7 +206,11 @@ def _run_one(job_id: str) -> None:
 
 async def run_worker() -> None:
     """Poll loop. Started from the FastAPI startup hook when enabled."""
-    global _stopping
+    global _stopping, _main_loop
+    try:
+        _main_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
     me = worker_id()
     logger.info("[LeadAI jobs] worker %s started (concurrency=%d)", me, settings.worker_concurrency)
     running: set[asyncio.Task] = set()
@@ -260,13 +265,17 @@ async def run_worker() -> None:
 
 
 def start(loop: asyncio.AbstractEventLoop | None = None) -> None:
-    global _worker_task, _stopping
+    global _worker_task, _stopping, _main_loop
     if not settings.worker_enabled:
         logger.info("[LeadAI jobs] worker disabled by config")
         return
     if _worker_task is not None and not _worker_task.done():
         return
     _stopping = False
+    try:
+        _main_loop = loop or asyncio.get_running_loop()
+    except RuntimeError:
+        _main_loop = loop
     _worker_task = asyncio.create_task(run_worker())
 
 
@@ -404,7 +413,20 @@ def handle_linkedin_sync_comments(db: Session, payload: dict) -> dict:
     results = {}
     for account in accounts:
         try:
-            res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account))
+            if _main_loop is not None and _main_loop.is_running() and not _main_loop.is_closed():
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        fetch_recent_posts_and_comments_browser(db, account),
+                        _main_loop,
+                    )
+                    res = future.result(timeout=240)
+                except RuntimeError as r_err:
+                    if "closed" in str(r_err).lower():
+                        res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account))
+                    else:
+                        raise
+            else:
+                res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account))
             results[account.ClientId] = res
         except Exception as exc:
             logger.warning("[LeadAI jobs] LinkedIn comment sync error for client %s: %s", account.ClientId, exc)

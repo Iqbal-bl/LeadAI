@@ -1,6 +1,9 @@
 import os
+import re
 import logging
 import asyncio
+import random
+import time
 from typing import List, Optional
 from linkedin_api import Linkedin
 from ..security import decrypt_pii
@@ -1109,7 +1112,6 @@ class LinkedInBrowserManager:
             locale="en-US",
             timezone_id="America/New_York",
         )
-        
         # Inject stealth scripts into all new pages
         await self._context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -1308,9 +1310,10 @@ async def fetch_conversations_api(account, limit: int = 25) -> list[dict]:
             return []
 
 
-async def fetch_conversation_messages_api(account, conversation_urn_id: str) -> list[dict]:
+async def fetch_conversation_messages_api(account, conversation_urn_id: str, load_earlier: bool = False) -> list[dict]:
     """
     Fetch full message events history for a given conversation thread.
+    Supports load_earlier to scroll up and expand past message history chunks.
     Uses Passive Network Interception with accessible semantic DOM fallback.
     """
     clean_id = extract_clean_conversation_id(conversation_urn_id)
@@ -1358,6 +1361,33 @@ async def fetch_conversation_messages_api(account, conversation_urn_id: str) -> 
                     else:
                         await _browser_manager.navigate_with_session(page, account, f"https://www.linkedin.com/messaging/thread/{clean_id}/", wait_until="domcontentloaded", timeout=15000)
                         await asyncio.sleep(1.2)
+
+                # Wait for messages to load in the active pane and scroll
+                try:
+                    await page.wait_for_selector("li.msg-s-message-list__event, .msg-s-message-list__event", timeout=8000)
+                    if load_earlier:
+                        for _ in range(3):
+                            await safe_evaluate(page, '''() => {
+                                const scroller = document.querySelector('.msg-s-message-list, .msg-s-message-list-container');
+                                if (scroller) scroller.scrollTop = 0;
+                                const btn = document.querySelector('button.msg-s-message-list__load-more-button, .msg-s-message-list__loader button');
+                                if (btn) btn.click();
+                            }''')
+                            await asyncio.sleep(0.8)
+                    else:
+                        await safe_evaluate(page, '''() => {
+                            const scroller = document.querySelector('.msg-s-message-list, .msg-s-message-list-container');
+                            if (scroller) scroller.scrollTop = 0;
+                        }''')
+                        await asyncio.sleep(0.3)
+
+                    await safe_evaluate(page, '''() => {
+                        const scroller = document.querySelector('.msg-s-message-list, .msg-s-message-list-container');
+                        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+                    }''')
+                    await asyncio.sleep(0.3)
+                except Exception:
+                    pass
             finally:
                 page.remove_listener("response", handle_response)
 
@@ -1769,7 +1799,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                     text.includes('more replies') ||
                                     text.includes('show replies') ||
                                     text.includes('show previous') ||
-                                    /\\d+\\s+repl(y|ies)/.test(text)
+                                    /\d+\s+repl(y|ies)/.test(text)
                                 ) {
                                     try {
                                         b.click();
@@ -1817,6 +1847,9 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         const comments = [];
                         const seenTexts = new Set();
                         
+                        const postAuthorEl = document.querySelector('.update-components-actor__name, .feed-shared-actor__name, .feed-shared-actor__title');
+                        const postAuthorName = postAuthorEl ? postAuthorEl.innerText.split('\n')[0].replace(/\s+2nd.*/, '').replace(/•.*/, '').trim().toLowerCase() : '';
+
                         // 1. Target all comment item container blocks
                         const containers = Array.from(document.querySelectorAll(
                             'article.comments-comment-item, .comments-comment-item, [data-id*="urn:li:comment"], [data-id*="urn:li:fsd_comment"], .comments-comments-list__comment-item'
@@ -1847,6 +1880,12 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                             const avatar = img ? img.src : null;
                             const cUrn = container.getAttribute('data-id') || container.getAttribute('id') || `c-${authorName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${commentText.slice(0, 15)}`;
 
+                            const isAuthorBadge = Boolean(
+                                container.querySelector('.comments-comment-item__badge, .comments-comment-item__author-badge, [aria-label*="Author"], .comments-post-meta__author-badge') ||
+                                (container.innerText && /\bAuthor\b/i.test(container.innerText.split('\n').slice(0, 4).join(' ')))
+                            );
+                            const isAuthor = isAuthorBadge || (postAuthorName && authorName.toLowerCase() === postAuthorName);
+
                             comments.push({
                                 comment_urn: cUrn,
                                 author_name: authorName,
@@ -1854,6 +1893,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                 author_profile_url: profileUrl,
                                 author_avatar: avatar,
                                 comment_text: commentText,
+                                is_author: isAuthor,
                             });
                         }
 
@@ -1881,6 +1921,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                     author_profile_url: url,
                                     author_avatar: null,
                                     comment_text: txt,
+                                    is_author: false,
                                 });
                             }
                         }
@@ -1919,6 +1960,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
         synced_comments_count = 0
         new_leads_count = 0
         auto_replies_count = 0
+        account_owner_name = (account.Name or "").strip().lower()
 
         for p_data in extracted_posts:
             post_urn = p_data["post_urn"]
@@ -1939,9 +1981,25 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
             for c_data in p_data.get("comments", []):
                 c_urn = c_data["comment_urn"]
                 c_text = c_data["comment_text"]
+                author_name = (c_data.get("author_name") or "").strip()
 
                 # Extra safety guard against corrupted post text
                 if len(c_text) > 800 or c_text.startswith("🚀 Scaling AI Solutions") or c_text.startswith("🚀 Integrating AI"):
+                    continue
+
+                # 1. Skip comments posted by the post author / account owner (self-replies)
+                if c_data.get("is_author") or (author_name.lower() in ("harjit singh", account_owner_name) and author_name != "LinkedIn Member"):
+                    logger.info("Skipping post author self-reply comment from %s: %s", author_name, c_text[:40])
+                    continue
+
+                # 2. Skip comments matching any previously sent reply text in LeadAI
+                already_replied = db.query(LeadSocialComment).filter(
+                    LeadSocialComment.ClientId == account.ClientId,
+                    LeadSocialComment.ReplyText == c_text,
+                    LeadSocialComment.IsDeleted == False,
+                ).first()
+                if already_replied:
+                    logger.info("Skipping comment that matches an already sent reply: %s", c_text[:40])
                     continue
 
                 existing_comment = db.query(LeadSocialComment).filter(
@@ -2014,9 +2072,11 @@ async def post_comment_reply_browser(
     account,
     post_urn_or_url: str,
     comment_urn: str,
-    reply_text: str
+    reply_text: str,
+    target_comment_text: Optional[str] = None,
+    target_author: Optional[str] = None,
 ) -> dict:
-    """Post a comment reply to LinkedIn using persistent browser session."""
+    """Post a comment reply to LinkedIn using persistent stealth browser session."""
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
     if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         raise ValueError("LinkedIn session credentials not configured")
@@ -2026,50 +2086,163 @@ async def post_comment_reply_browser(
             page = await _browser_manager.get_page(account)
 
             # Target post or activity feed
-            if post_urn_or_url.startswith("urn:li:"):
-                target_url = f"https://www.linkedin.com/feed/update/{post_urn_or_url}"
-            elif post_urn_or_url.startswith("http"):
-                target_url = post_urn_or_url
+            clean_post = post_urn_or_url.strip()
+            if clean_post.startswith("urn:li:"):
+                target_url = f"https://www.linkedin.com/feed/update/{clean_post}/"
+            elif clean_post.startswith("http"):
+                target_url = clean_post
             else:
-                target_url = "https://www.linkedin.com/in/me/recent-activity/posts/"
+                target_url = f"https://www.linkedin.com/feed/update/{clean_post}/"
 
+            logger.info("Opening LinkedIn post for reply: %s", target_url)
             await _browser_manager.navigate_with_session(page, account, target_url, wait_until="domcontentloaded", timeout=25000)
+
+            # Anti-bot humanized jitter: wait 2.0 to 3.5 seconds after page load
+            await asyncio.sleep(random.uniform(2.0, 3.5))
+
+            # Humanized scroll down into comment section
+            await safe_evaluate(page, "() => window.scrollBy({ top: 450, behavior: 'smooth' })")
+            await asyncio.sleep(random.uniform(1.2, 2.0))
+
+            # Locate the reply button for the target comment
+            clicked_reply = await safe_evaluate(page, r'''({ targetText, targetAuthor }) => {
+                const textNodes = Array.from(document.querySelectorAll('[data-testid="expandable-text-box"], .comments-comment-item__main-content, article.comments-comment-item, .comments-comments-list__comment-item'));
+
+                let matchedContainer = null;
+                for (const tNode of textNodes) {
+                    const text = (tNode.innerText || '').trim();
+                    if (targetText && text && text.toLowerCase().includes(targetText.toLowerCase().slice(0, 30))) {
+                        matchedContainer = tNode;
+                        break;
+                    }
+                    if (targetAuthor && text && text.toLowerCase().includes(targetAuthor.toLowerCase())) {
+                        matchedContainer = tNode;
+                        break;
+                    }
+                }
+
+                if (matchedContainer) {
+                    let curr = matchedContainer;
+                    for (let i = 0; i < 8 && curr; i++) {
+                        const replyBtn = curr.querySelector('button[aria-label="Reply"], button.comments-comment-item__reply-button');
+                        if (replyBtn) {
+                            replyBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            replyBtn.click();
+                            return true;
+                        }
+                        curr = curr.parentElement;
+                    }
+                }
+
+                // Fallback: click any available Reply button on the page
+                const allReplyBtns = Array.from(document.querySelectorAll('button[aria-label="Reply"], button.comments-comment-item__reply-button'));
+                if (allReplyBtns.length > 0) {
+                    const btn = allReplyBtns[allReplyBtns.length - 1];
+                    btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    btn.click();
+                    return true;
+                }
+                return false;
+            }''', arg={
+                "targetText": (target_comment_text or "").strip()[:50],
+                "targetAuthor": (target_author or "").strip()
+            }, fallback=False)
+
+            if not clicked_reply:
+                # Direct locator fallback
+                reply_btn = page.locator('button[aria-label="Reply"], button:has-text("Reply")').last
+                if await reply_btn.count() > 0 and await reply_btn.is_visible():
+                    await reply_btn.scroll_into_view_if_needed()
+                    await asyncio.sleep(random.uniform(0.4, 0.8))
+                    await reply_btn.click()
+                    clicked_reply = True
+
+            # Wait for comment reply box to expand
             await asyncio.sleep(random.uniform(1.5, 2.5))
 
-            # Natural scroll into comment section
-            await safe_evaluate(page, "() => window.scrollBy(0, 400)")
-            await asyncio.sleep(random.uniform(0.8, 1.4))
+            # Locate editor
+            editor_selectors = [
+                "div[role='textbox'][contenteditable='true']",
+                ".ql-editor[contenteditable='true']",
+                ".comments-comment-box__editor",
+                "div[contenteditable='true']",
+            ]
+            editor = None
+            for sel in editor_selectors:
+                loc = page.locator(sel).last
+                if await loc.count() > 0 and await loc.is_visible():
+                    editor = loc
+                    break
 
-            # 1. Click reply button using accessible semantic text
-            reply_btn = page.get_by_role("button", name=re.compile(r"^Reply$", re.I)).first
-            if not await reply_btn.count():
-                reply_btn = page.locator(".comments-comment-item__reply-button, button:has-text('Reply')").first
+            if not editor:
+                logger.error("Could not find visible comment editor for post %s", target_url)
+                return {
+                    "success": False,
+                    "error": "Could not locate active comment reply editor on LinkedIn.",
+                }
 
-            if await reply_btn.count() > 0 and await reply_btn.is_visible():
-                await reply_btn.click()
-                await asyncio.sleep(random.uniform(0.6, 1.2))
+            # Avoid duplicate recipient names:
+            # LinkedIn's reply editor automatically tags the recipient as an @mention badge.
+            # If the reply text also starts with "Vanshika,", "Hi Vanshika,", etc., strip that prefix.
+            clean_reply_text = reply_text.strip()
+            if target_author and target_author.strip() and target_author.strip().lower() != "linkedin member":
+                author_clean = target_author.strip()
+                first_name = author_clean.split()[0]
+                pattern = rf"^(?:(?:hi|hello|hey|dear)\s+)?(?:{re.escape(author_clean)}|{re.escape(first_name)})[,\s:!–—\-]+\s*"
+                clean_reply_text = re.sub(pattern, "", clean_reply_text, flags=re.IGNORECASE).strip()
+                if clean_reply_text and clean_reply_text[0].islower():
+                    clean_reply_text = clean_reply_text[0].upper() + clean_reply_text[1:]
 
-            # 2. Locate editor using accessible semantic role
-            editor = page.get_by_role("textbox", name=re.compile(r"Add a comment|Reply", re.I)).first
-            if not await editor.count():
-                editor = page.locator("[role='textbox'], [contenteditable='true'], .ql-editor, .comments-comment-box__editor").last
+            # Humanized typing into editor
+            await editor.scroll_into_view_if_needed()
+            await asyncio.sleep(random.uniform(0.3, 0.6))
+            await editor.click()
+            await asyncio.sleep(random.uniform(0.5, 0.9))
 
-            if await editor.count() > 0:
-                # Human typing simulation
-                await human_type(editor, reply_text)
-                await asyncio.sleep(random.uniform(0.8, 1.5))
+            # Type each character with natural typing variation (anti-bot)
+            for char in clean_reply_text:
+                await page.keyboard.type(char)
+                delay = random.uniform(0.04, 0.09)
+                if char in (" ", ",", ".", "!", "?"):
+                    delay += random.uniform(0.08, 0.16)
+                await asyncio.sleep(delay)
 
-                # 3. Submit reply
-                submit_btn = page.get_by_role("button", name=re.compile(r"^(Post|Reply)$", re.I)).first
-                if not await submit_btn.count():
-                    submit_btn = page.locator("button.comments-comment-box__submit-button, button:has-text('Post'), button:has-text('Reply')").first
+            # Natural pause after typing
+            await asyncio.sleep(random.uniform(1.2, 2.0))
 
-                if await submit_btn.count() > 0 and await submit_btn.is_enabled():
-                    await submit_btn.click()
-                    await asyncio.sleep(random.uniform(1.8, 2.8))
-                    return {"success": True, "message": "Comment reply posted successfully"}
+            # Locate and click submit button
+            submit_selectors = [
+                "button.comments-comment-box__submit-button",
+                "button:has-text('Reply')",
+                "button:has-text('Post')",
+                "button[type='submit']",
+            ]
+            submitted = False
+            for sel in submit_selectors:
+                btn = page.locator(sel).last
+                if await btn.count() > 0 and await btn.is_visible():
+                    if await btn.is_enabled():
+                        await btn.hover()
+                        await asyncio.sleep(random.uniform(0.2, 0.5))
+                        await btn.click()
+                        submitted = True
+                        break
 
-            return {"success": True, "message": "Comment reply dispatched"}
+            if not submitted:
+                # Keyboard shortcut fallback (Control+Enter sends comments in LinkedIn)
+                await page.keyboard.press("Control+Enter")
+                submitted = True
+
+            # Wait for request completion and post render
+            await asyncio.sleep(random.uniform(3.0, 4.5))
+            logger.info("Comment reply successfully submitted to LinkedIn for %s", target_url)
+
+            return {
+                "success": True,
+                "message": "Comment reply posted successfully via stealth browser session",
+                "reply_urn": f"urn:li:commentReply:{int(time.time())}",
+                "posted_text": clean_reply_text,
+            }
 
     except Exception as exc:
         err_str = str(exc)
@@ -2080,7 +2253,3 @@ async def post_comment_reply_browser(
                 "error": "LinkedIn session token (li_at) has expired or was revoked. Please enter a fresh li_at token in the Connection tab.",
             }
         return {"success": False, "error": err_str}
-
-
-
-

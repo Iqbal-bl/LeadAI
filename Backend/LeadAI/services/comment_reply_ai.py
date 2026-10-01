@@ -69,7 +69,7 @@ class CommentReplyAIService:
         try:
             from domain.models import Client
         except ImportError:
-            from Domain.models import Client
+            pass
         
         client = db.query(Client).filter(Client.Id == client_id, Client.IsDeleted == False).first()
         company_name = client.Name if client else "Our Organization"
@@ -160,7 +160,7 @@ KNOWLEDGE BASE CONTEXT:
 REPLY GUIDELINES:
 1. Tone: {tone.replace('_', ' ').title()}.
 2. Be authentic, professional, and conversational. NEVER sound like a generic AI (Avoid: "Thank you for your valuable insight!", "Indeed!", "Great question!").
-3. Greet the commenter naturally by their first name (or full name if first name is ambiguous).
+3. Do NOT prefix or greet with the commenter's name (e.g., do NOT start with "Hi John," or "John,") because LinkedIn automatically prefixes their @mention tag to the reply. Jump straight into the conversational response.
 4. Connect their comment directly to the specific topic/insights of the post.
 5. If the comment is a question: answer it clearly and accurately using the context provided.
 6. If the comment expresses interest, inquiry, or partnership: provide a helpful answer and gently invite them to connect or send a DM.
