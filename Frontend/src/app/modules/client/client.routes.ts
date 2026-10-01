@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { ClientPermissionGuard } from './guards/client-permission.guard';
+import { ChannelPlanGuard } from '../../guards/channel-plan.guard';
 
 export const CLIENT_ROUTES: Routes = [
   {
@@ -90,6 +91,15 @@ export const CLIENT_ROUTES: Routes = [
           ),
       },
       {
+        path: 'products',
+        canActivate: [ClientPermissionGuard],
+        data: { permission: 'kb.read' },
+        loadComponent: () =>
+          import('./pages/products/product-list/product-list.component').then(
+            (m) => m.ProductListComponent,
+          ),
+      },
+      {
         path: 'prompts',
         canActivate: [ClientPermissionGuard],
         data: { permission: 'prompt.read' },
@@ -118,8 +128,8 @@ export const CLIENT_ROUTES: Routes = [
       },
       {
         path: 'linkedin',
-        canActivate: [ClientPermissionGuard],
-        data: { permission: 'channel.read' },
+        canActivate: [ClientPermissionGuard, ChannelPlanGuard],
+        data: { permission: 'channel.read', requiredChannel: 'linkedin' },
         loadComponent: () =>
           import('../../features/linkedin/linkedin-dashboard.component').then(
             (m) => m.LinkedinDashboardComponent,
@@ -178,6 +188,8 @@ export const CLIENT_ROUTES: Routes = [
       },
       {
         path: 'blog',
+        canActivate: [ClientPermissionGuard, ChannelPlanGuard],
+        data: { permission: 'campaign.read', requiredFeature: 'blog' },
         loadComponent: () =>
           import('../../features/blog/blog-dashboard/blog-dashboard.component').then(
             (m) => m.BlogDashboardComponent,

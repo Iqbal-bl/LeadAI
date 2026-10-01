@@ -398,6 +398,16 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
             db, "campaign.run", {"campaign_id": campaign.Id},
             client_id=campaign.ClientId, run_at=resume_at,
         )
+        activity.log(
+            db,
+            action=A.CAMPAIGN_DEFERRED,
+            client_id=campaign.ClientId,
+            actor_email="system",
+            entity_type="campaign",
+            entity_id=campaign.Id,
+            message=f"Campaign deferred: quiet hours active until {resume_at:%H:%M} (resumes automatically)",
+            meta={"resume_at": str(resume_at), "reason": "quiet_hours"},
+        )
         db.commit()
         return {"deferred_until": str(resume_at)}
 
@@ -463,11 +473,9 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         actor_email="system",
         entity_type="campaign",
         entity_id=campaign.Id,
-        message=f"Batch: {sent} sent, {failed} failed, {skipped} skipped ({remaining} remaining)",
+        message=f"Batch processed: {sent} sent, {failed} failed, {skipped} skipped — {remaining} remaining",
         meta={"sent": sent, "failed": failed, "skipped": skipped, "remaining": remaining},
     )
-    db.commit()
-
     if remaining:
         jobs.enqueue(
             db, "campaign.run", {"campaign_id": campaign.Id}, client_id=campaign.ClientId

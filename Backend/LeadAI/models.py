@@ -218,6 +218,28 @@ class LeadKbChunk(LeadAIBase):
 
 
 # ===========================================================================
+# Client Products
+# ===========================================================================
+
+
+class LeadProduct(LeadAIBase):
+    """Product catalog item added by a client company with an associated knowledge base file."""
+
+    __tablename__ = "leadai_products"
+    __table_args__ = (
+        Index("ix_leadai_product_client", "ClientId"),
+        Index("ix_leadai_product_type", "ProductType"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    ProductName = Column(String(200), nullable=False)
+    ProductType = Column(String(100), nullable=False)
+    KnowledgeBaseFile = Column(String(500), nullable=True)
+    KbDocumentId = Column(String(36), nullable=True)
+    BoundKbDocumentIds = Column(JSON, default=list, nullable=True)
+
+
+# ===========================================================================
 # Per-company dynamic scripts + prompts
 # ===========================================================================
 
@@ -254,6 +276,40 @@ class LeadCompanyScript(LeadAIBase):
     VoiceGender = Column(String(20), nullable=True)
     VoiceSpeaker = Column(String(60), nullable=True)
     MultiStt = Column(Boolean, default=False)
+
+
+# Valid LeadCompanyDataPoint.DataType values.
+DATA_POINT_TYPES = ("text", "number", "boolean", "select", "date", "email")
+
+
+class LeadCompanyDataPoint(LeadAIBase):
+    """One custom field a company admin wants the AI to collect from every lead —
+    "these are the data points AI will collect and give to the company admin."
+
+    Defined once per company (not per script — every script/channel asks toward
+    the same set), then two things happen with no further admin work:
+      * ai_engine.qualify()'s existing extraction call also tries to fill in
+        whatever it can from the conversation so far, keyed by `Key`.
+      * a required data point still missing is worked into the prompt (see
+        memory.missing_data_points_note) so the AI asks for it directly rather
+        than only capturing it if the customer happens to mention it.
+    """
+
+    __tablename__ = "leadai_company_data_points"
+    __table_args__ = (
+        UniqueConstraint("ClientId", "Key", name="uq_leadai_datapoint_client_key"),
+        Index("ix_leadai_datapoint_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    Key = Column(String(60), nullable=False)          # slug used in FactsJson-style storage
+    Label = Column(String(160), nullable=False)        # shown to the admin and used in the prompt
+    DataType = Column(String(20), nullable=False, default="text")
+    OptionsJson = Column(JSON, nullable=True)          # DataType == "select": list[str] of choices
+    Description = Column(String(300), nullable=True)   # extra guidance for the AI, e.g. "in lakhs"
+    Required = Column(Boolean, default=False)          # required -> the AI proactively asks for it
+    DisplayOrder = Column(Integer, default=0)
+    IsActive = Column(Boolean, default=True)
 
 
 class LeadCompanyPrompt(LeadAIBase):
@@ -469,6 +525,11 @@ class Lead(LeadAIBase):
     # incrementally by ai_engine.qualify() so they survive after the raw turns fall
     # out of the LLM's window. A JSON list of short strings; see memory.thread_state_note.
     FactsJson = Column(JSON, nullable=True)
+    # Values for this company's admin-defined LeadCompanyDataPoint fields, keyed
+    # by DataPoint.Key. Deliberately separate from FactsJson: these are
+    # structured (typed, admin-named) answers the company asked for by name,
+    # not the model's own loose observations.
+    DataPointsJson = Column(JSON, nullable=True)
     QualifiedAt = Column(DateTime, nullable=True)
     # Threshold bookkeeping. Denormalised onto the lead so the dashboard query is
     # a single indexed WHERE instead of a join to settings per row.
@@ -646,7 +707,9 @@ ALL_LEADAI_TABLES = (
     LeadActivityLog,
     LeadKbDocument,
     LeadKbChunk,
+    LeadProduct,
     LeadCompanyScript,
+    LeadCompanyDataPoint,
     LeadCompanyPrompt,
     LeadCompanySettings,
     LeadCustomer,

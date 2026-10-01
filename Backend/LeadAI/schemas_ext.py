@@ -351,6 +351,29 @@ class RecipientListOut(BaseModel):
     items: list[RecipientOut] = []
 
 
+class CampaignHistoryItemOut(BaseModel):
+    id: str
+    action: str
+    message: str
+    meta: dict[str, Any] | None = None
+    created_at: datetime
+    actor_email: str | None = None
+    log_type: str | None = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime, _info):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class CampaignHistoryListOut(BaseModel):
+    total_items: int
+    page: int
+    page_size: int
+    items: list[CampaignHistoryItemOut] = []
+
+
 class CampaignPreviewOut(BaseModel):
     """What a dry run of the campaign would do — shown before Start."""
 

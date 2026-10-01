@@ -45,6 +45,8 @@ ADDON_BENCHMARKS = {
     "instagram": 2000.0,
     "facebook": 2000.0,
     "linkedin": 3000.0,
+    "blog": 2000.0,
+    "voice_facilities": 2500.0,
 }
 
 
@@ -66,6 +68,8 @@ DEFAULT_PLANS = [
     {"name": "Instagram DM Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "instagram", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Turn comments and DMs into high-intent inbound customers instantly."},
     {"name": "Facebook Messenger", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "facebook", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Engage visitors contacting your Facebook business page around the clock."},
     {"name": "LinkedIn Lead Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "linkedin", "included_minutes": 0.0, "validity_days": 30, "price": 3000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Automate connection messaging, B2B lead qualification, and CRM syncing on LinkedIn."},
+    {"name": "AI Blog Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "blog", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Automated SEO blog generation, Ghost/WordPress publishing, and content marketing funnel."},
+    {"name": "Voice Call Facilities", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "voice_facilities", "included_minutes": 0.0, "validity_days": 30, "price": 2500.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Dedicated business virtual DID number, inbound IVR auto-receptionist, and call routing facility."},
 ]
 
 
@@ -87,21 +91,45 @@ def ensure_default_templates(db: Session) -> None:
             )
         ).update({"IsActive": False, "IsDeleted": True}, synchronize_session=False)
 
-        for plan_def in DEFAULT_PLANS:
-            existing = (
-                db.query(LeadRechargePlanTemplate)
-                .filter(
-                    LeadRechargePlanTemplate.Name == plan_def["name"],
-                    LeadRechargePlanTemplate.PlanCategory == plan_def["plan_category"],
-                )
-                .first()
+        # Remove duplicate channel add-on templates in DB so each FeatureKey has at most 1 active template
+        addon_templates = (
+            db.query(LeadRechargePlanTemplate)
+            .filter(
+                LeadRechargePlanTemplate.PlanCategory == PLAN_CATEGORY_CHANNEL_ADDON,
+                LeadRechargePlanTemplate.FeatureKey.isnot(None),
+                LeadRechargePlanTemplate.IsActive == True,
+                LeadRechargePlanTemplate.IsDeleted == False,
             )
+            .order_by(LeadRechargePlanTemplate.Id.asc())
+            .all()
+        )
+        seen_keys = set()
+        for t in addon_templates:
+            k = (t.FeatureKey or "").lower().strip()
+            if k in seen_keys:
+                t.IsActive = False
+                t.IsDeleted = True
+            else:
+                seen_keys.add(k)
+
+        for plan_def in DEFAULT_PLANS:
+            feat_key = plan_def.get("feature_key")
+            query = db.query(LeadRechargePlanTemplate).filter(
+                LeadRechargePlanTemplate.PlanCategory == plan_def["plan_category"],
+                LeadRechargePlanTemplate.IsDeleted == False,
+            )
+            if feat_key:
+                query = query.filter(LeadRechargePlanTemplate.FeatureKey == feat_key)
+            else:
+                query = query.filter(LeadRechargePlanTemplate.Name == plan_def["name"])
+            existing = query.first()
+
             if not existing:
                 template = LeadRechargePlanTemplate(
                     Name=plan_def["name"],
                     PlanType=plan_def["plan_type"],
                     PlanCategory=plan_def["plan_category"],
-                    FeatureKey=plan_def.get("feature_key"),
+                    FeatureKey=feat_key,
                     TargetClientId=None,
                     IncludedMinutes=plan_def["included_minutes"],
                     ValidityDays=plan_def["validity_days"],
@@ -110,6 +138,7 @@ def ensure_default_templates(db: Session) -> None:
                     Description=plan_def["description"],
                     AutoPayByDefault=plan_def.get("auto_pay_by_default", True),
                     IsActive=True,
+                    IsDeleted=False,
                 )
                 db.add(template)
 
@@ -2235,6 +2264,12 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
     elif ch_norm in ("linkedin", "li"):
         target_keys = {"linkedin", "li"}
         channel_name = "LinkedIn Lead Gen"
+    elif ch_norm in ("blog", "blogs", "ai_blog", "content_studio"):
+        target_keys = {"blog", "blogs", "ai_blog", "content_studio"}
+        channel_name = "AI Blog & Content Studio"
+    elif ch_norm in ("voice_facilities", "voice_addon", "did"):
+        target_keys = {"voice_facilities", "voice_addon", "did"}
+        channel_name = "Voice Call Facilities"
     else:
         target_keys = {ch_norm}
         channel_name = channel.title()
@@ -2255,7 +2290,7 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
                     db.rollback()
         if not active_channels and active.PlanNameSnapshot:
             plan_lower = active.PlanNameSnapshot.lower()
-            found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin") if c in plan_lower]
+            found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin", "blog") if c in plan_lower]
             if found:
                 active_channels = set(found)
                 active.ActiveChannels = found
@@ -2268,6 +2303,4 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
         return False, f"Your active plan does not include '{channel_name}'. Please add this channel add-on from Billing & Prepaid Recharges to perform actions on it."
 
     return True, ""
-
-
 

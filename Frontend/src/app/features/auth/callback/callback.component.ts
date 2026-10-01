@@ -127,10 +127,22 @@ export class CallbackComponent implements OnInit {
           //     this.router.navigate([path]);
           //   },
           // });
-          if (this.authService.isSuperAdmin()) {
+          if (this.authService.isSuperAdmin() || this.authService.isPlatformAdmin()) {
             this.router.navigate(['/admin/dashboard']);
           } else {
-            this.router.navigate(['/client/dashboard']);
+            // Check company subscription immediately upon login
+            this.authService.getAccessMe().subscribe({
+              next: (me) => {
+                if (me.has_active_subscription) {
+                  this.router.navigate(['/client/dashboard']);
+                } else {
+                  this.router.navigate(['/plans']);
+                }
+              },
+              error: () => {
+                this.router.navigate(['/plans']);
+              },
+            });
           }
         }
       })

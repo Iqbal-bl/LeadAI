@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, OnDestroy } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { NotificationPanelComponent } from '../../../layout/notification-panel/notification-panel.component';
 import { ToolbarComponent } from '../../../layout/toolbar/toolbar.component';
 import { SidebarComponent } from '../../../layout/sidebar/sidebar.component';
@@ -32,6 +32,7 @@ export class ClientShellComponent implements OnInit, OnDestroy {
   private permissionService = inject(ClientPermissionService);
   private leadService = inject(LeadService);
   private toastService = inject(ToastService);
+  private router = inject(Router);
   private sub = new Subscription();
 
   navigationalMenu: SidebarSection[] = [];
@@ -55,11 +56,22 @@ export class ClientShellComponent implements OnInit, OnDestroy {
       }),
     );
 
-    // Global Inbox WebSocket connection management
+    // Global Inbox WebSocket connection and company subscription enforcement
     this.sub.add(
       this.authService.selectedCompanyId$.subscribe((clientId) => {
         if (clientId) {
           this.leadService.connectInbox(clientId);
+
+          // If company-scoped user switches to an unsubscribed company, redirect to plans
+          if (!this.authService.isSuperAdmin() && !this.authService.isPlatformAdmin()) {
+            this.authService.getAccessMe(clientId).subscribe({
+              next: (user) => {
+                if (!user.has_active_subscription) {
+                  this.router.navigate(['/plans']);
+                }
+              },
+            });
+          }
         } else {
           this.leadService.disconnectInbox();
         }

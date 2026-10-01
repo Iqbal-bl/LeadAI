@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 
 # ===========================================================================
 # generic
@@ -103,6 +103,7 @@ class CompanyOut(BaseModel):
     chunk_count: int = 0
     script_count: int = 0
     conversation_count: int = 0
+    has_active_subscription: bool | None = None
 
     @field_serializer('created_at')
     def serialize_created_at(self, dt: datetime | None, _info):
@@ -198,6 +199,10 @@ class MeOut(BaseModel):
     client_name: str | None = None
     permissions: list[str]
     accessible_companies: list[CompanyOut] = []
+    has_active_subscription: bool = False
+    active_subscription_plan: str | None = None
+    active_channels: list[str] = []
+    active_features: list[str] = []
 
 
 class UserProfileUpdate(BaseModel):
@@ -390,6 +395,67 @@ class ScriptDetail(ScriptOut):
     rendered_prompt: str | None = None
 
 
+# =========================================================================== #
+# company-defined data points ("what the AI should collect for us")
+# =========================================================================== #
+DataPointType = Literal["text", "number", "boolean", "select", "date", "email"]
+
+
+class DataPointCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=60, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=160)
+    data_type: DataPointType = "text"
+    options: list[str] | None = None      # required (2+) when data_type == "select"
+    description: str | None = Field(default=None, max_length=300)
+    required: bool = False
+    display_order: int = 0
+
+    @field_validator("options")
+    @classmethod
+    def _clean_options(cls, v):
+        if not v:
+            return None
+        seen: set[str] = set()
+        out = []
+        for opt in v:
+            opt = str(opt).strip()
+            if opt and opt.lower() not in seen:
+                seen.add(opt.lower())
+                out.append(opt[:80])
+        return out or None
+
+
+class DataPointUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=160)
+    data_type: DataPointType | None = None
+    options: list[str] | None = None
+    description: str | None = None
+    required: bool | None = None
+    display_order: int | None = None
+    is_active: bool | None = None
+
+
+class DataPointOut(BaseModel):
+    id: str
+    key: str
+    label: str
+    data_type: str
+    options: list[str] | None = None
+    description: str | None = None
+    required: bool
+    display_order: int
+    is_active: bool
+    created_at: datetime | None = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
 class ScriptImportRequest(BaseModel):
     filename: str = Field(description="A file present in the app's scripts/ folder")
 
@@ -498,6 +564,11 @@ class LeadOut(BaseModel):
     sentiment: str
     score_breakdown: dict[str, Any] | None = None
     qualified_at: datetime | None = None
+    # Raw {data_point_key: value} for this company's admin-defined data points
+    # (see /data-points). Deliberately not label/type-resolved here — the
+    # frontend already has that schema from GET /data-points and joins by key,
+    # so this stays a plain read of Lead.DataPointsJson with no extra query.
+    data_points: dict[str, Any] | None = None
 
     @field_serializer('qualified_at')
     def serialize_qualified_at(self, dt: datetime | None, _info):
@@ -893,9 +964,6 @@ class MemberOut(BaseModel):
     role: str
     client_id: str
     is_active: bool = True
-    # Conversations currently assigned to this person (LeadConversation.AssignedUserEmail),
-    # not a lifetime total — matches what "Team Management" actually needs to show: who's
-    # carrying how much right now.
     assigned_leads: int = 0
     created_at: datetime | None = None
 
@@ -1179,6 +1247,68 @@ class BillingSummaryOut(BaseModel):
     pending_recharges: list[ClientRechargeOut] = []
     total_remaining_minutes: float = 0.0
     is_quota_active: bool = False
+
+
+# ===========================================================================
+# Product Schemas
+# ===========================================================================
+
+
+class BoundKbDocOut(BaseModel):
+    id: str
+    title: str
+    file_name: str | None = None
+    content_type: str | None = None
+    chunk_count: int = 0
+    status: str = "indexed"
+    is_primary: bool = False
+    created_at: datetime | None = None
+
+    @field_serializer("created_at")
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class ProductOut(BaseModel):
+    id: str
+    client_id: str
+    product_name: str
+    product_type: str
+    knowledge_base_file: str | None = None
+    kb_document_id: str | None = None
+    bound_kb_document_ids: list[str] = []
+    bound_kb_documents: list[BoundKbDocOut] = []
+    created_at: datetime | None = None
+    created_by: str | None = None
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+    is_deleted: bool = False
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class ProductListOut(BaseModel):
+    total: int
+    items: list[ProductOut]
+
+
+class ProductUpdate(BaseModel):
+    product_name: str | None = None
+    product_type: str | None = None
+
+
+class BindExistingKbRequest(BaseModel):
+    kb_document_id: str
 
 
 ConversationDetail.model_rebuild()

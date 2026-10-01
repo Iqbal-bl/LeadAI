@@ -66,7 +66,7 @@ def test_a_completed_run_is_recorded_batch_by_batch():
     cr.build_audience(db, campaign)
     cr.run_campaign_job(db, {"campaign_id": campaign.Id})
 
-    out = campaigns.campaign_history(
+    out = campaigns.list_campaign_history(
         campaign.Id, page=1, page_size=50, scope=(principal, client.Id), db=db
     )
     actions = [item.action for item in out.items]  # newest first
@@ -94,7 +94,7 @@ def test_quiet_hours_deferral_is_recorded_and_nothing_is_sent():
     assert "deferred_until" in result
     assert sent == []  # nothing was actually sent
 
-    out = campaigns.campaign_history(
+    out = campaigns.list_campaign_history(
         campaign.Id, page=1, page_size=50, scope=(principal, client.Id), db=db
     )
     actions = [item.action for item in out.items]
@@ -112,11 +112,13 @@ def test_history_does_not_leak_across_campaigns_or_companies():
     cr.build_audience(db2, campaign2)
     cr.run_campaign_job(db2, {"campaign_id": campaign2.Id})
 
-    out = campaigns.campaign_history(
+    out = campaigns.list_campaign_history(
         campaign1.Id, page=1, page_size=50, scope=(principal1, client1.Id), db=db1
     )
-    assert all(i.entity_id == campaign1.Id for i in out.items)
-    assert len(out.items) > 0
+    # campaign1's own run produces exactly 3 entries (built, batch_processed,
+    # completed). If campaign2's identically-shaped run (different campaign,
+    # different client) leaked in too, this would be 6.
+    assert len(out.items) == out.total_items == 3
 
 
 if __name__ == "__main__":

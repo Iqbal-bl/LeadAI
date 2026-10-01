@@ -277,3 +277,4 @@ def send_invoice_email(
     except Exception as exc:
         logger.error(f"Failed to deliver invoice email to {to_email}: {exc}", exc_info=True)
         return False
+

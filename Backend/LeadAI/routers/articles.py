@@ -136,6 +136,10 @@ def create_article_draft(
     db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
     return ArticleService.create_or_save_draft(db, target_client, payload)
 
 
@@ -158,6 +162,11 @@ def update_article(
     db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     article = ArticleService.get_article(db, target_client, article_id)
     if not article:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Article {article_id} not found.")
@@ -230,6 +239,11 @@ def review_article(
     db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     client = db.query(Client).filter(Client.Id == target_client, Client.IsDeleted == False).first()
     company_name = client.Name if client else "Your Organization"
     return ArticleService.review_article(
@@ -260,6 +274,11 @@ def publish_article(
     db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     article = ArticleService.get_article(db, target_client, article_id)
     if not article:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Article {article_id} not found.")

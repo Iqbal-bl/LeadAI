@@ -16,13 +16,16 @@
   </div>
 </div>
 
-<p-tabs [value]="activeTab" [lazy]="true">
+<p-tabs [(value)]="activeTab" [lazy]="true">
   <p-tablist class="mb-4">
     <p-tab value="scripts" (click)="activeTab = 'scripts'">
       <i class="pi pi-file-code mr-2"></i> Scripts Library (XML)
     </p-tab>
     <p-tab value="prompts" (click)="activeTab = 'prompts'">
       <i class="pi pi-sliders-h mr-2"></i> System Prompts
+    </p-tab>
+    <p-tab value="data-points" (click)="activeTab = 'data-points'">
+      <i class="pi pi-database mr-2"></i> Data Points
     </p-tab>
   </p-tablist>
 
@@ -85,6 +88,15 @@
         (onReset)="resetPrompt($event.prompt, $event.event)"
       >
       </app-prompt-grid>
+    </p-tabpanel>
+
+    <!-- ========================================== -->
+    <!-- DATA POINTS TAB PANEL                      -->
+    <!-- ========================================== -->
+    <p-tabpanel value="data-points">
+      <div *ngIf="activeTab === 'data-points'" class="mt-2">
+        <app-data-points></app-data-points>
+      </div>
     </p-tabpanel>
   </p-tabpanels>
 </p-tabs>

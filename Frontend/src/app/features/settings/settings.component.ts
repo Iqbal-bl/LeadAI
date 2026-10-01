@@ -86,7 +86,8 @@ export class SettingsComponent implements OnInit {
     this.loadingPermissions = true;
     forkJoin({
       manager: this.roleManagementService.getCompanyRolePermissions('manager'),
-      employee: this.roleManagementService.getCompanyRolePermissions('employee'),
+      employee:
+        this.roleManagementService.getCompanyRolePermissions('employee'),
     }).subscribe({
       next: ({ manager, employee }) => {
         this.loadingPermissions = false;
@@ -136,7 +137,9 @@ export class SettingsComponent implements OnInit {
           if (role === 'manager') this.savingManager = false;
           if (role === 'employee') this.savingEmployee = false;
           this.toastService.error(
-            err?.error?.detail || err?.message || 'Failed to update permission.',
+            err?.error?.detail ||
+              err?.message ||
+              'Failed to update permission.',
             'Update Failed',
           );
         },

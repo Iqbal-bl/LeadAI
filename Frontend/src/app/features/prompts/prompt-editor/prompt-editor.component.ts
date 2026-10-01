@@ -2,11 +2,16 @@ import { Component, OnInit, inject } from '@angular/core';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { ScriptService } from '../../../services/script.service';
-import { Script, ScriptPreview, PromptTemplate } from '../../../models/script.models';
+import {
+  Script,
+  ScriptPreview,
+  PromptTemplate,
+} from '../../../models/script.models';
 import { SharedModule } from '../../../shared/shared.module';
 import { ScriptListComponent } from './components/script-list/script-list.component';
 import { ScriptWorkspaceComponent } from './components/script-workspace/script-workspace.component';
 import { PromptGridComponent } from './components/prompt-grid/prompt-grid.component';
+import { DataPointsComponent } from './components/data-points/data-points.component';
 
 export interface PromptItem {
   key: string;
@@ -20,32 +25,43 @@ export interface PromptItem {
 const PROMPT_META: Record<string, { title: string; description: string }> = {
   greeting: {
     title: 'Welcome Greeting',
-    description: 'The initial welcome message sent to customer when session starts.'
+    description:
+      'The initial welcome message sent to customer when session starts.',
   },
   sales: {
     title: 'Sales Representative Context',
-    description: 'Core brand identity, tone parameters, and primary product descriptions.'
+    description:
+      'Core brand identity, tone parameters, and primary product descriptions.',
   },
   qualification: {
     title: 'Lead Qualification (BANT)',
-    description: 'Specific qualification requirements for budget, authority, needs, and timeline.'
+    description:
+      'Specific qualification requirements for budget, authority, needs, and timeline.',
   },
   escalation: {
     title: 'Human Escalation Criteria',
-    description: 'Direct rules defining when the AI must hand off conversation to a human agent.'
+    description:
+      'Direct rules defining when the AI must hand off conversation to a human agent.',
   },
   voice: {
     title: 'Voice Channel Assistant',
-    description: 'Acoustic turn-taking controls, text-to-speech pronunciation, and voice parameters.'
-  }
+    description:
+      'Acoustic turn-taking controls, text-to-speech pronunciation, and voice parameters.',
+  },
 };
 
 @Component({
   selector: 'app-prompt-editor',
   standalone: true,
-  imports: [SharedModule, ScriptListComponent, ScriptWorkspaceComponent, PromptGridComponent],
+  imports: [
+    SharedModule,
+    ScriptListComponent,
+    ScriptWorkspaceComponent,
+    PromptGridComponent,
+    DataPointsComponent,
+  ],
   templateUrl: './prompt-editor.component.html',
-  styleUrl: './prompt-editor.component.scss'
+  styleUrl: './prompt-editor.component.scss',
 })
 export class PromptEditorComponent implements OnInit {
   // Service Injections
@@ -54,15 +70,21 @@ export class PromptEditorComponent implements OnInit {
   private confirmationService = inject(ConfirmationService);
 
   // Tab State
-  activeTab: 'scripts' | 'prompts' = 'scripts';
+  activeTab: 'scripts' | 'prompts' | 'data-points' = 'scripts';
   listCollapsed = false;
 
   // --- SCRIPTS TAB STATE ---
   scripts: Script[] = [];
-  selectedScript: (Script & { script_xml?: string; sections?: any[]; rendered_prompt?: string }) | null = null;
+  selectedScript:
+    | (Script & {
+        script_xml?: string;
+        sections?: any[];
+        rendered_prompt?: string;
+      })
+    | null = null;
   scriptLoading = false;
   scriptXmlEditorContent = '';
-  
+
   // Script Preview
   previewChannel: 'chat' | 'voice' = 'chat';
   scriptPreview: ScriptPreview | null = null;
@@ -87,7 +109,7 @@ export class PromptEditorComponent implements OnInit {
     language: 'en-IN',
     voice_gender: 'female',
     voice_speaker: 'Priya',
-    multi_stt: false
+    multi_stt: false,
   };
 
   // Import Modal State
@@ -97,29 +119,30 @@ export class PromptEditorComponent implements OnInit {
   importLoading = false;
 
   // Speaker configuration dropdowns
-  voiceSpeakers: Record<'male' | 'female', { label: string; value: string }[]> = {
-    male: [
-      { label: 'Prabhat (Hindi/English)', value: 'Prabhat' },
-      { label: 'Rohan (English - IN)', value: 'Rohan' },
-      { label: 'David (English - US)', value: 'David' }
-    ],
-    female: [
-      { label: 'Priya (Hindi/English - Recommended)', value: 'Priya' },
-      { label: 'Kavita (Hindi)', value: 'Kavita' },
-      { label: 'Emily (English - US)', value: 'Emily' }
-    ]
-  };
+  voiceSpeakers: Record<'male' | 'female', { label: string; value: string }[]> =
+    {
+      male: [
+        { label: 'Prabhat (Hindi/English)', value: 'Prabhat' },
+        { label: 'Rohan (English - IN)', value: 'Rohan' },
+        { label: 'David (English - US)', value: 'David' },
+      ],
+      female: [
+        { label: 'Priya (Hindi/English - Recommended)', value: 'Priya' },
+        { label: 'Kavita (Hindi)', value: 'Kavita' },
+        { label: 'Emily (English - US)', value: 'Emily' },
+      ],
+    };
 
   languages = [
     { label: 'English (India) - en-IN', value: 'en-IN' },
     { label: 'English (US) - en-US', value: 'en-US' },
-    { label: 'Hindi (India) - hi-IN', value: 'hi-IN' }
+    { label: 'Hindi (India) - hi-IN', value: 'hi-IN' },
   ];
 
   channels = [
     { label: 'All Channels', value: 'all' },
     { label: 'Chat Only', value: 'chat' },
-    { label: 'Voice Only', value: 'voice' }
+    { label: 'Voice Only', value: 'voice' },
   ];
 
   // --- PROMPTS TAB STATE ---
@@ -145,14 +168,15 @@ export class PromptEditorComponent implements OnInit {
         this.scripts = data;
         if (this.scripts.length > 0) {
           if (selectId) {
-            const found = this.scripts.find(s => s.id === selectId);
+            const found = this.scripts.find((s) => s.id === selectId);
             if (found) {
               this.selectScript(found);
               return;
             }
           }
           // Select default script first, otherwise the first one
-          const defaultScript = this.scripts.find(s => s.is_default) || this.scripts[0];
+          const defaultScript =
+            this.scripts.find((s) => s.is_default) || this.scripts[0];
           this.selectScript(defaultScript);
         } else {
           this.selectedScript = null;
@@ -165,10 +189,10 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to load conversation scripts.'
+          detail: 'Failed to load conversation scripts.',
         });
         this.scriptLoading = false;
-      }
+      },
     });
   }
 
@@ -185,10 +209,10 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: `Failed to load details for script ${script.name}.`
+          detail: `Failed to load details for script ${script.name}.`,
         });
         this.scriptLoading = false;
-      }
+      },
     });
   }
 
@@ -202,7 +226,7 @@ export class PromptEditorComponent implements OnInit {
       error: () => {
         this.scriptPreview = null;
         this.previewLoading = false;
-      }
+      },
     });
   }
 
@@ -216,28 +240,32 @@ export class PromptEditorComponent implements OnInit {
   saveScriptXml(): void {
     if (!this.selectedScript?.id) return;
     this.scriptLoading = true;
-    this.scriptService.updateScript(this.selectedScript.id, { script_xml: this.scriptXmlEditorContent }).subscribe({
-      next: (updated) => {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Saved',
-          detail: 'Script XML saved successfully.'
-        });
-        if (this.selectedScript) {
-          this.selectedScript.script_xml = this.scriptXmlEditorContent;
-        }
-        this.loadScriptPreview(this.selectedScript!.id!, this.previewChannel);
-        this.scriptLoading = false;
-      },
-      error: () => {
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Save Failed',
-          detail: 'Failed to update XML schema on server.'
-        });
-        this.scriptLoading = false;
-      }
-    });
+    this.scriptService
+      .updateScript(this.selectedScript.id, {
+        script_xml: this.scriptXmlEditorContent,
+      })
+      .subscribe({
+        next: (updated) => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Saved',
+            detail: 'Script XML saved successfully.',
+          });
+          if (this.selectedScript) {
+            this.selectedScript.script_xml = this.scriptXmlEditorContent;
+          }
+          this.loadScriptPreview(this.selectedScript!.id!, this.previewChannel);
+          this.scriptLoading = false;
+        },
+        error: () => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Save Failed',
+            detail: 'Failed to update XML schema on server.',
+          });
+          this.scriptLoading = false;
+        },
+      });
   }
 
   openCreateScriptModal(): void {
@@ -249,7 +277,7 @@ export class PromptEditorComponent implements OnInit {
       language: 'en-IN',
       voice_gender: 'female',
       voice_speaker: 'Priya',
-      multi_stt: false
+      multi_stt: false,
     };
     this.showScriptModal = true;
   }
@@ -265,43 +293,45 @@ export class PromptEditorComponent implements OnInit {
       language: script.language,
       voice_gender: script.voice_gender || 'female',
       voice_speaker: script.voice_speaker || 'Priya',
-      multi_stt: script.multi_stt || false
+      multi_stt: script.multi_stt || false,
     };
     this.showScriptModal = true;
   }
 
   submitScriptForm(): void {
     if (this.isEditingScript && this.scriptForm.id) {
-      this.scriptService.updateScript(this.scriptForm.id, this.scriptForm).subscribe({
-        next: (updated) => {
-          this.messageService.add({
-            severity: 'success',
-            summary: 'Updated',
-            detail: 'Script configuration updated.'
-          });
-          this.showScriptModal = false;
-          this.loadScripts(updated.id);
-        },
-        error: () => {
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'Failed to update script settings.'
-          });
-        }
-      });
+      this.scriptService
+        .updateScript(this.scriptForm.id, this.scriptForm)
+        .subscribe({
+          next: (updated) => {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Updated',
+              detail: 'Script configuration updated.',
+            });
+            this.showScriptModal = false;
+            this.loadScripts(updated.id);
+          },
+          error: () => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'Failed to update script settings.',
+            });
+          },
+        });
     } else {
       // Create new script payload (inject placeholder XML template)
       const payload: Script = {
         ...this.scriptForm,
-        script_xml: `<script>\n  <section name="greeting">\n    Hello! Welcome to our company. How can I assist you today?\n  </section>\n  <section name="qualification">\n    To help you best, could you tell me a bit about your budget and timeline?\n  </section>\n  <section name="sales">\n    Our product provides live AI qualification and qualification scoreboards directly integrated.\n  </section>\n</script>`
+        script_xml: `<script>\n  <section name="greeting">\n    Hello! Welcome to our company. How can I assist you today?\n  </section>\n  <section name="qualification">\n    To help you best, could you tell me a bit about your budget and timeline?\n  </section>\n  <section name="sales">\n    Our product provides live AI qualification and qualification scoreboards directly integrated.\n  </section>\n</script>`,
       };
       this.scriptService.createScript(payload).subscribe({
         next: (created) => {
           this.messageService.add({
             severity: 'success',
             summary: 'Created',
-            detail: 'New script schema initialized.'
+            detail: 'New script schema initialized.',
           });
           this.showScriptModal = false;
           this.loadScripts(created.id);
@@ -310,9 +340,9 @@ export class PromptEditorComponent implements OnInit {
           this.messageService.add({
             severity: 'error',
             summary: 'Error',
-            detail: 'Failed to initialize script schema.'
+            detail: 'Failed to initialize script schema.',
           });
-        }
+        },
       });
     }
   }
@@ -324,7 +354,7 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'success',
           summary: 'Default Changed',
-          detail: `${script.name} is now the default active script.`
+          detail: `${script.name} is now the default active script.`,
         });
         this.loadScripts(script.id);
       },
@@ -332,9 +362,9 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to set script as default.'
+          detail: 'Failed to set script as default.',
         });
-      }
+      },
     });
   }
 
@@ -351,7 +381,7 @@ export class PromptEditorComponent implements OnInit {
             this.messageService.add({
               severity: 'success',
               summary: 'Deleted',
-              detail: 'Script deleted successfully.'
+              detail: 'Script deleted successfully.',
             });
             if (this.selectedScript?.id === script.id) {
               this.selectedScript = null;
@@ -362,11 +392,11 @@ export class PromptEditorComponent implements OnInit {
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: 'Failed to delete script.'
+              detail: 'Failed to delete script.',
             });
-          }
+          },
         });
-      }
+      },
     });
   }
 
@@ -374,7 +404,9 @@ export class PromptEditorComponent implements OnInit {
     this.importLoading = true;
     this.scriptService.getImportableScripts().subscribe({
       next: (res: any) => {
-        this.importableFiles = res.files || (Array.isArray(res) ? res.map((f: any) => f.filename || f) : []);
+        this.importableFiles =
+          res.files ||
+          (Array.isArray(res) ? res.map((f: any) => f.filename || f) : []);
         this.selectedImportFile = this.importableFiles[0] || '';
         this.showImportModal = true;
         this.importLoading = false;
@@ -383,10 +415,10 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to fetch importable XML files from disk.'
+          detail: 'Failed to fetch importable XML files from disk.',
         });
         this.importLoading = false;
-      }
+      },
     });
   }
 
@@ -398,7 +430,7 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'success',
           summary: 'Imported',
-          detail: 'Script file imported into database.'
+          detail: 'Script file imported into database.',
         });
         this.showImportModal = false;
         this.loadScripts(created.id);
@@ -408,10 +440,10 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to parse and import the XML file.'
+          detail: 'Failed to parse and import the XML file.',
         });
         this.importLoading = false;
-      }
+      },
     });
   }
 
@@ -428,7 +460,8 @@ export class PromptEditorComponent implements OnInit {
           is_customised: p.is_customised,
           updated_at: p.updated_at,
           title: PROMPT_META[p.key]?.title || p.key.toUpperCase(),
-          description: PROMPT_META[p.key]?.description || 'System prompt template.'
+          description:
+            PROMPT_META[p.key]?.description || 'System prompt template.',
         }));
         this.promptsLoading = false;
       },
@@ -436,10 +469,10 @@ export class PromptEditorComponent implements OnInit {
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to load system prompts.'
+          detail: 'Failed to load system prompts.',
         });
         this.promptsLoading = false;
-      }
+      },
     });
   }
 
@@ -452,26 +485,28 @@ export class PromptEditorComponent implements OnInit {
   savePrompt(): void {
     if (!this.selectedPrompt) return;
     this.promptSaving = true;
-    this.scriptService.updatePrompt(this.selectedPrompt.key, this.promptEditContent).subscribe({
-      next: () => {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Saved',
-          detail: `${this.selectedPrompt?.title} prompt updated.`
-        });
-        this.showPromptEditModal = false;
-        this.loadPrompts();
-        this.promptSaving = false;
-      },
-      error: () => {
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to update prompt text.'
-        });
-        this.promptSaving = false;
-      }
-    });
+    this.scriptService
+      .updatePrompt(this.selectedPrompt.key, this.promptEditContent)
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Saved',
+            detail: `${this.selectedPrompt?.title} prompt updated.`,
+          });
+          this.showPromptEditModal = false;
+          this.loadPrompts();
+          this.promptSaving = false;
+        },
+        error: () => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'Failed to update prompt text.',
+          });
+          this.promptSaving = false;
+        },
+      });
   }
 
   resetPrompt(prompt: PromptItem, event: Event): void {
@@ -487,7 +522,7 @@ export class PromptEditorComponent implements OnInit {
             this.messageService.add({
               severity: 'success',
               summary: 'Reset Successful',
-              detail: `${prompt.title} has been reverted to system default.`
+              detail: `${prompt.title} has been reverted to system default.`,
             });
             this.loadPrompts();
           },
@@ -495,11 +530,11 @@ export class PromptEditorComponent implements OnInit {
             this.messageService.add({
               severity: 'error',
               summary: 'Error',
-              detail: 'Failed to reset prompt.'
+              detail: 'Failed to reset prompt.',
             });
-          }
+          },
         });
-      }
+      },
     });
   }
 }

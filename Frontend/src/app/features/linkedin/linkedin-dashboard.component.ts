@@ -31,6 +31,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   oauthLoading = false;
   private pollingInterval: any = null;
   private messageListener: any = null;
+  private chatPollingInterval: any = null;
 
   // Bot Session Credentials (Cookie or Email & Password)
   authMode: 'cookie' | 'credentials' = 'cookie';
@@ -79,6 +80,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   messages: LinkedInMessage[] = [];
   loadingConversations = false;
   loadingMessages = false;
+  syncingThreadMessages = false;
+  loadingPreviousMessages = false;
+  hasNoEarlierMessages = false;
   sendingMessage = false;
   replyMessageText = '';
   syncingMessages = false;
@@ -130,8 +134,22 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearPolling();
+    this.stopChatPolling();
     if (this.messageListener) {
       window.removeEventListener('message', this.messageListener);
+    }
+  }
+
+  onTabChange(tab: any): void {
+    this.activeTab = tab;
+    if (tab !== 'messages') {
+      this.stopChatPolling();
+    } else {
+      if (this.conversations.length === 0) {
+        this.loadConversations();
+      } else if (this.selectedConversation) {
+        this.selectConversation(this.selectedConversation);
+      }
     }
   }
 
@@ -727,7 +745,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.applyConversationFilter();
         if (this.conversations.length > 0) {
           if (!this.selectedConversation) {
-            this.selectConversation(this.conversations[0]);
+            this.selectedConversation = this.conversations[0];
+            if (this.activeTab === 'messages') {
+              this.selectConversation(this.conversations[0]);
+            }
           } else {
             const found = this.conversations.find(
               (c) =>
@@ -755,33 +776,96 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  selectConversation(conv: LinkedInConversation): void {
+  selectConversation(conv: LinkedInConversation, isBackgroundRefresh = false): void {
+    if (this.activeTab !== 'messages') {
+      this.stopChatPolling();
+      return;
+    }
     this.selectedConversation = conv;
     if (!conv.is_read || (conv.unread_count && conv.unread_count > 0)) {
       conv.is_read = true;
       conv.unread_count = 0;
       this.updateUnreadCount();
     }
-    this.messages = [];
-    this.loadingMessages = true;
+    if (!isBackgroundRefresh) {
+      this.messages = [];
+      this.loadingMessages = true;
+      this.syncingThreadMessages = false;
+      this.hasNoEarlierMessages = false;
+    } else {
+      this.syncingThreadMessages = true;
+    }
     const convId = conv.conversation_id || conv.conversation_urn;
     this.linkedinService.getConversationMessages(convId).subscribe({
       next: (res) => {
         this.loadingMessages = false;
-        this.messages = res.messages || [];
-        this.scrollToBottom();
+        this.syncingThreadMessages = false;
+        if (this.activeTab !== 'messages') {
+          this.stopChatPolling();
+          return;
+        }
+        const incoming = res.messages || [];
+        if (!isBackgroundRefresh || incoming.length !== this.messages.length) {
+          const hadMessages = this.messages.length > 0;
+          this.messages = incoming;
+          if (!hadMessages || incoming.length > this.messages.length) {
+            this.scrollToBottom();
+          }
+          if (incoming.length > 0) {
+            conv.last_message = incoming[incoming.length - 1].text;
+          }
+        }
+        if (!isBackgroundRefresh && this.activeTab === 'messages') {
+          this.startChatPolling();
+          // Quick follow-up sync after 2.5s to capture remaining streamed messages without waiting 15s
+          setTimeout(() => {
+            if (this.activeTab === 'messages' && this.selectedConversation === conv) {
+              this.selectConversation(conv, true);
+            }
+          }, 2500);
+        }
       },
       error: (err) => {
         this.loadingMessages = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Message Fetch Failed',
-          detail:
-            err?.error?.detail ||
-            'Could not load conversation thread messages.',
-        });
+        this.syncingThreadMessages = false;
+        if (!isBackgroundRefresh && this.activeTab === 'messages') {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Message Fetch Failed',
+            detail:
+              err?.error?.detail ||
+              'Could not load conversation thread messages.',
+          });
+        }
       },
     });
+  }
+
+  private startChatPolling(): void {
+    this.stopChatPolling();
+    if (this.activeTab !== 'messages') return;
+    this.chatPollingInterval = setInterval(() => {
+      // Pause polling if tab is not messages or browser window is hidden/minimized
+      if (this.activeTab !== 'messages' || typeof document !== 'undefined' && document.hidden) {
+        if (this.activeTab !== 'messages') this.stopChatPolling();
+        return;
+      }
+      if (
+        this.selectedConversation &&
+        !this.loadingMessages &&
+        !this.syncingThreadMessages &&
+        !this.sendingMessage
+      ) {
+        this.selectConversation(this.selectedConversation, true);
+      }
+    }, 20000);
+  }
+
+  private stopChatPolling(): void {
+    if (this.chatPollingInterval) {
+      clearInterval(this.chatPollingInterval);
+      this.chatPollingInterval = null;
+    }
   }
 
   sendDirectReply(): void {
@@ -884,15 +968,61 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     return this.unreadConversationsCount;
   }
 
+  loadPreviousMessages(): void {
+    if (
+      !this.selectedConversation ||
+      this.loadingPreviousMessages ||
+      this.loadingMessages ||
+      this.hasNoEarlierMessages
+    ) {
+      return;
+    }
+    this.loadingPreviousMessages = true;
+    const conv = this.selectedConversation;
+    const convId = conv.conversation_id || conv.conversation_urn;
+    this.linkedinService.getConversationMessages(convId, true).subscribe({
+      next: (res) => {
+        this.loadingPreviousMessages = false;
+        const incoming = res.messages || [];
+        if (incoming.length > this.messages.length) {
+          const chatContainer = document.getElementById(
+            'linkedin-chat-messages-container',
+          );
+          const oldScrollHeight = chatContainer ? chatContainer.scrollHeight : 0;
+          this.messages = incoming;
+          setTimeout(() => {
+            if (chatContainer) {
+              chatContainer.scrollTop =
+                chatContainer.scrollHeight - oldScrollHeight;
+            }
+          }, 60);
+        } else {
+          // All earlier messages are already loaded
+          this.hasNoEarlierMessages = true;
+        }
+      },
+      error: () => {
+        this.loadingPreviousMessages = false;
+      },
+    });
+  }
+
   private scrollToBottom(): void {
-    setTimeout(() => {
+    const doScroll = () => {
+      const anchor = document.getElementById('chat-bottom-anchor');
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: 'auto', block: 'end' });
+      }
       const chatContainer = document.getElementById(
         'linkedin-chat-messages-container',
       );
       if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
-    }, 60);
+    };
+    setTimeout(doScroll, 50);
+    setTimeout(doScroll, 180);
+    setTimeout(doScroll, 400);
   }
 
   // =========================================================================

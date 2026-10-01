@@ -442,25 +442,80 @@ export class AuthService {
   }
 
   // GET /access/me
-  public getAccessMe(): Observable<UserMe> {
-    return this.http.get<UserMe>(`${environment.apiPrefix}/access/me`).pipe(
-      tap((user) => {
-        this.currentUserSubject.next(user);
+  public getAccessMe(companyId?: string): Observable<UserMe> {
+    let params = new HttpParams();
+    const targetCompanyId = companyId || this.getSelectedCompanyId();
+    if (targetCompanyId) {
+      params = params.set('client_id', targetCompanyId);
+    }
+    return this.http
+      .get<UserMe>(`${environment.apiPrefix}/access/me`, {
+        params,
+        headers: { 'ngrok-skip-browser-warning': 'skip' },
+      })
+      .pipe(
+        tap((user) => {
+          this.currentUserSubject.next(user);
 
-        const currentCompanyId = this.getSelectedCompanyId();
-        const hasAccess = user.accessible_companies.some(
-          (c: any) => c.id === currentCompanyId,
-        );
+          const currentCompanyId = this.getSelectedCompanyId();
+          const hasAccess = user.accessible_companies.some(
+            (c: any) => c.id === currentCompanyId,
+          );
 
-        if (!currentCompanyId || !hasAccess) {
-          if (user.accessible_companies.length > 0) {
-            this.setSelectedCompanyId(user.accessible_companies[0].id);
-          } else {
-            this.setSelectedCompanyId(user.client_id || null);
+          if (!currentCompanyId || !hasAccess) {
+            if (user.accessible_companies.length > 0) {
+              this.setSelectedCompanyId(user.accessible_companies[0].id);
+            } else {
+              this.setSelectedCompanyId(user.client_id || null);
+            }
           }
-        }
-      }),
-    );
+        }),
+      );
+  }
+
+  /**
+   * Checks whether the current company has an active subscription.
+   * Platform and super admins always bypass subscription checks.
+   */
+  public hasActiveSubscription(): boolean {
+    if (this.isSuperAdmin() || this.isPlatformAdmin()) {
+      return true;
+    }
+    const user = this.currentUserSubject.value;
+    return user?.has_active_subscription ?? false;
+  }
+
+  /**
+   * Checks whether a specific channel/feature is included in the company's active plan.
+   * Super / platform admins always have access.
+   */
+  public hasChannel(channel: string): boolean {
+    if (this.isSuperAdmin() || this.isPlatformAdmin()) {
+      return true;
+    }
+    const user = this.currentUserSubject.value;
+    if (!user || !user.has_active_subscription) {
+      return false;
+    }
+    const ch = (channel || '').toLowerCase().trim();
+    const channels = (user.active_channels || []).map((c) => (c || '').toLowerCase().trim());
+    const features = (user.active_features || []).map((f) => (f || '').toLowerCase().trim());
+
+    if (ch === 'linkedin' || ch === 'li') {
+      return channels.includes('linkedin') || channels.includes('li') || features.includes('linkedin') || features.includes('li');
+    }
+    if (ch === 'blog' || ch === 'blogs' || ch === 'content_studio' || ch === 'ai_blog') {
+      const blogKeys = ['blog', 'blogs', 'content_studio', 'ai_blog'];
+      return channels.some((c) => blogKeys.includes(c)) || features.some((f) => blogKeys.includes(f));
+    }
+    return channels.includes(ch) || features.includes(ch);
+  }
+
+  /**
+   * Alias for hasChannel to check feature entitlements.
+   */
+  public hasFeature(feature: string): boolean {
+    return this.hasChannel(feature);
   }
 
   /**

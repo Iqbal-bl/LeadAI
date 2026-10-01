@@ -58,6 +58,8 @@ from ..rbac import Principal, assert_owns, scoped
 from ..schemas import ActivityListOut, Ok
 from ..schemas_ext import (
     CampaignCreate,
+    CampaignHistoryItemOut,
+    CampaignHistoryListOut,
     CampaignListOut,
     CampaignOut,
     CampaignPreviewOut,
@@ -904,27 +906,24 @@ def list_recipients(
     )
 
 
-@router.get(
-    "/{campaign_id}/history",
-    response_model=ActivityListOut,
-    summary="Full run history — created, built, started, paused/resumed, each batch, completed",
-)
-def campaign_history(
+@router.get("/{campaign_id}/history", response_model=CampaignHistoryListOut, summary="Campaign run history")
+def list_campaign_history(
     campaign_id: str,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
+    page_size: int = Query(default=50, ge=1, le=500),
     scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
     db: Session = Depends(get_leadai_db),
 ):
-    """Every lifecycle event for one campaign, newest first — the same audit
-    trail as GET /activity, pre-filtered so the caller doesn't need to know
-    entity_type/entity_id. Recipient-level detail (who, what failed) lives in
-    /recipients; this is the timeline of the run itself."""
+    """Paginated, newest-first list of run events for a campaign."""
     _, client_id = scope
     _campaign(db, campaign_id, client_id)
-    query = db.query(LeadActivityLog).filter(
-        LeadActivityLog.EntityType == "campaign",
-        LeadActivityLog.EntityId == campaign_id,
+    query = (
+        db.query(LeadActivityLog)
+        .filter(
+            LeadActivityLog.ClientId == client_id,
+            LeadActivityLog.EntityType == "campaign",
+            LeadActivityLog.EntityId == campaign_id,
+        )
     )
     total = query.count()
     rows = (
@@ -933,9 +932,22 @@ def campaign_history(
         .limit(page_size)
         .all()
     )
-    return ActivityListOut(
-        total_items=total, page=page, page_size=page_size,
-        items=[activity_out(r) for r in rows],
+    return CampaignHistoryListOut(
+        total_items=total,
+        page=page,
+        page_size=page_size,
+        items=[
+            CampaignHistoryItemOut(
+                id=r.Id,
+                action=r.Action,
+                message=r.LogMessage,
+                meta=r.MetaJson,
+                created_at=r.CreatedAt,
+                actor_email=r.ActorEmail,
+                log_type=r.LogType,
+            )
+            for r in rows
+        ],
     )
 
 

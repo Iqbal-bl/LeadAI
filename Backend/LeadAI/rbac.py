@@ -58,6 +58,9 @@ P = {
     "kb.read": "List knowledge documents",
     "kb.manage": "Upload / delete knowledge documents, re-index",
     "kb.test": "Run retrieval tests against the knowledge base",
+    # products
+    "product.read": "List company products",
+    "product.manage": "Create / update / delete company products",
     # scripts + prompts
     "script.read": "View conversation scripts",
     "script.manage": "Create / edit / activate scripts",
@@ -180,6 +183,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "social.linkedin",
         "billing.read",
         "billing.recharge",
+        "product.read",
+        "product.manage",
     },
 
     ROLE_MANAGER: {
@@ -187,6 +192,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "role.read",
         "kb.read",
         "kb.test",
+        "product.read",
+        "product.manage",
         "script.read",
         "script.manage",
         "prompt.read",
@@ -219,6 +226,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     ROLE_EMPLOYEE: {
         "company.read",
         "kb.read",
+        "product.read",
         "script.read",
         "lead.read.assigned",
         "lead.reply",

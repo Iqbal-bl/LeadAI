@@ -169,7 +169,14 @@ def list_available_plans(
     )
 
     matched = []
+    seen_channel_keys = set()
     for t in rows:
+        if t.PlanCategory == "channel_addon" and t.FeatureKey:
+            fk = t.FeatureKey.lower().strip()
+            if fk in seen_channel_keys:
+                continue
+            seen_channel_keys.add(fk)
+
         if not t.TargetClientId and not t.TargetClientIds:
             matched.append(t)
         elif t.TargetClientId == client_id:
@@ -753,10 +760,8 @@ def admin_recharge_client(
                 payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
                 created_by=principal.email,
             )
-        return _serialize_recharge(last_recharge)
     except ValueError as err:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
-
+        raise HTTPException(status_code=400, detail=str(err))
 
 @admin_router.get("/clients-summary", response_model=list[BillingSummaryOut], summary="Admin: System-wide client billing statuses")
 def admin_clients_summary(

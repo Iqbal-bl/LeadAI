@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional, Any, List, Dict
-from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks, Query
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -56,8 +56,13 @@ async def linkedin_connect(
     db: Session = Depends(get_leadai_db),
 ):
     from ..social import linkedin
+    from ..services import billing as billing_svc
 
     principal, client_id = scope
+    allowed, reason = billing_svc.check_channel_access(db, client_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     try:
         url = await linkedin.build_authorize_url(db, client_id)
         return {"authorize_url": url}
@@ -312,6 +317,10 @@ async def save_linkedin_credentials(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
 
     # Find the corresponding LeadChannelAccount row
     row = db.query(LeadChannelAccount).filter(
@@ -337,8 +346,9 @@ async def save_linkedin_credentials(
         else:
             row.LinkedinCookieEnc = encrypt_pii(li_at)
             
-        row.LinkedinUsernameEnc = None
-        row.LinkedinPasswordEnc = None
+        if payload.username and payload.password:
+            row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
+            row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
     elif payload.username and payload.password:
         row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
         row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
@@ -456,6 +466,11 @@ async def linkedin_search_profiles(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     # Retrieve credentials from database
@@ -739,6 +754,7 @@ async def get_linkedin_conversations(
 )
 async def get_linkedin_conversation_messages(
     conversation_urn_id: str,
+    load_earlier: bool = Query(default=False),
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -754,7 +770,7 @@ async def get_linkedin_conversation_messages(
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
 
     try:
-        messages = await linkedin_bot.fetch_conversation_messages_api(row, conversation_urn_id)
+        messages = await linkedin_bot.fetch_conversation_messages_api(row, conversation_urn_id, load_earlier=load_earlier)
         return {"messages": messages}
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -774,6 +790,11 @@ async def send_linkedin_conversation_message(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     row = db.query(LeadChannelAccount).filter(
@@ -807,11 +828,17 @@ async def sync_linkedin_messages(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     row = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
     ).first()
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
@@ -930,11 +957,21 @@ async def get_linkedin_comments(
         if background_tasks is not None:
             background_tasks.add_task(_bg_auto_sync_comments, company_id)
 
+    active_account = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
+    ).first()
+
     q = db.query(LeadSocialComment).filter(
         LeadSocialComment.ClientId == company_id,
         LeadSocialComment.Channel == "linkedin",
         LeadSocialComment.IsDeleted == False,
     )
+
+    if active_account:
+        from sqlalchemy import or_
+        q = q.filter(or_(LeadSocialComment.AccountId == active_account.Id, LeadSocialComment.AccountId == None))
 
     if status_filter:
         q = q.filter(LeadSocialComment.Status == status_filter)
@@ -1028,6 +1065,11 @@ async def post_linkedin_comment_reply(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..models_blog import LeadSocialComment
     from ..social import linkedin as linkedin_oauth, linkedin_bot
 
@@ -1043,6 +1085,7 @@ async def post_linkedin_comment_reply(
     account = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
         LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
     ).first()
 
     if not account:
@@ -1052,38 +1095,23 @@ async def post_linkedin_comment_reply(
     reply_success = False
     reply_urn = None
 
-    # Try Official OAuth API first if access token available
-    if account.AccessTokenEnc:
-        try:
-            from ..security import decrypt_pii
-            token = decrypt_pii(account.AccessTokenEnc)
-            person_urn = account.ExternalId
-            if token and person_urn:
-                res = await linkedin_oauth.reply_to_post_comment(
-                    access_token=token,
-                    person_urn=person_urn,
-                    post_urn=comment.PostUrn,
-                    reply_text=reply_text,
-                    parent_comment_urn=comment.CommentUrn if comment.CommentUrn and comment.CommentUrn.startswith("urn:") else None,
-                )
-                if res.get("success"):
-                    reply_success = True
-                    reply_urn = res.get("reply_urn")
-        except Exception as oauth_exc:
-            logger.info(f"OAuth comment reply fallback to browser automation: {oauth_exc}")
-
-    # Fallback to browser session automation if cookie configured
-    if not reply_success and (account.LinkedinCookieEnc or (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):
+    # Post comment reply directly via browser session automation
+    # (LinkedIn's OAuth API restricts comment replies to Enterprise Partners and returns 403 ACCESS_DENIED)
+    if account.LinkedinCookieEnc or (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         try:
             bot_res = await linkedin_bot.post_comment_reply_browser(
                 account=account,
                 post_urn_or_url=comment.PostUrn,
                 comment_urn=comment.CommentUrn,
                 reply_text=reply_text,
+                target_comment_text=comment.CommentText,
+                target_author=comment.AuthorName,
             )
             if bot_res.get("success"):
                 reply_success = True
                 reply_urn = bot_res.get("reply_urn") or f"reply-{comment.CommentUrn}"
+                if bot_res.get("posted_text"):
+                    reply_text = bot_res["posted_text"]
             else:
                 err_msg = bot_res.get("error") or "Failed to post comment reply via browser."
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, err_msg)
@@ -1092,6 +1120,11 @@ async def post_linkedin_comment_reply(
         except Exception as bot_exc:
             logger.error(f"Browser comment reply failed: {bot_exc}")
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Comment reply failed: {bot_exc}")
+    else:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "LinkedIn session token (li_at) is required to post comment replies. Please connect your session cookie in the Connection tab."
+        )
 
     if not reply_success:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Could not post reply. Verify LinkedIn connection credentials.")
@@ -1174,11 +1207,17 @@ async def sync_linkedin_comments(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     account = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
         LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
     ).first()
 
     if not account or (not account.LinkedinCookieEnc and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc)):
