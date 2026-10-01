@@ -15,6 +15,7 @@ from .models import (
     LeadCampaign,
     LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadContactList,
     LeadContactListItem,
@@ -25,6 +26,7 @@ from .schemas_ext import (
     AccountOut,
     CampaignExecutionOut,
     CampaignOut,
+    CampaignRecipientAttemptOut,
     ChannelAccountOut,
     ContactListItemOut,
     ContactListOut,
@@ -180,6 +182,24 @@ def campaign_execution_out(row: LeadCampaignExecution) -> CampaignExecutionOut:
         skipped_count=row.SkippedCount or 0,
         started_at=row.StartedAt,
         completed_at=row.CompletedAt,
+    )
+
+
+def campaign_recipient_attempt_out(
+    row: LeadCampaignRecipientAttempt, recipient: LeadCampaignRecipient | None
+) -> CampaignRecipientAttemptOut:
+    return CampaignRecipientAttemptOut(
+        id=row.Id,
+        recipient_id=row.RecipientId,
+        name=recipient.Name if recipient else None,
+        phone_masked=recipient.PhoneMasked if recipient else None,
+        status=row.Status,
+        external_message_id=row.ExternalMessageId,
+        sent_at=row.SentAt,
+        delivered_at=row.DeliveredAt,
+        read_at=row.ReadAt,
+        replied_at=row.RepliedAt,
+        failure_reason=row.FailureReason,
     )
 
 

@@ -66,11 +66,13 @@ from ..schemas import ActivityListOut, Ok
 from ..schemas_ext import (
     CampaignCreate,
     CampaignExecutionListOut,
+    CampaignExecutionOut,
     CampaignHistoryItemOut,
     CampaignHistoryListOut,
     CampaignListOut,
     CampaignOut,
     CampaignPreviewOut,
+    CampaignRecipientAttemptListOut,
     CampaignUpdate,
     ContactListFromLeads,
     ContactListItemsOut,
@@ -82,6 +84,7 @@ from ..serializers import activity_out
 from ..serializers_ext import (
     campaign_execution_out,
     campaign_out,
+    campaign_recipient_attempt_out,
     contact_list_item_out,
     contact_list_out,
     recipient_out,
@@ -776,7 +779,12 @@ def start_campaign(
     row = _campaign(db, campaign_id, client_id)
     if row.Status == "running":
         raise HTTPException(status.HTTP_409_CONFLICT, "Campaign is already running.")
-    if row.Status in campaign_runner.TERMINAL_STATUSES:
+    # "completed" is deliberately NOT blocked here — restarting a finished
+    # campaign (all/failed_only/pending_only) is the entire point of
+    # restart_mode. Only an explicit operator stop (cancelled) still blocks a
+    # plain Start; "failed" is reserved for a future whole-campaign failure
+    # state and is never actually set today, but is included for when it is.
+    if row.Status in ("cancelled", "failed"):
         raise HTTPException(status.HTTP_409_CONFLICT, f"Campaign is {row.Status}.")
     if restart_mode not in campaign_runner.RESTART_MODES:
         raise HTTPException(
@@ -813,6 +821,7 @@ def start_campaign(
     # only ever a plan for an automatic fire, and starting manually overrides it.
     row.Status = "queued"
     row.StatusMessage = "Queued — starting shortly"
+    row.CompletedAt = None  # stale from a previous run — this one hasn't finished yet
     jobs.enqueue(
         db, "campaign.run", {"campaign_id": row.Id},
         client_id=client_id, run_at=None, priority=3,
@@ -1013,6 +1022,75 @@ def list_campaign_executions(
     )
 
 
+def _execution(db: Session, campaign_id: str, execution_id: str) -> LeadCampaignExecution:
+    row = db.get(LeadCampaignExecution, execution_id)
+    if row is None or row.CampaignId != campaign_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Execution not found")
+    return row
+
+
+@router.get(
+    "/{campaign_id}/executions/{execution_id}",
+    response_model=CampaignExecutionOut,
+    summary="One run's own summary (BatchExecution detail)",
+)
+def get_campaign_execution(
+    campaign_id: str,
+    execution_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    _campaign(db, campaign_id, client_id)
+    return campaign_execution_out(_execution(db, campaign_id, execution_id))
+
+
+@router.get(
+    "/{campaign_id}/executions/{execution_id}/attempts",
+    response_model=CampaignRecipientAttemptListOut,
+    summary="Per-recipient outcomes for ONE run (CallNumberExecution detail)",
+)
+def list_campaign_execution_attempts(
+    campaign_id: str,
+    execution_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+    status_filter: str | None = Query(default=None, alias="status"),
+    scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """What THIS run did to each recipient it touched — frozen at the time of
+    the run, so a later retry never rewrites what this listing shows."""
+    _, client_id = scope
+    _campaign(db, campaign_id, client_id)
+    _execution(db, campaign_id, execution_id)
+
+    query = db.query(LeadCampaignRecipientAttempt).filter(
+        LeadCampaignRecipientAttempt.CampaignExecutionId == execution_id
+    )
+    if status_filter:
+        query = query.filter(LeadCampaignRecipientAttempt.Status == status_filter)
+    total = query.count()
+    rows = (
+        query.order_by(LeadCampaignRecipientAttempt.CreatedAt.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    recipients = {}
+    if rows:
+        recipient_ids = {r.RecipientId for r in rows}
+        for recipient in (
+            db.query(LeadCampaignRecipient).filter(LeadCampaignRecipient.Id.in_(recipient_ids)).all()
+        ):
+            recipients[recipient.Id] = recipient
+
+    return CampaignRecipientAttemptListOut(
+        total_items=total, page=page, page_size=page_size,
+        items=[campaign_recipient_attempt_out(r, recipients.get(r.RecipientId)) for r in rows],
+    )
+
+
 @router.get(
     "/{campaign_id}/export",
     summary="Export recipients as CSV — status, lead score, and every data point collected",
@@ -1035,9 +1113,7 @@ def export_campaign(
 
     attempts_by_recipient: dict[str, LeadCampaignRecipientAttempt] = {}
     if execution_id:
-        execution = db.get(LeadCampaignExecution, execution_id)
-        if execution is None or execution.CampaignId != campaign.Id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Execution not found")
+        _execution(db, campaign.Id, execution_id)
         for attempt in (
             db.query(LeadCampaignRecipientAttempt)
             .filter(LeadCampaignRecipientAttempt.CampaignExecutionId == execution_id)

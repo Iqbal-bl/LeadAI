@@ -416,6 +416,38 @@ class CampaignExecutionListOut(BaseModel):
     items: list[CampaignExecutionOut] = []
 
 
+class CampaignRecipientAttemptOut(BaseModel):
+    """One recipient's frozen outcome on ONE specific execution — the
+    CallNumberExecution counterpart."""
+
+    id: str
+    recipient_id: str
+    name: str | None = None
+    phone_masked: str | None = None
+    status: str
+    external_message_id: str | None = None
+    sent_at: datetime | None = None
+    delivered_at: datetime | None = None
+    read_at: datetime | None = None
+    replied_at: datetime | None = None
+    failure_reason: str | None = None
+
+    @field_serializer('sent_at', 'delivered_at', 'read_at', 'replied_at')
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class CampaignRecipientAttemptListOut(BaseModel):
+    total_items: int
+    page: int
+    page_size: int
+    items: list[CampaignRecipientAttemptOut] = []
+
+
 class CampaignPreviewOut(BaseModel):
     """What a dry run of the campaign would do — shown before Start."""
 

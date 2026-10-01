@@ -16,6 +16,7 @@ import uuid
 
 import conftest_stub  # noqa: F401
 from conftest_stub import Base, SessionLocalAdmin, engine
+from fastapi import HTTPException  # noqa: E402
 
 from domain.models import Client  # noqa: E402
 from LeadAI import models  # noqa: E402
@@ -184,6 +185,85 @@ def test_an_earlier_runs_export_still_shows_that_runs_real_outcome():
     assert bad_row[header.index("Status")] == "failed"
     # Run 1 only ever touched both recipients once — the export for it has exactly 2 rows.
     assert len(rows) - 1 == 2
+
+
+def test_a_completed_campaign_can_be_restarted_via_start():
+    """The whole point of restart_mode is restarting a campaign that already
+    finished — a plain POST /start?restart_mode=all on a 'completed' campaign
+    must succeed, not 409, and must open a second, separately-tracked run."""
+    db, client, campaign, principal = _setup_two_recipients("Kestrel Restart")
+    channels.send_text = lambda account, channel, to, text: "msg-1"
+    cr.build_audience(db, campaign)
+    cr.run_campaign_job(db, {"campaign_id": campaign.Id})
+    db.refresh(campaign)
+    assert campaign.Status == "completed"
+
+    campaigns.start_campaign(
+        campaign.Id, request=None, restart_mode="all", scope=(principal, client.Id), db=db
+    )
+    db.refresh(campaign)
+    assert campaign.Status == "queued"
+    assert campaign.CompletedAt is None
+
+    executions = campaigns.list_campaign_executions(
+        campaign.Id, page=1, page_size=50, scope=(principal, client.Id), db=db
+    ).items
+    assert len(executions) == 2
+    newest = executions[0]
+    assert newest.restart_mode == "all"
+    assert newest.total_count == 2  # "all" touches both recipients again, not just failures
+
+
+def test_execution_detail_and_attempts_endpoints():
+    """The list endpoint alone isn't enough — an operator drilling into one
+    run needs its own summary (GET .../executions/{id}) and the per-recipient
+    outcomes it actually produced (GET .../executions/{id}/attempts)."""
+    db, client, campaign, principal = _setup_two_recipients("Kestrel Detail")
+    channels.send_text = _send_fail_for_919222222222
+    cr.build_audience(db, campaign)
+    cr.run_campaign_job(db, {"campaign_id": campaign.Id})
+
+    execution_id = campaigns.list_campaign_executions(
+        campaign.Id, page=1, page_size=50, scope=(principal, client.Id), db=db
+    ).items[0].id
+
+    detail = campaigns.get_campaign_execution(
+        campaign.Id, execution_id, scope=(principal, client.Id), db=db
+    )
+    assert detail.id == execution_id
+    assert detail.completed_count == 1 and detail.failed_count == 1
+
+    attempts = campaigns.list_campaign_execution_attempts(
+        campaign.Id, execution_id, page=1, page_size=50, status_filter=None,
+        scope=(principal, client.Id), db=db,
+    )
+    assert attempts.total_items == 2
+    names_by_status = {a.status: a.name for a in attempts.items}
+    assert names_by_status["sent"] == "Good Lead"
+    assert names_by_status["failed"] == "Bad Lead"
+
+    # Wrong campaign, right execution id -> 404, not a cross-campaign leak.
+    other_db, other_client, other_campaign, other_principal = _setup_two_recipients("Nexa Detail")
+    try:
+        campaigns.get_campaign_execution(
+            other_campaign.Id, execution_id, scope=(other_principal, other_client.Id), db=other_db
+        )
+        assert False, "expected a 404"
+    except HTTPException as exc:
+        assert exc.status_code == 404
+
+
+def test_a_cancelled_campaign_still_cannot_be_started():
+    db, client, campaign, principal = _setup_two_recipients("Nexa Restart")
+    campaign.Status = "cancelled"
+    db.commit()
+    try:
+        campaigns.start_campaign(
+            campaign.Id, request=None, restart_mode="all", scope=(principal, client.Id), db=db
+        )
+        assert False, "expected a 409"
+    except HTTPException as exc:
+        assert exc.status_code == 409
 
 
 if __name__ == "__main__":
