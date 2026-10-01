@@ -30,6 +30,7 @@ from .routers import (
     inbox,
     knowledge,
     linkedin,
+    products,
     role_permissions,
     roles,
     scripts,
@@ -59,6 +60,7 @@ api_router.include_router(role_permissions.router)
 api_router.include_router(company_role_permissions.router)
 api_router.include_router(companies.router)
 api_router.include_router(knowledge.router)
+api_router.include_router(products.router)
 api_router.include_router(scripts.router)
 api_router.include_router(scripts.prompts_router)
 api_router.include_router(data_points.router)

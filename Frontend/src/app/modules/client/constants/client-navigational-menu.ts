@@ -96,6 +96,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'kb.read',
       },
       {
+        label: 'Products',
+        icon: 'pi pi-box',
+        routerLink: '/client/products',
+        permission: 'kb.read',
+      },
+      {
         label: 'Prompts',
         icon: 'pi pi-file-edit',
         routerLink: '/client/prompts',

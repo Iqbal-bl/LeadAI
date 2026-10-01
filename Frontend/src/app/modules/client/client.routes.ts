@@ -91,6 +91,15 @@ export const CLIENT_ROUTES: Routes = [
           ),
       },
       {
+        path: 'products',
+        canActivate: [ClientPermissionGuard],
+        data: { permission: 'kb.read' },
+        loadComponent: () =>
+          import('./pages/products/product-list/product-list.component').then(
+            (m) => m.ProductListComponent,
+          ),
+      },
+      {
         path: 'prompts',
         canActivate: [ClientPermissionGuard],
         data: { permission: 'prompt.read' },

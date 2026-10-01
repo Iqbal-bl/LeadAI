@@ -6,12 +6,14 @@ export interface CreateMemberPayload {
   email: string;
   password?: string;
   name: string;
+  phone?: string | null;
   role: string;
   send_email_confirmation?: boolean;
 }
 
 export interface UpdateEmployeePayload {
   full_name?: string;
+  phone?: string | null;
   role?: string;
   is_active?: boolean;
 }
@@ -20,9 +22,11 @@ export interface EmployeeResponse {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
   role: string;
   client_id: string;
   is_active: boolean;
+  assigned_leads?: number;
   created_at: string;
 }
 
