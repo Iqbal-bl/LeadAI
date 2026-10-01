@@ -40,6 +40,7 @@ from sqlalchemy.orm import relationship
 try:
     from core.base import Base
 except ImportError:
+    # pyrefly: ignore [missing-import]
     from base import Base
 
 

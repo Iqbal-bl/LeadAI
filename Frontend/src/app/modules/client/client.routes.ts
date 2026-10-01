@@ -39,6 +39,13 @@ export const CLIENT_ROUTES: Routes = [
               ),
           },
           {
+            path: 'import',
+            loadComponent: () =>
+              import('../../features/leads/lead-import/lead-import.component').then(
+                (m) => m.LeadImportComponent,
+              ),
+          },
+          {
             path: ':id',
             loadComponent: () =>
               import('../../features/leads/lead-detail/lead-detail.component').then(

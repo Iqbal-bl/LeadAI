@@ -8,21 +8,61 @@
 </div>
 
 <!-- Actions Bar -->
-<div class="flex justify-between items-center mb-4">
-  <div></div>
-  <p-button
-    *appHasPermission="PERMISSIONS.CAMPAIGN_MANAGE"
-    label="New Campaign"
-    icon="pi pi-plus"
-    (onClick)="openCreate()"
-    [rounded]="true"
-  ></p-button>
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+  <!-- Tabs: All vs Broadcasts vs Lead Campaigns based on campaign_type -->
+  <div class="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 p-1 text-xs">
+    <button
+      type="button"
+      (click)="selectedTab = 'all'"
+      class="px-3 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+      [ngClass]="selectedTab === 'all' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
+    >
+      All
+      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'all' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
+        {{ campaigns.length }}
+      </span>
+    </button>
+    <button
+      type="button"
+      (click)="selectedTab = 'broadcast'"
+      class="px-3 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+      [ngClass]="selectedTab === 'broadcast' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
+    >
+      <i class="pi pi-megaphone text-[11px]"></i>
+      Broadcasts
+      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'broadcast' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
+        {{ broadcastCampaignsCount }}
+      </span>
+    </button>
+    <button
+      type="button"
+      (click)="selectedTab = 'lead'"
+      class="px-3 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+      [ngClass]="selectedTab === 'lead' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
+    >
+      <i class="pi pi-users text-[11px]"></i>
+      Lead Campaigns
+      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'lead' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
+        {{ leadCampaignsCount }}
+      </span>
+    </button>
+  </div>
+
+  <div class="flex items-center gap-2.5">
+    <p-button
+      *appHasPermission="PERMISSIONS.CAMPAIGN_MANAGE"
+      label="New Campaign"
+      icon="pi pi-plus"
+      (onClick)="openCreate()"
+      [rounded]="true"
+    ></p-button>
+  </div>
 </div>
 
 <!-- Campaign Table -->
 <div class="card-base overflow-hidden">
   <p-table
-    [value]="campaigns"
+    [value]="filteredCampaigns"
     [loading]="loading"
     [paginator]="true"
     [rows]="10"
@@ -51,9 +91,26 @@
     <ng-template pTemplate="body" let-campaign>
       <tr class="cursor-pointer" (click)="viewCampaign(campaign)">
         <td>
-          <span class="font-medium" style="color: var(--app-text)">{{
-            campaign.name
-          }}</span>
+          <div class="flex flex-col gap-1.5 py-0.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-medium" style="color: var(--app-text)">{{ campaign.name }}</span>
+              <p-tag
+                [value]="getCampaignTypeBadge(campaign).label"
+                [severity]="getCampaignTypeBadge(campaign).severity"
+                [icon]="getCampaignTypeBadge(campaign).icon"
+                [rounded]="true"
+                class="text-[10px]"
+              ></p-tag>
+              <span
+                *ngIf="campaign.created_via === 'import'"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                pTooltip="Generated via Lead Import & Product Classification"
+              >
+                <i class="pi pi-sparkles text-[9px]"></i>
+                Auto-classified
+              </span>
+            </div>
+          </div>
         </td>
         <td>
           <div class="flex items-center gap-2">
@@ -113,73 +170,20 @@
             >—</span
           >
         </td>
-        <td>
-          <span class="text-sm" style="color: var(--app-text-secondary)">{{
-            campaign.created_at
-          }}</span>
+        <td class="whitespace-nowrap">
+          <span class="text-sm" style="color: var(--app-text-secondary)">
+            {{ campaign.created_at ? (campaign.created_at | date: 'd MMM y, h:mm a') : '—' }}
+          </span>
         </td>
         <td>
-          <div class="flex gap-1" (click)="$event.stopPropagation()">
+          <div class="flex items-center" (click)="$event.stopPropagation()">
             <p-button
-              *ngIf="campaign.status === 'draft'"
-              icon="pi pi-cog"
-              [rounded]="true"
-              [text]="true"
-              severity="info"
-              pTooltip="Build Audience"
-              (onClick)="buildCampaign(campaign)"
-            ></p-button>
-            <p-button
-              *ngIf="campaign.status === 'ready' || campaign.status === 'scheduled'"
-              icon="pi pi-send"
-              [rounded]="true"
-              [text]="true"
-              severity="success"
-              [loading]="startingCampaignId === campaign.id"
-              [disabled]="!canSend || startingCampaignId !== null"
-              [pTooltip]="
-                !canSend
-                  ? 'You need the campaign.send permission to start campaigns'
-                  : 'Start Campaign'
-              "
-              (onClick)="startCampaign(campaign)"
-            ></p-button>
-            <p-button
-              *ngIf="campaign.status === 'running'"
-              icon="pi pi-pause"
-              [rounded]="true"
-              [text]="true"
-              severity="warn"
-              pTooltip="Pause"
-              (onClick)="pauseCampaign(campaign)"
-            ></p-button>
-            <p-button
-              *ngIf="campaign.status === 'paused'"
-              icon="pi pi-play"
-              [rounded]="true"
-              [text]="true"
-              severity="success"
-              pTooltip="Resume"
-              (onClick)="resumeCampaign(campaign)"
-            ></p-button>
-            <p-button
-              *ngIf="
-                campaign.status !== 'draft' && campaign.status !== 'building'
-              "
-              icon="pi pi-users"
-              [rounded]="true"
-              [text]="true"
-              severity="info"
-              pTooltip="View Recipients"
-              (onClick)="viewRecipients(campaign)"
-            ></p-button>
-            <p-button
-              icon="pi pi-eye"
+              icon="pi pi-ellipsis-v"
               [rounded]="true"
               [text]="true"
               severity="secondary"
-              pTooltip="View Details"
-              (onClick)="viewCampaign(campaign)"
+              pTooltip="Actions"
+              (onClick)="openActionMenu($event, campaign, campaignRowMenu)"
             ></p-button>
           </div>
         </td>
@@ -416,3 +420,6 @@
     </p-table>
   </div>
 </p-dialog>
+
+<!-- Row Actions Context Menu -->
+<p-menu #campaignRowMenu [popup]="true" appendTo="body" [model]="campaignRowMenuItems"></p-menu>

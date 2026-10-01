@@ -70,6 +70,13 @@ export interface Campaign {
   skipped_count?: number;
   leads_created?: number;
   counters?: CampaignCounters;
+  product_id?: string | null;
+  product_name?: string | null;
+  campaign_type?: 'broadcast' | 'lead' | string | null;
+  created_via?: 'manual' | 'import' | string;
+  call_escalation_enabled?: boolean;
+  output_file_id?: string | null;
+  output_generated_at?: string | null;
   created_at: string;
   created_by?: string | null;
   updated_at?: string;
@@ -119,10 +126,15 @@ export interface CampaignWarning {
 export interface CampaignRecipient {
   id: string;
   identifier_masked: string;
+  phone?: string | null;
+  email?: string | null;
   name: string | null;
   status: 'pending' | 'sent' | 'delivered' | 'failed' | 'replied';
   failure_reason?: string;
   sent_at?: string;
+  call_consent_status?: 'asked' | 'accepted' | 'declined' | 'not_yet_asked' | string | null;
+  CallConsentStatus?: string | null;
+  conversation_id?: string | null;
 }
 
 export interface CampaignBatchMeta {
@@ -152,4 +164,27 @@ export interface CampaignHistoryResponse {
   page: number;
   page_size: number;
   items: CampaignHistoryItem[];
+}
+
+export type RestartMode = 'all' | 'failed_only' | 'pending_only';
+export type ExecutionStatus = 'running' | 'completed' | 'stopped';
+
+export interface CampaignExecution {
+  id: string;
+  campaign_id: string;
+  status: ExecutionStatus | string;
+  restart_mode: RestartMode | string;
+  total_count: number;
+  completed_count: number;
+  failed_count: number;
+  skipped_count: number;
+  started_at: string;
+  completed_at?: string | null;
+}
+
+export interface CampaignExecutionListResponse {
+  total_items: number;
+  page: number;
+  page_size: number;
+  items: CampaignExecution[];
 }

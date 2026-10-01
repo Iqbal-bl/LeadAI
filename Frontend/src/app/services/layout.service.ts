@@ -499,6 +499,12 @@ export class LayoutService {
           routerLink: '/client/campaigns',
           permission: 'campaign.read',
         },
+        {
+          label: 'Import Leads & Batches',
+          icon: 'pi pi-cloud-upload',
+          routerLink: '/client/campaigns/import',
+          permission: 'campaign.manage',
+        },
       ];
       if (this.authService.hasFeature('linkedin')) {
         outreachItems.push({

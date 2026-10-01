@@ -11,7 +11,7 @@ nothing must be written locally when it does. Run: python tests/test_member_crea
 """
 import asyncio
 
-import conftest_stub  # noqa: F401
+# pyrefly: ignore [missing-import]
 from conftest_stub import Base, SessionLocalAdmin, engine
 
 from fastapi import HTTPException
