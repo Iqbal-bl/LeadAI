@@ -2071,6 +2071,8 @@
                   (onClick)="showCommentSettingsModal = true"
                 ></p-button>
 
+
+
                 <p-button
                   icon="pi pi-refresh"
                   [rounded]="true"
@@ -2589,11 +2591,30 @@
                         (onClick)="captureCommentLead(c)"
                       ></p-button>
 
+                      <!-- CRM Lead Saved badge + optional LinkedIn profile link -->
                       <span
                         *ngIf="c.customer_id"
-                        class="text-xs text-emerald-400 font-medium flex items-center gap-1"
+                        class="flex items-center gap-2 flex-wrap"
                       >
-                        <i class="pi pi-check"></i> CRM Lead Saved
+                        <span class="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                          <i class="pi pi-check-circle"></i> CRM Lead Saved
+                        </span>
+                        <a
+                          *ngIf="c.author_profile_url"
+                          [href]="c.author_profile_url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
+                          style="background: rgba(10,102,194,0.12); color: #0A66C2; border: 1px solid rgba(10,102,194,0.25);"
+                          onmouseover="this.style.background='rgba(10,102,194,0.22)'"
+                          onmouseout="this.style.background='rgba(10,102,194,0.12)'"
+                          pTooltip="View LinkedIn Profile"
+                          tooltipPosition="top"
+                        >
+                          <i class="pi pi-linkedin" style="font-size:11px"></i>
+                          <span>View Profile</span>
+                          <i class="pi pi-external-link" style="font-size:9px"></i>
+                        </a>
                       </span>
 
                       <p-button

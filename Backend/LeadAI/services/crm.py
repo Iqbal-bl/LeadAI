@@ -73,6 +73,7 @@ def create_account(
     fields: dict | None = None,
     actor: str = "system",
     customer_id: str | None = None,
+    linkedin_profile_url: str | None = None,
 ) -> LeadAccount:
     """Create (or return an existing) account. Contact details encrypted at rest.
 
@@ -81,7 +82,21 @@ def create_account(
     decryptions — revealing a real number stays a deliberate, audited action.
     """
     existing = find_account_by_phone(db, client_id, phone)
+    if existing is None and customer_id:
+        existing = (
+            db.query(LeadAccount)
+            .filter(
+                LeadAccount.ClientId == client_id,
+                LeadAccount.CustomerId == customer_id,
+                LeadAccount.IsDeleted == False,
+            )
+            .first()
+        )
     if existing is not None:
+        # Backfill the LinkedIn URL on the existing account if it is missing.
+        if linkedin_profile_url and not existing.LinkedinProfileUrl:
+            existing.LinkedinProfileUrl = linkedin_profile_url
+            db.commit()
         return existing
 
     account = LeadAccount(
@@ -95,6 +110,7 @@ def create_account(
         PhoneHash=phone_fingerprint(phone),
         PhoneMasked=mask_phone(phone),
         EmailMasked=mask_email(email),
+        LinkedinProfileUrl=linkedin_profile_url,
         Stage=stage,
         OwnerEmail=owner_email,
         Product=product,
@@ -145,6 +161,7 @@ def convert_lead(
     phone = decrypt_pii(customer.PhoneEnc) if customer else None
     email = decrypt_pii(customer.EmailEnc) if customer else None
     whatsapp = decrypt_pii(customer.WhatsAppEnc) if customer else None
+    linkedin_profile_url = getattr(customer, "LinkedinProfileUrl", None) if customer else None
 
     account = find_account_by_phone(db, client_id, phone)
     if account is None:
@@ -169,7 +186,11 @@ def convert_lead(
             fields={"lead_facts": stated_facts} if stated_facts else None,
             actor=actor,
             customer_id=conversation.CustomerId,
+            linkedin_profile_url=linkedin_profile_url,
         )
+    elif linkedin_profile_url and not account.LinkedinProfileUrl:
+        # Backfill on an already-existing account that predates this feature.
+        account.LinkedinProfileUrl = linkedin_profile_url
 
     account.SourceConversationId = conversation.Id
     account.SourceLeadId = lead.Id

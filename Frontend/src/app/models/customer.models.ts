@@ -15,6 +15,8 @@ export interface Customer {
   company?: string | null; // backwards-compatible alias
   phone_masked: string | null;
   email_masked: string | null;
+  /** LinkedIn profile URL — set when the customer was captured from a LinkedIn comment. */
+  linkedin_profile_url?: string | null;
   stage: 'new' | 'active' | 'churned' | 'vip' | 'opportunity' | string;
   status: 'active' | 'inactive' | string;
   owner_email: string | null;

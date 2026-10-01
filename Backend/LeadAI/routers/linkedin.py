@@ -1195,7 +1195,11 @@ async def capture_comment_lead(
         "message": f"Successfully captured {comment.AuthorName} as a CRM Lead",
         "customer_id": customer.Id if customer else None,
         "display_name": customer.DisplayName if customer else comment.AuthorName,
+        "linkedin_profile_url": getattr(customer, "LinkedinProfileUrl", None) if customer else comment.AuthorProfileUrl,
     }
+
+
+
 
 
 @router.post(

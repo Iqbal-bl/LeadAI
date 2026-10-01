@@ -27,6 +27,7 @@ from ..models_blog import (
     LeadArticle,
 )
 from ..security import encrypt_pii
+from . import crm as crm_service
 
 logger = logging.getLogger("leadai.services.comment_reply_ai")
 
@@ -240,12 +241,35 @@ COMMENT DETAILS:
     @classmethod
     def capture_commenter_as_lead(cls, db: Session, comment: LeadSocialComment) -> Optional[LeadCustomer]:
         """Convert a LinkedIn commenter into a LeadCustomer and LeadChannelIdentity in CRM."""
+        # ------------------------------------------------------------------ #
+        # Path 1: comment is already linked to a customer — backfill URL if  #
+        # missing then return early.                                          #
+        # ------------------------------------------------------------------ #
         if comment.CustomerId:
-            return db.get(LeadCustomer, comment.CustomerId)
+            cust = db.get(LeadCustomer, comment.CustomerId)
+            if cust and not cust.LinkedinProfileUrl and comment.AuthorProfileUrl:
+                cust.LinkedinProfileUrl = comment.AuthorProfileUrl
+                cust.UpdatedAt = utcnow()
+            # Ensure a LeadAccount exists for CRM list visibility
+            if cust:
+                crm_service.create_account(
+                    db, comment.ClientId,
+                    display_name=cust.DisplayName or "LinkedIn Member",
+                    source="linkedin",
+                    stage="lead",
+                    customer_id=cust.Id,
+                    linkedin_profile_url=getattr(cust, "LinkedinProfileUrl", None) or comment.AuthorProfileUrl,
+                    actor="linkedin_comment_ai",
+                )
+            db.commit()
+            return cust
 
         external_id = comment.AuthorUrn or comment.AuthorProfileUrl or f"linkedin_comment_{comment.AuthorName.replace(' ', '_')}"
-        
-        # Check if identity already exists
+
+        # ------------------------------------------------------------------ #
+        # Path 2: channel identity already exists — reuse existing customer,  #
+        # backfill URL if needed.                                              #
+        # ------------------------------------------------------------------ #
         identity = (
             db.query(LeadChannelIdentity)
             .filter(
@@ -256,14 +280,30 @@ COMMENT DETAILS:
             .first()
         )
 
-        customer = None
         if identity:
             customer = db.get(LeadCustomer, identity.CustomerId)
+            if customer and not customer.LinkedinProfileUrl and comment.AuthorProfileUrl:
+                customer.LinkedinProfileUrl = comment.AuthorProfileUrl
+                customer.UpdatedAt = utcnow()
             comment.CustomerId = identity.CustomerId
             comment.IdentityId = identity.Id
+            # Ensure a LeadAccount exists for CRM list visibility
+            if customer:
+                crm_service.create_account(
+                    db, comment.ClientId,
+                    display_name=customer.DisplayName or "LinkedIn Member",
+                    source="linkedin",
+                    stage="lead",
+                    customer_id=customer.Id,
+                    linkedin_profile_url=getattr(customer, "LinkedinProfileUrl", None) or comment.AuthorProfileUrl,
+                    actor="linkedin_comment_ai",
+                )
             db.commit()
             return customer
 
+        # ------------------------------------------------------------------ #
+        # Path 3: brand-new commenter — create customer + identity.           #
+        # ------------------------------------------------------------------ #
         # Resolve channel account ID
         chan_acct = (
             db.query(LeadChannelAccount)
@@ -276,12 +316,13 @@ COMMENT DETAILS:
         )
         channel_account_id = chan_acct.Id if chan_acct else "linkedin-default"
 
-        # Create new customer
+        # Create new customer WITH LinkedIn profile URL
         display_name = comment.AuthorName or "LinkedIn Member"
         customer = LeadCustomer(
             ClientId=comment.ClientId,
             PublicRef=f"Lead #{random.randint(10000, 99999)}",
             DisplayName=display_name,
+            LinkedinProfileUrl=comment.AuthorProfileUrl,  # <-- persisted here
             PhoneEnc=encrypt_pii(None),
             CreatedBy="linkedin_comment_ai",
         )
@@ -302,7 +343,19 @@ COMMENT DETAILS:
 
         comment.CustomerId = customer.Id
         comment.IdentityId = identity.Id
+
+        # Create a LeadAccount so this person appears in the CRM Customers list
+        crm_service.create_account(
+            db, comment.ClientId,
+            display_name=display_name,
+            source="linkedin",
+            stage="lead",
+            customer_id=customer.Id,
+            linkedin_profile_url=comment.AuthorProfileUrl,
+            actor="linkedin_comment_ai",
+        )
         db.commit()
+
         logger.info(f"Captured new LinkedIn commenter as CRM Lead: {display_name} ({customer.Id})")
         return customer
 
