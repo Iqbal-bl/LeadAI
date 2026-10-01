@@ -961,10 +961,10 @@ class MemberOut(BaseModel):
     email: str
     name: str | None = None
     phone: str | None = None
-    assigned_leads: int = 0
     role: str
     client_id: str
     is_active: bool = True
+    assigned_leads: int = 0
     created_at: datetime | None = None
 
     @field_serializer('created_at')
@@ -1247,6 +1247,43 @@ class BillingSummaryOut(BaseModel):
     pending_recharges: list[ClientRechargeOut] = []
     total_remaining_minutes: float = 0.0
     is_quota_active: bool = False
+
+
+# ===========================================================================
+# Product Schemas
+# ===========================================================================
+
+
+class ProductOut(BaseModel):
+    id: str
+    client_id: str
+    product_name: str
+    product_type: str
+    knowledge_base_file: str | None = None
+    kb_document_id: str | None = None
+    created_at: datetime | None = None
+    created_by: str | None = None
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+    is_deleted: bool = False
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class ProductListOut(BaseModel):
+    total: int
+    items: list[ProductOut]
+
+
+class ProductUpdate(BaseModel):
+    product_name: str | None = None
+    product_type: str | None = None
 
 
 ConversationDetail.model_rebuild()

@@ -49,6 +49,11 @@ class A:
     KB_REINDEXED = "kb.document_reindexed"
     KB_TESTED = "kb.retrieval_tested"
 
+    # products
+    PRODUCT_CREATED = "product.created"
+    PRODUCT_UPDATED = "product.updated"
+    PRODUCT_DELETED = "product.deleted"
+
     # scripts / prompts
     SCRIPT_CREATED = "script.created"
     SCRIPT_UPDATED = "script.updated"
