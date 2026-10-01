@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, map, switchMap } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
 import { BillingService } from '../services/billing.service';
 
@@ -27,34 +27,44 @@ export const SubscriptionGuard: CanActivateFn = (route, state) => {
     return true;
   }
 
-  const currentUser = authService.getCurrentUser();
-
-  // 2. If user state is already in memory with subscription flag
-  if (currentUser && currentUser.has_active_subscription !== undefined) {
-    if (currentUser.has_active_subscription) {
-      return true;
-    }
-    router.navigate(['/plans']);
-    return false;
-  }
-
-  // 3. Otherwise fetch /access/me or fallback to /billing/current-plan
+  // 2. Check /access/me and fallback to /billing/current-plan
   return authService.getAccessMe().pipe(
-    map((user) => {
-      if (authService.isSuperAdmin() || authService.isPlatformAdmin()) {
-        return true;
+    switchMap((user) => {
+      if (
+        authService.isSuperAdmin() ||
+        authService.isPlatformAdmin() ||
+        user.has_active_subscription
+      ) {
+        return of(true);
       }
-      if (user.has_active_subscription) {
-        return true;
-      }
-      router.navigate(['/plans']);
-      return false;
-    }),
-    catchError(() => {
-      // Fallback check against billing/current-plan
       return billingService.getCurrentPlan().pipe(
         map((summary) => {
-          if (summary.active_recharge && summary.active_recharge.status === 'active') {
+          const hasPlan = !!(
+            summary?.active_recharge &&
+            (summary.active_recharge.status === 'active' ||
+              summary.active_recharge.status === 'exhausted')
+          );
+          if (hasPlan) {
+            return true;
+          }
+          router.navigate(['/plans']);
+          return false;
+        }),
+        catchError(() => {
+          router.navigate(['/plans']);
+          return of(false);
+        }),
+      );
+    }),
+    catchError(() => {
+      return billingService.getCurrentPlan().pipe(
+        map((summary) => {
+          const hasPlan = !!(
+            summary?.active_recharge &&
+            (summary.active_recharge.status === 'active' ||
+              summary.active_recharge.status === 'exhausted')
+          );
+          if (hasPlan) {
             return true;
           }
           router.navigate(['/plans']);

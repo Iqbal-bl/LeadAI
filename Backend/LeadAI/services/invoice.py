@@ -142,8 +142,45 @@ def render_invoice_html(
     active_channels = list(getattr(recharge, "ActiveChannels", None) or [])
     line_items = []
     if active_channels and mins > 0:
-        channel_cost_total = len(active_channels) * 2000.0
-        voice_cost = max(0.0, amount - channel_cost_total)
+        try:
+            from .billing import ADDON_BENCHMARKS
+            channel_rates = ADDON_BENCHMARKS
+        except Exception:
+            channel_rates = {
+                "whatsapp": 2000.0,
+                "instagram": 2000.0,
+                "facebook": 2000.0,
+                "linkedin": 3000.0,
+                "blog": 2000.0,
+                "voice_facilities": 2500.0,
+            }
+
+        channel_items = []
+        channel_cost_total = 0.0
+        for ch in active_channels:
+            ch_key = (ch or "").lower().strip()
+            ch_price = float(channel_rates.get(ch_key, 2000.0))
+            channel_cost_total += ch_price
+
+            title = (
+                "Voice Call Facilities"
+                if ch_key == "voice_facilities"
+                else f"{ch.replace('_', ' ').title()} Bot Automation"
+            )
+            desc = (
+                "Dedicated business virtual DID line, inbound IVR auto-receptionist, and call routing facility."
+                if ch_key == "voice_facilities"
+                else f"Automated 24/7 AI-driven {ch.title()} lead conversations and CRM qualification."
+            )
+            channel_items.append({
+                "title": title,
+                "description": desc,
+                "quantity": 1,
+                "rate_formatted": f"{curr_symbol}{ch_price:,.2f}",
+                "amount_formatted": f"{curr_symbol}{ch_price:,.2f}",
+            })
+
+        voice_cost = max(0.0, round(amount - channel_cost_total, 2))
         line_items.append({
             "title": f"LeadAI Voice Calling Plan — {plan_name}",
             "description": f"{mins_str}{validity_str}",
@@ -151,14 +188,7 @@ def render_invoice_html(
             "rate_formatted": f"{curr_symbol}{voice_cost:,.2f}",
             "amount_formatted": f"{curr_symbol}{voice_cost:,.2f}",
         })
-        for ch in active_channels:
-            line_items.append({
-                "title": f"{ch.title()} Bot Automation",
-                "description": f"Automated 24/7 AI-driven {ch.title()} lead conversations and CRM qualification.",
-                "quantity": 1,
-                "rate_formatted": f"{curr_symbol}2,000.00",
-                "amount_formatted": f"{curr_symbol}2,000.00",
-            })
+        line_items.extend(channel_items)
     else:
         line_items.append({
             "title": f"LeadAI Platform Recharge — {plan_name}",

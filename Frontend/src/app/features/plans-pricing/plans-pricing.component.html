@@ -6,11 +6,12 @@
         *ngIf="hasActivePlan"
         type="button"
         id="btn-back-to-usage"
+        routerLink="/client/dashboard"
         (click)="navigateToUsage()"
         class="inline-flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-full border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition shadow-2xs cursor-pointer"
       >
         <i class="pi pi-arrow-left text-xs"></i>
-        <span>Back to Workspace</span>
+        <span>Return to Dashboard</span>
       </button>
 
       <span
@@ -250,8 +251,8 @@
             type="button"
             [id]="'btn-select-plan-' + idx"
             (click)="$event.stopPropagation(); selectStandardPlan(plan, true)"
-            [disabled]="hasActivePlan"
-            [ngClass]="hasActivePlan
+            [disabled]="isCurrentPlan(plan) || (hasActivePlan && !isHigherTier(plan))"
+            [ngClass]="isCurrentPlan(plan) || (hasActivePlan && !isHigherTier(plan))
               ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
               : (isPopularPlan(plan, idx)
                 ? 'bg-white text-slate-950 hover:bg-slate-100 shadow-lg'
@@ -263,11 +264,17 @@
               class="pi pi-check-circle text-sm"
             ></i>
             <span>
-              {{ hasActivePlan
-                ? 'Plan Active'
-                : (isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
-                  ? 'Selected • Add Social Channels ↓'
-                  : (idx === 0 ? 'Select Start' : 'Select Growth')) }}
+              {{ isCurrentPlan(plan)
+                ? 'Current Plan Active'
+                : (hasActivePlan && isHigherTier(plan)
+                  ? (isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
+                      ? 'Upgrade Selected • Configure ↓'
+                      : 'Upgrade to ' + getPlanTierTitle(plan, idx))
+                  : (hasActivePlan
+                      ? 'Plan Active'
+                      : (isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
+                          ? 'Selected • Add Social Channels ↓'
+                          : (idx === 0 ? 'Select Start' : 'Select Growth')))) }}
             </span>
           </button>
 
@@ -355,7 +362,6 @@
               [min]="MIN_CUSTOM_MINUTES"
               [max]="MAX_CUSTOM_MINUTES"
               [step]="50"
-              [disabled]="hasActivePlan"
               (onChange)="onCustomMinutesChange(customMinutes)"
               styleClass="w-full"
             ></p-slider>
@@ -364,7 +370,6 @@
               <button
                 type="button"
                 *ngFor="let preset of [500, 1500, 3000, 6000]"
-                [disabled]="hasActivePlan"
                 (click)="onCustomMinutesChange(preset)"
                 [ngClass]="customMinutes === preset
                   ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-bold'
@@ -398,19 +403,23 @@
             type="button"
             id="btn-select-custom-plan"
             (click)="$event.stopPropagation(); selectCustomPlan(true)"
-            [disabled]="hasActivePlan"
-            [ngClass]="hasActivePlan
+            [disabled]="hasActivePlan && !isHigherTierCustom()"
+            [ngClass]="hasActivePlan && !isHigherTierCustom()
               ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
               : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100'"
             class="w-full py-3.5 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <i *ngIf="isPlanSelected && selectedPlanType === 'custom'" class="pi pi-check-circle text-sm"></i>
             <span>
-              {{ hasActivePlan
+              {{ hasActivePlan && !isHigherTierCustom()
                 ? 'Plan Active'
-                : (isPlanSelected && selectedPlanType === 'custom'
-                  ? 'Selected • Add Social Channels ↓'
-                  : 'Select Enterprise') }}
+                : (hasActivePlan
+                  ? (isPlanSelected && selectedPlanType === 'custom'
+                      ? 'Upgrade Selected • Configure ↓'
+                      : 'Upgrade to Enterprise')
+                  : (isPlanSelected && selectedPlanType === 'custom'
+                      ? 'Selected • Add Social Channels ↓'
+                      : 'Select Enterprise')) }}
             </span>
           </button>
 
@@ -701,21 +710,23 @@
             type="button"
             id="btn-proceed-autopay"
             (click)="initiateAutoPayCheckout()"
-            [disabled]="hasActivePlan || isCheckingOut || !isCompanyAdmin"
-            [ngClass]="hasActivePlan || !isCompanyAdmin
+            [disabled]="(hasActivePlan && !canUpgradeCurrentSelection()) || isCheckingOut || !isCompanyAdmin"
+            [ngClass]="(hasActivePlan && !canUpgradeCurrentSelection()) || !isCompanyAdmin
               ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
               : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg'"
             class="w-full py-4 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <i *ngIf="isCheckingOut" class="pi pi-spin pi-spinner text-sm"></i>
-            <i *ngIf="!isCheckingOut && !hasActivePlan && isCompanyAdmin" class="pi pi-shield text-sm"></i>
+            <i *ngIf="!isCheckingOut && (!hasActivePlan || canUpgradeCurrentSelection()) && isCompanyAdmin" class="pi pi-shield text-sm"></i>
             <i *ngIf="!isCompanyAdmin" class="pi pi-lock text-sm"></i>
             <span>
-              {{ hasActivePlan
-                ? 'Active Plan Running'
+              {{ (hasActivePlan && !canUpgradeCurrentSelection())
+                ? 'Current Plan Active'
                 : (!isCompanyAdmin
                     ? 'Admin Action Required to Purchase'
-                    : ('Pay ₹' + (getTotalPayableInclusiveTax() | number) + ' (Incl. Taxes)')) }}
+                    : (hasActivePlan && canUpgradeCurrentSelection()
+                        ? ('Upgrade Plan • Pay ₹' + (getTotalPayableInclusiveTax() | number) + ' (Incl. Taxes)')
+                        : ('Pay ₹' + (getTotalPayableInclusiveTax() | number) + ' (Incl. Taxes)'))) }}
             </span>
           </button>
 
