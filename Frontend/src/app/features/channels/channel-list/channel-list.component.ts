@@ -530,11 +530,6 @@ export class ChannelListComponent implements OnInit, OnDestroy {
   getChannelMenuItems(channel: Channel): MenuItem[] {
     return [
       {
-        label: 'Send Test Message',
-        icon: 'pi pi-send',
-        command: () => this.openTestDialog(channel),
-      },
-      {
         label: 'View Contacts',
         icon: 'pi pi-users',
         command: () => this.openContacts(channel),

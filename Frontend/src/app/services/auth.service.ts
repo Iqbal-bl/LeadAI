@@ -160,9 +160,9 @@ export class AuthService {
     return !authConfig.pkce
       ? baseUrl
       : baseUrl +
-          '&code_challenge=' +
-          code_challenge +
-          '&code_challenge_method=S256&scope=openid profile api1 offline_access roles';
+      '&code_challenge=' +
+      code_challenge +
+      '&code_challenge_method=S256&scope=openid profile api1 offline_access roles';
   }
 
   // Generate the oauth token using code
@@ -234,13 +234,13 @@ export class AuthService {
       this.http
         .post(
           environment.authConfig.issuer +
-            '/tokens/revoke/access_token' +
-            '?ngsw-bypass=true',
+          '/tokens/revoke/access_token' +
+          '?ngsw-bypass=true',
           accessToken,
           options,
         )
         .subscribe(
-          (data: any) => {},
+          (data: any) => { },
           (error: any) => console.log(error),
         );
     }
@@ -375,9 +375,8 @@ export class AuthService {
     const idToken = this.getValue('id_token') || '';
     const endsessionPath = 'connect/endsession';
     // this.logout();
-    window.location.href = `${
-      environment.authConfig.issuer
-    }/${endsessionPath}?id_token_hint=${idToken}&post_logout_redirect_uri=${encodeURIComponent(environment.authConfig.postLogoutRedirectUri)}`;
+    window.location.href = `${environment.authConfig.issuer
+      }/${endsessionPath}?id_token_hint=${idToken}&post_logout_redirect_uri=${encodeURIComponent(environment.authConfig.postLogoutRedirectUri)}`;
   }
 
   // set auth attributes by decoding token
@@ -633,7 +632,7 @@ export class AuthService {
   // LinkedIn OAuth: Get authorization URL
   public getLinkedInConnectUrl(): Observable<{ authorize_url: string }> {
     return this.http.get<{ authorize_url: string }>(
-      `${environment.apiPrefix}/channels/linkedin/connect`,
+      `${environment.apiPrefix}/linkedin/connect`,
       {
         headers: {
           'ngrok-skip-browser-warning': 'sdf',
@@ -654,7 +653,7 @@ export class AuthService {
       person_urn?: string;
       access_token_valid?: boolean;
       has_refresh_token?: boolean;
-    }>(`${environment.apiPrefix}/channels/linkedin/status`, {
+    }>(`${environment.apiPrefix}/linkedin/status`, {
       headers: {
         'ngrok-skip-browser-warning': 'sdf',
       },
@@ -664,7 +663,7 @@ export class AuthService {
   // LinkedIn OAuth: Disconnect
   public disconnectLinkedIn(): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>(
-      `${environment.apiPrefix}/channels/linkedin/disconnect`,
+      `${environment.apiPrefix}/linkedin/disconnect`,
       {},
     );
   }

@@ -114,6 +114,17 @@ def render_invoice_html(
     contact_email = user_email or getattr(client, "ContactEmail", "") or ""
     customer_address = getattr(client, "Address", "") or ""
 
+    # Tax / GST handling (toggleable via settings.enable_gst)
+    if getattr(settings, "enable_gst", False) and getattr(settings, "gst_rate", 0.0) > 0:
+        rate = float(settings.gst_rate)
+        subtotal_val = round(amount / (1.0 + rate), 2)
+        gst_val = round(amount - subtotal_val, 2)
+        subtotal_formatted = f"{curr_symbol}{subtotal_val:,.2f}"
+        tax_formatted = f"{curr_symbol}{gst_val:,.2f} ({int(rate * 100)}% GST - SAC 9984)"
+    else:
+        subtotal_formatted = f"{curr_symbol}{amount:,.2f}"
+        tax_formatted = ""
+
     formatted_rate = f"{curr_symbol}{amount:,.2f}"
     formatted_total = f"{curr_symbol}{amount:,.2f}"
     formatted_paid = f"{curr_symbol}{amount:,.2f}"
@@ -126,6 +137,66 @@ def render_invoice_html(
     validity_str = f" • Validity: {validity} Days" if validity else ""
 
     booking_code = str(recharge_id).replace("-", "")[-6:].upper()
+
+    # Line items itemization
+    active_channels = list(getattr(recharge, "ActiveChannels", None) or [])
+    line_items = []
+    if active_channels and mins > 0:
+        try:
+            from .billing import ADDON_BENCHMARKS
+            channel_rates = ADDON_BENCHMARKS
+        except Exception:
+            channel_rates = {
+                "whatsapp": 2000.0,
+                "instagram": 2000.0,
+                "facebook": 2000.0,
+                "linkedin": 3000.0,
+                "blog": 2000.0,
+                "voice_facilities": 2500.0,
+            }
+
+        channel_items = []
+        channel_cost_total = 0.0
+        for ch in active_channels:
+            ch_key = (ch or "").lower().strip()
+            ch_price = float(channel_rates.get(ch_key, 2000.0))
+            channel_cost_total += ch_price
+
+            title = (
+                "Voice Call Facilities"
+                if ch_key == "voice_facilities"
+                else f"{ch.replace('_', ' ').title()} Bot Automation"
+            )
+            desc = (
+                "Dedicated business virtual DID line, inbound IVR auto-receptionist, and call routing facility."
+                if ch_key == "voice_facilities"
+                else f"Automated 24/7 AI-driven {ch.title()} lead conversations and CRM qualification."
+            )
+            channel_items.append({
+                "title": title,
+                "description": desc,
+                "quantity": 1,
+                "rate_formatted": f"{curr_symbol}{ch_price:,.2f}",
+                "amount_formatted": f"{curr_symbol}{ch_price:,.2f}",
+            })
+
+        voice_cost = max(0.0, round(amount - channel_cost_total, 2))
+        line_items.append({
+            "title": f"LeadAI Voice Calling Plan — {plan_name}",
+            "description": f"{mins_str}{validity_str}",
+            "quantity": 1,
+            "rate_formatted": f"{curr_symbol}{voice_cost:,.2f}",
+            "amount_formatted": f"{curr_symbol}{voice_cost:,.2f}",
+        })
+        line_items.extend(channel_items)
+    else:
+        line_items.append({
+            "title": f"LeadAI Platform Recharge — {plan_name}",
+            "description": f"{client_name} • {mins_str}{validity_str}",
+            "quantity": 1,
+            "rate_formatted": formatted_rate,
+            "amount_formatted": formatted_rate,
+        })
 
     context = {
         "leadai_company_name": "LeadAI Technologies",
@@ -154,8 +225,9 @@ def render_invoice_html(
         "quantity": 1,
         "rate_formatted": formatted_rate,
         "amount_formatted": formatted_rate,
-        "subtotal_formatted": formatted_rate,
-        "tax_formatted": "",
+        "line_items": line_items,
+        "subtotal_formatted": subtotal_formatted,
+        "tax_formatted": tax_formatted,
         "total_formatted": formatted_total,
         "amount_paid_formatted": formatted_paid,
         "balance_due_formatted": formatted_due,
