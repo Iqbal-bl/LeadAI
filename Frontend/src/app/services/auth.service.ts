@@ -487,6 +487,39 @@ export class AuthService {
   }
 
   /**
+   * Checks whether a specific channel/feature is included in the company's active plan.
+   * Super / platform admins always have access.
+   */
+  public hasChannel(channel: string): boolean {
+    if (this.isSuperAdmin() || this.isPlatformAdmin()) {
+      return true;
+    }
+    const user = this.currentUserSubject.value;
+    if (!user || !user.has_active_subscription) {
+      return false;
+    }
+    const ch = (channel || '').toLowerCase().trim();
+    const channels = (user.active_channels || []).map((c) => (c || '').toLowerCase().trim());
+    const features = (user.active_features || []).map((f) => (f || '').toLowerCase().trim());
+
+    if (ch === 'linkedin' || ch === 'li') {
+      return channels.includes('linkedin') || channels.includes('li') || features.includes('linkedin') || features.includes('li');
+    }
+    if (ch === 'blog' || ch === 'blogs' || ch === 'content_studio' || ch === 'ai_blog') {
+      const blogKeys = ['blog', 'blogs', 'content_studio', 'ai_blog'];
+      return channels.some((c) => blogKeys.includes(c)) || features.some((f) => blogKeys.includes(f));
+    }
+    return channels.includes(ch) || features.includes(ch);
+  }
+
+  /**
+   * Alias for hasChannel to check feature entitlements.
+   */
+  public hasFeature(feature: string): boolean {
+    return this.hasChannel(feature);
+  }
+
+  /**
    * Self-service profile update for the currently authenticated user.
    * Sends the updated profile payload to PATCH /api/leadai/access/profile,
    * updates the local currentUserSubject state, and refreshes the userName.

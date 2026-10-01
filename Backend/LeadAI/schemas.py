@@ -201,6 +201,8 @@ class MeOut(BaseModel):
     accessible_companies: list[CompanyOut] = []
     has_active_subscription: bool = False
     active_subscription_plan: str | None = None
+    active_channels: list[str] = []
+    active_features: list[str] = []
 
 
 class UserProfileUpdate(BaseModel):

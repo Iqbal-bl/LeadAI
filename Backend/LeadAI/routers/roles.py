@@ -47,6 +47,42 @@ router = APIRouter(prefix="/access", tags=["LeadAI • Access control"])
 
 
 @router.get("/me", response_model=MeOut, summary="Who am I and what may I do")
+def _get_subscription_info(db: Session, principal: Principal, effective_client_id: str | None) -> tuple[bool, str | None, list[str], list[str]]:
+    ALL_CHANNELS = ["whatsapp", "instagram", "facebook", "linkedin", "blog", "voice_facilities"]
+    if principal.is_platform_admin:
+        return True, "Platform Admin (Unlimited)", ALL_CHANNELS, ALL_CHANNELS
+
+    if not effective_client_id:
+        return False, None, [], []
+
+    from ..services import billing as billing_svc
+    from ..models import RECHARGE_STATUS_ACTIVE, RECHARGE_STATUS_EXHAUSTED, LeadRechargePlanTemplate
+    active_sub = billing_svc.get_active_recharge(db, effective_client_id)
+    if not active_sub:
+        return False, None, [], []
+
+    if active_sub.Status not in (RECHARGE_STATUS_ACTIVE, RECHARGE_STATUS_EXHAUSTED):
+        return False, None, [], []
+
+    if active_sub.ExpiresAt and billing_svc._is_expired(active_sub.ExpiresAt, utcnow()):
+        return False, None, [], []
+
+    active_channels = set((c or "").strip().lower() for c in (active_sub.ActiveChannels or []))
+    if not active_channels:
+        if active_sub.PlanTemplateId:
+            template = db.query(LeadRechargePlanTemplate).filter(LeadRechargePlanTemplate.Id == active_sub.PlanTemplateId).first()
+            if template and template.AddonChannels:
+                active_channels = set((c or "").strip().lower() for c in template.AddonChannels)
+        if not active_channels and active_sub.PlanNameSnapshot:
+            plan_lower = active_sub.PlanNameSnapshot.lower()
+            found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin", "blog") if c in plan_lower]
+            if found:
+                active_channels = set(found)
+
+    channel_list = sorted(list(active_channels))
+    return True, active_sub.PlanNameSnapshot, channel_list, channel_list
+
+
 def me(
     client_id: str | None = Query(None, description="Optional company ID to scope check"),
     principal: Principal = Depends(current_principal),
@@ -81,17 +117,9 @@ def me(
         )
         companies = [company_out(db, c, with_counts=False) for c in rows]
 
-    # Check active subscription
-    has_active_subscription = False
-    active_subscription_plan = None
-    if principal.is_platform_admin:
-        has_active_subscription = True
-    elif effective_client_id:
-        from ..services import billing as billing_svc
-        active_sub = billing_svc.get_active_recharge(db, effective_client_id)
-        if active_sub and active_sub.Status == "active":
-            has_active_subscription = True
-            active_subscription_plan = active_sub.PlanNameSnapshot
+    has_active_subscription, active_subscription_plan, active_channels, active_features = _get_subscription_info(
+        db, principal, effective_client_id
+    )
 
     return MeOut(
         email=principal.email,
@@ -103,6 +131,8 @@ def me(
         accessible_companies=companies,
         has_active_subscription=has_active_subscription,
         active_subscription_plan=active_subscription_plan,
+        active_channels=active_channels,
+        active_features=active_features,
     )
 
 
@@ -158,17 +188,9 @@ def update_profile(
         )
         companies = [company_out(db, c, with_counts=False) for c in rows]
 
-    # Check active subscription
-    has_active_subscription = False
-    active_subscription_plan = None
-    if principal.is_platform_admin:
-        has_active_subscription = True
-    elif principal.client_id:
-        from ..services import billing as billing_svc
-        active_sub = billing_svc.get_active_recharge(db, principal.client_id)
-        if active_sub and active_sub.Status == "active":
-            has_active_subscription = True
-            active_subscription_plan = active_sub.PlanNameSnapshot
+    has_active_subscription, active_subscription_plan, active_channels, active_features = _get_subscription_info(
+        db, principal, principal.client_id
+    )
 
     return MeOut(
         email=principal.email,
@@ -180,6 +202,8 @@ def update_profile(
         accessible_companies=companies,
         has_active_subscription=has_active_subscription,
         active_subscription_plan=active_subscription_plan,
+        active_channels=active_channels,
+        active_features=active_features,
     )
 
 

@@ -15,6 +15,8 @@ export interface UserMe {
   accessible_companies: AccessibleCompany[];
   has_active_subscription?: boolean;
   active_subscription_plan?: string | null;
+  active_channels?: string[];
+  active_features?: string[];
 }
 
 /**
@@ -41,6 +43,8 @@ export interface UserProfileDetails {
   accessible_companies: AccessibleCompany[];
   has_active_subscription?: boolean;
   active_subscription_plan?: string | null;
+  active_channels?: string[];
+  active_features?: string[];
 }
 
 export interface RoleGrant {

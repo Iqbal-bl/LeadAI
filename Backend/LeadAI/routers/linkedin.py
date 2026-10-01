@@ -56,8 +56,13 @@ async def linkedin_connect(
     db: Session = Depends(get_leadai_db),
 ):
     from ..social import linkedin
+    from ..services import billing as billing_svc
 
     principal, client_id = scope
+    allowed, reason = billing_svc.check_channel_access(db, client_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     try:
         url = await linkedin.build_authorize_url(db, client_id)
         return {"authorize_url": url}
@@ -312,6 +317,10 @@ async def save_linkedin_credentials(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
 
     # Find the corresponding LeadChannelAccount row
     row = db.query(LeadChannelAccount).filter(
@@ -457,6 +466,11 @@ async def linkedin_search_profiles(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     # Retrieve credentials from database
@@ -776,6 +790,11 @@ async def send_linkedin_conversation_message(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     row = db.query(LeadChannelAccount).filter(
@@ -809,6 +828,11 @@ async def sync_linkedin_messages(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     row = db.query(LeadChannelAccount).filter(
@@ -1041,6 +1065,11 @@ async def post_linkedin_comment_reply(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..models_blog import LeadSocialComment
     from ..social import linkedin as linkedin_oauth, linkedin_bot
 
@@ -1178,6 +1207,11 @@ async def sync_linkedin_comments(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     from ..social import linkedin_bot
 
     account = db.query(LeadChannelAccount).filter(

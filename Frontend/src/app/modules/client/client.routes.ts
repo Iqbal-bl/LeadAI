@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { ClientPermissionGuard } from './guards/client-permission.guard';
+import { ChannelPlanGuard } from '../../guards/channel-plan.guard';
 
 export const CLIENT_ROUTES: Routes = [
   {
@@ -118,8 +119,8 @@ export const CLIENT_ROUTES: Routes = [
       },
       {
         path: 'linkedin',
-        canActivate: [ClientPermissionGuard],
-        data: { permission: 'channel.read' },
+        canActivate: [ClientPermissionGuard, ChannelPlanGuard],
+        data: { permission: 'channel.read', requiredChannel: 'linkedin' },
         loadComponent: () =>
           import('../../features/linkedin/linkedin-dashboard.component').then(
             (m) => m.LinkedinDashboardComponent,
@@ -178,6 +179,8 @@ export const CLIENT_ROUTES: Routes = [
       },
       {
         path: 'blog',
+        canActivate: [ClientPermissionGuard, ChannelPlanGuard],
+        data: { permission: 'campaign.read', requiredFeature: 'blog' },
         loadComponent: () =>
           import('../../features/blog/blog-dashboard/blog-dashboard.component').then(
             (m) => m.BlogDashboardComponent,

@@ -1947,6 +1947,12 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
     elif ch_norm in ("linkedin", "li"):
         target_keys = {"linkedin", "li"}
         channel_name = "LinkedIn Lead Gen"
+    elif ch_norm in ("blog", "blogs", "ai_blog", "content_studio"):
+        target_keys = {"blog", "blogs", "ai_blog", "content_studio"}
+        channel_name = "AI Blog & Content Studio"
+    elif ch_norm in ("voice_facilities", "voice_addon", "did"):
+        target_keys = {"voice_facilities", "voice_addon", "did"}
+        channel_name = "Voice Call Facilities"
     else:
         target_keys = {ch_norm}
         channel_name = channel.title()
@@ -1967,7 +1973,7 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
                     db.rollback()
         if not active_channels and active.PlanNameSnapshot:
             plan_lower = active.PlanNameSnapshot.lower()
-            found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin") if c in plan_lower]
+            found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin", "blog") if c in plan_lower]
             if found:
                 active_channels = set(found)
                 active.ActiveChannels = found
