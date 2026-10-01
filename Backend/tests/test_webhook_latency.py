@@ -23,7 +23,7 @@ from domain.models import Client  # noqa: E402
 from LeadAI import models  # noqa: E402
 from LeadAI.config import settings as real_settings  # noqa: E402
 from LeadAI.routers import webhooks  # noqa: E402
-from LeadAI.services import ai_engine, billing, channels, conversation_flow  # noqa: E402
+from LeadAI.services import ai_engine, billing, channels, conversation_flow, scoring_queue  # noqa: E402
 
 billing.check_channel_access = lambda db, client_id, channel: (True, "")
 
@@ -177,14 +177,21 @@ def test_a_push_channel_reply_is_committed_before_scoring_runs():
     assert conv2.Summary == "s"                   # qualify/summarize actually ran in the background
 
 
-def test_the_widget_still_scores_inline_because_its_response_needs_the_result():
+def test_the_widget_reply_is_not_held_up_by_scoring_either():
     wire_scoring_fakes()
     db, client, conv = setup_conv("web")
     result = conversation_flow.handle_customer_turn(db, client, conv, "Hi", deliver_reply=False)
     ai = db.query(models.LeadMessage).filter_by(ConversationId=conv.Id, Sender="ai").one()
     steps = [s["step"] for s in ai.TraceJson["steps"]]
-    assert "qualify" in steps and "threshold" in steps
-    assert result.lead_status is not None
+    assert "commit" in steps and "qualify" not in steps, "scoring must not run inline for the widget"
+    assert result.lead_status is not None and result.lead_score == 0     # as of the previous turn
+
+    assert scoring_queue.wait_idle()
+    db.expire_all()
+    ai = db.query(models.LeadMessage).filter_by(ConversationId=conv.Id, Sender="ai").one()
+    steps_after = [s["step"] for s in ai.TraceJson["steps"]]
+    assert "qualify" in steps_after and "threshold" in steps_after      # scored in the background
+    assert db.query(models.Lead).filter_by(ConversationId=conv.Id).one().Score > 0
 
 
 if __name__ == "__main__":

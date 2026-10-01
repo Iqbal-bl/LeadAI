@@ -59,7 +59,9 @@ from ..models import (
     Lead,
     LeadAccount,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadChannelIdentity,
     LeadContactListItem,
@@ -73,6 +75,10 @@ from . import audience, channels, crm, jobs
 logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = ("completed", "cancelled", "failed")
+
+# Mirrors the old VoiceAI outbound/batching.py restart modes exactly, so an
+# operator who already knows that system needs to learn nothing new here.
+RESTART_MODES = ("all", "failed_only", "pending_only")
 
 # A phone number is never a valid recipient id on these platforms — Meta rejects
 # it. A campaign on one of these channels must resolve and send to the IGSID/PSID
@@ -364,6 +370,105 @@ def _iter_targets(db: Session, campaign: LeadCampaign):
 
 
 # =========================================================================== #
+# per-run history — Batch -> BatchExecution -> CallNumberExecution, mirrored
+# =========================================================================== #
+def _active_execution(db: Session, campaign: LeadCampaign) -> LeadCampaignExecution:
+    """The execution the current/next batch belongs to.
+
+    A job can be enqueued without ever going through `start_execution` (older
+    data, or a test calling `run_campaign_job` directly) — rather than fail,
+    that work is attributed to an implicitly-created "all" execution so no
+    send ever happens outside of some execution row.
+    """
+    execution = (
+        db.query(LeadCampaignExecution)
+        .filter(
+            LeadCampaignExecution.CampaignId == campaign.Id,
+            LeadCampaignExecution.Status == "running",
+        )
+        .order_by(LeadCampaignExecution.StartedAt.desc())
+        .first()
+    )
+    if execution is not None:
+        return execution
+
+    execution = LeadCampaignExecution(
+        ClientId=campaign.ClientId,
+        CampaignId=campaign.Id,
+        Status="running",
+        RestartMode="all",
+        TotalCount=campaign.TotalCount or 0,
+    )
+    db.add(execution)
+    db.flush()
+    return execution
+
+
+def start_execution(
+    db: Session, campaign: LeadCampaign, restart_mode: str = "all"
+) -> LeadCampaignExecution:
+    """Create the execution row for a Start/Restart and select which
+    recipients this run actually touches — the direct counterpart of the old
+    `_select_numbers_for_mode()`.
+
+        all           every non-deleted recipient runs again, win or lose.
+        failed_only    only rows currently Status == 'failed'.
+        pending_only   only rows never successfully attempted (queued/sending).
+    """
+    if restart_mode not in RESTART_MODES:
+        restart_mode = "all"
+
+    query = db.query(LeadCampaignRecipient).filter(
+        LeadCampaignRecipient.CampaignId == campaign.Id,
+        LeadCampaignRecipient.IsDeleted == False,  # noqa: E712
+    )
+    if restart_mode == "failed_only":
+        query = query.filter(LeadCampaignRecipient.Status == "failed")
+    elif restart_mode == "pending_only":
+        query = query.filter(LeadCampaignRecipient.Status.in_(("queued", "sending")))
+
+    selected_ids = [rid for (rid,) in query.with_entities(LeadCampaignRecipient.Id).all()]
+    if selected_ids:
+        db.query(LeadCampaignRecipient).filter(
+            LeadCampaignRecipient.Id.in_(selected_ids)
+        ).update(
+            {"Status": "queued", "Attempts": 0, "FailureReason": None},
+            synchronize_session=False,
+        )
+
+    execution = LeadCampaignExecution(
+        ClientId=campaign.ClientId,
+        CampaignId=campaign.Id,
+        Status="running",
+        RestartMode=restart_mode,
+        TotalCount=len(selected_ids),
+    )
+    db.add(execution)
+    db.flush()
+    return execution
+
+
+def _record_attempt(db: Session, execution: LeadCampaignExecution, recipient: LeadCampaignRecipient) -> None:
+    """Snapshot this recipient's outcome under THIS execution, immutably.
+
+    `recipient` itself keeps mutating across every future run — this row
+    freezes what actually happened here, so an export of an earlier run never
+    gets silently rewritten by a later one.
+    """
+    db.add(
+        LeadCampaignRecipientAttempt(
+            ClientId=recipient.ClientId,
+            CampaignExecutionId=execution.Id,
+            RecipientId=recipient.Id,
+            Status=recipient.Status,
+            ExternalMessageId=recipient.ExternalMessageId,
+            SentAt=recipient.SentAt,
+            FailureReason=recipient.FailureReason,
+        )
+    )
+
+
+# =========================================================================== #
 # EXECUTE
 # =========================================================================== #
 @jobs.register("campaign.run")
@@ -398,16 +503,6 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
             db, "campaign.run", {"campaign_id": campaign.Id},
             client_id=campaign.ClientId, run_at=resume_at,
         )
-        activity.log(
-            db,
-            action=A.CAMPAIGN_DEFERRED,
-            client_id=campaign.ClientId,
-            actor_email="system",
-            entity_type="campaign",
-            entity_id=campaign.Id,
-            message=f"Campaign deferred: quiet hours active until {resume_at:%H:%M} (resumes automatically)",
-            meta={"resume_at": str(resume_at), "reason": "quiet_hours"},
-        )
         db.commit()
         return {"deferred_until": str(resume_at)}
 
@@ -416,6 +511,7 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         campaign.StartedAt = campaign.StartedAt or utcnow()
         db.commit()
 
+    execution = _active_execution(db, campaign)
     client = db.get(Client, campaign.ClientId)
     batch = (
         db.query(LeadCampaignRecipient)
@@ -430,7 +526,7 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
     )
 
     if not batch:
-        return _finish(db, campaign)
+        return _finish(db, campaign, execution=execution)
 
     # Rate limiting: a fixed inter-send delay is simpler and gentler on the
     # carrier than a token bucket that fires in bursts.
@@ -451,10 +547,14 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
             skipped += 1
         else:
             failed += 1
+        _record_attempt(db, execution, recipient)
         db.commit()
         if delay > 0.01:
             time.sleep(delay)
 
+    execution.CompletedCount = (execution.CompletedCount or 0) + sent
+    execution.FailedCount = (execution.FailedCount or 0) + failed
+    execution.SkippedCount = (execution.SkippedCount or 0) + skipped
     _refresh_counters(db, campaign)
 
     remaining = (
@@ -483,7 +583,7 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         db.commit()
         return {"sent": sent, "failed": failed, "skipped": skipped, "remaining": remaining}
 
-    return _finish(db, campaign, {"sent": sent, "failed": failed, "skipped": skipped})
+    return _finish(db, campaign, {"sent": sent, "failed": failed, "skipped": skipped}, execution=execution)
 
 
 def _send_one(
@@ -733,7 +833,10 @@ def _refresh_counters(db: Session, campaign: LeadCampaign) -> None:
     campaign.SkippedCount = rows.get("skipped", 0) + rows.get("opted_out", 0)
 
 
-def _finish(db: Session, campaign: LeadCampaign, extra: dict | None = None) -> dict:
+def _finish(
+    db: Session, campaign: LeadCampaign, extra: dict | None = None,
+    execution: LeadCampaignExecution | None = None,
+) -> dict:
     _refresh_counters(db, campaign)
     campaign.Status = "completed"
     campaign.CompletedAt = utcnow()
@@ -741,6 +844,10 @@ def _finish(db: Session, campaign: LeadCampaign, extra: dict | None = None) -> d
         f"Completed — {campaign.SentCount} sent, "
         f"{campaign.FailedCount} failed, {campaign.SkippedCount} skipped"
     )
+    if execution is None:
+        execution = _active_execution(db, campaign)
+    execution.Status = "completed"
+    execution.CompletedAt = utcnow()
     activity.log(
         db,
         action=A.CAMPAIGN_COMPLETED,
@@ -778,9 +885,11 @@ def apply_status_update(db: Session, external_message_id: str, status: str, erro
         return False
 
     rank = {"queued": 0, "sending": 1, "sent": 2, "delivered": 3, "read": 4, "replied": 5}
+    changed = False
     if status == "failed":
         recipient.Status = "failed"
         recipient.FailureReason = (error or "Provider reported a failure")[:400]
+        changed = True
     elif rank.get(status, -1) > rank.get(recipient.Status, 0):
         recipient.Status = status
         if status == "delivered":
@@ -789,11 +898,34 @@ def apply_status_update(db: Session, external_message_id: str, status: str, erro
             recipient.ReadAt = utcnow()
         elif status == "replied":
             recipient.RepliedAt = utcnow()
+        changed = True
+
+    if changed:
+        _update_latest_attempt(db, recipient)
 
     campaign = db.get(LeadCampaign, recipient.CampaignId)
     if campaign is not None:
         _refresh_counters(db, campaign)
     return True
+
+
+def _update_latest_attempt(db: Session, recipient: LeadCampaignRecipient) -> None:
+    """Fold a delivery receipt into the SAME attempt row the original send
+    created, not a new one — a receipt is an update to that run's outcome,
+    never a run of its own."""
+    attempt = (
+        db.query(LeadCampaignRecipientAttempt)
+        .filter(LeadCampaignRecipientAttempt.RecipientId == recipient.Id)
+        .order_by(LeadCampaignRecipientAttempt.CreatedAt.desc())
+        .first()
+    )
+    if attempt is None:
+        return
+    attempt.Status = recipient.Status
+    attempt.DeliveredAt = recipient.DeliveredAt
+    attempt.ReadAt = recipient.ReadAt
+    attempt.RepliedAt = recipient.RepliedAt
+    attempt.FailureReason = recipient.FailureReason
 
 
 def note_reply(db: Session, conversation: LeadConversation) -> None:
@@ -812,6 +944,7 @@ def note_reply(db: Session, conversation: LeadConversation) -> None:
         return
     recipient.Status = "replied"
     recipient.RepliedAt = utcnow()
+    _update_latest_attempt(db, recipient)
     campaign = db.get(LeadCampaign, conversation.CampaignId)
     if campaign is not None:
         _refresh_counters(db, campaign)

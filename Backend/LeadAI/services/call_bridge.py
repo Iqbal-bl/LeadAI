@@ -111,7 +111,7 @@ def prepare_agent_context(
                 "type": "text",
                 "content": (
                     "Confirm the customer's interest, capture budget and timeline, and "
-                    "offer to connect a specialist if anything is outside your knowledge."
+                    "say a representative will follow up if anything is outside your knowledge."
                 ),
             },
         ]

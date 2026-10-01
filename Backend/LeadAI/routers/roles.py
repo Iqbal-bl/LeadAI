@@ -46,7 +46,6 @@ from ..serializers import company_out, role_out
 router = APIRouter(prefix="/access", tags=["LeadAI • Access control"])
 
 
-@router.get("/me", response_model=MeOut, summary="Who am I and what may I do")
 def _get_subscription_info(db: Session, principal: Principal, effective_client_id: str | None) -> tuple[bool, str | None, list[str], list[str]]:
     ALL_CHANNELS = ["whatsapp", "instagram", "facebook", "linkedin", "blog", "voice_facilities"]
     if principal.is_platform_admin:
@@ -83,6 +82,7 @@ def _get_subscription_info(db: Session, principal: Principal, effective_client_i
     return True, active_sub.PlanNameSnapshot, channel_list, channel_list
 
 
+@router.get("/me", response_model=MeOut, summary="Who am I and what may I do")
 def me(
     client_id: str | None = Query(None, description="Optional company ID to scope check"),
     principal: Principal = Depends(current_principal),

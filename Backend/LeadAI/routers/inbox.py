@@ -148,6 +148,16 @@ def list_conversations(
     campaign_id: str | None = Query(
         default=None, description="Only conversations produced by this campaign."
     ),
+    include_unreached: bool = Query(
+        default=False,
+        description=(
+            "Imported leads get a real, trackable conversation the moment they're "
+            "imported — before any message is ever sent. If that send/call is later "
+            "skipped or fails, nothing is ever exchanged. Those empty threads are "
+            "hidden from the inbox by default (there is nothing to read); set this "
+            "true to review which imported leads were never actually reached."
+        ),
+    ),
     sort: str = Query(default="recent", pattern="^(recent|score|oldest)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
@@ -176,6 +186,9 @@ def list_conversations(
 
     if campaign_id:
         query = query.filter(LeadConversation.CampaignId == campaign_id)
+
+    if not include_unreached:
+        query = query.filter(LeadConversation.MessageCount > 0)
 
     # --- lead-score threshold ------------------------------------------------
     # `IsAboveThreshold` is denormalised onto the lead row and indexed, so this

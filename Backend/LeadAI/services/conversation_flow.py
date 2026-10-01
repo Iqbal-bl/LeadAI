@@ -28,7 +28,8 @@ from __future__ import annotations
 
 import logging
 import random
-import threading
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -59,8 +60,9 @@ from ..models import (
     LeadMessage,
     utcnow,
 )
+from ..models_ext import LeadCampaign
 from ..security import decrypt_pii, encrypt_pii, phone_fingerprint
-from . import ai_engine, contact_capture, memory, reply_cleanup, script_engine
+from . import ai_engine, contact_capture, memory, reply_cleanup, scoring_queue, script_engine
 
 try:
     from core.websocket_manager import _fire_and_forget, manager as ws_manager
@@ -227,57 +229,96 @@ def apply_threshold(
     return True, True
 
 
-def run_deferred_scoring(client_id: str, conversation_id: str, message_id: str | None) -> None:
-    """Phase 2 for a push-delivered turn (WhatsApp/Instagram/Messenger), in its own session,
-    after the reply has already been sent. Mirrors voice_flow.run_deferred_scoring: on a call
-    every second is felt, and on chat the customer is equally just watching a "..." — qualify
-    and summarise are a second LLM round trip that changes nothing about what they see, so it
-    runs after delivery instead of blocking it.
+def get_or_create_lead(db: Session, client_id: str, conversation_id: str, actor: str = "ai") -> Lead:
+    lead = db.query(Lead).filter(Lead.ConversationId == conversation_id).one_or_none()
+    if lead is None:
+        lead = Lead(ClientId=client_id, ConversationId=conversation_id, CreatedBy=actor)
+        db.add(lead)
+        db.flush()
+    return lead
+
+
+def score_turn(
+    db: Session,
+    client: Client,
+    conversation: LeadConversation,
+    lead: Lead,
+    history: list,
+    *,
+    trace: TurnTrace | None = None,
+    request: Request | None = None,
+) -> tuple[bool, bool]:
+    """The single place a lead is scored: qualify, summarise, log the first time it reaches
+    "qualified", then evaluate the dashboard threshold. Returns apply_threshold's
+    (is_above, crossed_just_now). Caller commits.
+
+    Every channel goes through here (chat inline and deferred, voice, a human-assigned
+    conversation), so a scoring rule or side effect added here applies everywhere.
+    """
+    previous_status = lead.Status
+    ai_engine.qualify(db, client.Id, lead, history, trace=trace)
+    conversation.Summary, conversation.NextStep = ai_engine.summarize(
+        db, client.Id, client.Name, lead, history, trace=trace
+    )
+    conversation.MessageCount = len(history)
+
+    if lead.Status == "qualified" and previous_status != "qualified":
+        activity.log(
+            db,
+            action=A.LEAD_QUALIFIED,
+            client_id=client.Id,
+            actor_email="ai",
+            actor_role="ai",
+            entity_type="lead",
+            entity_id=lead.Id,
+            message=f"Lead qualified at score {lead.Score}",
+            meta={
+                "score": lead.Score,
+                "intent": lead.Intent,
+                "timeline": lead.Timeline,
+                "product": lead.Product,
+            },
+            request=request,
+        )
+    return apply_threshold(db, client, conversation, lead, request, trace=trace)
+
+
+def score_after_reply(
+    db: Session,
+    client_id: str,
+    conversation_id: str,
+    message_id: str | None,
+    *,
+    channel: str | None = None,
+    history_fn: Callable[[Session, str], list] | None = None,
+    note: str = "scoring after the reply was delivered",
+    touch_last_message: bool = False,
+) -> bool:
+    """Phase 2 of a turn, after the reply has gone out. The caller owns `db` and closes it.
+
+    qualify and summarise are a second LLM round trip that changes nothing about what the
+    customer sees, so they run after delivery instead of blocking it (chat push channels and
+    live calls alike).
 
     Appends its steps to the AI message's trace, so "why did the AI say that" and "how was the
     lead scored" still read as one record. Never raises: called fire-and-forget.
+    Returns False only when scoring failed (so a queue can retry), True otherwise.
     """
-    db = new_session()
     try:
         client = db.get(Client, client_id)
         conversation = db.get(LeadConversation, conversation_id)
         if client is None or conversation is None:
-            return
-        lead = db.query(Lead).filter(Lead.ConversationId == conversation_id).one_or_none()
-        if lead is None:
-            lead = Lead(ClientId=client_id, ConversationId=conversation_id, CreatedBy="ai")
-            db.add(lead)
-            db.flush()
-        history = memory.thread_history(db, conversation_id)
-        trace = TurnTrace(conversation_id=conversation_id, client_id=client_id, channel=conversation.Channel)
-        trace_step(trace, "post_turn", "scoring after the reply was delivered")
-
-        previous_status = lead.Status
-        ai_engine.qualify(db, client_id, lead, history, trace=trace)
-        conversation.Summary, conversation.NextStep = ai_engine.summarize(
-            db, client_id, client.Name, lead, history, trace=trace
+            return True
+        lead = get_or_create_lead(db, client_id, conversation_id)
+        history = (history_fn or memory.thread_history)(db, conversation_id)
+        trace = TurnTrace(
+            conversation_id=conversation_id, client_id=client_id, channel=channel or conversation.Channel
         )
-        conversation.MessageCount = len(history)
+        trace_step(trace, "post_turn", note)
 
-        if lead.Status == "qualified" and previous_status != "qualified":
-            activity.log(
-                db,
-                action=A.LEAD_QUALIFIED,
-                client_id=client_id,
-                actor_email="ai",
-                actor_role="ai",
-                entity_type="lead",
-                entity_id=lead.Id,
-                message=f"Lead qualified at score {lead.Score}",
-                meta={
-                    "score": lead.Score,
-                    "intent": lead.Intent,
-                    "timeline": lead.Timeline,
-                    "product": lead.Product,
-                },
-            )
-
-        apply_threshold(db, client, conversation, lead, None, trace=trace)
+        score_turn(db, client, conversation, lead, history, trace=trace)
+        if touch_last_message:
+            conversation.LastMessageAt = utcnow()
 
         message = db.get(LeadMessage, message_id) if message_id else None
         if message is not None and message.TraceJson and trace.as_json():
@@ -285,9 +326,19 @@ def run_deferred_scoring(client_id: str, conversation_id: str, message_id: str |
             merged["steps"] = list(merged.get("steps", [])) + trace.as_json()["steps"]
             message.TraceJson = merged
         db.commit()
+        return True
     except Exception:  # noqa: BLE001
         logger.warning("[LeadAI flow] deferred scoring failed for conv %s", conversation_id, exc_info=True)
         db.rollback()
+        return False
+
+
+def run_deferred_scoring(client_id: str, conversation_id: str, message_id: str | None) -> bool:
+    """score_after_reply in its own session, for a push-delivered turn
+    (WhatsApp/Instagram/Messenger). Runs on a scoring_queue worker thread."""
+    db = new_session()
+    try:
+        return score_after_reply(db, client_id, conversation_id, message_id)
     finally:
         db.close()
 
@@ -697,6 +748,72 @@ def _broadcast_conversation(conversation_id: str, payload: dict) -> None:
 
 
 # =========================================================================== #
+# call escalation ("chat and call", with consent) — see models.LeadCampaign.
+# CallEscalationEnabled and LeadConversation.CallConsentStatus.
+# =========================================================================== #
+CALL_CONSENT_YES = re.compile(
+    r"\b(yes|yeah|yep|yup|sure|ok|okay|please call|call me|go ahead|call now)\b", re.IGNORECASE
+)
+CALL_CONSENT_NO = re.compile(
+    r"\b(no|nope|not now|don'?t call|later|no thanks)\b", re.IGNORECASE
+)
+
+
+def _resolve_call_consent(db: Session, client: Client, conversation: LeadConversation, text: str) -> None:
+    """If we're waiting on a yes/no to "should we call you", resolve it from
+    THIS message before the normal chat reply is generated. A call is placed
+    ONLY here, on an explicit yes — never anywhere else, and never silently.
+    Best-effort: a call failing to start must not break the chat turn.
+    """
+    if conversation.CallConsentStatus != "asked":
+        return
+    if CALL_CONSENT_YES.search(text or ""):
+        conversation.CallConsentStatus = "accepted"
+        try:
+            customer = db.get(LeadCustomer, conversation.CustomerId)
+            phone = decrypt_pii(customer.PhoneEnc) if customer else None
+            if not phone:
+                logger.warning("[LeadAI] call consent accepted but conv %s has no phone on file",
+                               conversation.Id)
+                return
+            campaign = db.get(LeadCampaign, conversation.CampaignId) if conversation.CampaignId else None
+            from . import call_bridge
+
+            call_bridge.start_call_for_conversation(
+                db, client.Id, client.Name, conversation,
+                initiated_by="call_consent", mode="ai_voice",
+                script_id=campaign.ScriptId if campaign else None,
+                override_number=phone,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("[LeadAI] consent-triggered call failed to start for conv %s", conversation.Id)
+    elif CALL_CONSENT_NO.search(text or ""):
+        conversation.CallConsentStatus = "declined"
+    # Anything else (an unrelated reply) leaves status "asked" — the chat just
+    # continues normally and the offer can still be accepted on a later turn.
+
+
+def _maybe_offer_call_consent(db: Session, conversation: LeadConversation, result: dict) -> None:
+    """Right before a normal handoff would fire, offer a call instead — only
+    for a campaign that explicitly turned this on, and only once per
+    conversation (CallConsentStatus starts null; "asked" guards re-asking).
+    """
+    if not (result.get("needs_human") and conversation.Status == "open"):
+        return
+    if conversation.CallConsentStatus is not None or not conversation.CampaignId:
+        return
+    campaign = db.get(LeadCampaign, conversation.CampaignId)
+    if campaign is None or not campaign.CallEscalationEnabled:
+        return
+    result["reply"] = (
+        (result.get("reply") or "").rstrip()
+        + " Would you like us to call you about this instead?"
+    ).strip()
+    conversation.CallConsentStatus = "asked"
+    conversation.CallConsentAskedAt = utcnow()
+
+
+# =========================================================================== #
 # the pipeline
 # =========================================================================== #
 def handle_customer_turn(
@@ -766,6 +883,8 @@ def _run_customer_turn(
                external_id_present=bool(external_message_id),
                conversation_status=conversation.Status,
                control_status=engine_control.get_control(conversation))
+
+    _resolve_call_consent(db, client, conversation, text)
 
     # Centralised in memory.thread_history() so the voice path and the chat path
     # can never window history differently. Same query as before.
@@ -889,12 +1008,7 @@ def _run_customer_turn(
         _event(db, "turn.skipped", conversation, speaker="system", reason="human took over")
         trace_step(trace, "takeover", "a human has taken over: AI silent, lead still scored",
                    assigned_to_set=bool(conversation.AssignedUserEmail))
-        ai_engine.qualify(db, client_id, lead, history, trace=trace)
-        conversation.Summary, conversation.NextStep = ai_engine.summarize(
-            db, client_id, client.Name, lead, history, trace=trace
-        )
-        conversation.MessageCount = len(history)
-        above, crossed = apply_threshold(db, client, conversation, lead, request, trace=trace)
+        above, crossed = score_turn(db, client, conversation, lead, history, trace=trace, request=request)
         inbound.TraceJson = trace.as_json()
         db.commit()
 
@@ -968,6 +1082,8 @@ def _run_customer_turn(
             conversation.AiCompletedAt = utcnow()
         elif already_completed:
             conversation.AiCompletedAt = None  # they reopened it with a new question
+
+    _maybe_offer_call_consent(db, conversation, result)
 
     outbound = LeadMessage(
         ClientId=client_id,
@@ -1046,38 +1162,10 @@ def _run_customer_turn(
                    conversation_status=conversation.Status)
 
     # Lead scoring (qualify + summarise) is a second LLM round trip that changes nothing
-    # about the reply already decided above. On a push channel the customer is only waiting
-    # on delivery, so scoring runs AFTER it (run_deferred_scoring, its own session) instead of
-    # adding its latency to every reply. The widget is pull-based and its response carries
-    # lead_status/lead_score, so it still scores inline, as before.
-    defer_scoring = deliver_reply
-    above, crossed = False, False
-    if not defer_scoring:
-        previous_status = lead.Status
-        ai_engine.qualify(db, client_id, lead, history, trace=trace)
-        conversation.Summary, conversation.NextStep = ai_engine.summarize(
-            db, client_id, client.Name, lead, history, trace=trace
-        )
-        if lead.Status == "qualified" and previous_status != "qualified":
-            activity.log(
-                db,
-                action=A.LEAD_QUALIFIED,
-                client_id=client_id,
-                actor_email="ai",
-                actor_role="ai",
-                entity_type="lead",
-                entity_id=lead.Id,
-                message=f"Lead qualified at score {lead.Score}",
-                meta={
-                    "score": lead.Score,
-                    "intent": lead.Intent,
-                    "timeline": lead.Timeline,
-                    "product": lead.Product,
-                },
-                request=request,
-            )
-        above, crossed = apply_threshold(db, client, conversation, lead, request, trace=trace)
-
+    # about the reply already decided above, so on EVERY channel it runs after the reply
+    # (scoring_queue, its own session) instead of adding its latency to the reply. The
+    # widget's response therefore carries the lead_status/lead_score as of the previous turn:
+    # only the staff-side lead gauge reads it, and it catches up on the next message.
     trace_step(trace, "commit", "turn committed as one transaction",
                reply_chars=len(result["reply"] or ""), messages_in_thread=len(history))
     outbound.TraceJson = trace.as_json()
@@ -1095,12 +1183,7 @@ def _run_customer_turn(
             outbound.TraceJson = trace.as_json()
             db.commit()
 
-    if defer_scoring and result["reply"]:
-        threading.Thread(
-            target=run_deferred_scoring,
-            args=(client_id, conversation.Id, outbound.Id),
-            daemon=True,
-        ).start()
+    scoring_queue.submit(client_id, conversation.Id, outbound.Id)
 
     _broadcast_conversation(
         conversation.Id,
@@ -1133,7 +1216,5 @@ def _run_customer_turn(
         sources=result["sources"],
         lead_status=lead.Status,
         lead_score=lead.Score or 0,
-        above_threshold=above,
-        crossed_threshold_now=crossed,
         conversation_id=conversation.Id,
     )

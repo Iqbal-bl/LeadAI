@@ -337,6 +337,19 @@ class LeadCampaign(LeadAIBase):
     LeadsCreated = Column(Integer, default=0)
     StatusMessage = Column(String(500), nullable=True)
 
+    # Product-based batching (leads import -> auto-classify by product).
+    ProductId = Column(String(36), nullable=True)      # leadai_products.Id; null for "Unknown Product" or manual
+    CreatedVia = Column(String(20), nullable=False, default="manual")  # manual|import
+    # Channel is the chat/messaging channel this campaign runs on. When the
+    # import was configured as "chat and call", this is set and the AI may
+    # offer to call — never silently, always by asking first in the
+    # conversation and waiting for an explicit yes (see LeadConversation.
+    # CallConsentStatus / conversation_flow.py).
+    CallEscalationEnabled = Column(Boolean, default=False)
+    # Most recent CSV export (leadai_files.Id) — see GET /campaigns/{id}/export.
+    OutputFileId = Column(String(36), nullable=True)
+    OutputGeneratedAt = Column(DateTime, nullable=True)
+
 
 class LeadCampaignRecipient(LeadAIBase):
     """One target inside one campaign. The unit of work, retry and reporting."""
@@ -374,6 +387,68 @@ class LeadCampaignRecipient(LeadAIBase):
     Attempts = Column(Integer, default=0)
     ExternalMessageId = Column(String(160), nullable=True)
     RenderedBody = Column(Text, nullable=True)
+    SentAt = Column(DateTime, nullable=True)
+    DeliveredAt = Column(DateTime, nullable=True)
+    ReadAt = Column(DateTime, nullable=True)
+    RepliedAt = Column(DateTime, nullable=True)
+    FailureReason = Column(String(400), nullable=True)
+
+
+# --------------------------------------------------------------------------- #
+# Per-run history — the same Batch -> BatchExecution -> CallNumberExecution
+# structure the old VoiceAI outbound/batching.py system used, so starting,
+# restarting, logging and reporting all work the same way an operator already
+# knows: LeadCampaign plays Batch's role; LeadCampaignExecution is one row per
+# start/restart (own counters, own restart mode); LeadCampaignRecipientAttempt
+# is one row per recipient PER RUN, so a CSV for run 1 shows run 1's real
+# outcome even after run 2 later succeeded where run 1 failed — LeadCampaign-
+# Recipient alone can only ever show the CURRENT state, never what happened on
+# an earlier attempt.
+# --------------------------------------------------------------------------- #
+class LeadCampaignExecution(LeadAIBase):
+    """One run of a campaign — created fresh every Start/Restart."""
+
+    __tablename__ = "leadai_campaign_executions"
+    __table_args__ = (
+        Index("ix_leadai_execution_campaign", "CampaignId", "CreatedAt"),
+        Index("ix_leadai_execution_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    CampaignId = Column(String(36), nullable=False)
+    Status = Column(String(20), nullable=False, default="running")
+    # running|completed|stopped|failed
+    RestartMode = Column(String(20), nullable=False, default="all")
+    # all|failed_only|pending_only — mirrors the old batching system exactly.
+    TotalCount = Column(Integer, default=0)
+    CompletedCount = Column(Integer, default=0)
+    FailedCount = Column(Integer, default=0)
+    SkippedCount = Column(Integer, default=0)
+    StartedAt = Column(DateTime, default=utcnow)
+    CompletedAt = Column(DateTime, nullable=True)
+
+
+class LeadCampaignRecipientAttempt(LeadAIBase):
+    """One recipient's outcome WITHIN one specific execution (run).
+
+    LeadCampaignRecipient.Status is the recipient's CURRENT state, mutated in
+    place every run — exactly like CallNumber never recorded per-call outcomes
+    on itself either. This table is CallNumberExecution's counterpart: the
+    immutable record of what happened to this recipient on THIS run, never
+    overwritten by a later run.
+    """
+
+    __tablename__ = "leadai_campaign_recipient_attempts"
+    __table_args__ = (
+        Index("ix_leadai_attempt_execution", "CampaignExecutionId"),
+        Index("ix_leadai_attempt_recipient", "RecipientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    CampaignExecutionId = Column(String(36), nullable=False)
+    RecipientId = Column(String(36), nullable=False)
+    Status = Column(String(20), nullable=False, default="queued")
+    ExternalMessageId = Column(String(160), nullable=True)
     SentAt = Column(DateTime, nullable=True)
     DeliveredAt = Column(DateTime, nullable=True)
     ReadAt = Column(DateTime, nullable=True)
@@ -613,6 +688,8 @@ ALL_LEADAI_EXT_TABLES = (
     LeadContactListItem,
     LeadCampaign,
     LeadCampaignRecipient,
+    LeadCampaignExecution,
+    LeadCampaignRecipientAttempt,
     LeadAccount,
     LeadAccountNote,
     LeadFile,
