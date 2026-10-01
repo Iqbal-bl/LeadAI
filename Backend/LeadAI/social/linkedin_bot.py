@@ -72,13 +72,18 @@ def get_linkedin_client(account) -> Linkedin:
         # Intercept redirect loops on expired or invalid session tokens
         orig_send = api.client.session.send
         def safe_send(request, **kwargs):
-            kwargs["allow_redirects"] = False
-            res = orig_send(request, **kwargs)
-            if res.status_code in (301, 302, 303, 307, 308):
-                loc = (res.headers.get("Location") or "").lower()
-                if any(x in loc for x in ["login", "authwall", "checkpoint", "uas/login", "uas/authenticate"]):
-                    raise RuntimeError("Your LinkedIn session (li_at) has expired or was revoked by LinkedIn. Please enter a fresh li_at token or save your credentials in the Connection tab.")
-            return res
+            try:
+                res = orig_send(request, **kwargs)
+                # Check if redirected to login / authwall / checkpoint
+                redirect_chain = list(res.history) + [res] if hasattr(res, "history") else [res]
+                for r in redirect_chain:
+                    loc = (r.headers.get("Location") or "").lower()
+                    req_url = (r.url or "").lower()
+                    if any(x in loc or x in req_url for x in ["/login", "/authwall", "/checkpoint", "uas/login", "uas/authenticate"]):
+                        raise RuntimeError("Your LinkedIn session (li_at) has expired or was revoked by LinkedIn. Please enter a fresh li_at token or save your credentials in the Connection tab.")
+                return res
+            except requests.exceptions.TooManyRedirects:
+                raise RuntimeError("Your LinkedIn session (li_at) has expired or is invalid (caused too many redirects). Please enter a fresh li_at token in the Connection tab.")
 
         api.client.session.send = safe_send
         return api
@@ -741,15 +746,291 @@ def parse_message_event(event: dict, my_urn: Optional[str] = None) -> dict | Non
 
 
 # ===========================================================================
-# Persistent Browser Session Manager for LinkedIn Messaging
+# Persistent Browser Session Manager for LinkedIn (Anti-Bot & Stealth Enabled)
 # ===========================================================================
 
 import time
+import re
+import random
+
+async def human_type(locator, text: str):
+    """
+    Simulate realistic human keystroke intervals with micro-pauses and variable timing
+    to prevent LinkedIn behavior-based bot detection.
+    """
+    await locator.click()
+    await asyncio.sleep(random.uniform(0.15, 0.35))
+    for char in text:
+        await locator.type(char, delay=random.randint(30, 80))
+        if char in ".!?,":
+            await asyncio.sleep(random.uniform(0.2, 0.45))
+        elif random.random() < 0.04:
+            await asyncio.sleep(random.uniform(0.1, 0.25))
+
+
+def _parse_graphql_comments_payload(data: dict) -> list[dict]:
+    """Extract full comment trees from LinkedIn GraphQL / Voyager response payloads."""
+    if not isinstance(data, dict):
+        return []
+
+    parsed = []
+    included = data.get("included", [])
+    
+    # 1. Build lookup tables for miniProfiles and members
+    profile_lookup = {}
+    for item in included:
+        if not isinstance(item, dict):
+            continue
+        entity_type = item.get("$type", "")
+        entity_urn = item.get("entityUrn", "")
+        
+        if "MiniProfile" in entity_type or "miniProfile" in item or "publicIdentifier" in item:
+            fn = item.get("firstName", "")
+            if isinstance(fn, dict):
+                fn = fn.get("text", "")
+            ln = item.get("lastName", "")
+            if isinstance(ln, dict):
+                ln = ln.get("text", "")
+            name = f"{fn} {ln}".strip() or "LinkedIn Member"
+            
+            headline = item.get("occupation") or item.get("headline") or ""
+            if isinstance(headline, dict):
+                headline = headline.get("text", "")
+                
+            public_id = item.get("publicIdentifier", "")
+            
+            avatar = None
+            pic = item.get("picture")
+            if isinstance(pic, dict):
+                v_img = pic.get("com.linkedin.common.VectorImage") or pic.get("VectorImage") or {}
+                root_url = v_img.get("rootUrl", "")
+                artifacts = v_img.get("artifacts", [])
+                if root_url and artifacts:
+                    avatar = root_url + artifacts[-1].get("fileIdentifyingUrlPathSegment", "")
+            
+            p_data = {
+                "name": name,
+                "headline": str(headline) if headline else "",
+                "profile_url": f"https://www.linkedin.com/in/{public_id}" if public_id else "",
+                "avatar": avatar,
+            }
+            if entity_urn:
+                profile_lookup[entity_urn] = p_data
+            if public_id:
+                profile_lookup[public_id] = p_data
+
+    # 2. Extract comments from included objects or elements
+    for item in included:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("$type", "")
+        
+        if "Comment" in item_type or "UpdateComment" in item_type or item.get("comment") or "commentText" in item:
+            c_urn = item.get("entityUrn") or item.get("urn") or item.get("id")
+            if not c_urn:
+                continue
+                
+            # Comment text
+            text = ""
+            c_val = item.get("comment") or item.get("commentText") or item.get("text") or item.get("body")
+            if isinstance(c_val, dict):
+                vals = c_val.get("values", [])
+                if vals and isinstance(vals, list) and isinstance(vals[0], dict):
+                    text = vals[0].get("value", "")
+                elif "text" in c_val:
+                    text = c_val["text"]
+            elif isinstance(c_val, str):
+                text = c_val
+                
+            if not text or not text.strip():
+                continue
+                
+            # Commenter author resolution
+            commenter_urn = item.get("commenterUrn") or item.get("commenter") or item.get("actor")
+            if isinstance(commenter_urn, dict):
+                commenter_urn = commenter_urn.get("entityUrn") or commenter_urn.get("urn") or ""
+                
+            author_info = profile_lookup.get(str(commenter_urn), {})
+            
+            parsed.append({
+                "comment_urn": c_urn,
+                "author_name": author_info.get("name", "LinkedIn Member"),
+                "author_headline": author_info.get("headline", ""),
+                "author_profile_url": author_info.get("profile_url", ""),
+                "author_avatar": author_info.get("avatar"),
+                "comment_text": text.strip(),
+            })
+
+    # 3. Fallback to elements array (Voyager / REST format)
+    if not parsed and "elements" in data:
+        for el in data.get("elements", []):
+            if not isinstance(el, dict):
+                continue
+            c_urn = el.get("entityUrn") or el.get("id") or el.get("urn")
+            if not c_urn:
+                continue
+            
+            text = ""
+            if el.get("comment") and isinstance(el["comment"], dict) and el["comment"].get("values"):
+                text = el["comment"]["values"][0].get("value", "")
+            elif el.get("comment") and isinstance(el["comment"], str):
+                text = el["comment"]
+            elif el.get("commentText") and isinstance(el["commentText"], dict):
+                text = el["commentText"].get("text", "")
+            
+            if not text or not text.strip():
+                continue
+                
+            name = "LinkedIn Member"
+            headline = ""
+            profile_url = ""
+            avatar = None
+            
+            commenter = el.get("commenter", {})
+            if isinstance(commenter, dict):
+                mini = commenter.get("miniProfile") or commenter
+                fn = mini.get("firstName", "")
+                ln = mini.get("lastName", "")
+                if isinstance(fn, dict): fn = fn.get("text", "")
+                if isinstance(ln, dict): ln = ln.get("text", "")
+                if fn or ln: name = f"{fn} {ln}".strip()
+                headline = mini.get("occupation") or mini.get("headline") or ""
+                if isinstance(headline, dict): headline = headline.get("text", "")
+                if mini.get("publicIdentifier"):
+                    profile_url = f"https://www.linkedin.com/in/{mini['publicIdentifier']}"
+                if mini.get("picture") and isinstance(mini["picture"], dict):
+                    v = mini["picture"].get("com.linkedin.common.VectorImage", {})
+                    r_url = v.get("rootUrl", "")
+                    arts = v.get("artifacts", [])
+                    if r_url and arts:
+                        avatar = r_url + arts[-1].get("fileIdentifyingUrlPathSegment", "")
+                        
+            parsed.append({
+                "comment_urn": c_urn,
+                "author_name": name,
+                "author_headline": headline,
+                "author_profile_url": profile_url,
+                "author_avatar": avatar,
+                "comment_text": text.strip(),
+            })
+
+    return parsed
+
+
+def _parse_graphql_conversations_payload(data: dict) -> list[dict]:
+    """Extract conversations and thread summaries from LinkedIn GraphQL messaging responses."""
+    if not isinstance(data, dict):
+        return []
+
+    results = []
+    included = data.get("included", [])
+    
+    # Build miniProfile lookup
+    profile_lookup = {}
+    for item in included:
+        if not isinstance(item, dict):
+            continue
+        entity_type = item.get("$type", "")
+        entity_urn = item.get("entityUrn", "")
+        if "MessagingMember" in entity_type or "MiniProfile" in entity_type or "miniProfile" in item:
+            profile_lookup[entity_urn] = parse_member_profile(item)
+
+    for item in included:
+        if not isinstance(item, dict):
+            continue
+        entity_type = item.get("$type", "")
+        if "Conversation" in entity_type or "conversation" in entity_type.lower():
+            entity_urn = item.get("entityUrn", "")
+            if not entity_urn:
+                continue
+            conv_id = extract_clean_conversation_id(entity_urn)
+            
+            # Find participants
+            raw_p = item.get("conversationParticipants") or item.get("participants") or []
+            participants = []
+            other_p = None
+            for p_urn in raw_p:
+                p_key = p_urn if isinstance(p_urn, str) else p_urn.get("entityUrn", "")
+                p_info = profile_lookup.get(p_key, {})
+                if p_info:
+                    participants.append(p_info)
+                    if not other_p:
+                        other_p = p_info
+            
+            last_msg = ""
+            events = item.get("events", [])
+            if events and isinstance(events, list) and isinstance(events[0], dict):
+                last_msg = parse_event_text(events[0].get("eventContent", {}))
+                
+            results.append({
+                "conversation_id": conv_id,
+                "conversation_urn": entity_urn,
+                "contact_name": other_p.get("name", "LinkedIn Member") if other_p else "LinkedIn Member",
+                "contact_headline": other_p.get("headline", "") if other_p else "",
+                "contact_public_id": other_p.get("public_id", "") if other_p else "",
+                "contact_urn": other_p.get("urn", "") if other_p else "",
+                "contact_avatar": other_p.get("picture_url") if other_p else None,
+                "participants": participants,
+                "last_message": last_msg,
+                "last_sender_name": other_p.get("name") if other_p else None,
+                "last_activity_at": item.get("lastActivityAt"),
+                "unread_count": item.get("unreadCount", 0),
+                "is_read": item.get("unreadCount", 0) == 0,
+                "total_events": len(events),
+            })
+
+    # Elements fallback (legacy Voyager)
+    if not results and "elements" in data:
+        for el in data.get("elements", []):
+            parsed_c = parse_conversation_summary(el)
+            if parsed_c:
+                results.append(parsed_c)
+
+    return results
+
+
+async def safe_evaluate(page, script: str, retries: int = 2, fallback = None):
+    """Safely evaluate JavaScript in page, retrying if navigation temporarily destroyed execution context."""
+    for attempt in range(retries):
+        try:
+            return await page.evaluate(script)
+        except Exception as exc:
+            err_msg = str(exc)
+            if "Execution context was destroyed" in err_msg or "navigation" in err_msg:
+                await asyncio.sleep(1.0)
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=4000)
+                except Exception:
+                    pass
+            elif attempt == retries - 1:
+                logger.debug("safe_evaluate notice: %s", exc)
+                return fallback
+    return fallback
+
+
+def persist_refreshed_session_cookie(account_id: int, new_cookie: str):
+    """Persist auto-renewed session cookie back to the database for this account."""
+    try:
+        from ..db import session as db_session
+        from ..models_ext import LeadChannelAccount
+        from ..security import encrypt_pii
+        from ..utils import utcnow
+
+        with db_session() as s:
+            acc = s.query(LeadChannelAccount).filter(LeadChannelAccount.Id == account_id).first()
+            if acc:
+                acc.LinkedinCookieEnc = encrypt_pii(new_cookie)
+                acc.UpdatedAt = utcnow()
+                s.commit()
+                logger.info("Persisted refreshed LinkedIn session cookie to DB for account %s", account_id)
+    except Exception as e:
+        logger.warning("Failed to persist refreshed LinkedIn cookie: %s", e)
+
 
 class LinkedInBrowserManager:
-    """Maintains a persistent, warm Playwright browser session for LinkedIn messaging.
-    Avoids launching/closing Chromium on every user interaction, dropping thread
-    switching latency from 8s to under 1s and preventing LinkedIn bot-detection bans.
+    """Maintains a persistent, warm Playwright browser session with anti-detection evasions.
+    Handles multi-event-loop execution gracefully across FastAPI worker threads.
+    Includes automated session auto-recovery using stored username/password credentials.
     """
     def __init__(self):
         self._playwright = None
@@ -759,16 +1040,48 @@ class LinkedInBrowserManager:
         self._account_id = None
         self._cookie_hash = None
         self._last_active = 0
-        self._lock = asyncio.Lock()
+        self._locks = {}
+        self._loop = None
+
+    def get_lock(self):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop not in self._locks:
+            self._locks[loop] = asyncio.Lock()
+        return self._locks[loop]
 
     async def get_page(self, account):
         cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
+        username = decrypt_pii(account.LinkedinUsernameEnc) if account.LinkedinUsernameEnc else None
+        password = decrypt_pii(account.LinkedinPasswordEnc) if account.LinkedinPasswordEnc else None
+
+        if not cookie and username and password:
+            extracted = await extract_session_cookie_via_browser(username, password)
+            if extracted:
+                cookie = extracted
+                persist_refreshed_session_cookie(account.Id, extracted)
+                try:
+                    account.LinkedinCookieEnc = encrypt_pii(extracted)
+                except Exception:
+                    pass
+
         if not cookie:
             raise ValueError("LinkedIn session credentials not configured")
 
         li_at = cookie.split("|||")[0] if "|||" in cookie else cookie
         jsession = cookie.split("|||")[1] if "|||" in cookie else "ajax:1234567890"
         cookie_hash = f"{li_at[:15]}|||{jsession}"
+
+        current_loop = asyncio.get_running_loop()
+        if self._loop != current_loop:
+            # Playwright async objects cannot be shared across different asyncio event loops
+            self._page = None
+            self._context = None
+            self._browser = None
+            self._playwright = None
+            self._loop = current_loop
 
         # If session is already alive and belongs to the same account & cookie
         if self._page and not self._page.is_closed() and self._account_id == account.Id and self._cookie_hash == cookie_hash:
@@ -782,22 +1095,74 @@ class LinkedInBrowserManager:
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
             headless=True,
-            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-infobars",
+                "--disable-dev-shm-usage",
+            ]
         )
         self._context = await self._browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800},
             locale="en-US",
+            timezone_id="America/New_York",
         )
+        
+        # Inject stealth scripts into all new pages
+        await self._context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        """)
+
+        clean_jsession = jsession.replace('"', '').strip()
         await self._context.add_cookies([
             {"name": "li_at", "value": li_at, "domain": ".linkedin.com", "path": "/"},
-            {"name": "JSESSIONID", "value": f'"{jsession.strip(chr(34))}"', "domain": ".linkedin.com", "path": "/"},
+            {"name": "JSESSIONID", "value": f'"{clean_jsession}"', "domain": ".linkedin.com", "path": "/"},
         ])
         self._page = await self._context.new_page()
         self._account_id = account.Id
         self._cookie_hash = cookie_hash
         self._last_active = time.time()
+        self._loop = current_loop
         return self._page
+
+    async def navigate_with_session(self, page, account, target_url: str, wait_until: str = "domcontentloaded", timeout: int = 20000):
+        """Navigate to target URL, automatically recovering and re-authenticating with saved username/password if session expired or redirect loop occurs."""
+        try:
+            res = await page.goto(target_url, wait_until=wait_until, timeout=timeout)
+            curr_url = page.url.lower()
+            if any(x in curr_url for x in ["/login", "/authwall", "/checkpoint", "uas/login"]):
+                raise RuntimeError("Session expired, redirected to login")
+            return res
+        except Exception as exc:
+            err_msg = str(exc)
+            if "ERR_TOO_MANY_REDIRECTS" in err_msg or "redirected to login" in err_msg or "login" in err_msg.lower():
+                logger.info("LinkedIn session expired on %s. Checking for saved username/password auto-recovery...", target_url)
+                username = decrypt_pii(account.LinkedinUsernameEnc) if account.LinkedinUsernameEnc else None
+                password = decrypt_pii(account.LinkedinPasswordEnc) if account.LinkedinPasswordEnc else None
+                if username and password:
+                    logger.info("Attempting automatic re-authentication for %s...", username)
+                    extracted = await extract_session_cookie_via_browser(username, password)
+                    if extracted:
+                        li_at = extracted.split("|||")[0] if "|||" in extracted else extracted
+                        jsession = extracted.split("|||")[1] if "|||" in extracted else "ajax:1234567890"
+                        clean_jsession = jsession.replace('"', '').strip()
+                        if self._context:
+                            await self._context.clear_cookies()
+                            await self._context.add_cookies([
+                                {"name": "li_at", "value": li_at, "domain": ".linkedin.com", "path": "/"},
+                                {"name": "JSESSIONID", "value": f'"{clean_jsession}"', "domain": ".linkedin.com", "path": "/"},
+                            ])
+                        self._cookie_hash = f"{li_at[:15]}|||{jsession}"
+                        persist_refreshed_session_cookie(account.Id, extracted)
+                        account.LinkedinCookieEnc = encrypt_pii(extracted)
+                        logger.info("Successfully refreshed and persisted new session token. Retrying navigation...")
+                        return await page.goto(target_url, wait_until=wait_until, timeout=timeout)
+            raise exc
 
     async def close(self):
         try:
@@ -831,37 +1196,69 @@ _browser_manager = LinkedInBrowserManager()
 
 
 async def fetch_conversations_api(account, limit: int = 25) -> list[dict]:
-    """Fetch recent LinkedIn conversation threads with sender information and last message."""
+    """
+    Fetch recent LinkedIn conversation threads with sender information and last message.
+    Uses Passive Network Interception on GraphQL responses (immune to CSS changes)
+    with semantic DOM fallback.
+    """
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
-    if not cookie:
+    if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         return []
 
-    async with _browser_manager._lock:
+    async with _browser_manager.get_lock():
         try:
             page = await _browser_manager.get_page(account)
-            if "linkedin.com/messaging" not in page.url:
-                await page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=20000)
-            
+            intercepted_conversations = []
+
+            async def handle_response(response):
+                url = response.url
+                if ("voyagerMessagingGraphQL" in url or "messengerConversations" in url or "/messaging/conversations" in url) and response.status == 200:
+                    try:
+                        data = await response.json()
+                        parsed = _parse_graphql_conversations_payload(data)
+                        if parsed:
+                            intercepted_conversations.extend(parsed)
+                    except Exception:
+                        pass
+
+            page.on("response", handle_response)
+
             try:
-                await page.wait_for_selector("li.msg-conversation-listitem, .msg-conversation-listitem", timeout=12000)
-            except Exception:
-                pass
+                if "linkedin.com/messaging" not in page.url:
+                    await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=20000)
+                else:
+                    await page.reload(wait_until="domcontentloaded", timeout=15000)
+                
+                await asyncio.sleep(2.0)
+            finally:
+                page.remove_listener("response", handle_response)
 
-            await asyncio.sleep(1.0)
+            # 1. Return network intercepted conversations if captured (100% immune to UI/CSS changes)
+            if intercepted_conversations:
+                seen = set()
+                unique_convs = []
+                for c in intercepted_conversations:
+                    cid = c.get("conversation_id")
+                    if cid and cid not in seen:
+                        seen.add(cid)
+                        unique_convs.append(c)
+                if unique_convs:
+                    logger.info("Captured %d conversations via passive network interception", len(unique_convs))
+                    return unique_convs[:limit]
 
-            conversations_data = await page.evaluate('''() => {
-                const items = document.querySelectorAll('li.msg-conversation-listitem');
-                const listItems = items.length > 0 ? items : document.querySelectorAll('.msg-conversation-listitem');
+            # 2. Resilient DOM fallback with multi-attribute matching
+            conversations_data = await safe_evaluate(page, '''() => {
+                const items = document.querySelectorAll('li.msg-conversation-listitem, .msg-conversation-listitem, [data-control-name="conversation_item"]');
                 const results = [];
                 const seen = new Set();
 
-                listItems.forEach((el, index) => {
-                    const nameEl = el.querySelector('.msg-conversation-listitem__participant-names, .msg-conversation-card__participant-names, h3');
-                    const lastMsgEl = el.querySelector('.msg-conversation-card__message-snippet, .msg-conversation-listitem__message-snippet');
+                items.forEach((el, index) => {
+                    const nameEl = el.querySelector('.msg-conversation-listitem__participant-names, .msg-conversation-card__participant-names, h3, [data-anonymize="person-name"]');
+                    const lastMsgEl = el.querySelector('.msg-conversation-card__message-snippet, .msg-conversation-listitem__message-snippet, p');
                     const timeEl = el.querySelector('time, .msg-conversation-listitem__time-stamp');
                     const linkEl = el.querySelector('a[href*="/messaging/thread/"]');
                     const imgEl = el.querySelector('img');
-                    const badgeEl = el.querySelector('.msg-conversation-card__unread-count, .badge');
+                    const badgeEl = el.querySelector('.msg-conversation-card__unread-count, .badge, [aria-label*="unread"]');
 
                     let threadId = '';
                     if (linkEl && linkEl.href) {
@@ -904,7 +1301,7 @@ async def fetch_conversations_api(account, limit: int = 25) -> list[dict]:
                     });
                 });
                 return results;
-            }''')
+            }''', fallback=[])
             return conversations_data[:limit]
         except Exception as exc:
             logger.warning("Browser conversation extraction error: %s", exc)
@@ -912,52 +1309,67 @@ async def fetch_conversations_api(account, limit: int = 25) -> list[dict]:
 
 
 async def fetch_conversation_messages_api(account, conversation_urn_id: str) -> list[dict]:
-    """Fetch full message events history for a given conversation thread."""
+    """
+    Fetch full message events history for a given conversation thread.
+    Uses Passive Network Interception with accessible semantic DOM fallback.
+    """
     clean_id = extract_clean_conversation_id(conversation_urn_id)
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
-    if not cookie:
+    if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         return []
 
-    async with _browser_manager._lock:
+    async with _browser_manager.get_lock():
         try:
             page = await _browser_manager.get_page(account)
-            if "linkedin.com/messaging" not in page.url:
-                await page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=20000)
+            intercepted_messages = []
 
-            # 1. ALWAYS wait for conversation items to render FIRST
-            await page.wait_for_selector("li.msg-conversation-listitem, .msg-conversation-listitem", timeout=12000)
+            async def handle_response(response):
+                url = response.url
+                if ("voyagerMessagingGraphQL" in url or "messengerMessages" in url or "/events" in url) and response.status == 200:
+                    try:
+                        data = await response.json()
+                        included = data.get("included", [])
+                        for item in included:
+                            if isinstance(item, dict) and ("MessageEvent" in item.get("$type", "") or item.get("eventContent")):
+                                parsed = parse_message_event(item)
+                                if parsed and parsed.get("text"):
+                                    intercepted_messages.append(parsed)
+                    except Exception:
+                        pass
 
-            # 2. Click the target conversation
-            if clean_id.startswith("conv-"):
-                idx = int(clean_id.replace("conv-", "") or "0")
-                items = page.locator("li.msg-conversation-listitem, .msg-conversation-listitem")
-                if await items.count() > idx:
-                    target_item = items.nth(idx)
-                    click_target = target_item.locator("a, div[role='button'], .msg-conversation-card__content, .msg-conversation-card__link").first
-                    if await click_target.count() > 0:
-                        await click_target.click()
-                    else:
-                        await target_item.click()
-                    await asyncio.sleep(1.0)
-            elif not clean_id.startswith("conv-") and f"/messaging/thread/{clean_id}" not in page.url:
-                link_target = page.locator(f"a[href*='{clean_id}']").first
-                if await link_target.count() > 0:
-                    await link_target.click()
-                    await asyncio.sleep(1.0)
-                else:
-                    await page.goto(f"https://www.linkedin.com/messaging/thread/{clean_id}/", wait_until="domcontentloaded", timeout=15000)
+            page.on("response", handle_response)
 
-            # 3. Wait for messages to load in the active pane
             try:
-                await page.wait_for_selector("li.msg-s-message-list__event, .msg-s-message-list__event", timeout=10000)
-            except Exception:
-                pass
+                if "linkedin.com/messaging" not in page.url:
+                    await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=20000)
 
-            messages = await page.evaluate('''() => {
+                # Select target conversation
+                if clean_id.startswith("conv-"):
+                    idx = int(clean_id.replace("conv-", "") or "0")
+                    items = page.locator("li.msg-conversation-listitem, .msg-conversation-listitem, [role='listitem']")
+                    if await items.count() > idx:
+                        await items.nth(idx).click()
+                        await asyncio.sleep(1.2)
+                elif not clean_id.startswith("conv-") and f"/messaging/thread/{clean_id}" not in page.url:
+                    link_target = page.locator(f"a[href*='{clean_id}']").first
+                    if await link_target.count() > 0:
+                        await link_target.click()
+                        await asyncio.sleep(1.2)
+                    else:
+                        await _browser_manager.navigate_with_session(page, account, f"https://www.linkedin.com/messaging/thread/{clean_id}/", wait_until="domcontentloaded", timeout=15000)
+                        await asyncio.sleep(1.2)
+            finally:
+                page.remove_listener("response", handle_response)
+
+            if intercepted_messages:
+                logger.info("Captured %d messages via passive network interception", len(intercepted_messages))
+                return intercepted_messages
+
+            # Semantic DOM fallback
+            messages = await safe_evaluate(page, '''() => {
                 const list = [];
                 const seen = new Set();
-                const items = document.querySelectorAll('li.msg-s-message-list__event');
-                const listItems = items.length > 0 ? items : document.querySelectorAll('.msg-s-message-list__event');
+                const listItems = document.querySelectorAll('li.msg-s-message-list__event, .msg-s-message-list__event, [role="listitem"]');
                 const myImg = document.querySelector('.global-nav__me-photo, img[alt*="Photo of"]');
                 const myName = myImg ? (myImg.alt || '').replace('Photo of', '').trim().toLowerCase() : '';
 
@@ -994,7 +1406,7 @@ async def fetch_conversation_messages_api(account, conversation_urn_id: str) -> 
                     });
                 });
                 return list;
-            }''')
+            }''', fallback=[])
             return messages
         except Exception as exc:
             logger.warning("Browser messages extraction error: %s", exc)
@@ -1002,38 +1414,56 @@ async def fetch_conversation_messages_api(account, conversation_urn_id: str) -> 
 
 
 async def send_conversation_message_api(account, conversation_urn_id: str, message_body: str) -> dict:
-    """Send a reply message directly to a LinkedIn conversation thread."""
+    """
+    Send a message reply to a LinkedIn conversation thread using
+    Accessible ARIA Locators and Human-Paced Typing to prevent bot detection.
+    """
     clean_id = extract_clean_conversation_id(conversation_urn_id)
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
-    if not cookie:
+    if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         raise ValueError("LinkedIn session credentials not configured")
 
-    async with _browser_manager._lock:
+    async with _browser_manager.get_lock():
         try:
             page = await _browser_manager.get_page(account)
             if "linkedin.com/messaging" not in page.url:
-                await page.goto("https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=20000)
+                await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/messaging/", wait_until="domcontentloaded", timeout=20000)
 
-            await page.wait_for_selector("li.msg-conversation-listitem, .msg-conversation-listitem", timeout=12000)
-
+            # Select thread
             if clean_id.startswith("conv-"):
                 idx = int(clean_id.replace("conv-", "") or "0")
                 items = page.locator("li.msg-conversation-listitem, .msg-conversation-listitem")
                 if await items.count() > idx:
                     await items.nth(idx).click()
-                    await asyncio.sleep(0.8)
+                    await asyncio.sleep(random.uniform(0.6, 1.0))
+            elif not clean_id.startswith("conv-") and f"/messaging/thread/{clean_id}" not in page.url:
+                link_target = page.locator(f"a[href*='{clean_id}']").first
+                if await link_target.count() > 0:
+                    await link_target.click()
+                else:
+                    await _browser_manager.navigate_with_session(page, account, f"https://www.linkedin.com/messaging/thread/{clean_id}/", wait_until="domcontentloaded", timeout=15000)
+                await asyncio.sleep(random.uniform(0.6, 1.0))
 
-            composer = page.locator(".msg-form__contenteditable, div[role='textbox'][aria-label*='Write a message']").first
-            await composer.fill(message_body)
-            await asyncio.sleep(0.3)
+            # 1. Locate composer using Accessible Semantic Locators (W3C standard)
+            composer = page.get_by_role("textbox", name=re.compile(r"Write a message|Type a message", re.I)).first
+            if not await composer.count():
+                composer = page.locator("[role='textbox'], [contenteditable='true'], .msg-form__contenteditable").last
 
-            send_btn = page.locator("button.msg-form__send-button, button[type='submit']").first
-            if await send_btn.count() > 0:
+            # 2. Humanized typing simulation with keystroke micro-delays
+            await human_type(composer, message_body)
+            await asyncio.sleep(random.uniform(0.6, 1.2))
+
+            # 3. Submit via accessible Send button or Enter
+            send_btn = page.get_by_role("button", name=re.compile(r"^Send$", re.I)).first
+            if not await send_btn.count():
+                send_btn = page.locator("button.msg-form__send-button, button[type='submit']").first
+
+            if await send_btn.count() > 0 and await send_btn.is_enabled():
                 await send_btn.click()
             else:
                 await composer.press("Enter")
 
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(random.uniform(1.0, 1.8))
             return {"success": True, "message": "Message sent successfully"}
         except Exception as exc:
             logger.error("Failed to send message via browser: %s", exc)
@@ -1159,7 +1589,7 @@ async def sync_linkedin_conversations(db, account) -> dict:
 # LinkedIn Comments & Replies Automation via Browser
 # ===========================================================================
 
-async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int = 5) -> dict:
+async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int = 10) -> dict:
     """
     Extract recent posts and comments using hybrid In-Browser Voyager API
     with intelligent DOM fallback, sync into LeadSocialComment table,
@@ -1169,19 +1599,19 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
     from ..services.comment_reply_ai import CommentReplyAIService
 
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
-    if not cookie:
+    if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         raise ValueError("LinkedIn session credentials not configured")
 
     settings = CommentReplyAIService.get_or_create_settings(db, account.ClientId, "linkedin")
 
     try:
-        async with _browser_manager._lock:
+        async with _browser_manager.get_lock():
             page = await _browser_manager.get_page(account)
 
             # Ensure page is on linkedin domain so cookies & origin headers are valid
             if "linkedin.com" not in page.url or "about:blank" in page.url:
                 try:
-                    await page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=20000)
+                    await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=20000)
                     await asyncio.sleep(2)
                 except Exception as feed_err:
                     logger.debug("Initial feed load notice: %s", feed_err)
@@ -1208,45 +1638,56 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         })
                         existing_urns.add(art.LinkedInPostId)
 
-            # Crawl recent native posts tabs (resolve user profile URL dynamically to avoid redirect loops)
-            user_profile_url = await page.evaluate('''() => {
-                const el = document.querySelector('a.feed-identity-module__actor-meta, a[href*="/in/"]');
+            # Discover candidate activity tabs & notifications (where comment alerts live)
+            user_profile_url = await safe_evaluate(page, '''() => {
+                const el = document.querySelector('.feed-identity-module a[href*="/in/"], a.feed-identity-module__actor-meta, a.profile-rail-card__actor-link, .global-nav__me a[href*="/in/"], a[href*="/in/"]');
                 return el ? el.href : null;
-            }''')
+            }''', fallback=None)
 
             candidate_urls = []
+            # 1. Notifications tab is the primary source for posts that received new comments
+            candidate_urls.append("https://www.linkedin.com/notifications/")
             if user_profile_url and "/in/" in user_profile_url:
                 clean_p = user_profile_url.split("?")[0].rstrip("/")
                 candidate_urls.append(f"{clean_p}/recent-activity/all/")
                 candidate_urls.append(f"{clean_p}/recent-activity/posts/")
             candidate_urls.append("https://www.linkedin.com/in/me/recent-activity/all/")
+            candidate_urls.append("https://www.linkedin.com/in/me/recent-activity/posts/")
+            candidate_urls.append("https://www.linkedin.com/feed/")
 
             for target_tab_url in candidate_urls:
                 if len(posts_to_scan) >= limit_posts:
                     break
                 try:
-                    await page.goto(target_tab_url, wait_until="domcontentloaded", timeout=20000)
+                    await _browser_manager.navigate_with_session(page, account, target_tab_url, wait_until="domcontentloaded", timeout=20000)
+                    await safe_evaluate(page, "() => window.scrollBy(0, 600)")
                     await asyncio.sleep(2)
 
-                    activity_urns = await page.evaluate('''() => {
+                    activity_urns = await safe_evaluate(page, '''() => {
                         const urns = [];
-                        const items = document.querySelectorAll('.feed-shared-update-v2, .profile-creator-shared-feed-update__container, [data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-urn*="urn:li:share"]');
+                        const seen = new Set();
+                        const items = document.querySelectorAll('.feed-shared-update-v2, .profile-creator-shared-feed-update__container, [data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-urn*="urn:li:share"], [data-id*="urn:li:activity"], [data-id*="urn:li:ugcPost"], [data-id*="urn:li:share"], [data-view-name="feed-full-update"], .nt-card');
                         items.forEach(el => {
-                            const u = el.getAttribute('data-urn') || el.getAttribute('data-id');
-                            if (u && (u.includes('urn:li:activity') || u.includes('urn:li:ugcPost') || u.includes('urn:li:share'))) {
-                                if (!urns.includes(u)) urns.push(u);
+                            const u = el.getAttribute('data-urn') || el.getAttribute('data-id') || el.getAttribute('data-activity-urn') || '';
+                            const match = u.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
+                            if (match && !seen.has(match[0])) {
+                                seen.add(match[0]);
+                                urns.push(match[0]);
                             }
-                            const links = el.querySelectorAll('a[href*="/feed/update/"], a[href*="/analytics/post-summary/"]');
-                            links.forEach(l => {
-                                const href = l.href;
-                                const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
-                                if (match && !urns.includes(match[0])) urns.push(match[0]);
-                            });
+                        });
+                        const links = document.querySelectorAll('a[href*="/feed/update/"], a[href*="/analytics/post-summary/"], a[href*="activity:"], a[href*="ugcPost:"], a[href*="share:"], a.nt-card__headline');
+                        links.forEach(l => {
+                            const href = l.href || '';
+                            const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
+                            if (match && !seen.has(match[0])) {
+                                seen.add(match[0]);
+                                urns.push(match[0]);
+                            }
                         });
                         return urns;
-                    }''')
+                    }''', fallback=[])
 
-                    for act_urn in activity_urns:
+                    for act_urn in (activity_urns or []):
                         if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
                             p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
                             posts_to_scan.append({
@@ -1257,7 +1698,9 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                             })
                             existing_urns.add(act_urn)
                 except Exception as tab_err:
-                    logger.debug("Checking activity tab %s notice: %s", act_tab, tab_err)
+                    logger.debug("Checking activity tab %s notice: %s", target_tab_url, tab_err)
+
+            logger.info("Found %d posts to scan for comments across activity and notifications", len(posts_to_scan))
 
             # 2. Extract comments for each post using Hybrid In-Browser Voyager API
             extracted_posts = []
@@ -1268,165 +1711,208 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                 post_comments = []
                 post_text = ""
 
-                # --- STEP A: In-Browser Voyager API fetch ---
+                # --- Passive Network Interception on GraphQL Comments ---
+                captured_comments = []
+
+                async def handle_comment_response(response):
+                    url = response.url
+                    if ("voyagerFeedDashComments" in url or "voyagerSocialDashComments" in url or "comments" in url or "graphql" in url) and response.status == 200:
+                        try:
+                            data = await response.json()
+                            parsed = _parse_graphql_comments_payload(data)
+                            if parsed:
+                                captured_comments.extend(parsed)
+                        except Exception:
+                            pass
+
+                page.on("response", handle_comment_response)
+
                 try:
-                    voyager_result = await page.evaluate(f'''async () => {{
-                        try {{
-                            const match = document.cookie.match(/JSESSIONID="?([^";]+)"?/);
-                            const jsession = match ? match[1] : "";
-                            const rawUrn = "{post_urn}";
-                            const cleanUrn = rawUrn.split('/').pop().replace(/[?#].*$/, '');
-                            const endpoint = `https://www.linkedin.com/voyager/api/feed/comments?count=30&q=comments&sortOrder=CHRONOLOGICAL&updateUrn=${{encodeURIComponent(cleanUrn)}}`;
+                    await _browser_manager.navigate_with_session(page, account, target_url, wait_until="domcontentloaded", timeout=20000)
+                    # Natural human scroll into comments section to trigger lazy loading
+                    await safe_evaluate(page, "() => window.scrollBy(0, 600)")
+                    await asyncio.sleep(1.0)
+                    
+                    # 1. Switch comment filter dropdown from 'Most relevant' to 'All comments' / 'Most recent' if present
+                    await safe_evaluate(page, '''() => {
+                        const sortDropdown = document.querySelector('button[aria-label*="sort" i], button.comments-sort-order-toggle, button[aria-controls*="sort" i]');
+                        if (sortDropdown) {
+                            sortDropdown.click();
+                        }
+                    }''')
+                    await asyncio.sleep(0.5)
+                    await safe_evaluate(page, '''() => {
+                        const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], li[role="menuitem"], button[role="menuitem"]'));
+                        for (const item of menuItems) {
+                            const t = (item.innerText || '').toLowerCase();
+                            if (t.includes('all comments') || t.includes('most recent') || t.includes('recent')) {
+                                item.click();
+                                break;
+                            }
+                        }
+                    }''')
+                    await asyncio.sleep(1.0)
 
-                            const resp = await fetch(endpoint, {{
-                                headers: {{
-                                    'csrf-token': jsession,
-                                    'x-restli-protocol-version': '2.0.0',
-                                    'accept': 'application/vnd.linkedin.normalized+json+2.1'
-                                }}
-                            }});
-
-                            if (!resp.ok) {{
-                                return {{ success: false, status: resp.status }};
-                            }}
-
-                            const data = await resp.json();
-                            const elements = data.elements || [];
-                            const parsed = [];
-
-                            for (const el of elements) {{
-                                const cUrn = el.entityUrn || el.id;
-                                if (!cUrn) continue;
-
-                                let text = '';
-                                if (el.comment && el.comment.values && el.comment.values.length > 0) {{
-                                    text = el.comment.values[0].value || '';
-                                }} else if (el.comment && typeof el.comment === 'string') {{
-                                    text = el.comment;
-                                }}
-                                if (!text || !text.trim()) continue;
-
-                                let name = 'LinkedIn Member';
-                                let headline = '';
-                                let profileUrl = '';
-                                let avatar = null;
-
-                                if (el.commenter) {{
-                                    const mini = el.commenter.miniProfile || el.commenter;
-                                    const fn = mini.firstName ? (typeof mini.firstName === 'string' ? mini.firstName : mini.firstName.text || '') : '';
-                                    const ln = mini.lastName ? (typeof mini.lastName === 'string' ? mini.lastName : mini.lastName.text || '') : '';
-                                    if (fn || ln) name = `${{fn}} ${{ln}}`.trim();
-                                    headline = mini.occupation || mini.headline || '';
-                                    if (typeof headline === 'object') headline = headline.text || '';
-                                    if (mini.publicIdentifier) profileUrl = `https://www.linkedin.com/in/${{mini.publicIdentifier}}`;
-                                    if (mini.picture && mini.picture['com.linkedin.common.VectorImage']) {{
-                                        const v = mini.picture['com.linkedin.common.VectorImage'];
-                                        if (v.rootUrl && v.artifacts && v.artifacts.length > 0) {{
-                                            avatar = v.rootUrl + v.artifacts[v.artifacts.length - 1].fileIdentifyingUrlPathSegment;
-                                        }}
-                                    }}
-                                }}
-
-                                parsed.push({{
-                                    comment_urn: cUrn,
-                                    author_name: name,
-                                    author_headline: headline,
-                                    author_profile_url: profileUrl,
-                                    author_avatar: avatar,
-                                    comment_text: text.trim()
-                                }});
-                            }}
-
-                            return {{ success: true, comments: parsed }};
-                        }} catch (e) {{
-                            return {{ success: false, error: e.toString() }};
-                        }}
-                    }}''')
-
-                    if voyager_result.get("success") and voyager_result.get("comments"):
-                        post_comments = voyager_result.get("comments", [])
-                        logger.info("Voyager in-browser API extracted %d comments for %s", len(post_comments), post_urn)
-                except Exception as voy_err:
-                    logger.debug("Voyager in-browser attempt notice for %s: %s", post_urn, voy_err)
-
-                # --- STEP B: Visual Page Navigation Fallback (if Voyager returned 0) ---
-                if not post_comments:
-                    try:
-                        await page.goto(target_url, wait_until="domcontentloaded", timeout=20000)
-                        await asyncio.sleep(2)
-
-                        # Scroll down slightly to trigger lazy-loaded comments
-                        await page.evaluate("() => window.scrollBy(0, 450)")
-                        await asyncio.sleep(1.5)
-
-                        dom_data = await page.evaluate(r'''() => {
-                            const textEl = document.querySelector('.feed-shared-update-v2__description, .feed-shared-text, .feed-shared-main-content');
-                            const postText = textEl ? textEl.innerText.trim() : '';
-
-                            const comments = [];
-                            const seenTexts = new Set();
-
-                            // Modern LinkedIn uses data-testid="expandable-text-box" or .comments-comment-item__main-content for comments
-                            const textNodes = Array.from(document.querySelectorAll('[data-testid="expandable-text-box"], .comments-comment-item__main-content, article.comments-comment-item, .comments-comments-list__comment-item'));
-
-                            for (const tNode of textNodes) {
-                                const commentText = tNode.innerText ? tNode.innerText.trim() : '';
-                                if (!commentText || commentText.length > 600 || seenTexts.has(commentText)) continue;
-                                if (postText && (commentText === postText || postText.startsWith(commentText))) continue;
-
-                                // Climb up to comment container - MUST have a Reply button to avoid grabbing the post body
-                                let container = tNode;
-                                let hasReplyBtn = false;
-                                for (let i = 0; i < 8 && container; i++) {
-                                    if (container.querySelector('button[aria-label="Reply"]') || (container.innerText && container.innerText.includes('Reply') && container.innerText.includes('Like'))) {
-                                        hasReplyBtn = true;
-                                        break;
-                                    }
-                                    container = container.parentElement;
+                    # 2. Multi-pass recursive expansion for 'Load more comments', 'Previous comments', and nested replies
+                    for _ in range(3):
+                        clicked_any = await safe_evaluate(page, '''() => {
+                            let clicked = false;
+                            const buttons = Array.from(document.querySelectorAll('button, span[role="button"], a[role="button"]'));
+                            for (const b of buttons) {
+                                const text = (b.innerText || '').trim().toLowerCase();
+                                if (
+                                    text.includes('previous comments') ||
+                                    text.includes('more comments') ||
+                                    text.includes('load comments') ||
+                                    text.includes('load previous') ||
+                                    text.includes('previous replies') ||
+                                    text.includes('more replies') ||
+                                    text.includes('show replies') ||
+                                    text.includes('show previous') ||
+                                    /\\d+\\s+repl(y|ies)/.test(text)
+                                ) {
+                                    try {
+                                        b.click();
+                                        clicked = true;
+                                    } catch(e) {}
                                 }
+                            }
+                            return clicked;
+                        }''', fallback=False)
+                        if clicked_any:
+                            await asyncio.sleep(random.uniform(1.2, 2.0))
+                        else:
+                            break
+                finally:
+                    page.remove_listener("response", handle_comment_response)
 
-                                if (!hasReplyBtn || !container) continue;
-                                seenTexts.add(commentText);
+                # 1b. Check Embedded GraphQL Hydration JSON (<code id="bpr-guid-...">)
+                embedded_json_payloads = await safe_evaluate(page, '''() => {
+                    const payloads = [];
+                    const codeTags = document.querySelectorAll('code[id^="bpr-guid-"]');
+                    codeTags.forEach(el => {
+                        try {
+                            const raw = el.textContent || el.innerText;
+                            if (raw && (raw.includes('Comment') || raw.includes('comment') || raw.includes('included') || raw.includes('dash.feed'))) {
+                                payloads.push(JSON.parse(raw));
+                            }
+                        } catch(e) {}
+                    });
+                    return payloads;
+                }''', fallback=[])
 
-                                const authorLink = container.querySelector('a[href*="/in/"]');
-                                let authorName = 'LinkedIn Member';
-                                let profileUrl = '';
-                                if (authorLink) {
-                                    authorName = authorLink.innerText.split('\n')[0].replace(/\s+2nd.*/, '').replace(/•.*/, '').replace(/View.*profile/i, '').trim();
-                                    profileUrl = authorLink.href.split('?')[0];
-                                }
+                if embedded_json_payloads:
+                    for p in embedded_json_payloads:
+                        parsed = _parse_graphql_comments_payload(p)
+                        if parsed:
+                            captured_comments.extend(parsed)
 
-                                const img = container.querySelector('img');
-                                const avatar = img ? img.src : null;
-                                const cUrn = container.getAttribute('data-id') || container.getAttribute('id') || `c-${authorName.toLowerCase().replace(/\s+/g, '-')}-${commentText.slice(0, 15)}`;
+                all_extracted_comments = []
+                if captured_comments:
+                    all_extracted_comments.extend(captured_comments)
 
-                                comments.push({
-                                    comment_urn: cUrn,
-                                    author_name: authorName || 'LinkedIn Member',
-                                    author_headline: '',
-                                    author_profile_url: profileUrl,
-                                    author_avatar: avatar,
-                                    comment_text: commentText,
-                                });
+                # 1c. DOM Scraper for any dynamically rendered comments
+                try:
+                    dom_comments = await safe_evaluate(page, r'''() => {
+                        const comments = [];
+                        const seenTexts = new Set();
+                        
+                        // 1. Target all comment item container blocks
+                        const containers = Array.from(document.querySelectorAll(
+                            'article.comments-comment-item, .comments-comment-item, [data-id*="urn:li:comment"], [data-id*="urn:li:fsd_comment"], .comments-comments-list__comment-item'
+                        ));
+
+                        for (const container of containers) {
+                            const textEl = container.querySelector(
+                                '.comments-comment-item__main-content, [data-testid="expandable-text-box"], .comments-comment-item-content-body, span.update-components-text, span[dir="ltr"]'
+                            ) || container.querySelector('p, span');
+                            
+                            const commentText = textEl ? (textEl.innerText || '').trim() : '';
+                            if (!commentText || commentText.length > 800 || seenTexts.has(commentText)) continue;
+                            seenTexts.add(commentText);
+
+                            const authorLink = container.querySelector('a[href*="/in/"]');
+                            let authorName = 'LinkedIn Member';
+                            let profileUrl = '';
+                            if (authorLink) {
+                                const rawName = authorLink.innerText ? authorLink.innerText.split('\n')[0] : '';
+                                authorName = rawName.replace(/\s+2nd.*/, '').replace(/\s+1st.*/, '').replace(/\s+3rd.*/, '').replace(/•.*/, '').replace(/View.*profile/i, '').trim() || 'LinkedIn Member';
+                                profileUrl = authorLink.href ? authorLink.href.split('?')[0] : '';
                             }
 
-                            return { post_text: postText, comments: comments };
-                        }''')
+                            const headlineEl = container.querySelector('.comments-comment-meta__description, .comments-comment-item__headline, .comments-post-meta__headline');
+                            const headline = headlineEl ? headlineEl.innerText.trim() : '';
 
-                        if dom_data.get("comments"):
-                            post_comments = dom_data.get("comments", [])
-                            logger.info("Visual DOM extractor found %d comments for %s", len(post_comments), target_url)
-                        if not post_text:
-                            post_text = dom_data.get("post_text", "")
-                    except Exception as dom_err:
-                        logger.debug("Visual page fallback notice for %s: %s", target_url, dom_err)
+                            const img = container.querySelector('img');
+                            const avatar = img ? img.src : null;
+                            const cUrn = container.getAttribute('data-id') || container.getAttribute('id') || `c-${authorName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${commentText.slice(0, 15)}`;
+
+                            comments.push({
+                                comment_urn: cUrn,
+                                author_name: authorName,
+                                author_headline: headline,
+                                author_profile_url: profileUrl,
+                                author_avatar: avatar,
+                                comment_text: commentText,
+                            });
+                        }
+
+                        // 2. Secondary scan if container matching was empty
+                        if (comments.length === 0) {
+                            const allTextNodes = Array.from(document.querySelectorAll('.comments-comment-item__main-content, [data-testid="expandable-text-box"]'));
+                            for (const tNode of allTextNodes) {
+                                const txt = (tNode.innerText || '').trim();
+                                if (!txt || txt.length > 800 || seenTexts.has(txt)) continue;
+                                seenTexts.add(txt);
+                                
+                                let p = tNode.parentElement;
+                                let aLink = null;
+                                for (let i = 0; i < 6 && p; i++) {
+                                    aLink = p.querySelector('a[href*="/in/"]');
+                                    if (aLink) break;
+                                    p = p.parentElement;
+                                }
+                                const name = aLink ? aLink.innerText.split('\n')[0].trim() : 'LinkedIn Member';
+                                const url = aLink ? aLink.href.split('?')[0] : '';
+                                comments.push({
+                                    comment_urn: `c-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${txt.slice(0, 15)}`,
+                                    author_name: name,
+                                    author_headline: '',
+                                    author_profile_url: url,
+                                    author_avatar: null,
+                                    comment_text: txt,
+                                });
+                            }
+                        }
+
+                        return comments;
+                    }''', fallback=[])
+                    if dom_comments:
+                        all_extracted_comments.extend(dom_comments)
+                except Exception as dom_err:
+                    logger.debug("DOM scraping fallback notice: %s", dom_err)
+
+                # Deduplicate and merge comments across GraphQL & DOM
+                seen_signatures = set()
+                for c in all_extracted_comments:
+                    c_urn = c.get("comment_urn")
+                    c_author = (c.get("author_name") or "").strip().lower()
+                    c_text = (c.get("comment_text") or "").strip().lower()
+                    if not c_text:
+                        continue
+                    sig = c_urn if (c_urn and not c_urn.startswith("c-")) else f"{c_author}::{c_text[:30]}"
+                    if sig not in seen_signatures:
+                        seen_signatures.add(sig)
+                        post_comments.append(c)
+
+                logger.info("Found total %d distinct comments for post %s", len(post_comments), post_urn)
 
                 extracted_posts.append({
                     "post_urn": post_urn,
-                    "post_text": post_text,
-                    "article_title": p_info.get("title"),
+                    "post_title": p_info.get("title"),
                     "article_id": p_info.get("article_id"),
-                    "comments": post_comments
+                    "comments": post_comments,
+                    "post_text": post_text
                 })
 
         # 3. Database Sync & AI processing
@@ -1436,10 +1922,10 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
 
         for p_data in extracted_posts:
             post_urn = p_data["post_urn"]
-            post_snippet = p_data["post_text"]
-            article_title = p_data["article_title"]
+            post_snippet = p_data.get("post_text", "")
+            article_title = p_data.get("post_title")
             post_title = article_title or (post_snippet.split("\n")[0][:120] if post_snippet else "LinkedIn Post")
-            article_id = p_data["article_id"]
+            article_id = p_data.get("article_id")
 
             if not article_id:
                 linked_article = db.query(LeadArticle).filter(
@@ -1450,7 +1936,7 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                     article_id = linked_article.Id
                     post_title = linked_article.Title
 
-            for c_data in p_data["comments"]:
+            for c_data in p_data.get("comments", []):
                 c_urn = c_data["comment_urn"]
                 c_text = c_data["comment_text"]
 
@@ -1532,11 +2018,11 @@ async def post_comment_reply_browser(
 ) -> dict:
     """Post a comment reply to LinkedIn using persistent browser session."""
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
-    if not cookie:
+    if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         raise ValueError("LinkedIn session credentials not configured")
 
     try:
-        async with _browser_manager._lock:
+        async with _browser_manager.get_lock():
             page = await _browser_manager.get_page(account)
 
             # Target post or activity feed
@@ -1547,29 +2033,40 @@ async def post_comment_reply_browser(
             else:
                 target_url = "https://www.linkedin.com/in/me/recent-activity/posts/"
 
-            await page.goto(target_url, wait_until="domcontentloaded", timeout=25000)
-            await asyncio.sleep(2)
+            await _browser_manager.navigate_with_session(page, account, target_url, wait_until="domcontentloaded", timeout=25000)
+            await asyncio.sleep(random.uniform(1.5, 2.5))
 
-            # Scroll into comment section
-            await page.evaluate("() => window.scrollBy(0, 400)")
-            await asyncio.sleep(1)
+            # Natural scroll into comment section
+            await safe_evaluate(page, "() => window.scrollBy(0, 400)")
+            await asyncio.sleep(random.uniform(0.8, 1.4))
 
-            # Click reply on target comment if found, or top comment box
-            reply_btn = page.locator(".comments-comment-item__reply-button, button:has-text('Reply')").first
+            # 1. Click reply button using accessible semantic text
+            reply_btn = page.get_by_role("button", name=re.compile(r"^Reply$", re.I)).first
+            if not await reply_btn.count():
+                reply_btn = page.locator(".comments-comment-item__reply-button, button:has-text('Reply')").first
+
             if await reply_btn.count() > 0 and await reply_btn.is_visible():
                 await reply_btn.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(random.uniform(0.6, 1.2))
 
-            # Locate editor and type reply
-            editor = page.locator(".ql-editor, div[contenteditable='true'], .comments-comment-box__editor").first
+            # 2. Locate editor using accessible semantic role
+            editor = page.get_by_role("textbox", name=re.compile(r"Add a comment|Reply", re.I)).first
+            if not await editor.count():
+                editor = page.locator("[role='textbox'], [contenteditable='true'], .ql-editor, .comments-comment-box__editor").last
+
             if await editor.count() > 0:
-                await editor.fill(reply_text)
-                await asyncio.sleep(0.5)
+                # Human typing simulation
+                await human_type(editor, reply_text)
+                await asyncio.sleep(random.uniform(0.8, 1.5))
 
-                submit_btn = page.locator("button.comments-comment-box__submit-button, button:has-text('Post'), button:has-text('Reply')").first
+                # 3. Submit reply
+                submit_btn = page.get_by_role("button", name=re.compile(r"^(Post|Reply)$", re.I)).first
+                if not await submit_btn.count():
+                    submit_btn = page.locator("button.comments-comment-box__submit-button, button:has-text('Post'), button:has-text('Reply')").first
+
                 if await submit_btn.count() > 0 and await submit_btn.is_enabled():
                     await submit_btn.click()
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(random.uniform(1.8, 2.8))
                     return {"success": True, "message": "Comment reply posted successfully"}
 
             return {"success": True, "message": "Comment reply dispatched"}
@@ -1583,6 +2080,7 @@ async def post_comment_reply_browser(
                 "error": "LinkedIn session token (li_at) has expired or was revoked. Please enter a fresh li_at token in the Connection tab.",
             }
         return {"success": False, "error": err_str}
+
 
 
 

@@ -337,8 +337,9 @@ async def save_linkedin_credentials(
         else:
             row.LinkedinCookieEnc = encrypt_pii(li_at)
             
-        row.LinkedinUsernameEnc = None
-        row.LinkedinPasswordEnc = None
+        if payload.username and payload.password:
+            row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
+            row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
     elif payload.username and payload.password:
         row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
         row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())

@@ -15,6 +15,7 @@ from .llm import complete_json
 from ..models import (
     LeadCustomer,
     LeadChannelIdentity,
+    LeadChannelAccount,
     LeadKbChunk,
     LeadActivityLog,
     utcnow,
@@ -263,6 +264,18 @@ COMMENT DETAILS:
             db.commit()
             return customer
 
+        # Resolve channel account ID
+        chan_acct = (
+            db.query(LeadChannelAccount)
+            .filter(
+                LeadChannelAccount.ClientId == comment.ClientId,
+                LeadChannelAccount.Channel == (comment.Channel or "linkedin"),
+                LeadChannelAccount.IsDeleted == False,
+            )
+            .first()
+        )
+        channel_account_id = chan_acct.Id if chan_acct else "linkedin-default"
+
         # Create new customer
         display_name = comment.AuthorName or "LinkedIn Member"
         customer = LeadCustomer(
@@ -277,7 +290,8 @@ COMMENT DETAILS:
 
         identity = LeadChannelIdentity(
             ClientId=comment.ClientId,
-            Channel="linkedin",
+            ChannelAccountId=channel_account_id,
+            Channel=comment.Channel or "linkedin",
             ExternalUserId=str(external_id),
             CustomerId=customer.Id,
             ProfileName=display_name,
@@ -291,3 +305,4 @@ COMMENT DETAILS:
         db.commit()
         logger.info(f"Captured new LinkedIn commenter as CRM Lead: {display_name} ({customer.Id})")
         return customer
+
