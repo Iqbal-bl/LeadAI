@@ -324,6 +324,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       next: () => {
         this.savingCredentials = false;
         this.showCredentialsSuccess = true;
+        this.credentialsForm.password = '';
         this.messageService.add({
           severity: 'success',
           summary: 'Credentials Saved',

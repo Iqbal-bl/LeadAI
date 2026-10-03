@@ -81,14 +81,27 @@ async def linkedin_status(
     from ..models_ext import LeadChannelAccount
 
     principal, client_id = scope
-    cred = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == client_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False
-    ).first()
+    cred = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == client_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
-    if not cred or not cred.AccessTokenEnc:
-        return {"connected": False}
+    if not cred:
+        return {
+            "connected": False,
+            "person_urn": None,
+            "access_token_valid": False,
+            "has_refresh_token": False,
+            "has_cookie_credentials": False,
+            "auto_accept": False,
+            "welcome_message": None,
+        }
 
     now = utcnow()
     if now.tzinfo is not None:
@@ -96,7 +109,7 @@ async def linkedin_status(
 
     access_token_valid = (
         cred.TokenExpiresAt > now
-        if cred.TokenExpiresAt
+        if cred.TokenExpiresAt and cred.AccessTokenEnc
         else False
     )
 
@@ -105,7 +118,7 @@ async def linkedin_status(
     has_credentials = bool(cred.LinkedinCookieEnc or (cred.LinkedinUsernameEnc and cred.LinkedinPasswordEnc))
 
     return {
-        "connected": True,
+        "connected": bool(cred.AccessTokenEnc),
         "person_urn": cred.ExternalId,
         "access_token_valid": access_token_valid,
         "has_refresh_token": bool(cred.AppSecretEnc),
@@ -322,14 +335,58 @@ async def save_linkedin_credentials(
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
 
-    # Find the corresponding LeadChannelAccount row
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    # Find the active LeadChannelAccount row
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found. Connect OAuth first.")
+        # Check if there is an existing row that can be reactivated
+        row = (
+            db.query(LeadChannelAccount)
+            .filter(
+                LeadChannelAccount.ClientId == company_id,
+                LeadChannelAccount.Channel == "linkedin",
+            )
+            .order_by(LeadChannelAccount.UpdatedAt.desc())
+            .first()
+        )
+        if row:
+            row.IsDeleted = False
+            row.IsActive = True
+        else:
+            row = LeadChannelAccount(
+                ClientId=company_id,
+                Channel="linkedin",
+                Provider="linkedin",
+                LoginType="linkedin",
+                Name="LinkedIn Account",
+                IsActive=True,
+                CreatedBy="system",
+            )
+            db.add(row)
+
+    # Ensure all other older active rows for this company are retired
+    other_active = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.Id != row.Id,
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .all()
+    )
+    for o in other_active:
+        o.IsDeleted = True
+        o.UpdatedAt = utcnow()
 
     # Encrypt and save the credentials
     if payload.cookie_li_at:
@@ -474,10 +531,16 @@ async def linkedin_search_profiles(
     from ..social import linkedin_bot
 
     # Retrieve credentials from database
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn search credentials/cookies are not configured")
@@ -509,10 +572,16 @@ async def linkedin_send_invitations(
     from ..social import linkedin_bot
 
     # Retrieve credentials from database
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
@@ -620,10 +689,16 @@ async def get_linkedin_invitations(
     _, company_id = scope
     from ..social import linkedin_bot
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
@@ -650,10 +725,16 @@ async def reply_linkedin_invitation(
     _, company_id = scope
     from ..social import linkedin_bot
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
@@ -692,10 +773,16 @@ async def accept_all_linkedin_invitations(
     _, company_id = scope
     from ..social import linkedin_bot
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
@@ -730,10 +817,16 @@ async def get_linkedin_conversations(
     _, company_id = scope
     from ..social import linkedin_bot
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
@@ -761,10 +854,16 @@ async def get_linkedin_conversation_messages(
     _, company_id = scope
     from ..social import linkedin_bot
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
@@ -797,10 +896,16 @@ async def send_linkedin_conversation_message(
 
     from ..social import linkedin_bot
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin"
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
         raise HTTPException(status.HTTP_409_CONFLICT, "LinkedIn automation credentials/cookies are not configured")
