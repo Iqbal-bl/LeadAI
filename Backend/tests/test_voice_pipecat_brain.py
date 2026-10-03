@@ -200,13 +200,14 @@ def test_scoring_runs_after_the_reply_in_order_and_joins_the_decision_trace():
     assert "scoring" in steps and "post_turn" in steps and "qualify" in steps   # one record, both phases
 
 
-def test_a_handoff_on_a_live_call_flags_staff_but_does_not_hang_up():
-    # The first real call was hung up on when nothing matched the knowledge base. Nothing can
-    # transfer to a human yet, so the call carries on and staff are flagged.
+def test_a_handoff_on_a_live_call_flags_staff_says_a_representative_will_contact_and_hangs_up():
+    # Nothing can transfer to a human yet: tell the caller a representative will contact them
+    # (no "connecting you now" / "hold"), flag staff, and end the call.
     db, conv, session = make_call()
     ai_engine.vectorstore.search = lambda *a, **k: []          # nothing known: low confidence
     reply = run(session.respond("do you finance a private island"))
-    assert reply.text and not reply.ends_call and "connecting you now" not in reply.text
+    assert "representative from our team will contact you" in reply.text and reply.ends_call
+    assert "connecting you now" not in reply.text and "hold" not in reply.text.lower()
     db.expire_all()
     assert db.get(models.LeadConversation, conv.Id).Status == "needs_human"
 

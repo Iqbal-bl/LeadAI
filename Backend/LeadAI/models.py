@@ -40,6 +40,7 @@ from sqlalchemy.orm import relationship
 try:
     from core.base import Base
 except ImportError:
+    # pyrefly: ignore [missing-import]
     from base import Base
 
 
@@ -444,6 +445,12 @@ class LeadConversation(LeadAIBase):
     # short fixed reply instead of restarting the qualification questions. Cleared
     # if the customer comes back with a real question.
     AiCompletedAt = Column(DateTime, nullable=True)
+    # Set when a campaign with CallEscalationEnabled asks "would you like us to
+    # call you?" — null|asked|accepted|declined. Only "accepted" ever triggers
+    # an actual call; the AI never dials without this being explicitly set here
+    # first by the customer's own reply (see conversation_flow.py).
+    CallConsentStatus = Column(String(20), nullable=True)
+    CallConsentAskedAt = Column(DateTime, nullable=True)
 
     # ---- control plane ------------------------------------------------------
     # Set from OUTSIDE the conversation, by staff or the monitor agent, and checked
@@ -694,7 +701,9 @@ from .models_ext import (  # noqa: E402
     LeadAccount,
     LeadAccountNote,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadChannelEvent,
     LeadChannelIdentity,

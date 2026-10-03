@@ -302,8 +302,19 @@ class CampaignOut(BaseModel):
     leads_created: int = 0
     created_at: datetime | None = None
     created_by: str | None = None
+    product_id: str | None = None
+    created_via: str = "manual"           # manual|import
+    # Derived from created_via, never stored separately — the two can never
+    # drift out of sync. broadcast: a one-time send to already-known contacts,
+    # no new Lead rows, delivery tracking only. lead_campaign: imported rows
+    # became real Leads (see routers/leads_import.py) and continue as normal
+    # conversations afterward — qualified, scored, data points collected.
+    campaign_type: str = "broadcast"      # broadcast|lead_campaign
+    call_escalation_enabled: bool = False
+    output_file_id: str | None = None
+    output_generated_at: datetime | None = None
 
-    @field_serializer('scheduled_at', 'started_at', 'completed_at', 'created_at')
+    @field_serializer('scheduled_at', 'started_at', 'completed_at', 'created_at', 'output_generated_at')
     def serialize_dates(self, dt: datetime | None, _info):
         if dt is None:
             return None
@@ -372,6 +383,69 @@ class CampaignHistoryListOut(BaseModel):
     page: int
     page_size: int
     items: list[CampaignHistoryItemOut] = []
+
+
+class CampaignExecutionOut(BaseModel):
+    """One run (Start/Restart) of a campaign — the Batch -> BatchExecution
+    counterpart, so an operator can see what each individual run actually did."""
+
+    id: str
+    campaign_id: str
+    status: str
+    restart_mode: str
+    total_count: int = 0
+    completed_count: int = 0
+    failed_count: int = 0
+    skipped_count: int = 0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+    @field_serializer('started_at', 'completed_at')
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class CampaignExecutionListOut(BaseModel):
+    total_items: int
+    page: int
+    page_size: int
+    items: list[CampaignExecutionOut] = []
+
+
+class CampaignRecipientAttemptOut(BaseModel):
+    """One recipient's frozen outcome on ONE specific execution — the
+    CallNumberExecution counterpart."""
+
+    id: str
+    recipient_id: str
+    name: str | None = None
+    phone_masked: str | None = None
+    status: str
+    external_message_id: str | None = None
+    sent_at: datetime | None = None
+    delivered_at: datetime | None = None
+    read_at: datetime | None = None
+    replied_at: datetime | None = None
+    failure_reason: str | None = None
+
+    @field_serializer('sent_at', 'delivered_at', 'read_at', 'replied_at')
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class CampaignRecipientAttemptListOut(BaseModel):
+    total_items: int
+    page: int
+    page_size: int
+    items: list[CampaignRecipientAttemptOut] = []
 
 
 class CampaignPreviewOut(BaseModel):
@@ -628,3 +702,40 @@ class InstagramCallbackIn(BaseModel):
 
     code: str = Field(min_length=10, description="Authorization code from Instagram")
     state: str = Field(min_length=8, description="State issued by /channels/instagram/connect")
+
+
+# =========================================================================== #
+# lead import -> auto-classified batches
+# =========================================================================== #
+class LeadImportSchemaField(BaseModel):
+    key: str
+    label: str
+    data_type: str
+    required: bool
+    source: Literal["fixed", "data_point"]
+
+
+class LeadImportSchemaOut(BaseModel):
+    fields: list[LeadImportSchemaField]
+    sample_csv_header: str
+
+
+class LeadImportRowError(BaseModel):
+    row_number: int
+    reason: str
+
+
+class LeadImportBatchOut(BaseModel):
+    campaign_id: str
+    name: str
+    product: str
+    lead_count: int
+
+
+class LeadImportResultOut(BaseModel):
+    total: int
+    valid: int
+    invalid: int
+    duplicates: int
+    invalid_rows: list[LeadImportRowError] = []
+    batches: list[LeadImportBatchOut] = []

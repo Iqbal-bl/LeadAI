@@ -2,13 +2,15 @@ import { Component, OnInit } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
+import { ProductService } from '../../../services/product.service';
 import {
   Campaign,
   CampaignStatus,
   CampaignPreview,
   CampaignRecipient,
+  RestartMode,
 } from '../../../models/campaign.models';
-import { MessageService } from 'primeng/api';
+import { MessageService, MenuItem } from 'primeng/api';
 import { CampaignCreateComponent } from '../campaign-create/campaign-create.component';
 import { AuthService } from '../../../services/auth.service';
 import { CLIENT_PERMISSIONS } from '../../../modules/client/constants/permission.constants';
@@ -28,6 +30,59 @@ export class CampaignListComponent implements OnInit {
   selectedAudienceId = '';
 
   canSend = false;
+
+  // Tab state: 'all' | 'broadcast' | 'lead'
+  selectedTab: 'all' | 'broadcast' | 'lead' = 'all';
+
+  // Start / Restart Menu State
+  startMenuCampaign: Campaign | null = null;
+  startMenuItems: MenuItem[] = [];
+  campaignRowMenuItems: MenuItem[] = [];
+  selectedCampaign: Campaign | null = null;
+
+  isLeadCampaign(c: Campaign): boolean {
+    const type = (c.campaign_type || '').toLowerCase().trim();
+    if (type === 'lead' || type === 'lead_campaign' || type === 'leads' || type.includes('lead')) {
+      return true;
+    }
+    if (c.created_via === 'import') {
+      return true;
+    }
+    return false;
+  }
+
+  isBroadcast(c: Campaign): boolean {
+    const type = (c.campaign_type || '').toLowerCase().trim();
+    if (type === 'broadcast' || type.includes('broadcast')) {
+      return true;
+    }
+    return !this.isLeadCampaign(c);
+  }
+
+  get filteredCampaigns(): Campaign[] {
+    if (this.selectedTab === 'broadcast') {
+      return this.campaigns.filter((c) => this.isBroadcast(c));
+    }
+    if (this.selectedTab === 'lead') {
+      return this.campaigns.filter((c) => this.isLeadCampaign(c));
+    }
+    return this.campaigns;
+  }
+
+  get broadcastCampaignsCount(): number {
+    return this.campaigns.filter((c) => this.isBroadcast(c)).length;
+  }
+
+  get leadCampaignsCount(): number {
+    return this.campaigns.filter((c) => this.isLeadCampaign(c)).length;
+  }
+
+  getCampaignTypeBadge(c: Campaign): { label: string; severity: 'info' | 'secondary'; icon: string } {
+    if (this.isLeadCampaign(c)) {
+      return { label: 'Lead Campaign', severity: 'info', icon: 'pi pi-users' };
+    }
+    return { label: 'Broadcast', severity: 'secondary', icon: 'pi pi-megaphone' };
+  }
 
   // Preview Dialog variables
   showPreviewDialog = false;
@@ -235,16 +290,128 @@ export class CampaignListComponent implements OnInit {
 
   startingCampaignId: string | null = null;
 
-  startCampaign(campaign: Campaign): void {
+  openActionMenu(event: Event, campaign: Campaign, menu: any): void {
+    event.stopPropagation();
+    this.selectedCampaign = campaign;
+    const hasFailures =
+      (campaign.counters?.failed ?? 0) > 0 ||
+      ((campaign as any).failed_count ?? 0) > 0;
+    const hasQueued =
+      (campaign.counters?.queued ?? 0) > 0 ||
+      ((campaign as any).queued_count ?? 0) > 0;
+    const isRunning = campaign.status === 'running';
+    const isPaused = campaign.status === 'paused';
+    const isDraft = campaign.status === 'draft';
+
+    const items: MenuItem[] = [
+      {
+        label: 'View Details',
+        icon: 'pi pi-eye',
+        command: () => this.viewCampaign(campaign),
+      },
+    ];
+
+    if (isDraft) {
+      items.push({
+        label: 'Build Audience',
+        icon: 'pi pi-cog',
+        command: () => this.buildCampaign(campaign),
+      });
+    }
+
+    if (isRunning) {
+      items.push({
+        label: 'Pause Campaign',
+        icon: 'pi pi-pause',
+        command: () => this.pauseCampaign(campaign),
+      });
+    } else if (isPaused) {
+      items.push({
+        label: 'Resume Campaign',
+        icon: 'pi pi-play',
+        command: () => this.resumeCampaign(campaign),
+      });
+    }
+
+    // Start / Restart execution options
+    items.push({
+      separator: true,
+    });
+
+    items.push({
+      label: 'Restart / Start (All)',
+      icon: 'pi pi-refresh',
+      disabled: !this.canSend || this.startingCampaignId !== null,
+      command: () => this.startCampaignWithMode(campaign, 'all'),
+    });
+
+    items.push({
+      label: 'Retry Failed Only',
+      icon: 'pi pi-replay',
+      disabled: !this.canSend || !hasFailures || this.startingCampaignId !== null,
+      command: () => this.startCampaignWithMode(campaign, 'failed_only'),
+    });
+
+    items.push({
+      label: 'Resume Pending Only',
+      icon: 'pi pi-play',
+      disabled: !this.canSend || !hasQueued || this.startingCampaignId !== null,
+      command: () => this.startCampaignWithMode(campaign, 'pending_only'),
+    });
+
+    if (campaign.status !== 'draft' && campaign.status !== 'building') {
+      items.push({
+        separator: true,
+      });
+      items.push({
+        label: 'View Recipients',
+        icon: 'pi pi-users',
+        command: () => this.viewRecipients(campaign),
+      });
+    }
+
+    this.campaignRowMenuItems = items;
+    menu.toggle(event);
+  }
+
+  openStartMenu(event: Event, campaign: Campaign, menu: any): void {
+    event.stopPropagation();
+    this.startMenuCampaign = campaign;
+    const hasFailures = (campaign.counters?.failed ?? 0) > 0 || ((campaign as any).failed_count ?? 0) > 0;
+    const hasQueued = (campaign.counters?.queued ?? 0) > 0 || ((campaign as any).queued_count ?? 0) > 0;
+
+    this.startMenuItems = [
+      {
+        label: 'Start / Restart All',
+        icon: 'pi pi-refresh',
+        command: () => this.startCampaignWithMode(campaign, 'all'),
+      },
+      {
+        label: 'Retry Failed Only',
+        icon: 'pi pi-replay',
+        disabled: !hasFailures,
+        command: () => this.startCampaignWithMode(campaign, 'failed_only'),
+      },
+      {
+        label: 'Resume Pending Only',
+        icon: 'pi pi-play',
+        disabled: !hasQueued,
+        command: () => this.startCampaignWithMode(campaign, 'pending_only'),
+      },
+    ];
+    menu.toggle(event);
+  }
+
+  startCampaignWithMode(campaign: Campaign, mode: RestartMode = 'all'): void {
     if (this.startingCampaignId) return;
     this.startingCampaignId = campaign.id;
-    this.campaignService.startCampaign(campaign.id).subscribe({
+    this.campaignService.startCampaign(campaign.id, mode).subscribe({
       next: () => {
         this.startingCampaignId = null;
         this.messageService.add({
           severity: 'success',
           summary: 'Campaign Started',
-          detail: `Campaign "${campaign.name}" is now queued and sending.`,
+          detail: `"${campaign.name}" started with mode: ${mode}.`,
         });
         this.loadCampaigns();
       },
@@ -252,11 +419,15 @@ export class CampaignListComponent implements OnInit {
         this.startingCampaignId = null;
         this.messageService.add({
           severity: 'error',
-          summary: 'Error',
-          detail: err.error?.detail || 'Failed to start campaign.',
+          summary: 'Start Failed',
+          detail: err.error?.detail || err.message || 'Failed to start campaign with selected mode.',
         });
       },
     });
+  }
+
+  startCampaign(campaign: Campaign): void {
+    this.startCampaignWithMode(campaign, 'all');
   }
 
   pauseCampaign(campaign: Campaign): void {
