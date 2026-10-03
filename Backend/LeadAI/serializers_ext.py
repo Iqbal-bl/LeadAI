@@ -13,7 +13,9 @@ from .models import (
     LeadAccount,
     LeadAccountNote,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadContactList,
     LeadContactListItem,
@@ -22,7 +24,9 @@ from .models import (
 from .schemas_ext import (
     AccountNoteOut,
     AccountOut,
+    CampaignExecutionOut,
     CampaignOut,
+    CampaignRecipientAttemptOut,
     ChannelAccountOut,
     ContactListItemOut,
     ContactListOut,
@@ -138,6 +142,12 @@ def campaign_out(row: LeadCampaign) -> CampaignOut:
         leads_created=row.LeadsCreated or 0,
         created_at=row.CreatedAt,
         created_by=row.CreatedBy,
+        product_id=row.ProductId,
+        created_via=row.CreatedVia or "manual",
+        campaign_type="lead_campaign" if row.CreatedVia == "import" else "broadcast",
+        call_escalation_enabled=bool(row.CallEscalationEnabled),
+        output_file_id=row.OutputFileId,
+        output_generated_at=row.OutputGeneratedAt,
     )
 
 
@@ -152,6 +162,39 @@ def recipient_out(row: LeadCampaignRecipient) -> RecipientOut:
         rendered_body=row.RenderedBody,
         conversation_id=row.ConversationId,
         call_id=row.CallId,
+        sent_at=row.SentAt,
+        delivered_at=row.DeliveredAt,
+        read_at=row.ReadAt,
+        replied_at=row.RepliedAt,
+        failure_reason=row.FailureReason,
+    )
+
+
+def campaign_execution_out(row: LeadCampaignExecution) -> CampaignExecutionOut:
+    return CampaignExecutionOut(
+        id=row.Id,
+        campaign_id=row.CampaignId,
+        status=row.Status,
+        restart_mode=row.RestartMode,
+        total_count=row.TotalCount or 0,
+        completed_count=row.CompletedCount or 0,
+        failed_count=row.FailedCount or 0,
+        skipped_count=row.SkippedCount or 0,
+        started_at=row.StartedAt,
+        completed_at=row.CompletedAt,
+    )
+
+
+def campaign_recipient_attempt_out(
+    row: LeadCampaignRecipientAttempt, recipient: LeadCampaignRecipient | None
+) -> CampaignRecipientAttemptOut:
+    return CampaignRecipientAttemptOut(
+        id=row.Id,
+        recipient_id=row.RecipientId,
+        name=recipient.Name if recipient else None,
+        phone_masked=recipient.PhoneMasked if recipient else None,
+        status=row.Status,
+        external_message_id=row.ExternalMessageId,
         sent_at=row.SentAt,
         delivered_at=row.DeliveredAt,
         read_at=row.ReadAt,

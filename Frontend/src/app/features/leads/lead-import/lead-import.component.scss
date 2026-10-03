@@ -1,0 +1,250 @@
+.lead-import-container {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Glass & Card Elevation */
+.import-card {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--card-border, #e2e8f0);
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.import-card:hover {
+  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+}
+
+/* Dropzone Styles */
+.upload-dropzone {
+  border: 2px dashed #cbd5e1;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.6) 0%, rgba(241, 245, 249, 0.4) 100%);
+  border-radius: 1.25rem;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+
+  &:hover {
+    border-color: #818cf8;
+    background: linear-gradient(180deg, rgba(238, 242, 255, 0.6) 0%, rgba(224, 231, 255, 0.3) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.12);
+  }
+
+  &.dragging {
+    border-color: #6366f1;
+    background: linear-gradient(180deg, rgba(238, 242, 255, 0.8) 0%, rgba(224, 231, 255, 0.5) 100%);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15), 0 12px 32px -4px rgba(99, 102, 241, 0.2);
+    transform: scale(1.008);
+  }
+}
+
+.dark .upload-dropzone {
+  border-color: #334155;
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%);
+
+  &:hover {
+    border-color: #6366f1;
+    background: linear-gradient(180deg, rgba(49, 46, 129, 0.25) 0%, rgba(30, 27, 75, 0.15) 100%);
+    box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.2);
+  }
+
+  &.dragging {
+    border-color: #818cf8;
+    background: linear-gradient(180deg, rgba(49, 46, 129, 0.4) 0%, rgba(30, 27, 75, 0.3) 100%);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+  }
+}
+
+/* Channel Selection Cards */
+.channel-card {
+  border: 2px solid var(--card-border, #e2e8f0);
+  background: var(--card-bg, #ffffff);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  &:hover {
+    border-color: #cbd5e1;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px -2px rgba(15, 23, 42, 0.06);
+  }
+
+  &.active {
+    border-color: #6366f1;
+    background: linear-gradient(145deg, rgba(238, 242, 255, 0.5) 0%, rgba(245, 243, 255, 0.3) 100%);
+    box-shadow: 0 0 0 1px #6366f1, 0 10px 25px -4px rgba(99, 102, 241, 0.15);
+    transform: translateY(-2px);
+  }
+}
+
+.dark .channel-card {
+  border-color: #334155;
+  background: #1e293b;
+
+  &:hover {
+    border-color: #475569;
+    box-shadow: 0 6px 18px -2px rgba(0, 0, 0, 0.3);
+  }
+
+  &.active {
+    border-color: #818cf8;
+    background: linear-gradient(145deg, rgba(49, 46, 129, 0.35) 0%, rgba(30, 27, 75, 0.2) 100%);
+    box-shadow: 0 0 0 1px #818cf8, 0 10px 25px -4px rgba(99, 102, 241, 0.3);
+  }
+}
+
+/* Custom Sleek Form Select */
+.custom-select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  .select-icon {
+    position: absolute;
+    left: 0.875rem;
+    pointer-events: none;
+    color: #94a3b8;
+    font-size: 0.875rem;
+    z-index: 2;
+  }
+
+  select {
+    width: 100%;
+    height: 2.625rem;
+    padding-left: 2.5rem;
+    padding-right: 2.25rem;
+    background-color: var(--card-bg, #ffffff);
+    color: var(--app-text, #0f172a);
+    border: 1px solid var(--card-border, #cbd5e1);
+    border-radius: 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    appearance: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    &:hover:not(:focus) {
+      border-color: #94a3b8;
+    }
+  }
+
+  .select-arrow {
+    position: absolute;
+    right: 0.875rem;
+    pointer-events: none;
+    color: #94a3b8;
+    font-size: 0.75rem;
+  }
+}
+
+.dark .custom-select-wrapper select {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+
+  &:hover:not(:focus) {
+    border-color: #475569;
+  }
+}
+
+/* Gradient Action Button */
+.btn-primary-gradient {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 50%, #7c3aed 100%);
+  color: #ffffff;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.75rem;
+  padding: 0.65rem 1.5rem;
+  font-size: 0.875rem;
+  box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px 0 rgba(99, 102, 241, 0.45);
+    filter: brightness(1.05);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px 0 rgba(99, 102, 241, 0.3);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+    filter: grayscale(0.5);
+  }
+}
+
+/* Secondary Button */
+.btn-secondary-modern {
+  background: var(--card-bg, #ffffff);
+  color: var(--app-text-secondary, #475569);
+  font-weight: 600;
+  border: 1px solid var(--card-border, #e2e8f0);
+  border-radius: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.8125rem;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #cbd5e1;
+    background: var(--app-bg, #f8fafc);
+    color: var(--app-text, #0f172a);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+}
+
+.dark .btn-secondary-modern {
+  background: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+
+  &:hover {
+    background: #0f172a;
+    border-color: #475569;
+    color: #f1f5f9;
+  }
+}
+
+/* PrimeNG Switch Override for Violet Theme */
+:host ::ng-deep {
+  .p-inputswitch.p-inputswitch-checked .p-inputswitch-slider {
+    background: #6366f1 !important;
+  }
+}

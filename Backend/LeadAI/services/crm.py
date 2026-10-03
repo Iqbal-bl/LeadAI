@@ -174,6 +174,30 @@ def convert_lead(
     account.SourceConversationId = conversation.Id
     account.SourceLeadId = lead.Id
     account.ConvertedAt = utcnow()
+    # The caller explicitly asked to move this lead to `stage` — true whether an
+    # account was just created (already got it via create_account's own default)
+    # or an existing one was found by phone. Skipping this for the existing-account
+    # path meant converting a lead whose phone matched a prior account silently did
+    # nothing: the request said stage="customer", the response echoed it back, but
+    # the stored account kept whatever stage it already had.
+    account.Stage = stage
+    # Same gap for the name: a different person's lead (or the same person giving
+    # a different name) sharing a phone with a PRIOR account converted and the
+    # account kept the old name forever, with no trace that anyone named
+    # differently had ever come through on that number. The new name wins (this
+    # is an explicit, operator-initiated conversion) but the old one is kept as a
+    # note rather than silently discarded — a shared number can genuinely belong
+    # to more than one person.
+    new_name = (customer.DisplayName if customer else None) or (customer.PublicRef if customer else None)
+    if new_name and new_name != account.DisplayName:
+        if account.DisplayName:
+            add_note(
+                db, client_id, account,
+                body=f"Name on file changed from \"{account.DisplayName}\" to \"{new_name}\" "
+                     f"(another lead on the same phone number converted).",
+                note_type="stage_change", author_email=actor,
+            )
+        account.DisplayName = new_name
     if owner_email:
         account.OwnerEmail = owner_email
 

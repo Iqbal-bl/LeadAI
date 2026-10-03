@@ -72,6 +72,57 @@ def test_converting_an_already_existing_account_never_overwrites_its_own_fields(
     assert account.FieldsJson == {"crm_source": "manual import"}  # untouched
 
 
+def test_converting_an_already_existing_account_still_moves_it_to_the_requested_stage():
+    # Real bug: converting a NEW lead whose phone matched a PRIOR account (still at
+    # "opportunity") skipped create_account() entirely (correct — no duplicate), but
+    # that also meant the requested stage="customer" was never applied to it. The
+    # response echoed back the request's stage, the stored account did not change.
+    db, client, conv, lead = setup()
+    existing = models.LeadAccount(ClientId=client.Id, DisplayName="Manmeet Kaur",
+                                  PhoneHash=phone_fingerprint("+917696086310"),
+                                  Stage="opportunity")
+    db.add(existing)
+    db.commit()
+
+    account = crm.convert_lead(db, client.Id, conv, lead, actor="agent@kestrel.test", stage="customer")
+    db.commit()
+    assert account.Id == existing.Id
+    assert account.Stage == "customer"
+
+
+def test_a_different_name_on_the_same_phone_updates_the_account_and_keeps_the_old_name_as_a_note():
+    # Real bug: "Priya" converted on a phone an account already had on file as
+    # "Manmeet Kaur" (from an earlier Instagram lead) — the account kept showing
+    # "Manmeet Kaur" forever, with nothing anywhere recording that a different
+    # name had ever come through on that number.
+    db, client, conv, lead = setup(display_name="Priya", phone="+917696086310")
+    existing = models.LeadAccount(ClientId=client.Id, DisplayName="Manmeet Kaur",
+                                  PhoneHash=phone_fingerprint("+917696086310"))
+    db.add(existing)
+    db.commit()
+
+    account = crm.convert_lead(db, client.Id, conv, lead, actor="agent@kestrel.test")
+    db.commit()
+    assert account.Id == existing.Id
+    assert account.DisplayName == "Priya"
+
+    notes = db.query(models.LeadAccountNote).filter_by(AccountId=account.Id).all()
+    assert any("Manmeet Kaur" in n.Body and "Priya" in n.Body for n in notes)
+
+
+def test_converting_with_the_same_name_again_adds_no_spurious_rename_note():
+    db, client, conv, lead = setup(display_name="Manmeet Kaur", phone="+917696086310")
+    existing = models.LeadAccount(ClientId=client.Id, DisplayName="Manmeet Kaur",
+                                  PhoneHash=phone_fingerprint("+917696086310"))
+    db.add(existing)
+    db.commit()
+
+    account = crm.convert_lead(db, client.Id, conv, lead, actor="agent@kestrel.test")
+    db.commit()
+    notes = db.query(models.LeadAccountNote).filter_by(AccountId=account.Id).all()
+    assert not any("changed from" in n.Body for n in notes)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
