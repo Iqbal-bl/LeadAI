@@ -1277,7 +1277,7 @@ class ProductOut(BaseModel):
     id: str
     client_id: str
     product_name: str
-    product_type: str
+    product_description: str | None = None
     knowledge_base_file: str | None = None
     kb_document_id: str | None = None
     bound_kb_document_ids: list[str] = []
@@ -1304,7 +1304,7 @@ class ProductListOut(BaseModel):
 
 class ProductUpdate(BaseModel):
     product_name: str | None = None
-    product_type: str | None = None
+    product_description: str | None = None
 
 
 class BindExistingKbRequest(BaseModel):

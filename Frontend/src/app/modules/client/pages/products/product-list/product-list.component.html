@@ -41,7 +41,7 @@
     dataKey="id"
     [globalFilterFields]="[
       'product_name',
-      'product_type',
+      'product_description',
       'knowledge_base_file',
     ]"
     [tableStyle]="{ 'min-width': '65rem' }"
@@ -58,31 +58,10 @@
               type="text"
               [(ngModel)]="searchQuery"
               (ngModelChange)="loadProducts()"
-              placeholder="Search products by name or type..."
+              placeholder="Search products by name or description..."
               class="w-full text-sm"
             />
           </p-iconfield>
-        </div>
-        <div class="flex items-center gap-3">
-          <p-dropdown
-            [options]="[
-              { label: 'All Product Types', value: '' },
-              { label: 'Physical Product', value: 'Physical Product' },
-              { label: 'Digital Service', value: 'Digital Service' },
-              { label: 'SaaS / Software', value: 'SaaS / Software' },
-              { label: 'Financial / Loan', value: 'Financial / Loan' },
-              {
-                label: 'Real Estate / Property',
-                value: 'Real Estate / Property',
-              },
-              { label: 'Subscription Plan', value: 'Subscription Plan' },
-            ]"
-            [(ngModel)]="selectedTypeFilter"
-            (onChange)="loadProducts()"
-            placeholder="Filter by Type"
-            styleClass="text-sm"
-            [style]="{ 'min-width': '180px' }"
-          ></p-dropdown>
         </div>
       </div>
     </ng-template>
@@ -90,7 +69,7 @@
     <ng-template pTemplate="header">
       <tr>
         <th style="min-width: 14rem">Product Name</th>
-        <th style="min-width: 10rem">Product Type</th>
+        <th style="min-width: 12rem">Description</th>
         <th style="min-width: 16rem">Knowledge Base File</th>
         <th style="min-width: 10rem">Created At</th>
         <th style="min-width: 10rem">Created By</th>
@@ -127,12 +106,16 @@
             </div>
           </div>
         </td>
-        <td>
-          <p-tag
-            [value]="product.product_type"
-            [severity]="getTypeSeverity(product.product_type)"
-            [rounded]="true"
-          ></p-tag>
+        <td class="max-w-xs">
+          <span
+            *ngIf="product.product_description"
+            class="text-xs text-slate-600 dark:text-slate-300 line-clamp-2"
+            [pTooltip]="product.product_description"
+            tooltipPosition="top"
+          >
+            {{ product.product_description }}
+          </span>
+          <span *ngIf="!product.product_description" class="text-xs text-slate-400">—</span>
         </td>
         <td>
           <div *ngIf="product.knowledge_base_file || (product.bound_kb_documents && product.bound_kb_documents.length > 0)" class="space-y-1.5">
@@ -313,25 +296,23 @@
       />
     </div>
 
-    <!-- Product Type -->
+    <!-- Product Description -->
     <div>
       <label
         class="text-xs font-semibold uppercase tracking-wider block mb-1.5"
         style="color: var(--app-text-secondary)"
       >
-        Product Type <span class="text-red-500">*</span>
+        Product Description
       </label>
-      <p-dropdown
-        [options]="productTypeOptions"
-        [(ngModel)]="form.product_type"
-        [editable]="true"
-        placeholder="Select or enter custom product type"
-        optionLabel="label"
-        optionValue="value"
-        styleClass="w-full text-sm"
-      ></p-dropdown>
+      <textarea
+        pInputText
+        [rows]="3"
+        [(ngModel)]="form.product_description"
+        class="w-full text-sm"
+        placeholder="Brief description of the product, key features, pricing, or target audience..."
+      ></textarea>
       <span class="text-[11px] block mt-1" style="color: var(--app-text-muted)">
-        Choose a standard category or type a custom one.
+        Provide details about the product to help AI agents accurately answer customer queries.
       </span>
     </div>
 
@@ -474,8 +455,8 @@
         <h4 class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-secondary)">
           Attached Knowledge Bases ({{ managingProduct?.bound_kb_documents?.length || 0 }})
         </h4>
-        <span *ngIf="managingProduct?.product_type" class="text-[11px] font-medium px-2 py-0.5 rounded-full" style="background: var(--app-surface-hover); color: var(--app-text-muted)">
-          {{ managingProduct?.product_type }}
+        <span *ngIf="managingProduct?.product_description" class="text-[11px] font-medium px-2 py-0.5 rounded-full" style="background: var(--app-surface-hover); color: var(--app-text-muted)">
+          {{ managingProduct?.product_description }}
         </span>
       </div>
 

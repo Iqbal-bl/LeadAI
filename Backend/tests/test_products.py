@@ -41,7 +41,7 @@ def test_create_product_without_file():
         products.create_product(
             request=None,
             product_name="Personal Loan Express",
-            product_type="Financial / Loan",
+            product_description="Financial / Loan",
             file=None,
             principal=principal,
             db=db,
@@ -49,7 +49,7 @@ def test_create_product_without_file():
     )
 
     assert out.product_name == "Personal Loan Express"
-    assert out.product_type == "Financial / Loan"
+    assert out.product_description == "Financial / Loan"
     assert out.knowledge_base_file is None
     assert out.kb_document_id is None
     assert out.created_by == "admin@nexa.test"
@@ -59,7 +59,7 @@ def test_create_product_without_file():
     row = db.get(models.LeadProduct, out.id)
     assert row is not None
     assert row.ProductName == "Personal Loan Express"
-    assert row.ProductType == "Financial / Loan"
+    assert row.ProductDescription == "Financial / Loan"
     assert row.ClientId == client.Id
     assert row.CreatedBy == "admin@nexa.test"
     assert row.CreatedAt is not None
@@ -84,7 +84,7 @@ def test_create_product_with_kb_file():
         products.create_product(
             request=None,
             product_name="Personal Loan Express Gold",
-            product_type="Financial / Loan",
+            product_description="Financial / Loan",
             file=upload_file,
             principal=principal,
             db=db,
@@ -111,7 +111,7 @@ def test_list_and_filter_products():
         products.create_product(
             request=None,
             product_name="Home Loan Premier",
-            product_type="Mortgage",
+            product_description="Mortgage",
             file=None,
             principal=principal,
             db=db,
@@ -121,7 +121,7 @@ def test_list_and_filter_products():
         products.create_product(
             request=None,
             product_name="Credit Card Titanium",
-            product_type="Cards",
+            product_description="Cards",
             file=None,
             principal=principal,
             db=db,
@@ -129,18 +129,18 @@ def test_list_and_filter_products():
     )
 
     # List all
-    all_res = products.list_products(search=None, product_type=None, principal=principal, db=db)
+    all_res = products.list_products(search=None, principal=principal, db=db)
     names = [p.product_name for p in all_res.items]
     assert "Home Loan Premier" in names
     assert "Credit Card Titanium" in names
 
     # Filter by search
-    search_res = products.list_products(search="Titanium", product_type=None, principal=principal, db=db)
+    search_res = products.list_products(search="Titanium", principal=principal, db=db)
     assert len(search_res.items) == 1
     assert search_res.items[0].product_name == "Credit Card Titanium"
 
-    # Filter by type
-    type_res = products.list_products(search=None, product_type="Mortgage", principal=principal, db=db)
+    # Filter by description search
+    type_res = products.list_products(search="Mortgage", principal=principal, db=db)
     assert len(type_res.items) == 1
     assert type_res.items[0].product_name == "Home Loan Premier"
 
@@ -151,7 +151,7 @@ def test_update_product():
         products.create_product(
             request=None,
             product_name="Old Name",
-            product_type="Old Type",
+            product_description="Old Description",
             file=None,
             principal=principal,
             db=db,
@@ -163,7 +163,7 @@ def test_update_product():
             product_id=p.id,
             request=None,
             product_name="Updated Name",
-            product_type="Updated Type",
+            product_description="Updated Description",
             file=None,
             principal=principal,
             db=db,
@@ -171,7 +171,7 @@ def test_update_product():
     )
 
     assert updated.product_name == "Updated Name"
-    assert updated.product_type == "Updated Type"
+    assert updated.product_description == "Updated Description"
     assert updated.updated_by == "admin@nexa.test"
     assert updated.updated_at is not None
 
@@ -188,7 +188,7 @@ def test_delete_product_soft_deletes_and_cleans_kb():
         products.create_product(
             request=None,
             product_name="To Delete",
-            product_type="Temporary",
+            product_description="Temporary",
             file=upload_file,
             principal=principal,
             db=db,
@@ -209,7 +209,7 @@ def test_delete_product_soft_deletes_and_cleans_kb():
     assert kb_row.IsDeleted is True
 
     # List products should no longer return it
-    listed = products.list_products(search="To Delete", product_type=None, principal=principal, db=db)
+    listed = products.list_products(search="To Delete", principal=principal, db=db)
     assert len(listed.items) == 0
 
 
@@ -229,7 +229,7 @@ def test_bind_existing_kb_to_product():
         products.create_product(
             request=None,
             product_name="Commercial Plot Sector 50",
-            product_type="Real Estate / Property",
+            product_description="Real Estate / Property",
             file=initial_file,
             principal=principal,
             db=db,
@@ -275,7 +275,7 @@ def test_bind_uploaded_kb_to_product():
         products.create_product(
             request=None,
             product_name="Industrial Warehouse",
-            product_type="Real Estate / Property",
+            product_description="Real Estate / Property",
             file=None,
             principal=principal,
             db=db,
@@ -313,7 +313,7 @@ def test_unbind_kb_from_product():
         products.create_product(
             request=None,
             product_name="Executive Office Suite",
-            product_type="Real Estate / Property",
+            product_description="Real Estate / Property",
             file=None,
             principal=principal,
             db=db,
@@ -350,6 +350,47 @@ def test_unbind_kb_from_product():
         db=db,
     )
     assert extra_doc.Id not in unbound_p.bound_kb_document_ids
+
+
+def test_create_and_update_product_description():
+    db, client, principal = setup()
+    out = asyncio.run(
+        products.create_product(
+            request=None,
+            product_name="Executive Health Plan",
+            product_description="Comprehensive family medical coverage up to $500,000 with zero copay.",
+            file=None,
+            principal=principal,
+            db=db,
+        )
+    )
+
+    assert out.product_name == "Executive Health Plan"
+    assert out.product_description == "Comprehensive family medical coverage up to $500,000 with zero copay."
+    assert out.id is not None
+
+    # Check database persistence
+    row = db.get(models.LeadProduct, out.id)
+    assert row is not None
+    assert row.ProductName == "Executive Health Plan"
+    assert row.ProductDescription == "Comprehensive family medical coverage up to $500,000 with zero copay."
+
+    # Update product description
+    updated = asyncio.run(
+        products.update_product(
+            product_id=out.id,
+            request=None,
+            product_description="Updated coverage with dental and vision add-on.",
+            principal=principal,
+            db=db,
+        )
+    )
+    assert updated.product_description == "Updated coverage with dental and vision add-on."
+
+    # Verify listing search matches description
+    search_res = products.list_products(search="dental", principal=principal, db=db)
+    assert search_res.total >= 1
+    assert any(item.id == out.id for item in search_res.items)
 
 
 if __name__ == "__main__":

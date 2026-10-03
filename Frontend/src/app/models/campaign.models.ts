@@ -110,6 +110,23 @@ export interface CampaignCreateRequest {
   rate_limit?: number;
 }
 
+export interface CampaignUpdateRequest {
+  name?: string;
+  description?: string | null;
+  message_body?: string | null;
+  template_name?: string | null;
+  template_language?: string | null;
+  template_params?: string[] | null;
+  script_id?: string | null;
+  scheduled_at?: string | null;
+  concurrency?: number | null;
+  rate_per_minute?: number | null;
+  respect_opt_out?: boolean | null;
+  quiet_hours_start?: number | null;
+  quiet_hours_end?: number | null;
+  timezone?: string | null;
+}
+
 export interface CampaignPreview {
   recipient_count: number;
   sample_messages: { recipient: string; rendered_body: string }[];
@@ -187,4 +204,30 @@ export interface CampaignExecutionListResponse {
   page: number;
   page_size: number;
   items: CampaignExecution[];
+}
+
+export interface CampaignExecutionAttempt {
+  id: string;
+  recipient_id: string;
+  name: string;
+  phone_masked?: string | null;
+  email_masked?: string | null;
+  status: string;
+  external_message_id?: string | null;
+  sent_at?: string | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
+  replied_at?: string | null;
+  failure_reason?: string | null;
+  lead_score?: number | null;
+  lead_status?: string | null;
+  call_status?: string | null;
+  call_duration_sec?: number | null;
+}
+
+export interface CampaignExecutionAttemptsResponse {
+  total_items: number;
+  page: number;
+  page_size: number;
+  items: CampaignExecutionAttempt[];
 }

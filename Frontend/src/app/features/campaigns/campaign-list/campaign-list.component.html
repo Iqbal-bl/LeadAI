@@ -210,10 +210,11 @@
   </p-table>
 </div>
 
-<!-- Create Dialog -->
+<!-- Create / Edit Dialog -->
 <app-campaign-create
   *ngIf="showCreate"
   [visible]="showCreate"
+  [campaign]="selectedCampaignForEdit"
   [audienceId]="selectedAudienceId"
   (complete)="onCreateComplete()"
   (close)="onCreateClose()"

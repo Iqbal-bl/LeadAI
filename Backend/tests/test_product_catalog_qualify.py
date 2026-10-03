@@ -47,7 +47,7 @@ def _setup(product=None, catalog=()):
     db.add(client)
     db.flush()
     for name in catalog:
-        db.add(models.LeadProduct(ClientId=client.Id, ProductName=name, ProductType="loan"))
+        db.add(models.LeadProduct(ClientId=client.Id, ProductName=name, ProductDescription="loan"))
     customer = models.LeadCustomer(ClientId=client.Id, PublicRef="C1")
     db.add(customer)
     db.flush()

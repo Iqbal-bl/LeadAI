@@ -229,12 +229,11 @@ class LeadProduct(LeadAIBase):
     __tablename__ = "leadai_products"
     __table_args__ = (
         Index("ix_leadai_product_client", "ClientId"),
-        Index("ix_leadai_product_type", "ProductType"),
     )
 
     ClientId = Column(String(36), nullable=False)
     ProductName = Column(String(200), nullable=False)
-    ProductType = Column(String(100), nullable=False)
+    ProductDescription = Column(Text, nullable=True)
     KnowledgeBaseFile = Column(String(500), nullable=True)
     KbDocumentId = Column(String(36), nullable=True)
     BoundKbDocumentIds = Column(JSON, default=list, nullable=True)

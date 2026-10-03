@@ -28,6 +28,7 @@ export class CampaignListComponent implements OnInit {
   loading = true;
   showCreate = false;
   selectedAudienceId = '';
+  selectedCampaignForEdit: Campaign | null = null;
 
   canSend = false;
 
@@ -144,21 +145,32 @@ export class CampaignListComponent implements OnInit {
   }
 
   openCreate(): void {
+    this.selectedCampaignForEdit = null;
+    this.showCreate = true;
+  }
+
+  openEdit(campaign: Campaign): void {
+    this.selectedCampaignForEdit = campaign;
     this.showCreate = true;
   }
 
   onCreateComplete(): void {
+    const isEdit = !!this.selectedCampaignForEdit;
     this.showCreate = false;
+    this.selectedCampaignForEdit = null;
     this.loadCampaigns();
     this.messageService.add({
       severity: 'success',
-      summary: 'Campaign Created',
-      detail: 'Your campaign has been saved as a draft.',
+      summary: isEdit ? 'Campaign Updated' : 'Campaign Created',
+      detail: isEdit
+        ? 'Your campaign settings have been updated.'
+        : 'Your campaign has been saved as a draft.',
     });
   }
 
   onCreateClose(): void {
     this.showCreate = false;
+    this.selectedCampaignForEdit = null;
   }
 
   viewCampaign(campaign: Campaign): void {
@@ -308,6 +320,13 @@ export class CampaignListComponent implements OnInit {
         label: 'View Details',
         icon: 'pi pi-eye',
         command: () => this.viewCampaign(campaign),
+      },
+      {
+        label: 'Edit Campaign',
+        icon: 'pi pi-pencil',
+        disabled: isRunning,
+        title: isRunning ? 'Pause the campaign before editing' : '',
+        command: () => this.openEdit(campaign),
       },
     ];
 

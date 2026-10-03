@@ -103,7 +103,7 @@ def _product_out(
         id=str(product.Id),
         client_id=str(product.ClientId),
         product_name=product.ProductName,
-        product_type=product.ProductType,
+        product_description=product.ProductDescription or None,
         knowledge_base_file=product.KnowledgeBaseFile,
         kb_document_id=str(product.KbDocumentId) if product.KbDocumentId else None,
         bound_kb_document_ids=bound_ids,
@@ -125,19 +125,17 @@ def _product_out(
 async def create_product(
     request: Request,
     product_name: str = Form(..., description="Name of the product"),
-    product_type: str = Form(..., description="Category or type of the product"),
+    product_description: str | None = Form(default=None, description="Description of the product"),
     file: UploadFile | None = File(default=None, description="Knowledge base file (PDF, DOCX, TXT, CSV)"),
     principal: Principal = Depends(require("product.manage", "kb.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     client_id = resolve_scope(principal)
     p_name = product_name.strip()
-    p_type = product_type.strip()
+    p_desc = product_description.strip() if product_description and product_description.strip() else None
 
     if not p_name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Product name cannot be empty.")
-    if not p_type:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Product type cannot be empty.")
 
     kb_filename: str | None = None
     kb_document_id: str | None = None
@@ -190,7 +188,7 @@ async def create_product(
                     content_type=file.content_type or "application/octet-stream",
                     source_type="upload",
                     text=extracted_text,
-                    tags=f"product,{p_name},{p_type}",
+                    tags=f"product,{p_name},{p_desc or ''}"[:250],
                     request=request,
                 )
                 kb_document_id = str(kb_doc.Id)
@@ -202,7 +200,7 @@ async def create_product(
     product = LeadProduct(
         ClientId=client_id,
         ProductName=p_name,
-        ProductType=p_type,
+        ProductDescription=p_desc,
         KnowledgeBaseFile=kb_filename,
         KbDocumentId=kb_document_id,
         CreatedBy=principal.email,
@@ -216,8 +214,8 @@ async def create_product(
         client_id=client_id,
         entity_type="product",
         entity_id=product.Id,
-        message=f"Added product '{p_name}' ({p_type})",
-        meta={"product_name": p_name, "product_type": p_type, "kb_file": kb_filename},
+        message=f"Added product '{p_name}'",
+        meta={"product_name": p_name, "product_description": p_desc, "kb_file": kb_filename},
         request=request,
     )
 
@@ -232,8 +230,7 @@ async def create_product(
     summary="List products for the authenticated company",
 )
 def list_products(
-    search: str | None = Query(default=None, description="Search by product name or type"),
-    product_type: str | None = Query(default=None, description="Filter by product type"),
+    search: str | None = Query(default=None, description="Search by product name or description"),
     principal: Principal = Depends(require("product.read", "kb.read")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -250,11 +247,9 @@ def list_products(
     if search:
         term = f"%{search.strip()}%"
         query = query.filter(
-            (LeadProduct.ProductName.ilike(term)) | (LeadProduct.ProductType.ilike(term))
+            (LeadProduct.ProductName.ilike(term))
+            | (LeadProduct.ProductDescription.ilike(term))
         )
-
-    if product_type:
-        query = query.filter(LeadProduct.ProductType == product_type.strip())
 
     rows = query.order_by(LeadProduct.CreatedAt.desc()).all()
 
@@ -320,7 +315,7 @@ async def update_product(
     product_id: str,
     request: Request,
     product_name: str | None = Form(default=None),
-    product_type: str | None = Form(default=None),
+    product_description: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
     principal: Principal = Depends(require("product.manage", "kb.manage")),
     db: Session = Depends(get_leadai_db),
@@ -341,8 +336,8 @@ async def update_product(
 
     if product_name is not None and product_name.strip():
         product.ProductName = product_name.strip()
-    if product_type is not None and product_type.strip():
-        product.ProductType = product_type.strip()
+    if product_description is not None:
+        product.ProductDescription = product_description.strip()
 
     # If new knowledge base file is uploaded, process and re-index
     if file and file.filename:
@@ -388,7 +383,7 @@ async def update_product(
                 content_type=file.content_type or "application/octet-stream",
                 source_type="upload",
                 text=extracted_text,
-                tags=f"product,{product.ProductName},{product.ProductType}",
+                tags=f"product,{product.ProductName},{product.ProductDescription or ''}"[:250],
                 request=request,
             )
             product.KbDocumentId = str(kb_doc.Id)
@@ -405,7 +400,7 @@ async def update_product(
         entity_type="product",
         entity_id=product.Id,
         message=f"Updated product '{product.ProductName}'",
-        meta={"product_name": product.ProductName, "product_type": product.ProductType},
+        meta={"product_name": product.ProductName, "product_description": product.ProductDescription},
         request=request,
     )
 
@@ -513,7 +508,7 @@ def bind_existing_kb(
         product.KnowledgeBaseFile = kb_doc.FileName or kb_doc.Title
 
     # Append product tag to kb_doc so vector retrieval links it
-    product_tag = f"product,{product.ProductName},{product.ProductType}"
+    product_tag = f"product,{product.ProductName}"
     if kb_doc.Tags:
         if product.ProductName.lower() not in kb_doc.Tags.lower():
             kb_doc.Tags = f"{kb_doc.Tags},{product_tag}"
@@ -592,7 +587,7 @@ async def bind_kb(
             product.KbDocumentId = doc_id
             product.KnowledgeBaseFile = kb_doc.FileName or kb_doc.Title
 
-        product_tag = f"product,{product.ProductName},{product.ProductType}"
+        product_tag = f"product,{product.ProductName}"
         if kb_doc.Tags:
             if product.ProductName.lower() not in kb_doc.Tags.lower():
                 kb_doc.Tags = f"{kb_doc.Tags},{product_tag}"
@@ -644,7 +639,7 @@ async def bind_kb(
             content_type=file.content_type or "application/octet-stream",
             source_type="upload",
             text=extracted_text,
-            tags=f"product,{product.ProductName},{product.ProductType}",
+            tags=f"product,{product.ProductName}",
             request=request,
         )
         new_id = str(kb_doc.Id)
