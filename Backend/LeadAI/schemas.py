@@ -128,6 +128,23 @@ class CompanySettingsOut(CompanySettingsIn):
     client_id: str
     effective_handoff_threshold: float
     effective_retrieval_top_k: int
+    # Read-only here on purpose: these two are set via PUT
+    # /companies/{id}/voice-settings, which only a super admin may call — see
+    # rbac.super_admin(). CompanySettingsIn (what a company admin can PUT
+    # through /companies/{id}/settings) deliberately does not carry them.
+    # (Pitch was considered too — dropped: Sarvam's current TTS model,
+    # bulbul:v3, ignores it entirely; only the deprecated, API-rejected v2
+    # honours it, so a pitch knob would visibly do nothing on a real call.)
+    voice_gender: str | None = None
+    voice_speed: float | None = None
+
+
+class VoiceSettingsIn(BaseModel):
+    """Super-admin-only AI call voice tuning for one company. Never reachable
+    by a company admin — see routers/companies.py's update_voice_settings."""
+
+    voice_gender: str | None = Field(default=None, pattern="^(male|female)$")
+    voice_speed: float | None = Field(default=None, ge=0.5, le=2.0)
 
 
 class PermissionItemOut(BaseModel):
@@ -345,7 +362,6 @@ class ScriptCreate(BaseModel):
     language: str = "en-IN"
     script_xml: str = Field(min_length=10)
     is_default: bool = False
-    voice_gender: str | None = None
     voice_speaker: str | None = None
     multi_stt: bool = False
 
@@ -358,7 +374,6 @@ class ScriptUpdate(BaseModel):
     script_xml: str | None = None
     is_default: bool | None = None
     is_active: bool | None = None
-    voice_gender: str | None = None
     voice_speaker: str | None = None
     multi_stt: bool | None = None
 
@@ -373,7 +388,6 @@ class ScriptOut(BaseModel):
     version: int
     is_default: bool
     is_active: bool
-    voice_gender: str | None = None
     voice_speaker: str | None = None
     multi_stt: bool
     section_count: int = 0

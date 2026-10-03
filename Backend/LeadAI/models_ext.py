@@ -373,6 +373,7 @@ class LeadCampaignRecipient(LeadAIBase):
     Name = Column(String(160), nullable=True)
     PhoneEnc = Column(Text, nullable=True)
     PhoneMasked = Column(String(40), nullable=True)
+    EmailMasked = Column(String(160), nullable=True)   # "jo***@x.com" — masked like PhoneMasked, same reason
     # The IGSID/PSID to actually send to, when the campaign's channel needs one
     # (Instagram, Messenger). A phone number is never a valid recipient id on
     # either platform — Meta rejects it — so those sends need this, not PhoneEnc.

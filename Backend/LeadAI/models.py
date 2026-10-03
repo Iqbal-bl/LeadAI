@@ -357,6 +357,18 @@ class LeadCompanySettings(LeadAIBase):
     # for with ?include_below_threshold=true.
     HideBelowThreshold = Column(Boolean, default=False)
 
+    # ---- AI call voice tuning ------------------------------------------------
+    # Deliberately platform-level, not a per-script field (LeadCompanyScript.
+    # VoiceGender/VoiceSpeaker remain for voice *identity*, i.e. which TTS voice
+    # speaks) — these two are the ones only a super admin may set, never a
+    # company admin, so they live on the settings row the companies router
+    # already gates by role, not on something script.manage can reach. None
+    # means "use the platform default". Pitch was deliberately left out: the
+    # live TTS model (Sarvam bulbul:v3) ignores it entirely; only the
+    # deprecated, API-rejected v2 honours it.
+    VoiceGender = Column(String(20), nullable=True)   # male|female
+    VoiceSpeed = Column(Float, nullable=True)          # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
+
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)
     CampaignConcurrency = Column(Integer, nullable=True)

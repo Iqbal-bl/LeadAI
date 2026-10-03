@@ -36,7 +36,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from ..models import LeadCompanyPrompt, LeadCompanyScript
+from ..models import LeadCompanyPrompt, LeadCompanyScript, LeadCompanySettings
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +238,7 @@ def build_system_prompt(
 
     script = script or resolve_script(db, client_id, channel=channel)
     script_prompt = sections_to_system_prompt(sections_of(script))
-    base_prompt += _gender_note(channel, script)
+    base_prompt += _gender_note(db, client_id, channel)
 
     if script_prompt:
         combined = (
@@ -251,20 +251,34 @@ def build_system_prompt(
     return base_prompt, script
 
 
-def _gender_note(channel: str, script: LeadCompanyScript | None) -> str:
+def company_voice_settings(db: Session, client_id: str) -> dict:
+    """The AI-call voice tuning only a super admin may set (see
+    rbac.super_admin() and routers/companies.py's voice-settings endpoint) —
+    platform-level, never per-script, and never reachable by a company admin.
+    None values fall back to the platform default, not "silent"/"male".
+    """
+    row = (
+        db.query(LeadCompanySettings)
+        .filter(LeadCompanySettings.ClientId == client_id, LeadCompanySettings.IsDeleted == False)  # noqa: E712
+        .one_or_none()
+    )
+    gender = (row.VoiceGender if row else None) or "female"
+    speed = (row.VoiceSpeed if row and row.VoiceSpeed is not None else None) or 1.1
+    return {"gender": gender, "speed": speed}
+
+
+def _gender_note(db: Session, client_id: str, channel: str) -> str:
     """Gendered languages (Hindi, Punjabi, ...) inflect first-person verbs by the
     speaker's gender. The model only ever saw the persona's NAME (in the script
     header below) and had to guess from that alone — a script literally named
     "Ritu" still came back "main chahta hoon" (masculine) instead of "chahti
-    hoon" (feminine) on a real call. VoiceGender already exists on the script
-    for picking the TTS voice; it just never reached the prompt that generates
-    the words being spoken.
+    hoon" (feminine) on a real call. The company's own voice gender setting
+    (super-admin only) already exists for picking the TTS voice; it just
+    never reached the prompt that generates the words being spoken.
     """
-    if channel != "voice" or script is None:
+    if channel != "voice":
         return ""
-    gender = (getattr(script, "VoiceGender", None) or "female").strip().lower()
-    if gender not in ("female", "male"):
-        return ""
+    gender = company_voice_settings(db, client_id)["gender"]
     example = "chahti hoon, kar rahi hoon" if gender == "female" else "chahta hoon, kar raha hoon"
     return (
         f"\n\nYou are voiced as a {gender} assistant. In Hindi, Punjabi and any other "

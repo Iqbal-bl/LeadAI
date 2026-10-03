@@ -40,7 +40,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from .. import activity
@@ -50,6 +50,7 @@ from ..db import get_leadai_db
 from ..models import (
     Lead,
     LeadActivityLog,
+    LeadCall,
     LeadCampaign,
     LeadCampaignExecution,
     LeadCampaignRecipient,
@@ -590,6 +591,12 @@ def list_campaigns(
     page_size: int = Query(default=20, ge=1, le=100),
     status_filter: str | None = Query(default=None, alias="status"),
     kind: str | None = None,
+    campaign_type: str | None = Query(
+        default=None,
+        description="broadcast | lead_campaign — same split as CampaignOut.campaign_type, "
+                    "for a frontend that wants the broadcaster list and the batch/lead-campaign "
+                    "list as two separate views without two separate endpoints.",
+    ),
     scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -602,6 +609,14 @@ def list_campaigns(
         query = query.filter(LeadCampaign.Status == status_filter)
     if kind:
         query = query.filter(LeadCampaign.Kind == kind)
+    if campaign_type == "lead_campaign":
+        query = query.filter(LeadCampaign.CreatedVia == "import")
+    elif campaign_type == "broadcast":
+        # CreatedVia is NOT NULL in the schema, so `!= "import"` alone is
+        # correct here — the `is_(None)` arm only guards a raw-SQL edge case
+        # outside normal application writes, kept for symmetry with
+        # campaign_out()'s own `else "broadcast"` fallback for a null value.
+        query = query.filter(or_(LeadCampaign.CreatedVia != "import", LeadCampaign.CreatedVia.is_(None)))
     total = query.count()
     rows = (
         query.order_by(LeadCampaign.CreatedAt.desc())
@@ -943,9 +958,14 @@ def list_recipients(
         .limit(page_size)
         .all()
     )
+    leads_by_conv: dict[str, Lead] = {}
+    conv_ids = [r.ConversationId for r in rows if r.ConversationId]
+    if conv_ids:
+        for lead in db.query(Lead).filter(Lead.ConversationId.in_(conv_ids)).all():
+            leads_by_conv[lead.ConversationId] = lead
     return RecipientListOut(
         total_items=total, page=page, page_size=page_size,
-        items=[recipient_out(r) for r in rows],
+        items=[recipient_out(r, leads_by_conv.get(r.ConversationId)) for r in rows],
     )
 
 
@@ -1077,7 +1097,9 @@ def list_campaign_execution_attempts(
         .limit(page_size)
         .all()
     )
-    recipients = {}
+    recipients: dict[str, LeadCampaignRecipient] = {}
+    leads: dict[str, Lead] = {}
+    calls: dict[str, LeadCall] = {}
     if rows:
         recipient_ids = {r.RecipientId for r in rows}
         for recipient in (
@@ -1085,9 +1107,25 @@ def list_campaign_execution_attempts(
         ):
             recipients[recipient.Id] = recipient
 
+        conv_ids = {r.ConversationId for r in recipients.values() if r.ConversationId}
+        if conv_ids:
+            for lead in db.query(Lead).filter(Lead.ConversationId.in_(conv_ids)).all():
+                leads[lead.ConversationId] = lead
+
+        call_ids = {r.CallId for r in recipients.values() if r.CallId}
+        if call_ids:
+            for call in db.query(LeadCall).filter(LeadCall.Id.in_(call_ids)).all():
+                calls[call.Id] = call
+
+    def _attempt_out(attempt: LeadCampaignRecipientAttempt) -> CampaignRecipientAttemptOut:
+        recipient = recipients.get(attempt.RecipientId)
+        lead = leads.get(recipient.ConversationId) if recipient and recipient.ConversationId else None
+        call = calls.get(recipient.CallId) if recipient and recipient.CallId else None
+        return campaign_recipient_attempt_out(attempt, recipient, lead, call)
+
     return CampaignRecipientAttemptListOut(
         total_items=total, page=page, page_size=page_size,
-        items=[campaign_recipient_attempt_out(r, recipients.get(r.RecipientId)) for r in rows],
+        items=[_attempt_out(r) for r in rows],
     )
 
 
@@ -1143,11 +1181,18 @@ def export_campaign(
         for lead in db.query(Lead).filter(Lead.ConversationId.in_(conv_ids)).all():
             leads_by_conv[lead.ConversationId] = lead
 
+    call_ids = [r.CallId for r in recipients if r.CallId]
+    calls_by_id = {}
+    if call_ids:
+        for call in db.query(LeadCall).filter(LeadCall.Id.in_(call_ids)).all():
+            calls_by_id[call.Id] = call
+
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(
-        ["Name", "Phone", "Status", "Sent At", "Delivered At", "Read At", "Replied At", "Failure Reason",
-         "Lead Score", "Lead Status"] + [dp.Label for dp in data_points]
+        ["Name", "Phone", "Email", "Status", "Sent At", "Delivered At", "Read At", "Replied At",
+         "Failure Reason", "Product", "Lead Score", "Lead Status", "Call Status", "Call Duration (s)"]
+        + [dp.Label for dp in data_points]
     )
     for r in recipients:
         # With execution_id set, report what THIS run actually did (the frozen
@@ -1155,17 +1200,22 @@ def export_campaign(
         # since-overwritten state.
         snapshot = attempts_by_recipient.get(r.Id) if execution_id else None
         lead = leads_by_conv.get(r.ConversationId)
+        call = calls_by_id.get(r.CallId)
         values = (lead.DataPointsJson or {}) if lead else {}
         writer.writerow(
             [
-                r.Name or "", r.PhoneMasked or "", snapshot.Status if snapshot else r.Status,
+                r.Name or "", r.PhoneMasked or "", r.EmailMasked or "",
+                snapshot.Status if snapshot else r.Status,
                 (snapshot or r).SentAt.isoformat() if (snapshot or r).SentAt else "",
                 (snapshot or r).DeliveredAt.isoformat() if (snapshot or r).DeliveredAt else "",
                 (snapshot or r).ReadAt.isoformat() if (snapshot or r).ReadAt else "",
                 (snapshot or r).RepliedAt.isoformat() if (snapshot or r).RepliedAt else "",
                 (snapshot.FailureReason if snapshot else r.FailureReason) or "",
+                (lead.Product or "unknown") if lead else "",
                 lead.Score if lead else "",
                 lead.Status if lead else "",
+                call.Status if call else "",
+                call.DurationSec if call else "",
             ]
             + [values.get(dp.Key, "") for dp in data_points]
         )

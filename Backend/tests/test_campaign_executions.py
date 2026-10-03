@@ -22,7 +22,7 @@ from domain.models import Client  # noqa: E402
 from LeadAI import models  # noqa: E402
 from LeadAI.rbac import ROLE_PERMISSIONS, Principal  # noqa: E402
 from LeadAI.routers import campaigns  # noqa: E402
-from LeadAI.security import encrypt_pii  # noqa: E402
+from LeadAI.security import encrypt_pii, mask_email  # noqa: E402
 from LeadAI.services import billing, campaign_runner as cr  # noqa: E402
 from LeadAI.services import channels  # noqa: E402
 
@@ -251,6 +251,116 @@ def test_execution_detail_and_attempts_endpoints():
         assert False, "expected a 404"
     except HTTPException as exc:
         assert exc.status_code == 404
+
+
+def test_attempt_detail_carries_email_lead_score_and_call_outcome():
+    """The whole reason the attempt endpoint joins Lead and LeadCall: an
+    operator should see name, phone, email, what the AI determined about the
+    lead, AND what happened on the call in one place — the same "input +
+    outcome" shape the old VoiceAI batch CSV used — not stitched together
+    from three different endpoints."""
+    db = SessionLocalAdmin()
+    client = Client(Name="Kestrel Enriched")
+    db.add(client)
+    db.flush()
+    contact_list = models.LeadContactList(ClientId=client.Id, Name="l", SourceType="leads", Status="ready")
+    db.add(contact_list)
+    db.flush()
+    customer = models.LeadCustomer(ClientId=client.Id, PublicRef="C1", DisplayName="Rani Shah",
+                                   PhoneEnc=encrypt_pii("+919333333333"))
+    db.add(customer)
+    db.flush()
+    db.add(models.LeadContactListItem(
+        ClientId=client.Id, ListId=contact_list.Id, RowNumber=1, Name="Rani Shah",
+        CustomerId=customer.Id, PhoneEnc=encrypt_pii("+919333333333"),
+        EmailEnc=encrypt_pii("rani.shah@example.com"), PhoneHash="r1", IsValid=True,
+    ))
+    campaign = models.LeadCampaign(ClientId=client.Id, Name="calls", Kind="call", Channel="voice",
+                                   AudienceType="list", ListId=contact_list.Id, ScriptId="s1",
+                                   Purpose="transactional", Concurrency=5, RatePerMinute=100000)
+    db.add(campaign)
+    db.commit()
+    principal = _principal(client.Id)
+
+    from LeadAI.services import call_bridge
+
+    def _fake_place_call(db, client_id, company_name, conversation, initiated_by, mode="ai_voice",
+                         script_id=None, override_number=None):
+        call = models.LeadCall(ClientId=client_id, ConversationId=conversation.Id, Status="completed",
+                               CallSid="CA123", DurationSec=97)
+        db.add(call)
+        db.flush()
+        return call
+
+    call_bridge.start_call_for_conversation = _fake_place_call
+
+    cr.build_audience(db, campaign)
+    cr.run_campaign_job(db, {"campaign_id": campaign.Id})
+
+    recipient = db.query(models.LeadCampaignRecipient).filter(
+        models.LeadCampaignRecipient.CampaignId == campaign.Id
+    ).one()
+    assert recipient.EmailMasked == mask_email("rani.shah@example.com")
+
+    # _place_call already created a Lead row for the fresh conversation — set
+    # its score/status/data points the way the real scoring pipeline would
+    # once the AI has actually talked to them.
+    lead = db.query(models.Lead).filter(models.Lead.ConversationId == recipient.ConversationId).one()
+    lead.Score = 88
+    lead.Status = "hot"
+    lead.Product = "Home Loan"
+    lead.DataPointsJson = {"budget": 4500000, "preferred_city": "Pune"}
+    db.commit()
+
+    execution_id = campaigns.list_campaign_executions(
+        campaign.Id, page=1, page_size=50, scope=(principal, client.Id), db=db
+    ).items[0].id
+    attempts = campaigns.list_campaign_execution_attempts(
+        campaign.Id, execution_id, page=1, page_size=50, status_filter=None,
+        scope=(principal, client.Id), db=db,
+    )
+    attempt = attempts.items[0]
+    assert attempt.name == "Rani Shah"
+    assert attempt.email_masked == mask_email("rani.shah@example.com")
+    assert attempt.lead_score == 88
+    assert attempt.lead_status == "hot"
+    assert attempt.product == "Home Loan"
+    assert attempt.data_points == {"budget": 4500000, "preferred_city": "Pune"}
+    assert attempt.call_status == "completed"
+    assert attempt.call_duration_sec == 97
+
+    # The live /recipients view (used while a campaign is still running)
+    # carries the same product the historical attempts view does.
+    recipients_page = campaigns.list_recipients(
+        campaign.Id, page=1, page_size=50, status_filter=None,
+        scope=(principal, client.Id), db=db,
+    )
+    assert recipients_page.items[0].product == "Home Loan"
+
+
+def test_list_campaigns_can_be_filtered_into_broadcast_vs_lead_campaign():
+    """A frontend wanting separate "broadcaster" and "batches" lists should
+    be able to get them from the one /campaigns endpoint via campaign_type,
+    rather than needing two different URLs."""
+    db, client, _campaign, principal = _setup_two_recipients("Kestrel Split")
+    db.add(models.LeadCampaign(ClientId=client.Id, Name="manual one", Kind="message", Channel="whatsapp",
+                               AudienceType="customers", CreatedVia="manual"))
+    db.add(models.LeadCampaign(ClientId=client.Id, Name="imported one", Kind="call", Channel="voice",
+                               AudienceType="list", CreatedVia="import"))
+    db.commit()
+
+    broadcasts = campaigns.list_campaigns(
+        page=1, page_size=50, status_filter=None, kind=None, campaign_type="broadcast",
+        scope=(principal, client.Id), db=db,
+    )
+    lead_campaigns = campaigns.list_campaigns(
+        page=1, page_size=50, status_filter=None, kind=None, campaign_type="lead_campaign",
+        scope=(principal, client.Id), db=db,
+    )
+    broadcast_names = {c.name for c in broadcasts.items}
+    lead_campaign_names = {c.name for c in lead_campaigns.items}
+    assert broadcast_names == {"c", "manual one"}
+    assert lead_campaign_names == {"imported one"}
 
 
 def test_a_cancelled_campaign_still_cannot_be_started():

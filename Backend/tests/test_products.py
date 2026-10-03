@@ -380,7 +380,9 @@ def test_create_and_update_product_description():
         products.update_product(
             product_id=out.id,
             request=None,
+            product_name=None,
             product_description="Updated coverage with dental and vision add-on.",
+            file=None,
             principal=principal,
             db=db,
         )

@@ -34,6 +34,7 @@ from ..db import get_leadai_db
 from ..models import (
     Lead,
     LeadCall,
+    LeadCampaign,
     LeadConversation,
     LeadCustomer,
     LeadMessage,
@@ -148,6 +149,16 @@ def list_conversations(
     campaign_id: str | None = Query(
         default=None, description="Only conversations produced by this campaign."
     ),
+    lead_source: str | None = Query(
+        default=None,
+        pattern="^(inbound|import|broadcast)$",
+        description=(
+            "inbound   = came in on its own (chat/call/social), no campaign behind it; "
+            "import    = produced by a lead-import batch (campaign.created_via == 'import'); "
+            "broadcast = produced by a manually-created campaign. "
+            "Omit to see everything, same as today."
+        ),
+    ),
     include_unreached: bool = Query(
         default=False,
         description=(
@@ -186,6 +197,15 @@ def list_conversations(
 
     if campaign_id:
         query = query.filter(LeadConversation.CampaignId == campaign_id)
+
+    if lead_source == "inbound":
+        query = query.filter(LeadConversation.CampaignId.is_(None))
+    elif lead_source in ("import", "broadcast"):
+        query = query.join(LeadCampaign, LeadCampaign.Id == LeadConversation.CampaignId)
+        if lead_source == "import":
+            query = query.filter(LeadCampaign.CreatedVia == "import")
+        else:
+            query = query.filter(LeadCampaign.CreatedVia != "import")
 
     if not include_unreached:
         query = query.filter(LeadConversation.MessageCount > 0)

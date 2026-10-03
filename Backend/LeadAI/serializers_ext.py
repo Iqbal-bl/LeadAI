@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from .config import settings
 from .models import (
+    Lead,
     LeadAccount,
     LeadAccountNote,
+    LeadCall,
     LeadCampaign,
     LeadCampaignExecution,
     LeadCampaignRecipient,
@@ -151,11 +153,12 @@ def campaign_out(row: LeadCampaign) -> CampaignOut:
     )
 
 
-def recipient_out(row: LeadCampaignRecipient) -> RecipientOut:
+def recipient_out(row: LeadCampaignRecipient, lead: Lead | None = None) -> RecipientOut:
     return RecipientOut(
         id=row.Id,
         name=row.Name,
         phone_masked=row.PhoneMasked,
+        email_masked=row.EmailMasked,
         status=row.Status,
         attempts=row.Attempts or 0,
         external_message_id=row.ExternalMessageId,
@@ -167,6 +170,7 @@ def recipient_out(row: LeadCampaignRecipient) -> RecipientOut:
         read_at=row.ReadAt,
         replied_at=row.RepliedAt,
         failure_reason=row.FailureReason,
+        product=(lead.Product or "unknown") if lead else None,
     )
 
 
@@ -186,13 +190,17 @@ def campaign_execution_out(row: LeadCampaignExecution) -> CampaignExecutionOut:
 
 
 def campaign_recipient_attempt_out(
-    row: LeadCampaignRecipientAttempt, recipient: LeadCampaignRecipient | None
+    row: LeadCampaignRecipientAttempt,
+    recipient: LeadCampaignRecipient | None,
+    lead: Lead | None = None,
+    call: LeadCall | None = None,
 ) -> CampaignRecipientAttemptOut:
     return CampaignRecipientAttemptOut(
         id=row.Id,
         recipient_id=row.RecipientId,
         name=recipient.Name if recipient else None,
         phone_masked=recipient.PhoneMasked if recipient else None,
+        email_masked=recipient.EmailMasked if recipient else None,
         status=row.Status,
         external_message_id=row.ExternalMessageId,
         sent_at=row.SentAt,
@@ -200,6 +208,12 @@ def campaign_recipient_attempt_out(
         read_at=row.ReadAt,
         replied_at=row.RepliedAt,
         failure_reason=row.FailureReason,
+        lead_score=lead.Score if lead else None,
+        lead_status=lead.Status if lead else None,
+        product=(lead.Product or "unknown") if lead else None,
+        data_points=lead.DataPointsJson if lead else None,
+        call_status=call.Status if call else None,
+        call_duration_sec=call.DurationSec if call else None,
     )
 
 
