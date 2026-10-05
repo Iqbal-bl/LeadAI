@@ -18,7 +18,7 @@ import {
   providedIn: 'root',
 })
 export class ChannelService {
-  constructor(private apiService: ApiService) {}
+  constructor(private apiService: ApiService) { }
 
   /** GET /channels — list all channels */
   public getChannels(): Observable<Channel[]> {
@@ -111,27 +111,24 @@ export class ChannelService {
     return this.updateChannel(accountId, { is_active: isActive });
   }
 
-  /** GET /channels/linkedin/status — check company LinkedIn profile connection status */
+  /** GET linkedin/status — check company LinkedIn profile connection status */
   public getLinkedInStatus(): Observable<LinkedInStatus> {
-    return this.apiService.get<LinkedInStatus>('channels/linkedin/status', {
+    return this.apiService.get<LinkedInStatus>('linkedin/status', {
       companyScoped: true,
     });
   }
 
-  /** GET /channels/linkedin/connect — get LinkedIn OAuth authorization URL */
+  /** GET linkedin/connect — get LinkedIn OAuth authorization URL */
   public getLinkedInConnectUrl(): Observable<{ authorize_url: string }> {
-    return this.apiService.get<{ authorize_url: string }>(
-      'channels/linkedin/connect',
-      {
-        companyScoped: true,
-      },
-    );
+    return this.apiService.get<{ authorize_url: string }>('linkedin/connect', {
+      companyScoped: true,
+    });
   }
 
-  /** POST /channels/linkedin/disconnect — remove/disconnect LinkedIn account */
+  /** POST linkedin/disconnect — remove/disconnect LinkedIn account */
   public disconnectLinkedIn(): Observable<{ ok: boolean }> {
     return this.apiService.post<{ ok: boolean }>(
-      'channels/linkedin/disconnect',
+      'linkedin/disconnect',
       {},
       {
         companyScoped: true,

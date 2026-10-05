@@ -3,6 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../services/auth.service';
 import { PermissionService } from '../../../services/permission.service';
 import { CommonLibService } from '../../../services/common-lib.service';
+import { BillingService } from '../../../services/billing.service';
 import { environment } from '../../../../environments/environment';
 import { first } from 'rxjs';
 
@@ -67,6 +68,7 @@ export class CallbackComponent implements OnInit {
   private router = inject(Router);
   private permissionService = inject(PermissionService);
   private commonLibService = inject(CommonLibService);
+  private billingService = inject(BillingService);
   error: any;
 
   ngOnInit() {
@@ -136,11 +138,31 @@ export class CallbackComponent implements OnInit {
                 if (me.has_active_subscription) {
                   this.router.navigate(['/client/dashboard']);
                 } else {
-                  this.router.navigate(['/plans']);
+                  this.billingService.getCurrentPlan().subscribe({
+                    next: (summary) => {
+                      const hasPlan = !!(
+                        summary?.active_recharge &&
+                        (summary.active_recharge.status === 'active' ||
+                          summary.active_recharge.status === 'exhausted')
+                      );
+                      this.router.navigate([hasPlan ? '/client/dashboard' : '/plans']);
+                    },
+                    error: () => this.router.navigate(['/plans']),
+                  });
                 }
               },
               error: () => {
-                this.router.navigate(['/plans']);
+                this.billingService.getCurrentPlan().subscribe({
+                  next: (summary) => {
+                    const hasPlan = !!(
+                      summary?.active_recharge &&
+                      (summary.active_recharge.status === 'active' ||
+                        summary.active_recharge.status === 'exhausted')
+                    );
+                    this.router.navigate([hasPlan ? '/client/dashboard' : '/plans']);
+                  },
+                  error: () => this.router.navigate(['/plans']),
+                });
               },
             });
           }

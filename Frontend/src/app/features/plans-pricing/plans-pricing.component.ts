@@ -108,85 +108,85 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
     string,
     { icon: string; color: string; defaultName: string; defaultDesc: string; defaultFeatures: string[] }
   > = {
-    whatsapp: {
-      icon: 'pi pi-whatsapp',
-      color: '#22c55e',
-      defaultName: 'WhatsApp Business API',
-      defaultDesc:
-        'Official Meta Cloud API integration for automated 24/7 lead chats and appointment scheduling.',
-      defaultFeatures: [
-        'Official Meta Cloud API webhook routing',
-        '24/7 AI conversational auto-replies',
-        'Instant qualification scorecard & handoff alerts',
-        '30-day recurring synchronization',
-      ],
-    },
-    instagram: {
-      icon: 'pi pi-instagram',
-      color: '#a855f7',
-      defaultName: 'Instagram DM Automation',
-      defaultDesc:
-        'Engage high-intent prospects reaching out via Instagram direct messages and reel comments.',
-      defaultFeatures: [
-        'Direct message automatic AI response funnel',
-        'Post and Story comment-to-DM triggers',
-        'Lead scoring and sentiment analysis',
-        '30-day recurring synchronization',
-      ],
-    },
-    facebook: {
-      icon: 'pi pi-facebook',
-      color: '#3b82f6',
-      defaultName: 'Facebook Messenger',
-      defaultDesc:
-        'Turn Facebook page visitors into qualified opportunities with zero response delay.',
-      defaultFeatures: [
-        'Business page inbox AI integration',
-        'Post comment auto-replies to Messenger',
-        'Multi-channel customer contact linking',
-        '30-day recurring synchronization',
-      ],
-    },
-    linkedin: {
-      icon: 'pi pi-linkedin',
-      color: '#0284c7',
-      defaultName: 'LinkedIn Lead Automation',
-      defaultDesc:
-        'Automate connection messaging, B2B lead qualification, and CRM syncing on LinkedIn.',
-      defaultFeatures: [
-        'B2B profile qualification & matching',
-        'Automated connection and InMail follow-ups',
-        'Real-time CRM contact creation',
-        '30-day recurring synchronization',
-      ],
-    },
-    blog: {
-      icon: 'pi pi-file-edit',
-      color: '#f59e0b',
-      defaultName: 'AI Blog & Content Automation',
-      defaultDesc:
-        'Automated SEO blog generation, Ghost/WordPress publishing, and high-ranking lead acquisition articles.',
-      defaultFeatures: [
-        'SEO-optimized long-form AI article generation',
-        'One-click WordPress & Ghost auto-publishing',
-        'Keyword intent scoring & organic lead capture',
-        '30-day recurring synchronization',
-      ],
-    },
-    voice_facilities: {
-      icon: 'pi pi-phone',
-      color: '#06b6d4',
-      defaultName: 'Voice Call Facilities',
-      defaultDesc:
-        'Dedicated virtual phone numbers, inbound IVR auto-receptionist, and smart multi-agent call routing.',
-      defaultFeatures: [
-        'Dedicated business virtual DID phone line',
-        'Inbound IVR auto-receptionist & smart menu',
-        'Live call transfers & agent hunt groups',
-        'High-fidelity audio & cloud call recordings',
-      ],
-    },
-  };
+      whatsapp: {
+        icon: 'pi pi-whatsapp',
+        color: '#22c55e',
+        defaultName: 'WhatsApp Business API',
+        defaultDesc:
+          'Official Meta Cloud API integration for automated 24/7 lead chats and appointment scheduling.',
+        defaultFeatures: [
+          'Official Meta Cloud API webhook routing',
+          '24/7 AI conversational auto-replies',
+          'Instant qualification scorecard & handoff alerts',
+          '30-day recurring synchronization',
+        ],
+      },
+      instagram: {
+        icon: 'pi pi-instagram',
+        color: '#a855f7',
+        defaultName: 'Instagram DM Automation',
+        defaultDesc:
+          'Engage high-intent prospects reaching out via Instagram direct messages and reel comments.',
+        defaultFeatures: [
+          'Direct message automatic AI response funnel',
+          'Post and Story comment-to-DM triggers',
+          'Lead scoring and sentiment analysis',
+          '30-day recurring synchronization',
+        ],
+      },
+      facebook: {
+        icon: 'pi pi-facebook',
+        color: '#3b82f6',
+        defaultName: 'Facebook Messenger',
+        defaultDesc:
+          'Turn Facebook page visitors into qualified opportunities with zero response delay.',
+        defaultFeatures: [
+          'Business page inbox AI integration',
+          'Post comment auto-replies to Messenger',
+          'Multi-channel customer contact linking',
+          '30-day recurring synchronization',
+        ],
+      },
+      linkedin: {
+        icon: 'pi pi-linkedin',
+        color: '#0284c7',
+        defaultName: 'LinkedIn Lead Automation',
+        defaultDesc:
+          'Automate connection messaging, B2B lead qualification, and CRM syncing on LinkedIn.',
+        defaultFeatures: [
+          'B2B profile qualification & matching',
+          'Automated connection and InMail follow-ups',
+          'Real-time CRM contact creation',
+          '30-day recurring synchronization',
+        ],
+      },
+      blog: {
+        icon: 'pi pi-file-edit',
+        color: '#f59e0b',
+        defaultName: 'AI Blog & Content Automation',
+        defaultDesc:
+          'Automated SEO blog generation, Ghost/WordPress publishing, and high-ranking lead acquisition articles.',
+        defaultFeatures: [
+          'SEO-optimized long-form AI article generation',
+          'One-click WordPress & Ghost auto-publishing',
+          'Keyword intent scoring & organic lead capture',
+          '30-day recurring synchronization',
+        ],
+      },
+      voice_facilities: {
+        icon: 'pi pi-phone',
+        color: '#06b6d4',
+        defaultName: 'Voice Call Facilities',
+        defaultDesc:
+          'Dedicated virtual phone numbers, inbound IVR auto-receptionist, and smart multi-agent call routing.',
+        defaultFeatures: [
+          'Dedicated business virtual DID phone line',
+          'Inbound IVR auto-receptionist & smart menu',
+          'Live call transfers & agent hunt groups',
+          'High-fidelity audio & cloud call recordings',
+        ],
+      },
+    };
 
   /** Omni-Channel Addon Options dynamically populated from API */
   public channelOptions: PricingChannelOption[] = [];
@@ -229,7 +229,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
             this.hasActivePlan = u.has_active_subscription;
           }
         },
-        error: () => {},
+        error: () => { },
       })
     );
   }
@@ -284,6 +284,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
           }
           if (this.hasActivePlan) {
             this.selectedChannelsMap = {};
+            this.autoSelectUpgradePlan();
           }
           this.isLoadingSummary = false;
         },
@@ -327,7 +328,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
 
           // Sort by price ascending: Start (500 Mins), Growth (1000 Mins)
           distinctPlans.sort((a, b) => a.price - b.price);
-          this.standardPlans = distinctPlans.slice(0, 2);
+          this.standardPlans = distinctPlans.slice(0, 5);
 
           if (this.standardPlans.length > 0 && this.standardPlans[0].rate_per_minute > 0) {
             this.customRatePerMinute = this.standardPlans[0].rate_per_minute;
@@ -412,13 +413,8 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
           });
           this.channelOptions = apiChannels;
 
-          // Pre-highlight the popular Growth plan (or first plan)
-          if (this.standardPlans.length > 1) {
-            this.selectedStandardPlan = this.standardPlans[1];
-          } else if (this.standardPlans.length > 0) {
-            this.selectedStandardPlan = this.standardPlans[0];
-          }
-          this.selectedPlanType = 'standard';
+          // Pre-highlight the popular Growth plan (or next upgrade tier if plan active)
+          this.autoSelectUpgradePlan();
           this.isLoadingPlans = false;
         },
         error: (err) => {
@@ -518,15 +514,100 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Checks if the given plan is the client's currently active plan.
+   */
+  public isCurrentPlan(plan: RechargePlanTemplate): boolean {
+    const active = this.currentSummary?.active_recharge;
+    if (!active) return false;
+    return (
+      active.plan_template_id === plan.id ||
+      (active.plan_name_snapshot || '').trim().toLowerCase() === (plan.name || '').trim().toLowerCase()
+    );
+  }
+
+  /**
+   * Checks if the given standard plan is a higher tier than current active plan.
+   */
+  public isHigherTier(plan: RechargePlanTemplate): boolean {
+    if (!this.hasActivePlan) return true;
+    if (this.isCurrentPlan(plan)) return false;
+    const active = this.currentSummary?.active_recharge;
+    if (!active) return true;
+    const activePaid = active.price_paid || 0;
+    const activeMinutes = active.purchased_minutes || 0;
+    return plan.price > activePaid || plan.included_minutes > activeMinutes;
+  }
+
+  /**
+   * Checks if custom/enterprise plan is higher tier than current active plan.
+   */
+  public isHigherTierCustom(): boolean {
+    if (!this.hasActivePlan) return true;
+    const active = this.currentSummary?.active_recharge;
+    if (!active) return true;
+    const activeMinutes = active.purchased_minutes || 0;
+    const activePaid = active.price_paid || 0;
+    const customPrice = this.customMinutes * this.customRatePerMinute;
+    return this.customMinutes > activeMinutes || customPrice > activePaid;
+  }
+
+  /**
+   * Checks if the currently selected configuration is an eligible upgrade.
+   */
+  public canUpgradeCurrentSelection(): boolean {
+    if (!this.hasActivePlan) return true;
+    if (this.selectedPlanType === 'standard') {
+      return !!this.selectedStandardPlan && this.isHigherTier(this.selectedStandardPlan);
+    }
+    if (this.selectedPlanType === 'custom') {
+      return this.isHigherTierCustom();
+    }
+    return false;
+  }
+
+  /**
+   * Auto-selects an upgrade plan or popular default.
+   */
+  public autoSelectUpgradePlan(): void {
+    if (!this.standardPlans || this.standardPlans.length === 0) return;
+    if (this.hasActivePlan) {
+      const upgradePlan = this.standardPlans.find((p) => this.isHigherTier(p));
+      if (upgradePlan) {
+        this.selectedStandardPlan = upgradePlan;
+        this.selectedPlanType = 'standard';
+        this.isPlanSelected = true;
+        return;
+      }
+    }
+    if (!this.selectedStandardPlan) {
+      if (this.standardPlans.length > 1) {
+        this.selectedStandardPlan = this.standardPlans[1];
+      } else if (this.standardPlans.length > 0) {
+        this.selectedStandardPlan = this.standardPlans[0];
+      }
+      this.selectedPlanType = 'standard';
+    }
+  }
+
+  /**
    * Selects a standard pre-configured master plan and reveals the Social Media Add-ons + Billing section.
    */
   public selectStandardPlan(plan: RechargePlanTemplate, scrollToAddons: boolean = true): void {
     if (this.hasActivePlan) {
-      this.toastService.warn(
-        'You already have an active subscription. Additional base plans cannot be purchased until renewal.',
-        'Active Plan Running'
-      );
-      return;
+      if (this.isCurrentPlan(plan)) {
+        this.toastService.info(
+          'This is your currently active subscription plan.',
+          'Current Plan'
+        );
+        return;
+      }
+      if (!this.isHigherTier(plan)) {
+        this.toastService.warn(
+          'You already have an active subscription with equal or higher quota.',
+          'Active Plan Running'
+        );
+        return;
+      }
     }
     this.selectedPlanType = 'standard';
     this.selectedStandardPlan = plan;
@@ -541,10 +622,10 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
    * Selects the Enterprise / Custom plan card and reveals the Social Media Add-ons + Billing section.
    */
   public selectCustomPlan(scrollToAddons: boolean = true): void {
-    if (this.hasActivePlan) {
+    if (this.hasActivePlan && !this.isHigherTierCustom()) {
       this.toastService.warn(
-        'You already have an active subscription. Additional base plans cannot be purchased until renewal.',
-        'Active Plan Running'
+        'Enterprise quota must exceed your current plan minutes to upgrade.',
+        'Custom Quota'
       );
       return;
     }
@@ -740,9 +821,9 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
    * Initiates recurring AutoPay subscription checkout via Razorpay.
    */
   public initiateAutoPayCheckout(): void {
-    if (this.hasActivePlan) {
+    if (this.hasActivePlan && !this.canUpgradeCurrentSelection()) {
       this.toastService.warn(
-        'You already have an active subscription. Additional plans cannot be purchased while your current plan is active.',
+        'You already have an active subscription with equal or higher quota.',
         'Active Plan Running'
       );
       return;

@@ -93,6 +93,8 @@ def me(
     effective_client_id = principal.client_id
     if client_id and (principal.is_platform_admin or client_id in (principal.accessible_client_ids or [])):
         effective_client_id = client_id
+    elif not effective_client_id and principal.accessible_client_ids:
+        effective_client_id = principal.accessible_client_ids[0]
 
     client_name = None
     if effective_client_id:
@@ -165,9 +167,10 @@ def update_profile(
         db.commit()
 
     # Re-fetch company details to construct updated MeOut
+    effective_client_id = principal.client_id or (principal.accessible_client_ids[0] if principal.accessible_client_ids else None)
     client_name = None
-    if principal.client_id:
-        client = db.get(Client, principal.client_id)
+    if effective_client_id:
+        client = db.get(Client, effective_client_id)
         client_name = client.Name if client else None
 
     companies: list[CompanyOut] = []
@@ -189,14 +192,14 @@ def update_profile(
         companies = [company_out(db, c, with_counts=False) for c in rows]
 
     has_active_subscription, active_subscription_plan, active_channels, active_features = _get_subscription_info(
-        db, principal, principal.client_id
+        db, principal, effective_client_id
     )
 
     return MeOut(
         email=principal.email,
         full_name=updated_name,
         role=principal.role,
-        client_id=principal.client_id,
+        client_id=effective_client_id,
         client_name=client_name,
         permissions=sorted(principal.permissions),
         accessible_companies=companies,
