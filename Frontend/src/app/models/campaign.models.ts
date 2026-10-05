@@ -145,6 +145,8 @@ export interface CampaignRecipient {
   identifier_masked: string;
   phone?: string | null;
   email?: string | null;
+  phone_masked?: string | null;
+  email_masked?: string | null;
   name: string | null;
   status: 'pending' | 'sent' | 'delivered' | 'failed' | 'replied';
   failure_reason?: string;
@@ -152,6 +154,8 @@ export interface CampaignRecipient {
   call_consent_status?: 'asked' | 'accepted' | 'declined' | 'not_yet_asked' | string | null;
   CallConsentStatus?: string | null;
   conversation_id?: string | null;
+  attempts?: number;
+  product?: string | null;
 }
 
 export interface CampaignBatchMeta {

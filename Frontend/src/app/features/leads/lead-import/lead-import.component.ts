@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { LeadImportService } from '../../../services/lead-import.service';
 import { ChannelService } from '../../../services/channel.service';
@@ -22,6 +22,8 @@ import { MessageService } from 'primeng/api';
   styleUrl: './lead-import.component.scss',
 })
 export class LeadImportComponent implements OnInit {
+  fromBatches = false;
+
   // Schema State
   schemaFields: LeadImportSchemaField[] = [];
   sampleCsvHeader = '';
@@ -34,10 +36,8 @@ export class LeadImportComponent implements OnInit {
 
   // Config State
   channel: 'chat' | 'call' | 'both' = 'chat';
-  chatChannel: 'whatsapp' | 'instagram' | 'messenger' = 'whatsapp';
+  chatChannel: 'whatsapp' = 'whatsapp';
   chatChannelAccountId = '';
-  instagramAccountId = '';
-  facebookAccountId = '';
   voiceScriptId = '';
   callEscalation = false;
 
@@ -57,9 +57,12 @@ export class LeadImportComponent implements OnInit {
     private scriptService: ScriptService,
     private messageService: MessageService,
     private router: Router,
+    private route: ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
+    this.fromBatches =
+      this.route.snapshot.queryParamMap.get('from') === 'batches';
     this.loadSchema();
     this.loadChannelsAndScripts();
   }
@@ -79,11 +82,9 @@ export class LeadImportComponent implements OnInit {
           { key: 'phone', label: 'Phone Number', data_type: 'text', required: false, source: 'fixed' },
           { key: 'email', label: 'Email', data_type: 'email', required: false, source: 'fixed' },
           { key: 'whatsapp', label: 'WhatsApp Number', data_type: 'text', required: false, source: 'fixed' },
-          { key: 'instagram_id', label: 'Instagram ID (IGSID)', data_type: 'text', required: false, source: 'fixed' },
-          { key: 'facebook_id', label: 'Facebook/Messenger ID (PSID)', data_type: 'text', required: false, source: 'fixed' },
           { key: 'product', label: 'Product', data_type: 'text', required: false, source: 'fixed' },
         ];
-        this.sampleCsvHeader = 'Name,Phone Number,Email,WhatsApp Number,Instagram ID (IGSID),Facebook/Messenger ID (PSID),Product';
+        this.sampleCsvHeader = 'Name,Phone Number,Email,WhatsApp Number,Product';
         this.isLoadingSchema = false;
       },
     });
@@ -123,19 +124,7 @@ export class LeadImportComponent implements OnInit {
 
   get accountsForChatChannel(): Channel[] {
     return this.channels.filter(
-      (c) => c.channel === this.chatChannel && c.is_active !== false,
-    );
-  }
-
-  get instagramAccounts(): Channel[] {
-    return this.channels.filter(
-      (c) => c.channel === 'instagram' && c.is_active !== false,
-    );
-  }
-
-  get facebookAccounts(): Channel[] {
-    return this.channels.filter(
-      (c) => c.channel === 'messenger' && c.is_active !== false,
+      (c) => c.channel === 'whatsapp' && c.is_active !== false,
     );
   }
 
@@ -204,7 +193,7 @@ export class LeadImportComponent implements OnInit {
 
   downloadSampleCsv(): void {
     if (!this.sampleCsvHeader) {
-      this.sampleCsvHeader = 'Name,Phone Number,Email,WhatsApp Number,Instagram ID (IGSID),Facebook/Messenger ID (PSID),Product,Budget';
+      this.sampleCsvHeader = 'Name,Phone Number,Email,WhatsApp Number,Product,Budget';
     }
     this.leadImportService.downloadSampleTemplate(this.sampleCsvHeader);
     this.messageService.add({
@@ -229,7 +218,7 @@ export class LeadImportComponent implements OnInit {
       this.messageService.add({
         severity: 'warn',
         summary: 'Connected Account Required',
-        detail: `Please select a connected ${this.chatChannel} account for messaging outreach.`,
+        detail: 'Please select a connected WhatsApp account for messaging outreach.',
       });
       return;
     }
@@ -240,15 +229,8 @@ export class LeadImportComponent implements OnInit {
     formData.append('channel', this.channel);
 
     if (this.channel === 'chat' || this.channel === 'both') {
-      formData.append('chat_channel', this.chatChannel);
+      formData.append('chat_channel', 'whatsapp');
       formData.append('chat_channel_account_id', this.chatChannelAccountId);
-    }
-
-    if (this.instagramAccountId) {
-      formData.append('instagram_account_id', this.instagramAccountId);
-    }
-    if (this.facebookAccountId) {
-      formData.append('facebook_account_id', this.facebookAccountId);
     }
 
     if (this.channel === 'call' || this.channel === 'both') {
@@ -290,7 +272,11 @@ export class LeadImportComponent implements OnInit {
   }
 
   goBackToLeads(): void {
-    this.router.navigate(['/client/leads']);
+    if (this.fromBatches) {
+      this.router.navigate(['/client/lead-batches']);
+    } else {
+      this.router.navigate(['/client/leads']);
+    }
   }
 
   goToCampaign(campaignId: string): void {
@@ -298,7 +284,7 @@ export class LeadImportComponent implements OnInit {
   }
 
   goToCampaignList(): void {
-    this.router.navigate(['/client/campaigns']);
+    this.router.navigate(['/client/lead-batches']);
   }
 
   getFileExt(filename?: string): string {

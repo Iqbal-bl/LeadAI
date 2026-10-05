@@ -1,68 +1,28 @@
-<div class="mb-6">
-  <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
-    Campaigns
-  </h1>
-  <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
-    Create, manage and monitor outreach campaigns
-  </p>
-</div>
-
-<!-- Actions Bar -->
-<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-  <!-- Tabs: Broadcasts vs Batches (Lead Campaigns) vs All -->
-  <div class="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 p-1 text-xs">
-    <button
-      type="button"
-      (click)="setTab('broadcast')"
-      class="px-3.5 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-      [ngClass]="selectedTab === 'broadcast' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
-    >
-      <i class="pi pi-megaphone text-[11px]"></i>
-      Broadcasts
-      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'broadcast' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
-        {{ selectedTab === 'broadcast' ? filteredCampaigns.length : broadcastCampaignsCount }}
-      </span>
-    </button>
-    <button
-      type="button"
-      (click)="setTab('lead_campaign')"
-      class="px-3.5 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-      [ngClass]="selectedTab === 'lead_campaign' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
-    >
-      <i class="pi pi-users text-[11px]"></i>
-      Batches
-      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'lead_campaign' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
-        {{ selectedTab === 'lead_campaign' ? filteredCampaigns.length : leadCampaignsCount }}
-      </span>
-    </button>
-    <button
-      type="button"
-      (click)="setTab('all')"
-      class="px-3 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-      [ngClass]="selectedTab === 'all' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
-    >
-      All
-      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'all' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
-        {{ campaigns.length }}
-      </span>
-    </button>
+<!-- Independent Lead Batches Page Header -->
+<div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+      Lead Batches
+    </h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+      Manage and monitor targeted lead campaign batches and imported segments
+    </p>
   </div>
-
   <div class="flex items-center gap-2.5">
     <p-button
       *appHasPermission="PERMISSIONS.CAMPAIGN_MANAGE"
-      label="New Campaign"
-      icon="pi pi-plus"
-      (onClick)="openCreate()"
+      label="Import Lead Batches"
+      icon="pi pi-upload"
+      (onClick)="goToImport()"
       [rounded]="true"
     ></p-button>
   </div>
 </div>
 
-<!-- Campaign Table -->
+<!-- Batches Table -->
 <div class="card-base overflow-hidden">
   <p-table
-    [value]="filteredCampaigns"
+    [value]="campaigns"
     [loading]="loading"
     [paginator]="true"
     [rows]="10"
@@ -95,9 +55,9 @@
             <div class="flex items-center gap-2 flex-wrap">
               <span class="font-medium" style="color: var(--app-text)">{{ campaign.name }}</span>
               <p-tag
-                [value]="getCampaignTypeBadge(campaign).label"
-                [severity]="getCampaignTypeBadge(campaign).severity"
-                [icon]="getCampaignTypeBadge(campaign).icon"
+                value="Lead Campaign"
+                severity="info"
+                icon="pi pi-users"
                 [rounded]="true"
                 class="text-[10px]"
               ></p-tag>
@@ -194,14 +154,14 @@
         <td colspan="8">
           <div class="flex flex-col items-center justify-center py-12 gap-3">
             <i
-              class="pi pi-megaphone text-4xl"
+              class="pi pi-users text-4xl"
               style="color: var(--app-text-muted)"
             ></i>
             <p class="text-lg font-medium" style="color: var(--app-text-muted)">
-              No campaigns yet
+              No campaign batches yet
             </p>
             <p class="text-sm" style="color: var(--app-text-muted)">
-              Create your first campaign to reach out to leads and customers
+              Import leads or create a campaign batch to reach targeted product groups
             </p>
           </div>
         </td>
@@ -209,17 +169,6 @@
     </ng-template>
   </p-table>
 </div>
-
-<!-- Create / Edit Dialog -->
-<app-campaign-create
-  *ngIf="showCreate"
-  [visible]="showCreate"
-  [campaign]="selectedCampaignForEdit"
-  [audienceId]="selectedAudienceId"
-  (complete)="onCreateComplete()"
-  (close)="onCreateClose()"
->
-</app-campaign-create>
 
 <!-- Preview Dialog -->
 <p-dialog
@@ -424,3 +373,14 @@
 
 <!-- Row Actions Context Menu -->
 <p-menu #campaignRowMenu [popup]="true" appendTo="body" [model]="campaignRowMenuItems"></p-menu>
+
+<!-- Create / Edit Dialog -->
+<app-campaign-create
+  *ngIf="showCreate"
+  [visible]="showCreate"
+  [campaign]="selectedCampaignForEdit"
+  [audienceId]="selectedAudienceId"
+  (complete)="onCreateComplete()"
+  (close)="onCreateClose()"
+>
+</app-campaign-create>

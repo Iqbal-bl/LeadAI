@@ -494,16 +494,16 @@ export class LayoutService {
       // Outreach & Campaigns Section
       const outreachItems: MenuItem[] = [
         {
-          label: 'Campaigns',
+          label: 'BroadCasts',
           icon: 'pi pi-megaphone',
           routerLink: '/client/campaigns',
           permission: 'campaign.read',
         },
         {
-          label: 'Import Leads & Batches',
-          icon: 'pi pi-cloud-upload',
-          routerLink: '/client/campaigns/import',
-          permission: 'campaign.manage',
+          label: 'Lead Batches',
+          icon: 'pi pi-users',
+          routerLink: '/client/lead-batches',
+          permission: 'lead.read.all',
         },
       ];
       if (this.authService.hasFeature('linkedin')) {

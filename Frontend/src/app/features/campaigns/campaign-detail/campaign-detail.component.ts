@@ -24,6 +24,7 @@ import {
   LeadConversationsComponent,
   CallMetadataInfo,
 } from '../../leads/components/lead-conversations/lead-conversations.component';
+import { Location } from '@angular/common';
 
 @Component({
   selector: 'app-campaign-detail',
@@ -103,6 +104,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     private voiceService: VoiceService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
+    public location: Location,
   ) {}
 
   ngOnInit(): void {
@@ -189,6 +191,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
         if (
           this.campaign?.status === 'running' ||
+          this.campaign?.status === 'queued' ||
           this.campaign?.status === 'building'
         ) {
           this.startPolling(id);
@@ -226,16 +229,18 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
   loadRecipients(id: string): void {
     this.recipientsLoading = true;
-    this.campaignService.getRecipients(id, this.recipientStatusFilter || undefined).subscribe({
-      next: (res: any) => {
-        this.allRecipients = Array.isArray(res) ? res : res?.items || [];
-        this.recipientsLoading = false;
-      },
-      error: () => {
-        this.allRecipients = [];
-        this.recipientsLoading = false;
-      },
-    });
+    this.campaignService
+      .getRecipients(id, this.recipientStatusFilter || undefined)
+      .subscribe({
+        next: (res: any) => {
+          this.allRecipients = Array.isArray(res) ? res : res?.items || [];
+          this.recipientsLoading = false;
+        },
+        error: () => {
+          this.allRecipients = [];
+          this.recipientsLoading = false;
+        },
+      });
   }
 
   onRecipientStatusChange(): void {
@@ -261,9 +266,13 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   }
 
   get deferredResumeTime(): string | null {
-    const match = (this.campaign?.status_message || '').match(/resumes\s+([0-9:]+)/i);
+    const match = (this.campaign?.status_message || '').match(
+      /resumes\s+([0-9:]+)/i,
+    );
     if (match) return match[1];
-    const deferredEvent = this.historyItems.find((h) => h.action === 'campaign.deferred');
+    const deferredEvent = this.historyItems.find(
+      (h) => h.action === 'campaign.deferred',
+    );
     if (deferredEvent?.meta?.resume_at) {
       return deferredEvent.meta.resume_at;
     }
@@ -349,6 +358,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
           }
           if (
             this.campaign?.status !== 'running' &&
+            this.campaign?.status !== 'queued' &&
             this.campaign?.status !== 'building'
           ) {
             this.stopPolling();
@@ -404,7 +414,23 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
   canStartCampaign(): boolean {
     const s = this.campaign?.status;
-    return s === 'ready' || s === 'scheduled';
+    const totalCount =
+      this.campaign?.total_count ?? this.campaign?.counters?.total ?? 0;
+
+    // Don't show when status is running, queued, or paused
+    if (s === 'running' || s === 'queued' || s === 'paused') {
+      return false;
+    }
+
+    // Show when status is "draft" (first run) or "completed"/"cancelled" (restart), and total_count > 0
+    return (
+      (s === 'draft' ||
+        s === 'ready' ||
+        s === 'scheduled' ||
+        s === 'completed' ||
+        s === 'cancelled') &&
+      totalCount > 0
+    );
   }
 
   loadExecutions(id: string): void {
@@ -427,9 +453,13 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
   updateStartModeMenu(): void {
     const failedCount =
-      this.campaign?.counters?.failed ?? (this.campaign as any)?.failed_count ?? 0;
+      this.campaign?.counters?.failed ??
+      (this.campaign as any)?.failed_count ??
+      0;
     const queuedCount =
-      this.campaign?.counters?.queued ?? (this.campaign as any)?.queued_count ?? 0;
+      this.campaign?.counters?.queued ??
+      (this.campaign as any)?.queued_count ??
+      0;
 
     this.startModeMenuItems = [
       {
@@ -469,40 +499,51 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   }
 
   onAccordionValueChange(val: any): void {
-    const ids: string[] = Array.isArray(val) ? val : (val ? [val] : []);
+    const ids: string[] = Array.isArray(val) ? val : val ? [val] : [];
     this.expandedExecutionIds = ids;
     for (const id of ids) {
-      if (id && this.executionAttempts[id] === undefined && !this.executionAttemptsLoading[id]) {
+      if (
+        id &&
+        this.executionAttempts[id] === undefined &&
+        !this.executionAttemptsLoading[id]
+      ) {
         this.loadExecutionAttempts(id);
       }
     }
   }
 
   loadExecutionAttempts(executionId: string, force: boolean = false): void {
-    const campaignId = this.campaign?.id || this.route.snapshot.paramMap.get('id');
+    const campaignId =
+      this.campaign?.id || this.route.snapshot.paramMap.get('id');
     if (!campaignId || !executionId) return;
     if (!force && this.executionAttempts[executionId] !== undefined) return;
 
     this.executionAttemptsLoading[executionId] = true;
     this.executionAttemptsError[executionId] = null;
 
-    this.campaignService.getExecutionAttempts(campaignId, executionId).subscribe({
-      next: (res: CampaignExecutionAttemptsResponse) => {
-        this.executionAttempts[executionId] = res.items || [];
-        this.executionAttemptsLoading[executionId] = false;
-      },
-      error: (err: any) => {
-        this.executionAttempts[executionId] = [];
-        this.executionAttemptsLoading[executionId] = false;
-        this.executionAttemptsError[executionId] =
-          err?.error?.detail || 'Failed to load call attempts for this execution run.';
-      },
-    });
+    this.campaignService
+      .getExecutionAttempts(campaignId, executionId)
+      .subscribe({
+        next: (res: CampaignExecutionAttemptsResponse) => {
+          this.executionAttempts[executionId] = res.items || [];
+          this.executionAttemptsLoading[executionId] = false;
+        },
+        error: (err: any) => {
+          this.executionAttempts[executionId] = [];
+          this.executionAttemptsLoading[executionId] = false;
+          this.executionAttemptsError[executionId] =
+            err?.error?.detail ||
+            'Failed to load call attempts for this execution run.';
+        },
+      });
   }
 
   getTranscriptDialogHeader(): string {
     const name = this.selectedAttemptForTranscript?.name;
-    const mode = this.activeTranscript?.mode === 'ai_voice' ? 'AI Voice Agent' : 'Human Specialist';
+    const mode =
+      this.activeTranscript?.mode === 'ai_voice'
+        ? 'AI Voice Agent'
+        : 'Human Specialist';
     let title = 'Call Transcript';
     if (name) {
       title += ` — ${name}`;
@@ -514,12 +555,24 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   }
 
   get callMetadataForDialog(): CallMetadataInfo | null {
-    if (!this.activeTranscript && !this.selectedAttemptForTranscript) return null;
+    if (!this.activeTranscript && !this.selectedAttemptForTranscript)
+      return null;
     return {
-      status: this.activeTranscript?.status || this.selectedAttemptForTranscript?.call_status || undefined,
-      duration: this.formatDuration(this.activeTranscript?.duration_sec ?? this.selectedAttemptForTranscript?.call_duration_sec ?? 0),
-      phone: this.activeTranscript?.phone_masked || this.selectedAttemptForTranscript?.phone_masked || undefined,
-      initiatedBy: this.activeTranscript?.initiated_by_email || 'Voice Campaign',
+      status:
+        this.activeTranscript?.status ||
+        this.selectedAttemptForTranscript?.call_status ||
+        undefined,
+      duration: this.formatDuration(
+        this.activeTranscript?.duration_sec ??
+          this.selectedAttemptForTranscript?.call_duration_sec ??
+          0,
+      ),
+      phone:
+        this.activeTranscript?.phone_masked ||
+        this.selectedAttemptForTranscript?.phone_masked ||
+        undefined,
+      initiatedBy:
+        this.activeTranscript?.initiated_by_email || 'Voice Campaign',
       language: this.activeTranscript?.language || undefined,
     };
   }
@@ -529,7 +582,8 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       this.messageService.add({
         severity: 'warn',
         summary: 'No Call Session',
-        detail: 'No call recording or external session ID was recorded for this recipient.',
+        detail:
+          'No call recording or external session ID was recorded for this recipient.',
       });
       return;
     }
@@ -544,14 +598,18 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       next: (transcript) => {
         this.activeTranscript = transcript;
         this.transcriptLoading = false;
-        this.dialogConversations = this.buildConversationsFromTranscript(transcript, attempt);
+        this.dialogConversations = this.buildConversationsFromTranscript(
+          transcript,
+          attempt,
+        );
       },
       error: (err: any) => {
         this.transcriptLoading = false;
         this.messageService.add({
           severity: 'error',
           summary: 'Transcript Error',
-          detail: err?.error?.detail || 'Could not load conversation transcript.',
+          detail:
+            err?.error?.detail || 'Could not load conversation transcript.',
         });
       },
     });
@@ -563,11 +621,18 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   ): any[] {
     const list: any[] = [];
     const sid = transcript.call_sid || attempt?.external_message_id || null;
-    const recipientName = attempt?.name || transcript.phone_masked || 'Customer';
+    const recipientName =
+      attempt?.name || transcript.phone_masked || 'Customer';
 
     // System summary event for the call
-    const statusText = (transcript.status || attempt?.call_status || 'completed').toUpperCase();
-    const durationText = this.formatDuration(transcript.duration_sec ?? attempt?.call_duration_sec ?? 0);
+    const statusText = (
+      transcript.status ||
+      attempt?.call_status ||
+      'completed'
+    ).toUpperCase();
+    const durationText = this.formatDuration(
+      transcript.duration_sec ?? attempt?.call_duration_sec ?? 0,
+    );
     list.push({
       id: 'call-start',
       sender: 'system',
@@ -607,7 +672,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return `${mins}m ${secs.toString().padStart(2, '0')}s`;
   }
 
-  getCallStatusSeverity(status: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  getCallStatusSeverity(
+    status: string | null | undefined,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
     switch ((status || '').toLowerCase()) {
       case 'completed':
         return 'success';
@@ -625,7 +692,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     }
   }
 
-  getLeadStatusSeverity(status: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  getLeadStatusSeverity(
+    status: string | null | undefined,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
     switch ((status || '').toLowerCase()) {
       case 'hot':
         return 'danger';
@@ -676,8 +745,8 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       mode === 'failed_only'
         ? 'retry failed recipients only'
         : mode === 'pending_only'
-        ? 'resume pending recipients only'
-        : 'all recipients';
+          ? 'resume pending recipients only'
+          : 'all recipients';
 
     this.confirmationService.confirm({
       message: `Start sending to ${modeLabel}? This action spends money and reaches real people.`,
@@ -695,13 +764,17 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
               detail: `Campaign started with mode: ${mode}.`,
             });
             this.loadCampaign(this.campaign!.id);
+            this.loadExecutions(this.campaign!.id);
           },
           error: (err) => {
             this.startingCampaign = false;
             this.messageService.add({
               severity: 'error',
               summary: 'Start Failed',
-              detail: err.error?.detail || err.message || 'Failed to start campaign with selected mode.',
+              detail:
+                err.error?.detail ||
+                err.message ||
+                'Failed to start campaign with selected mode.',
             });
           },
         });
@@ -807,7 +880,8 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
                 this.messageService.add({
                   severity: 'error',
                   summary: 'Start Failed',
-                  detail: err?.message || 'Could not start campaign after build.',
+                  detail:
+                    err?.message || 'Could not start campaign after build.',
                 });
               },
             });
@@ -854,12 +928,17 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return this.allRecipients.filter(
       (r) =>
         (r.name && r.name.toLowerCase().includes(q)) ||
-        (r.identifier_masked && r.identifier_masked.toLowerCase().includes(q)) ||
-        (r.status && r.status.toLowerCase().includes(q))
+        (r.identifier_masked &&
+          r.identifier_masked.toLowerCase().includes(q)) ||
+        (r.status && r.status.toLowerCase().includes(q)),
     );
   }
 
-  openRecipientMenu(event: Event, recipient: CampaignRecipient, menu: any): void {
+  openRecipientMenu(
+    event: Event,
+    recipient: CampaignRecipient,
+    menu: any,
+  ): void {
     this.selectedRecipientForTranscript = recipient;
     this.activeRecipientMenuItems = [
       {
@@ -959,28 +1038,60 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
   getExecutionStatusSeverity(): string {
     const s = (this.campaign?.status || '').toLowerCase();
-    if (s === 'completed') return 'bg-emerald-50 text-emerald-600 border border-emerald-200';
-    if (s === 'running') return 'bg-blue-50 text-blue-600 border border-blue-200';
+    if (s === 'completed')
+      return 'bg-emerald-50 text-emerald-600 border border-emerald-200';
+    if (s === 'running')
+      return 'bg-blue-50 text-blue-600 border border-blue-200';
     return 'bg-rose-50 text-rose-600 border border-rose-200';
   }
 
-  getTranscriptMessages(recipient: CampaignRecipient | null): { speaker: 'agent' | 'user'; text: string; time: string }[] {
+  getTranscriptMessages(
+    recipient: CampaignRecipient | null,
+  ): { speaker: 'agent' | 'user'; text: string; time: string }[] {
     const name = recipient?.name || 'Lead';
     const product = this.campaign?.product_name || 'Commercial Plots';
     return [
-      { speaker: 'agent', text: `Hello, may I speak with ${name}? I'm calling from LeadAI regarding your inquiry about ${product}.`, time: '0:02' },
-      { speaker: 'user', text: `Yes, speaking. Thanks for reaching out. What are the available details and pricing?`, time: '0:08' },
-      { speaker: 'agent', text: `Great! We have prime commercial units available with tailored payment structures. Would you like to schedule an in-person viewing or have the property specifications sent to your WhatsApp?`, time: '0:18' },
-      { speaker: 'user', text: `Please send the specifications to WhatsApp, and we can discuss scheduling next week.`, time: '0:26' },
-      { speaker: 'agent', text: `Perfect! I've logged your preference and will dispatch the catalog immediately. Have a wonderful day!`, time: '0:33' },
+      {
+        speaker: 'agent',
+        text: `Hello, may I speak with ${name}? I'm calling from LeadAI regarding your inquiry about ${product}.`,
+        time: '0:02',
+      },
+      {
+        speaker: 'user',
+        text: `Yes, speaking. Thanks for reaching out. What are the available details and pricing?`,
+        time: '0:08',
+      },
+      {
+        speaker: 'agent',
+        text: `Great! We have prime commercial units available with tailored payment structures. Would you like to schedule an in-person viewing or have the property specifications sent to your WhatsApp?`,
+        time: '0:18',
+      },
+      {
+        speaker: 'user',
+        text: `Please send the specifications to WhatsApp, and we can discuss scheduling next week.`,
+        time: '0:26',
+      },
+      {
+        speaker: 'agent',
+        text: `Perfect! I've logged your preference and will dispatch the catalog immediately. Have a wonderful day!`,
+        time: '0:33',
+      },
     ];
   }
 
-  getCampaignTypeBadge(): { label: string; severity: 'info' | 'secondary'; icon: string } {
+  getCampaignTypeBadge(): {
+    label: string;
+    severity: 'info' | 'secondary';
+    icon: string;
+  } {
     if (this.isLeadCampaign()) {
       return { label: 'Lead Campaign', severity: 'info', icon: 'pi pi-users' };
     }
-    return { label: 'Broadcast', severity: 'secondary', icon: 'pi pi-megaphone' };
+    return {
+      label: 'Broadcast',
+      severity: 'secondary',
+      icon: 'pi pi-megaphone',
+    };
   }
 
   getCallConsentStatus(recipient: CampaignRecipient): string {
@@ -989,7 +1100,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return String(raw).toLowerCase().trim();
   }
 
-  getConsentSeverity(status: string): 'success' | 'danger' | 'info' | 'warn' | 'secondary' {
+  getConsentSeverity(
+    status: string,
+  ): 'success' | 'danger' | 'info' | 'warn' | 'secondary' {
     switch (status) {
       case 'accepted':
         return 'success';
@@ -1013,10 +1126,6 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       default:
         return 'Not Yet Asked';
     }
-  }
-
-  goBack(): void {
-    this.router.navigate(['/client/campaigns']);
   }
 
   getProgressPercent(): number {
@@ -1044,7 +1153,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return map[severity] || map['info'];
   }
 
-  getStatusSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  getStatusSeverity(
+    status: string,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
     switch ((status || '').toLowerCase()) {
       case 'running':
       case 'sent':
@@ -1097,7 +1208,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return map[action] || 'pi pi-info-circle';
   }
 
-  getActionSeverity(action: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  getActionSeverity(
+    action: string,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
     switch (action) {
       case 'campaign.started':
       case 'campaign.resumed':

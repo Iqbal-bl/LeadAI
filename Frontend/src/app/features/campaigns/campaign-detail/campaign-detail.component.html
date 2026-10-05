@@ -7,244 +7,331 @@
 
 <div *ngIf="!loading && campaign" class="space-y-6">
   <!-- Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div class="flex items-center gap-3">
-        <p-button
-          icon="pi pi-arrow-left"
-          [rounded]="true"
-          [text]="true"
-          severity="secondary"
-          (onClick)="goBack()"
-        ></p-button>
-        <div>
-          <div class="flex items-center gap-3 flex-wrap">
-            <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
-              {{ campaign.name }}
-            </h1>
-            <p-tag
-              [value]="campaign.status | titlecase"
-              [severity]="getStatusSeverity(campaign.status)"
-              [rounded]="true"
-            ></p-tag>
-            <p-tag
-              [value]="getCampaignTypeBadge().label"
-              [severity]="getCampaignTypeBadge().severity"
-              [icon]="getCampaignTypeBadge().icon"
-              [rounded]="true"
-            ></p-tag>
-            <p-tag
-              *ngIf="campaign.product_name"
-              [value]="campaign.product_name"
-              severity="info"
-              icon="pi pi-box"
-              [rounded]="true"
-            ></p-tag>
-          </div>
-          <div class="flex items-center gap-2 mt-1 text-sm flex-wrap" style="color: var(--app-text-muted)">
-            <span *ngIf="campaign.status_message" class="font-medium text-slate-700 dark:text-slate-300">
-              {{ campaign.status_message }}
-            </span>
-            <span *ngIf="campaign.status_message">·</span>
-            <span class="capitalize">{{ campaign.channel || '—' }}</span>
+  <div
+    class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+  >
+    <div class="flex items-center gap-3">
+      <p-button
+        icon="pi pi-arrow-left"
+        [rounded]="true"
+        [text]="true"
+        severity="secondary"
+        (onClick)="location.back()"
+      ></p-button>
+      <div>
+        <div class="flex items-center gap-3 flex-wrap">
+          <h1
+            class="text-2xl font-bold tracking-tight"
+            style="color: var(--app-text)"
+          >
+            {{ campaign.name }}
+          </h1>
+          <p-tag
+            [value]="campaign.status | titlecase"
+            [severity]="getStatusSeverity(campaign.status)"
+            [rounded]="true"
+          ></p-tag>
+          <p-tag
+            [value]="getCampaignTypeBadge().label"
+            [severity]="getCampaignTypeBadge().severity"
+            [icon]="getCampaignTypeBadge().icon"
+            [rounded]="true"
+          ></p-tag>
+          <p-tag
+            *ngIf="campaign.product_name"
+            [value]="campaign.product_name"
+            severity="info"
+            icon="pi pi-box"
+            [rounded]="true"
+          ></p-tag>
+        </div>
+        <div
+          class="flex items-center gap-2 mt-1 text-sm flex-wrap"
+          style="color: var(--app-text-muted)"
+        >
+          <span
+            *ngIf="campaign.status_message"
+            class="font-medium text-slate-700 dark:text-slate-300"
+          >
+            {{ campaign.status_message }}
+          </span>
+          <span *ngIf="campaign.status_message">·</span>
+          <span class="capitalize">{{ campaign.channel || "—" }}</span>
+          <span>·</span>
+          <span class="capitalize">{{ campaign.kind || "—" }}</span>
+          <ng-container *ngIf="campaign.kind === 'call'">
             <span>·</span>
-            <span class="capitalize">{{ campaign.kind || '—' }}</span>
-            <ng-container *ngIf="campaign.kind === 'call'">
-              <span>·</span>
-              <span class="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 text-xs">
-                <i class="pi pi-phone text-[10px]"></i>
-                Max Simultaneous Calls: {{ campaign.concurrency ?? 5 }}
-              </span>
-            </ng-container>
-          </div>
+            <span
+              class="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 text-xs"
+            >
+              <i class="pi pi-phone text-[10px]"></i>
+              Max Simultaneous Calls: {{ campaign.concurrency ?? 5 }}
+            </span>
+          </ng-container>
         </div>
-      </div>
-
-      <!-- Header Action Buttons (Start / Restart with Mode Picker) -->
-      <div class="flex flex-wrap items-center gap-2">
-        <p-button
-          label="Edit"
-          icon="pi pi-pencil"
-          severity="secondary"
-          size="small"
-          [outlined]="true"
-          [disabled]="campaign.status === 'running'"
-          [pTooltip]="campaign.status === 'running' ? 'Pause the campaign before editing' : 'Edit campaign settings'"
-          (onClick)="openEditDialog()"
-        ></p-button>
-
-        <p-button
-          *ngIf="campaign.status === 'draft'"
-          label="Build Audience"
-          icon="pi pi-cog"
-          severity="info"
-          size="small"
-          (onClick)="buildCampaign()"
-        ></p-button>
-
-        <!-- Start / Restart with Mode Options when prior executions exist -->
-        <div *ngIf="hasPriorExecutions" class="inline-flex rounded-lg shadow-xs">
-          <p-button
-            label="Restart"
-            icon="pi pi-replay"
-            size="small"
-            [disabled]="!canSend || startingCampaign"
-            [loading]="startingCampaign"
-            (onClick)="startCampaign('all')"
-          ></p-button>
-          <p-button
-            icon="pi pi-chevron-down"
-            size="small"
-            [disabled]="!canSend || startingCampaign"
-            pTooltip="Choose Restart Mode"
-            (onClick)="openStartMenu($event, detailStartMenu)"
-          ></p-button>
-        </div>
-
-        <!-- First-time start -->
-        <p-button
-          *ngIf="!hasPriorExecutions && canStartCampaign()"
-          label="Start Campaign"
-          icon="pi pi-send"
-          size="small"
-          [loading]="startingCampaign"
-          [disabled]="!canSend || startingCampaign"
-          (onClick)="startCampaign('all')"
-        ></p-button>
-
-        <p-button
-          *ngIf="campaign.status === 'running'"
-          label="Pause"
-          icon="pi pi-pause"
-          severity="warn"
-          size="small"
-          (onClick)="pauseCampaign()"
-        ></p-button>
-
-        <p-button
-          *ngIf="campaign.status === 'paused'"
-          label="Resume"
-          icon="pi pi-play"
-          severity="success"
-          size="small"
-          (onClick)="resumeCampaign()"
-        ></p-button>
-
-        <p-button
-          *ngIf="campaign.status === 'running' || campaign.status === 'paused'"
-          label="Cancel"
-          icon="pi pi-times"
-          severity="danger"
-          size="small"
-          [outlined]="true"
-          (onClick)="cancelCampaign()"
-        ></p-button>
       </div>
     </div>
 
-    <!-- Delivery Statistics -->
-    <div class="card-base p-5">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-base font-semibold" style="color: var(--app-text)">
-          <i class="pi pi-chart-bar mr-2 text-blue-500"></i>Delivery & Campaign Statistics
-        </h2>
+    <!-- Header Action Buttons (Start / Restart with Mode Picker) -->
+    <div class="flex flex-wrap items-center gap-2">
+      <p-button
+        label="Edit"
+        icon="pi pi-pencil"
+        severity="secondary"
+        size="small"
+        [outlined]="true"
+        [disabled]="campaign.status === 'running' || campaign.status === 'queued'"
+        [pTooltip]="
+          campaign.status === 'running' || campaign.status === 'queued'
+            ? 'Pause the campaign before editing'
+            : 'Edit campaign settings'
+        "
+        (onClick)="openEditDialog()"
+      ></p-button>
+
+      <!-- Build Audience (when draft and not yet built) -->
+      <p-button
+        *ngIf="campaign.status === 'draft' && (campaign.total_count ?? campaign.counters?.total ?? 0) === 0"
+        label="Build Audience"
+        icon="pi pi-cog"
+        severity="info"
+        size="small"
+        (onClick)="buildCampaign()"
+      ></p-button>
+
+      <!-- Rebuild Audience (optional secondary button when already built) -->
+      <p-button
+        *ngIf="campaign.status === 'draft' && (campaign.total_count ?? campaign.counters?.total ?? 0) > 0"
+        label="Rebuild Audience"
+        icon="pi pi-refresh"
+        severity="secondary"
+        [outlined]="true"
+        size="small"
+        pTooltip="Re-materialise recipient list if source data changed"
+        (onClick)="buildCampaign()"
+      ></p-button>
+
+      <!-- Start / Restart with Mode Options when prior executions exist -->
+      <div *ngIf="hasPriorExecutions && canStartCampaign()" class="inline-flex rounded-lg shadow-xs">
+        <p-button
+          label="Restart"
+          icon="pi pi-replay"
+          size="small"
+          [disabled]="!canSend || startingCampaign"
+          [loading]="startingCampaign"
+          (onClick)="startCampaign('all')"
+        ></p-button>
+        <p-button
+          icon="pi pi-chevron-down"
+          size="small"
+          [disabled]="!canSend || startingCampaign"
+          pTooltip="Choose Restart Mode"
+          (onClick)="openStartMenu($event, detailStartMenu)"
+        ></p-button>
+      </div>
+
+      <!-- First-time start -->
+      <p-button
+        *ngIf="!hasPriorExecutions && canStartCampaign()"
+        label="Start Campaign"
+        icon="pi pi-send"
+        size="small"
+        [loading]="startingCampaign"
+        [disabled]="!canSend || startingCampaign"
+        (onClick)="startCampaign('all')"
+      ></p-button>
+
+      <p-button
+        *ngIf="campaign.status === 'running' || campaign.status === 'queued'"
+        label="Pause"
+        icon="pi pi-pause"
+        severity="warn"
+        size="small"
+        (onClick)="pauseCampaign()"
+      ></p-button>
+
+      <p-button
+        *ngIf="campaign.status === 'paused'"
+        label="Resume"
+        icon="pi pi-play"
+        severity="success"
+        size="small"
+        (onClick)="resumeCampaign()"
+      ></p-button>
+
+      <p-button
+        *ngIf="campaign.status === 'running' || campaign.status === 'queued' || campaign.status === 'paused'"
+        label="Cancel"
+        icon="pi pi-times"
+        severity="danger"
+        size="small"
+        [outlined]="true"
+        (onClick)="cancelCampaign()"
+      ></p-button>
+    </div>
+  </div>
+
+  <!-- Delivery Statistics -->
+  <div class="card-base p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-base font-semibold" style="color: var(--app-text)">
+        <i class="pi pi-chart-bar mr-2 text-blue-500"></i>Delivery & Campaign
+        Statistics
+      </h2>
+    </div>
+
+    <div
+      class="grid grid-cols-2 sm:grid-cols-4 gap-3"
+      [ngClass]="campaign.kind === 'call' ? 'lg:grid-cols-8' : 'lg:grid-cols-7'"
+    >
+      <div
+        class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl"
+      >
+        <p class="text-xl font-bold" style="color: var(--app-text)">
+          {{ campaign.total_count ?? campaign.counters?.total ?? 0 | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">
+          Total
+        </p>
       </div>
 
       <div
-        class="grid grid-cols-2 sm:grid-cols-4 gap-3"
-        [ngClass]="campaign.kind === 'call' ? 'lg:grid-cols-8' : 'lg:grid-cols-7'"
+        class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl"
       >
-        <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl">
-          <p class="text-xl font-bold" style="color: var(--app-text)">
-            {{ (campaign.total_count ?? campaign.counters?.total ?? 0) | number }}
-          </p>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">Total</p>
-        </div>
+        <p class="text-xl font-bold text-amber-500">
+          {{ campaign.queued_count ?? 0 | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">
+          Queued
+        </p>
+      </div>
 
-        <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl">
-          <p class="text-xl font-bold text-amber-500">
-            {{ (campaign.queued_count ?? 0) | number }}
+      <!-- Concurrency / Max Calls (Only for call campaigns, shown alongside counters) -->
+      <div
+        *ngIf="campaign.kind === 'call'"
+        class="card-base p-3 text-center bg-indigo-50/50 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/50 transition-all hover:border-indigo-300 dark:hover:border-indigo-700"
+        [ngClass]="campaign.status !== 'running' ? 'cursor-pointer' : ''"
+        [pTooltip]="
+          campaign.status === 'running'
+            ? 'Active call concurrency cap: ' + (campaign.concurrency ?? 5)
+            : 'Click to edit max simultaneous calls'
+        "
+        (click)="campaign.status !== 'running' ? openEditDialog() : null"
+      >
+        <div class="flex items-center justify-center gap-1">
+          <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+            {{ campaign.concurrency ?? 5 }}
           </p>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">Queued</p>
+          <i
+            *ngIf="campaign.status !== 'running'"
+            class="pi pi-pencil text-[10px] text-indigo-400 opacity-60"
+          ></i>
         </div>
-
-        <!-- Concurrency / Max Calls (Only for call campaigns, shown alongside counters) -->
-        <div
-          *ngIf="campaign.kind === 'call'"
-          class="card-base p-3 text-center bg-indigo-50/50 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/50 transition-all hover:border-indigo-300 dark:hover:border-indigo-700"
-          [ngClass]="campaign.status !== 'running' ? 'cursor-pointer' : ''"
-          [pTooltip]="campaign.status === 'running' ? 'Active call concurrency cap: ' + (campaign.concurrency ?? 5) : 'Click to edit max simultaneous calls'"
-          (click)="campaign.status !== 'running' ? openEditDialog() : null"
+        <p
+          class="text-[11px] uppercase tracking-wider mt-0.5 text-indigo-600/80 dark:text-indigo-400/80 font-semibold"
         >
-          <div class="flex items-center justify-center gap-1">
-            <p class="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-              {{ campaign.concurrency ?? 5 }}
-            </p>
-            <i *ngIf="campaign.status !== 'running'" class="pi pi-pencil text-[10px] text-indigo-400 opacity-60"></i>
-          </div>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-indigo-600/80 dark:text-indigo-400/80 font-semibold">
-            Max Calls
-          </p>
-        </div>
+          Max Calls
+        </p>
+      </div>
 
-        <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl">
-          <p class="text-xl font-bold text-blue-500">
-            {{ (campaign.sent_count ?? campaign.counters?.sent ?? 0) | number }}
-          </p>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">Sent</p>
-        </div>
+      <div
+        class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl"
+      >
+        <p class="text-xl font-bold text-blue-500">
+          {{ campaign.sent_count ?? campaign.counters?.sent ?? 0 | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">
+          Sent
+        </p>
+      </div>
 
-        <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl">
-          <p class="text-xl font-bold text-emerald-500">
-            {{ (campaign.delivered_count ?? campaign.counters?.delivered ?? 0) | number }}
-          </p>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">Delivered</p>
-        </div>
+      <div
+        class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl"
+      >
+        <p class="text-xl font-bold text-emerald-500">
+          {{
+            campaign.delivered_count ?? campaign.counters?.delivered ?? 0
+              | number
+          }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">
+          Delivered
+        </p>
+      </div>
 
-        <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl">
-          <p class="text-xl font-bold text-purple-500">
-            {{ (campaign.replied_count ?? campaign.counters?.replied ?? 0) | number }}
-          </p>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">Replied</p>
-        </div>
+      <div
+        class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl"
+      >
+        <p class="text-xl font-bold text-purple-500">
+          {{
+            campaign.replied_count ?? campaign.counters?.replied ?? 0 | number
+          }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">
+          Replied
+        </p>
+      </div>
 
-        <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl">
-          <p class="text-xl font-bold text-rose-500">
-            {{ (campaign.failed_count ?? campaign.counters?.failed ?? 0) | number }}
-          </p>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">Failed</p>
-        </div>
+      <div
+        class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl"
+      >
+        <p class="text-xl font-bold text-rose-500">
+          {{ campaign.failed_count ?? campaign.counters?.failed ?? 0 | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">
+          Failed
+        </p>
+      </div>
 
-        <div class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl">
-          <p class="text-xl font-bold text-teal-500">
-            {{ (campaign.leads_created ?? 0) | number }}
-          </p>
-          <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">Leads Created</p>
-        </div>
+      <div
+        class="card-base p-3 text-center bg-slate-50/50 dark:bg-slate-800/50 rounded-xl"
+      >
+        <p class="text-xl font-bold text-teal-500">
+          {{ campaign.leads_created ?? 0 | number }}
+        </p>
+        <p class="text-[11px] uppercase tracking-wider mt-0.5 text-slate-400">
+          Leads Created
+        </p>
       </div>
     </div>
+  </div>
 
-    <!-- Activity & Run History Tabs -->
-    <div class="card-base p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-      <p-tabs [(value)]="activeTab" [lazy]="true" (valueChange)="onTabChange($event)">
-        <p-tablist class="mb-5 border-b border-slate-100 dark:border-slate-800">
-          <p-tab value="executions">
-            <i class="pi pi-play mr-2"></i>Run History <span *ngIf="loadedTabs.has('executions')">({{ executions.length }})</span>
-          </p-tab>
-          <p-tab value="history">
-            <i class="pi pi-history mr-2"></i>Event Trail <span *ngIf="loadedTabs.has('history')">({{ historyTotal }})</span>
-          </p-tab>
-          <p-tab value="recipients">
-            <i class="pi pi-users mr-2"></i>Recipients ({{ (campaign.counters?.total || allRecipients.length) | number }})
-          </p-tab>
-        </p-tablist>
+  <!-- Activity & Run History Tabs -->
+  <div
+    class="card-base p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800"
+  >
+    <p-tabs
+      [(value)]="activeTab"
+      [lazy]="true"
+      (valueChange)="onTabChange($event)"
+    >
+      <p-tablist class="mb-5 border-b border-slate-100 dark:border-slate-800">
+        <p-tab value="executions">
+          <i class="pi pi-play mr-2"></i>Run History
+          <span *ngIf="loadedTabs.has('executions')"
+            >({{ executions.length }})</span
+          >
+        </p-tab>
+        <p-tab value="history">
+          <i class="pi pi-history mr-2"></i>Event Trail
+          <span *ngIf="loadedTabs.has('history')">({{ historyTotal }})</span>
+        </p-tab>
+        <p-tab value="recipients">
+          <i class="pi pi-users mr-2"></i>Recipients ({{
+            campaign.counters?.total || allRecipients.length | number
+          }})
+        </p-tab>
+      </p-tablist>
 
-        <p-tabpanels>
-          <!-- TAB 1: RUN HISTORY EXECUTIONS TABLE -->
-          <p-tabpanel value="executions">
-            <ng-container *ngIf="loadedTabs.has('executions')">
+      <p-tabpanels>
+        <!-- TAB 1: RUN HISTORY EXECUTIONS TABLE -->
+        <p-tabpanel value="executions">
+          <ng-container *ngIf="loadedTabs.has('executions')">
             <div class="flex items-center justify-between mb-4">
               <div>
-                <h3 class="text-base font-bold" style="color: var(--app-text)">Tracked Executions</h3>
+                <h3 class="text-base font-bold" style="color: var(--app-text)">
+                  Tracked Executions
+                </h3>
                 <p class="text-xs" style="color: var(--app-text-muted)">
                   List of discrete dispatch runs and scoped outcome CSV exports
                 </p>
@@ -262,21 +349,27 @@
             <!-- Header bar for columns -->
             <div
               *ngIf="executions.length > 0 && !executionsLoading"
-              class="hidden lg:grid grid-cols-12 gap-3 px-4 py-2.5 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50/70 dark:bg-slate-800/40 rounded-lg border border-slate-100 dark:border-slate-800"
+              class="hidden lg:flex items-center px-4 py-2.5 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-slate-50/70 dark:bg-slate-800/40 rounded-lg border border-slate-100 dark:border-slate-800"
             >
-              <div class="col-span-3">Run ID</div>
-              <div class="col-span-2">Started</div>
-              <div class="col-span-1">Restart Mode</div>
-              <div class="col-span-1">Status</div>
-              <div class="col-span-2">Total / Processed</div>
-              <div class="col-span-1">Failed</div>
-              <div class="col-span-2 text-right pr-6">Action</div>
+              <div class="grid grid-cols-12 gap-3 items-center w-full mr-3 text-left">
+                <div class="col-span-3">Started</div>
+                <div class="col-span-2">Restart Mode</div>
+                <div class="col-span-2">Status</div>
+                <div class="col-span-3">Total / Processed</div>
+                <div class="col-span-2">Failed</div>
+              </div>
+              <div class="w-6 shrink-0"></div>
             </div>
 
             <!-- Loading Spinner -->
-            <div *ngIf="executionsLoading" class="flex flex-col items-center justify-center py-12 space-y-3">
+            <div
+              *ngIf="executionsLoading"
+              class="flex flex-col items-center justify-center py-12 space-y-3"
+            >
               <i class="pi pi-spin pi-spinner text-3xl text-indigo-500"></i>
-              <span class="text-xs text-slate-400">Loading tracked executions...</span>
+              <span class="text-xs text-slate-400"
+                >Loading tracked executions...</span
+              >
             </div>
 
             <!-- Empty State -->
@@ -284,7 +377,9 @@
               *ngIf="!executionsLoading && executions.length === 0"
               class="text-center py-12 text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl"
             >
-              <i class="pi pi-inbox text-2xl mb-2 text-slate-300 dark:text-slate-600 block"></i>
+              <i
+                class="pi pi-inbox text-2xl mb-2 text-slate-300 dark:text-slate-600 block"
+              ></i>
               No execution records found yet.
             </div>
 
@@ -301,23 +396,28 @@
                 [value]="exec.id"
                 class="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-xs transition-all hover:border-slate-300 dark:hover:border-slate-700"
               >
-                <p-accordion-header class="py-3 px-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors cursor-pointer">
-                  <div class="grid grid-cols-12 gap-3 items-center w-full mr-3 text-left">
-                    <div class="col-span-12 lg:col-span-3 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 truncate" [pTooltip]="exec.id">
-                      {{ exec.id }}
+                <p-accordion-header
+                  class="py-3 px-4 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+                >
+                  <div
+                    class="grid grid-cols-12 gap-3 items-center w-full mr-3 text-left"
+                  >
+                    <div
+                      class="col-span-6 lg:col-span-3 text-xs text-slate-600 dark:text-slate-300"
+                    >
+                      {{ exec.started_at | date: "d MMM y, h:mm a" }}
                     </div>
-                    <div class="col-span-6 lg:col-span-2 text-xs text-slate-600 dark:text-slate-300">
-                      {{ exec.started_at | date: 'd MMM y, h:mm a' }}
-                    </div>
-                    <div class="col-span-6 lg:col-span-1">
+                    <div class="col-span-6 lg:col-span-2">
                       <p-tag
                         [value]="getRestartModeBadge(exec.restart_mode).label"
-                        [severity]="getRestartModeBadge(exec.restart_mode).severity"
+                        [severity]="
+                          getRestartModeBadge(exec.restart_mode).severity
+                        "
                         [rounded]="true"
                         class="text-[10px]"
                       ></p-tag>
                     </div>
-                    <div class="col-span-6 lg:col-span-1">
+                    <div class="col-span-6 lg:col-span-2">
                       <p-tag
                         [value]="exec.status | uppercase"
                         [severity]="getExecutionBadgeSeverity(exec.status)"
@@ -325,40 +425,49 @@
                         class="text-[10px]"
                       ></p-tag>
                     </div>
-                    <div class="col-span-6 lg:col-span-2 text-xs font-mono">
-                      <span class="font-bold text-slate-900 dark:text-slate-100">{{ exec.total_count }}</span>
-                      <span class="text-slate-400 ml-1">({{ exec.completed_count }} sent)</span>
+                    <div class="col-span-6 lg:col-span-3 text-xs font-mono">
+                      <span
+                        class="font-bold text-slate-900 dark:text-slate-100"
+                        >{{ exec.total_count }}</span
+                      >
+                      <span class="text-slate-400 ml-1"
+                        >({{ exec.completed_count }} sent)</span
+                      >
                     </div>
-                    <div class="col-span-6 lg:col-span-1 text-xs font-mono" [ngClass]="exec.failed_count > 0 ? 'text-rose-500 font-bold' : 'text-slate-400'">
+                    <div
+                      class="col-span-6 lg:col-span-2 text-xs font-mono"
+                      [ngClass]="
+                        exec.failed_count > 0
+                          ? 'text-rose-500 font-bold'
+                          : 'text-slate-400'
+                      "
+                    >
                       {{ exec.failed_count }}
                     </div>
-                    <!-- <div class="col-span-6 lg:col-span-2 flex items-center justify-end" (click)="$event.stopPropagation()">
-                      <button
-                        type="button"
-                        (click)="exportExecution(exec.id); $event.stopPropagation()"
-                        class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-indigo-400 hover:text-indigo-600 transition-all cursor-pointer shadow-xs"
-                        pTooltip="Download CSV scoped to recipients touched in this run"
-                        tooltipPosition="left"
-                      >
-                        <i class="pi pi-download text-[10px]"></i>
-                        <span>Export this run</span>
-                      </button>
-                    </div> -->
                   </div>
                 </p-accordion-header>
 
                 <p-accordion-content>
                   <div class="pt-2 pb-1">
                     <!-- Attempts Card Container -->
-                    <div class="p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700/60">
+                    <div
+                      class="p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200/70 dark:border-slate-700/60"
+                    >
                       <!-- Subheading & Actions -->
-                      <div class="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-200/60 dark:border-slate-700/50">
+                      <div
+                        class="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-200/60 dark:border-slate-700/50"
+                      >
                         <div class="flex items-center gap-2">
                           <i class="pi pi-phone text-indigo-500 text-xs"></i>
-                          <span class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                          <span
+                            class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider"
+                          >
                             Call Execution Details
                           </span>
-                          <span *ngIf="executionAttempts[exec.id]?.length" class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-semibold font-mono">
+                          <span
+                            *ngIf="executionAttempts[exec.id]?.length"
+                            class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-semibold font-mono"
+                          >
                             {{ executionAttempts[exec.id].length }} dispatches
                           </span>
                         </div>
@@ -368,20 +477,42 @@
                           class="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer px-2.5 py-1 rounded-lg hover:bg-slate-200/50 dark:hover:bg-slate-700/50 font-medium"
                           pTooltip="Refresh call details"
                         >
-                          <i class="pi pi-refresh text-[11px]" [ngClass]="{'pi-spin': executionAttemptsLoading[exec.id]}"></i>
+                          <i
+                            class="pi pi-refresh text-[11px]"
+                            [ngClass]="{
+                              'pi-spin': executionAttemptsLoading[exec.id],
+                            }"
+                          ></i>
                           <span>Refresh</span>
                         </button>
                       </div>
 
                       <!-- Loading state -->
-                      <div *ngIf="executionAttemptsLoading[exec.id]" class="py-8 flex flex-col items-center justify-center text-slate-500">
-                        <i class="pi pi-spin pi-spinner text-2xl text-indigo-500 mb-2"></i>
-                        <span class="text-xs font-medium">Fetching call execution details...</span>
+                      <div
+                        *ngIf="executionAttemptsLoading[exec.id]"
+                        class="py-8 flex flex-col items-center justify-center text-slate-500"
+                      >
+                        <i
+                          class="pi pi-spin pi-spinner text-2xl text-indigo-500 mb-2"
+                        ></i>
+                        <span class="text-xs font-medium"
+                          >Fetching call execution details...</span
+                        >
                       </div>
 
                       <!-- Error state -->
-                      <div *ngIf="!executionAttemptsLoading[exec.id] && executionAttemptsError[exec.id]" class="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-center">
-                        <p class="text-xs text-rose-600 dark:text-rose-400 mb-2.5">{{ executionAttemptsError[exec.id] }}</p>
+                      <div
+                        *ngIf="
+                          !executionAttemptsLoading[exec.id] &&
+                          executionAttemptsError[exec.id]
+                        "
+                        class="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-center"
+                      >
+                        <p
+                          class="text-xs text-rose-600 dark:text-rose-400 mb-2.5"
+                        >
+                          {{ executionAttemptsError[exec.id] }}
+                        </p>
                         <button
                           type="button"
                           (click)="loadExecutionAttempts(exec.id, true)"
@@ -392,42 +523,84 @@
                       </div>
 
                       <!-- Empty state -->
-                      <div *ngIf="!executionAttemptsLoading[exec.id] && !executionAttemptsError[exec.id] && (!executionAttempts[exec.id] || executionAttempts[exec.id].length === 0)" class="py-8 text-center text-slate-400 text-xs">
+                      <div
+                        *ngIf="
+                          !executionAttemptsLoading[exec.id] &&
+                          !executionAttemptsError[exec.id] &&
+                          (!executionAttempts[exec.id] ||
+                            executionAttempts[exec.id].length === 0)
+                        "
+                        class="py-8 text-center text-slate-400 text-xs"
+                      >
                         <i class="pi pi-info-circle text-lg mb-1 block"></i>
                         No call attempts recorded for this execution run.
                       </div>
 
                       <!-- Attempts Table -->
-                      <div *ngIf="!executionAttemptsLoading[exec.id] && executionAttempts[exec.id] && executionAttempts[exec.id].length > 0" class="overflow-x-auto rounded-lg border border-slate-200/80 dark:border-slate-700/70 bg-white dark:bg-slate-900">
+                      <div
+                        *ngIf="
+                          !executionAttemptsLoading[exec.id] &&
+                          executionAttempts[exec.id] &&
+                          executionAttempts[exec.id].length > 0
+                        "
+                        class="overflow-x-auto rounded-lg border border-slate-200/80 dark:border-slate-700/70 bg-white dark:bg-slate-900"
+                      >
                         <table class="w-full text-left border-collapse text-xs">
                           <thead>
-                            <tr class="border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                            <tr
+                              class="border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 text-[11px] font-semibold text-slate-400 uppercase tracking-wider"
+                            >
                               <th class="py-2.5 px-3">Recipient</th>
                               <th class="py-2.5 px-3">Phone</th>
                               <th class="py-2.5 px-3">Call Status</th>
                               <th class="py-2.5 px-3">Duration</th>
                               <th class="py-2.5 px-3">Lead Score & Status</th>
                               <th class="py-2.5 px-3">Sent At</th>
-                              <th class="py-2.5 px-3 text-right">Conversation</th>
+                              <th class="py-2.5 px-3 text-right">
+                                Conversation
+                              </th>
                             </tr>
                           </thead>
-                          <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60">
-                            <tr *ngFor="let attempt of executionAttempts[exec.id]" class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                              <td class="py-2.5 px-3 font-semibold text-slate-900 dark:text-slate-100">
-                                {{ attempt.name || 'Unknown Contact' }}
+                          <tbody
+                            class="divide-y divide-slate-100 dark:divide-slate-800/60"
+                          >
+                            <tr
+                              *ngFor="let attempt of executionAttempts[exec.id]"
+                              class="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                            >
+                              <td
+                                class="py-2.5 px-3 font-semibold text-slate-900 dark:text-slate-100"
+                              >
+                                {{ attempt.name || "Unknown Contact" }}
                               </td>
-                              <td class="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
-                                {{ attempt.phone_masked || attempt.email_masked || '-' }}
+                              <td
+                                class="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400"
+                              >
+                                {{
+                                  attempt.phone_masked ||
+                                    attempt.email_masked ||
+                                    "-"
+                                }}
                               </td>
                               <td class="py-2.5 px-3">
                                 <p-tag
-                                  [value]="(attempt.call_status || attempt.status || 'unknown') | uppercase"
-                                  [severity]="getCallStatusSeverity(attempt.call_status || attempt.status)"
+                                  [value]="
+                                    attempt.call_status ||
+                                      attempt.status ||
+                                      'unknown' | uppercase
+                                  "
+                                  [severity]="
+                                    getCallStatusSeverity(
+                                      attempt.call_status || attempt.status
+                                    )
+                                  "
                                   [rounded]="true"
                                   class="text-[10px]"
                                 ></p-tag>
                               </td>
-                              <td class="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                              <td
+                                class="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300"
+                              >
                                 {{ formatDuration(attempt.call_duration_sec) }}
                               </td>
                               <td class="py-2.5 px-3">
@@ -435,18 +608,37 @@
                                   <p-tag
                                     *ngIf="attempt.lead_status"
                                     [value]="attempt.lead_status | uppercase"
-                                    [severity]="getLeadStatusSeverity(attempt.lead_status)"
+                                    [severity]="
+                                      getLeadStatusSeverity(attempt.lead_status)
+                                    "
                                     [rounded]="true"
                                     class="text-[10px]"
                                   ></p-tag>
-                                  <span *ngIf="attempt.lead_score != null" class="font-mono font-bold text-slate-700 dark:text-slate-300 text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                  <span
+                                    *ngIf="attempt.lead_score != null"
+                                    class="font-mono font-bold text-slate-700 dark:text-slate-300 text-[11px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded"
+                                  >
                                     {{ attempt.lead_score }}/100
                                   </span>
-                                  <span *ngIf="!attempt.lead_status && attempt.lead_score == null" class="text-slate-400">-</span>
+                                  <span
+                                    *ngIf="
+                                      !attempt.lead_status &&
+                                      attempt.lead_score == null
+                                    "
+                                    class="text-slate-400"
+                                    >-</span
+                                  >
                                 </div>
                               </td>
-                              <td class="py-2.5 px-3 text-slate-500 text-[11px]">
-                                {{ attempt.sent_at ? (attempt.sent_at | date: 'd MMM, h:mm:ss a') : '-' }}
+                              <td
+                                class="py-2.5 px-3 text-slate-500 text-[11px]"
+                              >
+                                {{
+                                  attempt.sent_at
+                                    ? (attempt.sent_at
+                                      | date: "d MMM, h:mm:ss a")
+                                    : "-"
+                                }}
                               </td>
                               <td class="py-2.5 px-3 text-right">
                                 <button
@@ -456,7 +648,11 @@
                                   label="Conversation"
                                   class="p-button-sm p-button-outlined"
                                   [disabled]="!attempt.external_message_id"
-                                  [pTooltip]="attempt.external_message_id ? 'View call transcript and audio recording' : 'No call session ID available'"
+                                  [pTooltip]="
+                                    attempt.external_message_id
+                                      ? 'View call transcript and audio recording'
+                                      : 'No call session ID available'
+                                  "
                                   tooltipPosition="left"
                                   (click)="openAttemptTranscript(attempt)"
                                 ></button>
@@ -470,16 +666,20 @@
                 </p-accordion-content>
               </p-accordion-panel>
             </p-accordion>
-            </ng-container>
-          </p-tabpanel>
+          </ng-container>
+        </p-tabpanel>
 
-          <!-- TAB 2: EVENT AUDIT TRAIL -->
-          <p-tabpanel value="history">
-            <ng-container *ngIf="loadedTabs.has('history')">
+        <!-- TAB 2: EVENT AUDIT TRAIL -->
+        <p-tabpanel value="history">
+          <ng-container *ngIf="loadedTabs.has('history')">
             <div class="flex items-center justify-between mb-4">
               <div>
-                <h3 class="text-base font-bold" style="color: var(--app-text)">Audit Events</h3>
-                <p class="text-xs" style="color: var(--app-text-muted)">Chronological event trail</p>
+                <h3 class="text-base font-bold" style="color: var(--app-text)">
+                  Audit Events
+                </h3>
+                <p class="text-xs" style="color: var(--app-text-muted)">
+                  Chronological event trail
+                </p>
               </div>
               <p-button
                 icon="pi pi-refresh"
@@ -491,18 +691,32 @@
               ></p-button>
             </div>
 
-            <div *ngIf="historyItems.length === 0" class="text-center py-8 text-xs text-slate-400">
+            <div
+              *ngIf="historyItems.length === 0"
+              class="text-center py-8 text-xs text-slate-400"
+            >
               No audit history events logged yet.
             </div>
 
             <div *ngIf="historyItems.length > 0" class="space-y-3">
-              <div *ngFor="let item of historyItems" class="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between text-xs">
+              <div
+                *ngFor="let item of historyItems"
+                class="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between text-xs"
+              >
                 <div class="flex items-center gap-2.5 flex-wrap">
-                  <i [class]="getActionIcon(item.action)" [style.color]="getActionColor(item.action)"></i>
-                  <span class="font-bold text-slate-800 dark:text-slate-200">{{ getActionLabel(item.action) }}</span>
+                  <i
+                    [class]="getActionIcon(item.action)"
+                    [style.color]="getActionColor(item.action)"
+                  ></i>
+                  <span class="font-bold text-slate-800 dark:text-slate-200">{{
+                    getActionLabel(item.action)
+                  }}</span>
                   <span class="text-slate-500">— {{ item.message }}</span>
                   <span
-                    *ngIf="item.message && item.message.includes('(at call concurrency cap)')"
+                    *ngIf="
+                      item.message &&
+                      item.message.includes('(at call concurrency cap)')
+                    "
                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30"
                     title="Active calls reached max simultaneous calls cap; pausing between batches"
                   >
@@ -510,49 +724,82 @@
                     At Concurrency Cap
                   </span>
                 </div>
-                <span class="text-slate-400 text-[11px]">{{ getRelativeTime(item.created_at) }}</span>
+                <span class="text-slate-400 text-[11px]">{{
+                  getRelativeTime(item.created_at)
+                }}</span>
               </div>
             </div>
-            </ng-container>
-          </p-tabpanel>
+          </ng-container>
+        </p-tabpanel>
 
-          <!-- TAB 3: RECIPIENTS -->
-          <p-tabpanel value="recipients">
-            <ng-container *ngIf="loadedTabs.has('recipients')">
-            <p-table [value]="allRecipients" [loading]="recipientsLoading" [paginator]="true" [rows]="10" styleClass="p-datatable-sm">
+        <!-- TAB 3: RECIPIENTS -->
+        <p-tabpanel value="recipients">
+          <ng-container *ngIf="loadedTabs.has('recipients')">
+            <p-table
+              [value]="allRecipients"
+              [loading]="recipientsLoading"
+              [paginator]="true"
+              [rows]="10"
+              styleClass="p-datatable-sm"
+            >
               <ng-template pTemplate="header">
                 <tr>
                   <th>Recipient</th>
                   <th>Name</th>
-                  <th>Status</th>
-                  <th>Failure Reason</th>
-                  <th>Sent At</th>
+                  <th>Product</th>
+                  <th>Attempts</th>
                 </tr>
               </ng-template>
               <ng-template pTemplate="body" let-r>
                 <tr>
-                  <td class="font-mono text-xs">{{ r.identifier_masked || r.phone || r.email || '—' }}</td>
-                  <td class="text-xs">{{ r.name || '—' }}</td>
-                  <td>
-                    <p-tag [value]="r.status | uppercase" [severity]="getRecipientSeverity(r.status)" [rounded]="true" class="text-[11px]"></p-tag>
+                  <td class="font-mono text-xs">
+                    {{ r.phone_masked || r.email_masked || "—" }}
                   </td>
-                  <td class="text-xs text-slate-500">{{ r.failure_reason || '—' }}</td>
-                  <td class="text-xs text-slate-400">{{ r.sent_at ? (r.sent_at | date: 'd MMM y, h:mm a') : '—' }}</td>
+                  <td class="text-xs">{{ r.name || "—" }}</td>
+                  <td>
+                    <span
+                      *ngIf="(r.product && r.product !== 'unknown') || campaign.product_name; else noProd"
+                      class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800"
+                    >
+                      <i class="pi pi-box text-[10px]"></i>
+                      {{ (r.product && r.product !== 'unknown' ? r.product : campaign.product_name) }}
+                    </span>
+                    <ng-template #noProd>
+                      <span class="text-xs text-slate-400">—</span>
+                    </ng-template>
+                  </td>
+                  <td class="text-xs font-mono">
+                    <span
+                      class="inline-flex items-center justify-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                    >
+                      {{ r.attempts ?? 0 }}
+                    </span>
+                  </td>
                 </tr>
               </ng-template>
             </p-table>
-            </ng-container>
-          </p-tabpanel>
-        </p-tabpanels>
-      </p-tabs>
-    </div>
+          </ng-container>
+        </p-tabpanel>
+      </p-tabpanels>
+    </p-tabs>
+  </div>
 </div>
 
 <!-- Contextual Popup Menu (for Three Dots on Caller Info) -->
-<p-menu #rowMenu [popup]="true" appendTo="body" [model]="activeRecipientMenuItems"></p-menu>
+<p-menu
+  #rowMenu
+  [popup]="true"
+  appendTo="body"
+  [model]="activeRecipientMenuItems"
+></p-menu>
 
 <!-- Mode Picker Menu for Detail Start/Restart Button -->
-<p-menu #detailStartMenu [popup]="true" appendTo="body" [model]="startModeMenuItems"></p-menu>
+<p-menu
+  #detailStartMenu
+  [popup]="true"
+  appendTo="body"
+  [model]="startModeMenuItems"
+></p-menu>
 
 <!-- Conversation Dialog using LeadConversationsComponent -->
 <p-dialog

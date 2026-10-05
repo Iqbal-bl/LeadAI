@@ -9,7 +9,7 @@
           class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors group cursor-pointer"
         >
           <i class="pi pi-arrow-left text-[10px] group-hover:-translate-x-0.5 transition-transform"></i>
-          <span>Back to Leads</span>
+          <span>{{ fromBatches ? 'Back to Lead Batches' : 'Back to Leads' }}</span>
         </button>
       </div>
 
@@ -266,8 +266,8 @@
       </div>
 
       <!-- Channel Selection Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <!-- Option 1: Chat -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <!-- Option 1: Chat (WhatsApp) -->
         <div
           (click)="channel = 'chat'"
           class="channel-card"
@@ -276,7 +276,7 @@
           <div>
             <div class="flex items-center justify-between mb-3">
               <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-xs">
-                <i class="pi pi-comments text-lg"></i>
+                <i class="pi pi-whatsapp text-lg"></i>
               </div>
               <div
                 class="w-5 h-5 rounded-full flex items-center justify-center text-xs transition-all"
@@ -285,9 +285,9 @@
                 <i *ngIf="channel === 'chat'" class="pi pi-check text-[10px]"></i>
               </div>
             </div>
-            <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">Chat Messaging</h4>
+            <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">WhatsApp Chat</h4>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-              Reach leads via WhatsApp, Instagram DM, or Facebook Messenger
+              Reach leads directly on WhatsApp using verified mobile phone numbers
             </p>
           </div>
           <div class="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
@@ -346,9 +346,9 @@
                 <i *ngIf="channel === 'both'" class="pi pi-check text-[10px]"></i>
               </div>
             </div>
-            <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">Multi-Channel (Both)</h4>
+            <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">Multi-Channel (WhatsApp + Calls)</h4>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-              Coordinate chat qualification with voice call escalation upon consent
+              Coordinate WhatsApp outreach with automated voice call escalation upon consent
             </p>
           </div>
           <div class="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 text-[11px] text-purple-500 font-medium">
@@ -357,61 +357,51 @@
         </div>
       </div>
 
+      <!-- Cold Import Channel Limitations Notice -->
+      <div class="mb-5 p-3.5 rounded-xl border border-blue-200/80 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 flex items-start gap-3 text-xs text-slate-600 dark:text-slate-300">
+        <i class="pi pi-info-circle text-blue-500 mt-0.5 text-sm shrink-0"></i>
+        <div class="leading-relaxed">
+          <span class="font-semibold text-slate-800 dark:text-slate-100">Cold Import Channels:</span>
+          Import batches can call or WhatsApp a lead directly from their phone number. To reach a lead on Instagram or Facebook, message them yourself from your connected account — once they reply, they'll show up in your inbox like any other conversation.
+        </div>
+      </div>
+
       <!-- Specific Channel Options Panel -->
       <div class="space-y-5 pt-5 border-t border-slate-100 dark:border-slate-800">
         <!-- When Chat or Both -->
         <div *ngIf="channel === 'chat' || channel === 'both'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <!-- Chat Channel Selector -->
+          <!-- Chat Channel Indicator -->
           <div>
             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              Primary Chat Platform <span class="text-rose-500">*</span>
+              Primary Chat Platform
             </label>
-            <div class="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                (click)="chatChannel = 'whatsapp'; onChatChannelChange()"
-                class="px-3 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                [ngClass]="chatChannel === 'whatsapp' ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs ring-1 ring-emerald-500' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 bg-white dark:bg-slate-900'"
-              >
-                <i class="pi pi-whatsapp text-sm"></i> WhatsApp
-              </button>
-              <button
-                type="button"
-                (click)="chatChannel = 'instagram'; onChatChannelChange()"
-                class="px-3 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                [ngClass]="chatChannel === 'instagram' ? 'border-pink-500 bg-pink-500/10 text-pink-600 dark:text-pink-400 shadow-xs ring-1 ring-pink-500' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 bg-white dark:bg-slate-900'"
-              >
-                <i class="pi pi-instagram text-sm"></i> Instagram
-              </button>
-              <button
-                type="button"
-                (click)="chatChannel = 'messenger'; onChatChannelChange()"
-                class="px-3 py-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                [ngClass]="chatChannel === 'messenger' ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-xs ring-1 ring-blue-500' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 bg-white dark:bg-slate-900'"
-              >
-                <i class="pi pi-facebook text-sm"></i> Messenger
-              </button>
+            <div class="px-3.5 py-2.5 rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-2 text-xs">
+              <i class="pi pi-whatsapp text-sm text-emerald-500"></i>
+              <span>WhatsApp Direct Messaging</span>
             </div>
+            <p class="text-[11px] text-slate-400 mt-1.5">
+              Dispatches outreach messages directly via WhatsApp to imported phone numbers.
+            </p>
           </div>
 
           <!-- Connected Account Dropdown -->
           <div>
             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
-              Sender Account ({{ chatChannel | titlecase }}) <span class="text-rose-500">*</span>
+              Sender WhatsApp Account <span class="text-rose-500">*</span>
             </label>
             <div class="custom-select-wrapper">
-              <i class="pi pi-user select-icon"></i>
+              <i class="pi pi-whatsapp select-icon text-emerald-500"></i>
               <select [(ngModel)]="chatChannelAccountId">
-                <option value="" disabled>-- Select Connected Sender Account --</option>
+                <option value="" disabled>-- Select Connected WhatsApp Account --</option>
                 <option *ngFor="let acc of accountsForChatChannel" [value]="acc.id">
-                  {{ acc.display_name || acc.name || acc.display_number || acc.external_id || acc.id }} ({{ acc.channel }})
+                  {{ acc.display_name || acc.name || acc.display_number || acc.external_id || acc.id }}
                 </option>
               </select>
               <i class="pi pi-chevron-down select-arrow"></i>
             </div>
             <p *ngIf="accountsForChatChannel.length === 0" class="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
               <i class="pi pi-exclamation-triangle text-xs"></i>
-              No active {{ chatChannel }} accounts connected. Connect one in Channel Settings.
+              No active WhatsApp accounts connected. Connect one in Channel Settings.
             </p>
           </div>
         </div>
@@ -553,7 +543,7 @@
             class="btn-primary-gradient"
           >
             <i class="pi pi-list"></i>
-            <span>View All Campaigns</span>
+            <span>{{ fromBatches ? 'View Lead Batches' : 'View All Batches' }}</span>
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router, ActivatedRoute } from '@angular/router';
 import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
-import { ProductService } from '../../../services/product.service';
+import { AuthService } from '../../../services/auth.service';
 import {
   Campaign,
   CampaignStatus,
@@ -11,45 +11,76 @@ import {
   RestartMode,
 } from '../../../models/campaign.models';
 import { MessageService, MenuItem } from 'primeng/api';
-import { CampaignCreateComponent } from '../campaign-create/campaign-create.component';
-import { AuthService } from '../../../services/auth.service';
 import { CLIENT_PERMISSIONS } from '../../../modules/client/constants/permission.constants';
+import { CampaignCreateComponent } from '../campaign-create/campaign-create.component';
 
 @Component({
-  selector: 'app-campaign-list',
+  selector: 'app-broadcast-list',
   standalone: true,
   imports: [SharedModule, CampaignCreateComponent],
-  templateUrl: './campaign-list.component.html',
-  styleUrl: './campaign-list.component.scss',
+  templateUrl: './broadcast-list.component.html',
+  styleUrl: './broadcast-list.component.scss',
 })
-export class CampaignListComponent implements OnInit {
+export class BroadcastListComponent implements OnInit {
   PERMISSIONS = CLIENT_PERMISSIONS;
+
   campaigns: Campaign[] = [];
   loading = true;
-  showCreate = false;
-  selectedAudienceId = '';
-  selectedCampaignForEdit: Campaign | null = null;
-
   canSend = false;
+  startingCampaignId: string | null = null;
 
-  // Tab state: 'broadcast' | 'lead_campaign' | 'all'
-  selectedTab: 'broadcast' | 'lead_campaign' | 'all' = 'broadcast';
+  showCreate = false;
+  selectedCampaignForEdit: Campaign | null = null;
+  selectedAudienceId = '';
 
-  // Start / Restart Menu State
-  startMenuCampaign: Campaign | null = null;
-  startMenuItems: MenuItem[] = [];
+  // Preview Dialog state
+  showPreviewDialog = false;
+  activePreviewCampaign: Campaign | null = null;
+  activePreview: CampaignPreview | null = null;
+  previewLoading = false;
+
+  // Recipients Dialog state
+  showRecipientsDialog = false;
+  activeRecipientsCampaign: Campaign | null = null;
+  recipients: CampaignRecipient[] = [];
+  recipientsLoading = false;
+
+  // Context Menu state
   campaignRowMenuItems: MenuItem[] = [];
   selectedCampaign: Campaign | null = null;
 
-  setTab(tab: 'broadcast' | 'lead_campaign' | 'all'): void {
-    if (this.selectedTab === tab) return;
-    this.selectedTab = tab;
+  constructor(
+    private campaignService: CampaignService,
+    private messageService: MessageService,
+    private authService: AuthService,
+    private router: Router,
+    private route: ActivatedRoute,
+  ) {}
+
+  ngOnInit(): void {
+    const user = this.authService.getCurrentUser();
+    this.canSend = user?.permissions?.includes('campaign.send') ?? false;
+
+    this.route.queryParams.subscribe((params) => {
+      if (params['audienceId']) {
+        this.selectedAudienceId = params['audienceId'];
+      }
+      if (params['create'] === 'true' || params['audienceId']) {
+        this.openCreate();
+      }
+    });
+
     this.loadCampaigns();
   }
 
   isLeadCampaign(c: Campaign): boolean {
     const type = (c.campaign_type || '').toLowerCase().trim();
-    if (type === 'lead' || type === 'lead_campaign' || type === 'leads' || type.includes('lead')) {
+    if (
+      type === 'lead' ||
+      type === 'lead_campaign' ||
+      type === 'leads' ||
+      type.includes('lead')
+    ) {
       return true;
     }
     if (c.created_via === 'import') {
@@ -66,79 +97,12 @@ export class CampaignListComponent implements OnInit {
     return !this.isLeadCampaign(c);
   }
 
-  get filteredCampaigns(): Campaign[] {
-    if (this.selectedTab === 'broadcast') {
-      return this.campaigns.filter((c) => this.isBroadcast(c));
-    }
-    if (this.selectedTab === 'lead_campaign') {
-      return this.campaigns.filter((c) => this.isLeadCampaign(c));
-    }
-    return this.campaigns;
-  }
-
-  get broadcastCampaignsCount(): number {
-    return this.campaigns.filter((c) => this.isBroadcast(c)).length;
-  }
-
-  get leadCampaignsCount(): number {
-    return this.campaigns.filter((c) => this.isLeadCampaign(c)).length;
-  }
-
-  getCampaignTypeBadge(c: Campaign): { label: string; severity: 'info' | 'secondary'; icon: string } {
-    if (this.isLeadCampaign(c)) {
-      return { label: 'Lead Campaign', severity: 'info', icon: 'pi pi-users' };
-    }
-    return { label: 'Broadcast', severity: 'secondary', icon: 'pi pi-megaphone' };
-  }
-
-  // Preview Dialog variables
-  showPreviewDialog = false;
-  activePreviewCampaign: Campaign | null = null;
-  activePreview: CampaignPreview | null = null;
-  previewLoading = false;
-
-  // Recipients Dialog variables
-  showRecipientsDialog = false;
-  activeRecipientsCampaign: Campaign | null = null;
-  recipients: CampaignRecipient[] = [];
-  recipientsLoading = false;
-
-  constructor(
-    private campaignService: CampaignService,
-    private messageService: MessageService,
-    private authService: AuthService,
-    private router: Router,
-    private route: ActivatedRoute,
-  ) {}
-
-  ngOnInit(): void {
-    this.loadCampaigns();
-    const user = this.authService.getCurrentUser();
-    this.canSend = user?.permissions?.includes('campaign.send') ?? false;
-
-    this.route.queryParams.subscribe((params) => {
-      if (params['audienceId']) {
-        this.selectedAudienceId = params['audienceId'];
-      }
-      if (params['create'] === 'true' || params['audienceId']) {
-        this.openCreate();
-      }
-    });
-  }
-
   loadCampaigns(): void {
     this.loading = true;
-    const params: { campaign_type?: string } = {};
-    if (this.selectedTab === 'broadcast') {
-      params.campaign_type = 'broadcast';
-    } else if (this.selectedTab === 'lead_campaign') {
-      params.campaign_type = 'lead_campaign';
-    }
-
-    this.campaignService.getCampaigns(params).subscribe({
+    this.campaignService.getCampaigns({ campaign_type: 'broadcast' }).subscribe({
       next: (res: any) => {
         const raw = res.items ?? (Array.isArray(res) ? res : []);
-        this.campaigns = raw.map((c: any) => ({
+        const mapped = raw.map((c: any) => ({
           ...c,
           counters: {
             total: c.total_count || 0,
@@ -148,6 +112,7 @@ export class CampaignListComponent implements OnInit {
             replied: c.replied_count || 0,
           },
         }));
+        this.campaigns = mapped.filter((c: any) => this.isBroadcast(c));
         this.loading = false;
       },
       error: () => {
@@ -176,8 +141,8 @@ export class CampaignListComponent implements OnInit {
       severity: 'success',
       summary: isEdit ? 'Campaign Updated' : 'Campaign Created',
       detail: isEdit
-        ? 'Your campaign settings have been updated.'
-        : 'Your campaign has been saved as a draft.',
+        ? 'Your broadcast campaign has been updated.'
+        : 'Your broadcast campaign has been created.',
     });
   }
 
@@ -256,19 +221,74 @@ export class CampaignListComponent implements OnInit {
     if (!this.activePreviewCampaign) return;
     const campaign = this.activePreviewCampaign;
     this.showPreviewDialog = false;
-    this.startCampaign(campaign);
+    this.startCampaignWithMode(campaign, 'all');
   }
 
-  getWarningSeverity(severity: string): string {
-    if (severity === 'error') return 'rgba(239, 68, 68, 0.1)';
-    if (severity === 'warning') return 'rgba(245, 158, 11, 0.1)';
-    return 'rgba(59, 130, 246, 0.1)';
+  startCampaignWithMode(campaign: Campaign, mode: RestartMode = 'all'): void {
+    if (this.startingCampaignId) return;
+    this.startingCampaignId = campaign.id;
+    this.campaignService.startCampaign(campaign.id, mode).subscribe({
+      next: () => {
+        this.startingCampaignId = null;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Campaign Started',
+          detail: `"${campaign.name}" started with mode: ${mode}.`,
+        });
+        this.loadCampaigns();
+      },
+      error: (err) => {
+        this.startingCampaignId = null;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Start Failed',
+          detail:
+            err.error?.detail ||
+            err.message ||
+            'Failed to start campaign with selected mode.',
+        });
+      },
+    });
   }
 
-  getWarningColor(severity: string): string {
-    if (severity === 'error') return '#f87171';
-    if (severity === 'warning') return '#fbbf24';
-    return '#60a5fa';
+  pauseCampaign(campaign: Campaign): void {
+    this.campaignService.pauseCampaign(campaign.id).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'info',
+          summary: 'Campaign Paused',
+          detail: `Campaign "${campaign.name}" has been paused.`,
+        });
+        this.loadCampaigns();
+      },
+      error: () => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to pause campaign.',
+        });
+      },
+    });
+  }
+
+  resumeCampaign(campaign: Campaign): void {
+    this.campaignService.resumeCampaign(campaign.id).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Campaign Resumed',
+          detail: `Campaign "${campaign.name}" has resumed.`,
+        });
+        this.loadCampaigns();
+      },
+      error: () => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to resume campaign.',
+        });
+      },
+    });
   }
 
   viewRecipients(campaign: Campaign): void {
@@ -293,27 +313,6 @@ export class CampaignListComponent implements OnInit {
       },
     });
   }
-
-  getRecipientSeverity(
-    status: string,
-  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
-    const map: Record<
-      string,
-      'success' | 'info' | 'warn' | 'danger' | 'secondary'
-    > = {
-      pending: 'secondary',
-      queued: 'info',
-      sent: 'success',
-      delivered: 'success',
-      read: 'success',
-      replied: 'success',
-      failed: 'danger',
-      skipped: 'warn',
-    };
-    return map[status] || 'secondary';
-  }
-
-  startingCampaignId: string | null = null;
 
   openActionMenu(event: Event, campaign: Campaign, menu: any): void {
     event.stopPropagation();
@@ -365,7 +364,6 @@ export class CampaignListComponent implements OnInit {
       });
     }
 
-    // Start / Restart execution options
     items.push({
       separator: true,
     });
@@ -380,7 +378,8 @@ export class CampaignListComponent implements OnInit {
     items.push({
       label: 'Retry Failed Only',
       icon: 'pi pi-replay',
-      disabled: !this.canSend || !hasFailures || this.startingCampaignId !== null,
+      disabled:
+        !this.canSend || !hasFailures || this.startingCampaignId !== null,
       command: () => this.startCampaignWithMode(campaign, 'failed_only'),
     });
 
@@ -404,102 +403,6 @@ export class CampaignListComponent implements OnInit {
 
     this.campaignRowMenuItems = items;
     menu.toggle(event);
-  }
-
-  openStartMenu(event: Event, campaign: Campaign, menu: any): void {
-    event.stopPropagation();
-    this.startMenuCampaign = campaign;
-    const hasFailures = (campaign.counters?.failed ?? 0) > 0 || ((campaign as any).failed_count ?? 0) > 0;
-    const hasQueued = (campaign.counters?.queued ?? 0) > 0 || ((campaign as any).queued_count ?? 0) > 0;
-
-    this.startMenuItems = [
-      {
-        label: 'Start / Restart All',
-        icon: 'pi pi-refresh',
-        command: () => this.startCampaignWithMode(campaign, 'all'),
-      },
-      {
-        label: 'Retry Failed Only',
-        icon: 'pi pi-replay',
-        disabled: !hasFailures,
-        command: () => this.startCampaignWithMode(campaign, 'failed_only'),
-      },
-      {
-        label: 'Resume Pending Only',
-        icon: 'pi pi-play',
-        disabled: !hasQueued,
-        command: () => this.startCampaignWithMode(campaign, 'pending_only'),
-      },
-    ];
-    menu.toggle(event);
-  }
-
-  startCampaignWithMode(campaign: Campaign, mode: RestartMode = 'all'): void {
-    if (this.startingCampaignId) return;
-    this.startingCampaignId = campaign.id;
-    this.campaignService.startCampaign(campaign.id, mode).subscribe({
-      next: () => {
-        this.startingCampaignId = null;
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Campaign Started',
-          detail: `"${campaign.name}" started with mode: ${mode}.`,
-        });
-        this.loadCampaigns();
-      },
-      error: (err) => {
-        this.startingCampaignId = null;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Start Failed',
-          detail: err.error?.detail || err.message || 'Failed to start campaign with selected mode.',
-        });
-      },
-    });
-  }
-
-  startCampaign(campaign: Campaign): void {
-    this.startCampaignWithMode(campaign, 'all');
-  }
-
-  pauseCampaign(campaign: Campaign): void {
-    this.campaignService.pauseCampaign(campaign.id).subscribe({
-      next: () => {
-        this.messageService.add({
-          severity: 'info',
-          summary: 'Campaign Paused',
-          detail: `Campaign "${campaign.name}" has been paused.`,
-        });
-        this.loadCampaigns();
-      },
-      error: () => {
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to pause campaign.',
-        });
-      },
-    });
-  }
-
-  resumeCampaign(campaign: Campaign): void {
-    this.campaignService.resumeCampaign(campaign.id).subscribe({
-      next: () => {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Campaign Resumed',
-          detail: `Campaign "${campaign.name}" has resumed.`,
-        });
-        this.loadCampaigns();
-      },
-      error: () => {
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Error',
-          detail: 'Failed to resume campaign.',
-        });
-      },
-    });
   }
 
   getStatusSeverity(
@@ -549,5 +452,36 @@ export class CampaignListComponent implements OnInit {
         campaign.counters.total) *
         100,
     );
+  }
+
+  getWarningSeverity(severity: string): string {
+    if (severity === 'error') return 'rgba(239, 68, 68, 0.1)';
+    if (severity === 'warning') return 'rgba(245, 158, 11, 0.1)';
+    return 'rgba(59, 130, 246, 0.1)';
+  }
+
+  getWarningColor(severity: string): string {
+    if (severity === 'error') return '#f87171';
+    if (severity === 'warning') return '#fbbf24';
+    return '#60a5fa';
+  }
+
+  getRecipientSeverity(
+    status: string,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    const map: Record<
+      string,
+      'success' | 'info' | 'warn' | 'danger' | 'secondary'
+    > = {
+      pending: 'secondary',
+      queued: 'info',
+      sent: 'success',
+      delivered: 'success',
+      read: 'success',
+      replied: 'success',
+      failed: 'danger',
+      skipped: 'warn',
+    };
+    return map[status] || 'secondary';
   }
 }
