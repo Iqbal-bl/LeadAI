@@ -278,7 +278,11 @@ class LeadCompanyScript(LeadAIBase):
     # here only because additive-only migrations never drop a column.
     VoiceGender = Column(String(20), nullable=True)
     VoiceSpeaker = Column(String(60), nullable=True)
-    MultiStt = Column(Boolean, default=False)
+    # Column-level default only matters for a raw insert that skips the API
+    # layer; routers/scripts.py always passes MultiStt explicitly, so the
+    # real default a company admin gets is ScriptCreate.multi_stt in
+    # schemas.py (True) — kept in sync here so the two don't drift apart.
+    MultiStt = Column(Boolean, default=True)
 
 
 # Valid LeadCompanyDataPoint.DataType values.
@@ -379,7 +383,7 @@ class LeadCompanySettings(LeadAIBase):
     # honours it.
     VoiceGender = Column(String(20), nullable=True)    # male|female
     VoiceSpeed = Column(Float, nullable=True)           # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
-    VoiceSpeaker = Column(String(60), nullable=True)    # Sarvam voice id, e.g. "anushka"/"ritu"; None = platform default
+    VoiceSpeaker = Column(String(60), nullable=True)    # Sarvam bulbul:v3 voice id, e.g. "ritu"/"priya"; None = platform default
 
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)

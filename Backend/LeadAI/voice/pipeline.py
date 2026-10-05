@@ -203,7 +203,10 @@ def build_services(context: dict) -> Services:
     # 1.0 is Sarvam's normal speaking speed; valid range on bulbul:v3 is 0.5-2.0.
     # 1.1 (slightly faster) is the platform default; a super admin can override
     # it per company (see LeadCompanySettings.VoiceSpeed) — never a company admin.
-    tts_kwargs = {"voice": context.get("speaker") or "anushka", "pace": context.get("pace") or 1.1}
+    # "anushka" isn't in bulbul:v3's speaker roster (it's a leftover bulbul:v2
+    # name) — only reached if company_voice_settings() itself somehow handed
+    # back nothing, but kept valid for the same reason that one is "ritu".
+    tts_kwargs = {"voice": context.get("speaker") or "ritu", "pace": context.get("pace") or 1.1}
     if language:
         tts_kwargs["language"] = language
     def language_frame(code: str):

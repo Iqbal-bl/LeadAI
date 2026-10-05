@@ -294,7 +294,11 @@ def company_voice_settings(db: Session, client_id: str) -> dict:
     )
     gender = (row.VoiceGender if row else None) or "female"
     speed = (row.VoiceSpeed if row and row.VoiceSpeed is not None else None) or 1.1
-    speaker = (row.VoiceSpeaker if row else None) or "anushka"
+    # "anushka" was the old bulbul:v2 default and isn't in bulbul:v3's speaker
+    # roster at all — every call that never had VoiceSpeaker set got a 400 from
+    # Sarvam on every TTS attempt (3 quick-reconnect failures, then silence for
+    # the rest of the call). "ritu" is valid on v3.
+    speaker = (row.VoiceSpeaker if row else None) or "ritu"
     return {"gender": gender, "speed": speed, "speaker": speaker}
 
 

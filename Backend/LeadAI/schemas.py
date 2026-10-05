@@ -370,7 +370,14 @@ class ScriptCreate(BaseModel):
     language: str = "en-IN"
     script_xml: str = Field(min_length=10)
     is_default: bool = False
-    multi_stt: bool = False
+    # Most Indian callers code-switch (Hinglish) rather than speaking one language
+    # throughout. With this off, Sarvam's STT is pinned to `language` for the
+    # whole call and never actually detects anything else — every utterance
+    # comes back tagged as that one language regardless of what was said, so
+    # the AI has no signal to ever reply in anything but that language. On by
+    # default so a newly created script auto-detects per utterance unless an
+    # admin deliberately wants a single pinned language.
+    multi_stt: bool = True
 
 
 class ScriptUpdate(BaseModel):
