@@ -86,6 +86,42 @@ def test_a_handoff_speaks_first_then_ends_the_call():
     assert texts(down) == ["Connecting you now."]
 
 
+def test_a_vad_blip_during_the_farewell_does_not_cut_it_off():
+    """Real bug: a VAD false positive (background noise, the bot's own voice
+    bleeding into the mic) landing right as the farewell starts speaking
+    broadcast an interruption that cut the TTS off mid-sentence — the caller
+    heard "Of course." then silence, never the rest of the goodbye. Once a
+    reply ends the call there is no next turn to prepare for, so nothing
+    downstream should see an interruption for the remainder of that reply.
+
+    Driven directly against process_frame rather than through run_stage: by
+    the time an EndWorkerFrame reaches the sink, the pipeline worker is
+    already tearing down, so a frame queued after it in the full harness can
+    be dropped before delivery regardless of this guard — which would make
+    that version of this test pass or fail by sheer timing, not by what the
+    processor actually did.
+    """
+    from pipecat.processors.frame_processor import FrameDirection
+
+    async def respond(text):
+        return BrainReply(text="Of course. Thank you for your time. Goodbye!", ends_call=True)
+
+    processor = LeadAIBrainProcessor(respond=respond)
+    pushed = []
+
+    async def fake_push(frame, direction=FrameDirection.DOWNSTREAM):
+        pushed.append(frame)
+
+    processor.push_frame = fake_push
+    run(processor.process_frame(ctx(), FrameDirection.DOWNSTREAM))
+    run(processor.process_frame(UserStartedSpeakingFrame(), FrameDirection.DOWNSTREAM))
+
+    assert not any(isinstance(f, UserStartedSpeakingFrame) for f in pushed)
+    assert [type(f).__name__ for f in pushed] == [
+        "LLMFullResponseStartFrame", "LLMTextFrame", "LLMFullResponseEndFrame", "EndWorkerFrame"]
+    assert texts(pushed) == ["Of course. Thank you for your time. Goodbye!"]
+
+
 def test_provisional_and_empty_turns_are_never_answered():
     calls = []
 

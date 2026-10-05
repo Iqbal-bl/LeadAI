@@ -70,7 +70,7 @@ def test_a_call_campaign_reuses_the_imports_conversation_not_a_second_one():
     result = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="call", chat_channel=None, chat_channel_account_id=None,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id="script-1",
+        voice_script_id="script-1",
         call_escalation=False, principal=principal, db=db,
     ))
     campaign_id = result.batches[0].campaign_id

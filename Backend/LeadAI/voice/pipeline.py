@@ -51,6 +51,17 @@ IDLE_TIMEOUT_SECONDS = 120
 # that pairing; the first version used 0.6 s and added 0.4 s to EVERY turn for nothing (the
 # log showed Smart Turn correctly waiting through mid-sentence pauses on its own).
 VAD_STOP_SECONDS = 0.2
+# Silero's own defaults (confidence 0.7, start_secs 0.2, min_volume 0.6) assume a
+# clean microphone. Carrier-encoded phone audio (Twilio/Exotel, 8kHz) carries more
+# line noise and encoding artifacts than that — background noise alone was enough
+# to trip "user started speaking" mid-reply, broadcasting an interruption that cut
+# the bot off (see brain.py's _call_ending guard for the other half of that fix).
+# Raised the bar on all three: a higher confidence and a longer required run of
+# speech-like audio before triggering, plus a higher volume floor, costs a little
+# responsiveness on a genuinely quiet "yes" but stops noise alone from interrupting.
+VAD_CONFIDENCE = 0.8
+VAD_START_SECONDS = 0.35
+VAD_MIN_VOLUME = 0.7
 # Smart Turn decides whether a pause is the end of a thought. When it says "not finished" it
 # still gives up after this much silence. Its default is 3 s: on the second live call "Okay,
 # bye." was judged unfinished and the reply came 3 s later, after the caller had hung up. 1.5 s
@@ -364,7 +375,12 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
         transport_out=transport.output(),
         services=services,
         session=session,
-        vad=SileroVADAnalyzer(params=VADParams(stop_secs=VAD_STOP_SECONDS)),
+        vad=SileroVADAnalyzer(params=VADParams(
+            stop_secs=VAD_STOP_SECONDS,
+            confidence=VAD_CONFIDENCE,
+            start_secs=VAD_START_SECONDS,
+            min_volume=VAD_MIN_VOLUME,
+        )),
     )
     worker = PipelineWorker(
         pipeline,

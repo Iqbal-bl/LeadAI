@@ -3,8 +3,12 @@
 THE FLOW
 --------
 1. GET  /leads/import/schema  -> the columns a company can fill in: the fixed
-   set (name/phone/email/whatsapp/instagram_id/facebook_id/product) plus
-   whatever data points the company has defined (see routers/data_points.py).
+   set (name/phone/email/whatsapp/product) plus whatever data points the
+   company has defined (see routers/data_points.py). instagram_id/facebook_id
+   were deliberately dropped: a cold import can never carry a real IGSID/PSID
+   (Meta only hands that over once the person has already messaged the
+   connected account), so the column only ever produced a value the Send API
+   rejects — better to not offer it than let it fail silently at send time.
    The frontend renders this as a template/instructions so an uploaded file
    follows the expected format.
 2. POST /leads/import          -> parses the file with the SAME engine
@@ -37,10 +41,7 @@ from .. import activity
 from ..activity import A
 from ..db import get_leadai_db
 from ..models import (
-    CHANNEL_INSTAGRAM,
-    CHANNEL_MESSENGER,
     Lead,
-    LeadChannelIdentity,
     LeadCompanyDataPoint,
     LeadContactList,
     LeadContactListItem,
@@ -67,10 +68,13 @@ FIXED_SCHEMA_FIELDS: list[dict] = [
     {"key": "phone", "label": "Phone Number", "data_type": "text", "required": False},
     {"key": "email", "label": "Email", "data_type": "email", "required": False},
     {"key": "whatsapp", "label": "WhatsApp Number", "data_type": "text", "required": False},
-    {"key": "instagram_id", "label": "Instagram ID (IGSID)", "data_type": "text", "required": False},
-    {"key": "facebook_id", "label": "Facebook/Messenger ID (PSID)", "data_type": "text", "required": False},
     {"key": "product", "label": "Product", "data_type": "text", "required": False},
 ]
+# instagram_id/facebook_id were dropped from the template: a cold import can
+# never carry a real IGSID/PSID. Meta only hands that id over once the person
+# has already messaged the connected account — a value filled in by hand is
+# always either a username (which the Send API rejects) or a placeholder,
+# and the row previously failed silently at send time instead of at import.
 
 
 def _company_data_points(db: Session, client_id: str) -> list[LeadCompanyDataPoint]:
@@ -120,31 +124,6 @@ def _classify_product(raw: str | None, catalog_names: list[str]) -> str:
     return ai_engine._snap_to_catalog(raw, catalog_names)
 
 
-def _upsert_identity(
-    db: Session, client_id: str, channel_account_id: str, channel: str,
-    external_user_id: str, customer_id: str, actor: str,
-) -> None:
-    existing = (
-        db.query(LeadChannelIdentity)
-        .filter(
-            LeadChannelIdentity.ChannelAccountId == channel_account_id,
-            LeadChannelIdentity.ExternalUserId == external_user_id,
-        )
-        .first()
-    )
-    if existing:
-        if existing.IsDeleted:
-            existing.IsDeleted = False
-        existing.CustomerId = customer_id
-        return
-    db.add(
-        LeadChannelIdentity(
-            ClientId=client_id, ChannelAccountId=channel_account_id, Channel=channel,
-            ExternalUserId=external_user_id, CustomerId=customer_id, CreatedBy=actor,
-        )
-    )
-
-
 @router.post(
     "/import",
     response_model=LeadImportResultOut,
@@ -157,8 +136,6 @@ async def import_leads(
     channel: str = Form(..., pattern="^(chat|call|both)$"),
     chat_channel: str | None = Form(None, pattern="^(whatsapp|instagram|messenger)$"),
     chat_channel_account_id: str | None = Form(None),
-    instagram_account_id: str | None = Form(None, description="Required if the file has an instagram_id column"),
-    facebook_account_id: str | None = Form(None, description="Required if the file has a facebook_id column"),
     voice_script_id: str | None = Form(None),
     call_escalation: bool = Form(False, description="Only meaningful when channel='both': ask consent before calling"),
     principal: Principal = Depends(require("campaign.manage")),
@@ -185,22 +162,11 @@ async def import_leads(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "; ".join(result.warnings) or "No rows could be read from this file.")
 
-    # instagram_account_id/facebook_account_id are only EVER required when that
-    # specific channel is the one actually being used for messaging — a call
-    # campaign (or a whatsapp one) never sends to an IGSID/PSID, so a leftover
-    # instagram_id/facebook_id column in the file (the template includes every
-    # possible column; a row may carry social info never meant to be used
-    # this time) must not block an otherwise-unrelated import. When the
-    # column IS present but its account id is missing, those rows just don't
-    # get a channel identity recorded — reported back, not raised as an error.
-    needs_instagram_account = chat_channel == CHANNEL_INSTAGRAM
-    needs_facebook_account = chat_channel == CHANNEL_MESSENGER
-    if needs_instagram_account and any(r.instagram_id for r in result.rows) and not instagram_account_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            "The file has an instagram_id column — specify instagram_account_id.")
-    if needs_facebook_account and any(r.facebook_id for r in result.rows) and not facebook_account_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            "The file has a facebook_id column — specify facebook_account_id.")
+    # instagram_id/facebook_id are no longer part of the import schema (see
+    # FIXED_SCHEMA_FIELDS) — a cold import can never carry a real IGSID/PSID,
+    # only a username/placeholder that Meta's Send API rejects at send time.
+    # Any such column in an old-template file a caller still has lying around
+    # is simply ignored now, rather than recording a bogus identity from it.
 
     # Archive the original upload so "what was actually imported" is answerable
     # later, same as a contact-list upload already does. Best-effort — storage
@@ -271,17 +237,6 @@ async def import_leads(
             db.flush()
         elif row.name and not customer.DisplayName:
             customer.DisplayName = row.name
-
-        # Recorded whenever an account id was given, regardless of which
-        # channel this particular campaign runs on — a call campaign today
-        # doesn't need it, but the identity is still real and worth keeping
-        # for whenever this lead is messaged on that channel later.
-        if row.instagram_id and instagram_account_id:
-            _upsert_identity(db, client_id, instagram_account_id, CHANNEL_INSTAGRAM,
-                             row.instagram_id, customer.Id, principal.email)
-        if row.facebook_id and facebook_account_id:
-            _upsert_identity(db, client_id, facebook_account_id, CHANNEL_MESSENGER,
-                             row.facebook_id, customer.Id, principal.email)
 
         # Re-importing the same file (a frontend error + retry is exactly how
         # this was found) must not fork a second conversation and a second

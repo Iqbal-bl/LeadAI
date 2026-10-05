@@ -323,6 +323,37 @@ _RESPONSE_TYPE_TO_SENDER = {
 }
 
 
+def sync_call_outcome(db: Session, call_sid: str, status: str, duration_sec: int) -> bool:
+    """Write the carrier's own terminal status + measured duration onto the
+    matching leadai_calls row. Returns False if no row matches this CallSid.
+
+    Before this, LeadCall.Status/DurationSec were only ever touched by
+    voice/session.py's call-ends-no-matter-what fallback, which has no access
+    to what actually happened on the line — it marked every call "completed"
+    (even a busy/no-answer/failed one) and measured duration from when the
+    row was CREATED (dial time, including ringing) rather than from when the
+    call was actually answered. The carrier's own status callback (Twilio's
+    /call-status, Exotel's /voice/exotel/status) is the one place that truth
+    is available, which is why this takes it as plain arguments rather than
+    deriving it — the caller already received it from the carrier.
+
+    Deliberately unconditional — no "only if not already set" guard. The
+    carrier's own report always outranks the pipecat-side fallback guess,
+    whichever of the two happens to run first.
+    """
+    call = (
+        db.query(LeadCall)
+        .filter(LeadCall.CallSid == call_sid, LeadCall.IsDeleted == False)  # noqa: E712
+        .one_or_none()
+    )
+    if call is None:
+        return False
+    call.Status = status
+    call.DurationSec = duration_sec
+    call.UpdatedAt = utcnow()
+    return True
+
+
 def sync_call_transcript(
     db: Session,
     client_id: str,

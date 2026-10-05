@@ -299,6 +299,28 @@ async def _sync_leadai_transcript(call_sid: str):
     except Exception as exc:
         logger.warning(f"[SYNC] failed to sync transcript for {call_sid}: {exc}")
 
+
+async def _sync_leadai_call_outcome(call_sid: str, status: str, duration_sec: int) -> None:
+    """Twilio's own terminal status + measured duration, onto the LeadAI
+    leadai_calls row. See call_bridge.sync_call_outcome() for why this
+    matters — this is just the session-owning wrapper for the webhook."""
+    try:
+        from LeadAI.db import session
+        from LeadAI.services import call_bridge
+
+        def _do_update():
+            db = session()
+            try:
+                if call_bridge.sync_call_outcome(db, call_sid, status, duration_sec):
+                    db.commit()
+            finally:
+                db.close()
+
+        await asyncio.to_thread(_do_update)
+    except Exception as exc:  # noqa: BLE001 — bookkeeping must never break the webhook
+        logger.warning(f"[SYNC] failed to sync call outcome for {call_sid}: {exc}")
+
+
 # Session storage for XML sections and language settings
 session_xml_sections: Dict[str, list] = {}  # session_id -> sections
 session_language: Dict[str, str] = {}  # session_id -> language code
@@ -1722,6 +1744,16 @@ async def call_status(request: Request):
         # so the inbox UI can display it immediately.
         if call_data.get("leadai") and call_data.get("conversation_id"):
             asyncio.create_task(_sync_leadai_transcript(call_sid))
+
+            # Twilio's own terminal status (busy/no-answer/failed/completed/
+            # canceled) and its own measured duration (answered-to-hangup,
+            # 0 for a call that never connected) — the real outcome, not a
+            # "completed" guess computed from dial time.
+            try:
+                real_duration = int(float(form.get("CallDuration") or 0))
+            except (TypeError, ValueError):
+                real_duration = 0
+            asyncio.create_task(_sync_leadai_call_outcome(call_sid, status, real_duration))
 
         # Give the client a moment to receive the terminal + hangup messages,
         # then clean up its call-scoped WS connections (general + transcript).

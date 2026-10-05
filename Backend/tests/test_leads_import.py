@@ -68,7 +68,12 @@ def test_schema_lists_fixed_fields_and_the_companys_own_data_points():
     db.commit()
     out = leads_import.import_schema(principal=_principal(client.Id), db=db)
     keys = {f.key for f in out.fields}
-    assert {"name", "phone", "email", "instagram_id", "facebook_id", "product"} <= keys
+    assert {"name", "phone", "email", "product"} <= keys
+    # Dropped deliberately: a cold import can never carry a real IGSID/PSID
+    # (Meta only hands that over once the person has already messaged the
+    # connected account) — the column only ever produced a value the Send
+    # API rejects, discovered late and cryptically instead of not offered.
+    assert "instagram_id" not in keys and "facebook_id" not in keys
     assert "budget" in keys
     budget_field = next(f for f in out.fields if f.key == "budget")
     assert budget_field.source == "data_point" and budget_field.required is True
@@ -89,7 +94,7 @@ def test_import_classifies_leads_into_one_draft_campaign_per_product():
     result = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     assert result.total == 4 and result.valid == 4 and result.invalid == 0
@@ -119,7 +124,7 @@ def test_a_real_name_never_becomes_the_masked_public_ref():
     _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     customer = db.query(models.LeadCustomer).filter(models.LeadCustomer.ClientId == client.Id).one()
@@ -137,13 +142,13 @@ def test_reimporting_the_same_phone_continues_the_existing_lead_not_a_duplicate(
     first = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     second = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     assert first.valid == 1 and second.valid == 1
@@ -170,7 +175,7 @@ def test_a_closed_conversation_does_get_a_fresh_one_not_reopened_silently():
     _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     customer = db.query(models.LeadCustomer).filter(models.LeadCustomer.ClientId == client.Id).one()
@@ -182,7 +187,7 @@ def test_a_closed_conversation_does_get_a_fresh_one_not_reopened_silently():
     _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     conversations = db.query(models.LeadConversation).filter(
@@ -197,7 +202,7 @@ def test_a_company_with_no_catalog_puts_everything_in_one_unknown_batch():
     result = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     assert len(result.batches) == 1
@@ -211,7 +216,7 @@ def test_invalid_rows_are_reported_not_silently_dropped():
     result = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     assert result.total == 2 and result.valid == 1 and result.invalid == 1
@@ -226,7 +231,7 @@ def test_company_data_points_are_prefilled_from_matching_columns():
     _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     lead = db.query(models.Lead).filter(models.Lead.ClientId == client.Id).one()
@@ -242,7 +247,7 @@ def test_an_imported_batch_is_labelled_a_lead_campaign():
     result = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     campaign = db.get(LeadCampaign, result.batches[0].campaign_id)
@@ -265,71 +270,23 @@ def test_a_manually_created_campaign_is_labelled_a_broadcast():
 # =========================================================================== #
 # validation
 # =========================================================================== #
-def test_instagram_column_without_an_account_id_is_rejected_when_chat_channel_is_instagram():
-    db, client, account = _setup()
-    csv_text = "name,instagram_id,product\nSomeone,igsid123,Home Loan\n"
-    try:
-        _run(leads_import.import_leads(
-            request=None, file=_csv_file(csv_text),
-            channel="chat", chat_channel="instagram", chat_channel_account_id=account.Id,
-            instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
-            call_escalation=False, principal=_principal(client.Id), db=db,
-        ))
-        assert False, "should have required instagram_account_id"
-    except HTTPException as exc:
-        assert exc.status_code == 422
-
-
-def test_an_instagram_id_column_never_blocks_an_unrelated_call_campaign():
-    # Real bug: the import template includes every possible column, so a row
-    # can carry an instagram_id even when this particular batch is a pure
-    # voice-call campaign that never sends to it. The column being present
-    # must not force specifying an instagram_account_id that has nothing to
-    # do with this campaign's actual channel.
-    db, client, account = _setup()
-    csv_text = "name,phone,instagram_id,product\nSomeone,+919000000001,igsid123,Home Loan\n"
-    result = _run(leads_import.import_leads(
-        request=None, file=_csv_file(csv_text),
-        channel="call", chat_channel=None, chat_channel_account_id=None,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
-        call_escalation=False, principal=_principal(client.Id), db=db,
-    ))
-    assert result.valid == 1
-    # No identity is recorded either, since no account id was ever given.
-    assert db.query(models.LeadChannelIdentity).filter(
-        models.LeadChannelIdentity.ClientId == client.Id
-    ).count() == 0
-
-
-def test_an_instagram_id_column_never_blocks_a_whatsapp_only_chat_campaign():
+def test_a_stray_instagram_id_column_from_an_old_template_is_silently_ignored():
+    # instagram_id/facebook_id are gone from the schema (a cold import can
+    # never carry a real IGSID/PSID — see FIXED_SCHEMA_FIELDS) but a caller
+    # may still have an old template file with the column in it. It must not
+    # be rejected, and must not record any identity from it anymore.
     db, client, account = _setup()
     csv_text = "name,phone,instagram_id,product\nSomeone,+919000000001,igsid123,Home Loan\n"
     result = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=False, principal=_principal(client.Id), db=db,
     ))
     assert result.valid == 1
-
-
-def test_the_identity_is_still_recorded_when_an_account_id_is_given_even_on_a_call_campaign():
-    db, client, account = _setup()
-    ig_account = models.LeadChannelAccount(ClientId=client.Id, Channel="instagram", Name="ig",
-                                           ExternalId=uuid.uuid4().hex)
-    db.add(ig_account)
-    db.commit()
-    csv_text = "name,phone,instagram_id,product\nSomeone,+919000000001,igsid123,Home Loan\n"
-    _run(leads_import.import_leads(
-        request=None, file=_csv_file(csv_text),
-        channel="call", chat_channel=None, chat_channel_account_id=None,
-        instagram_account_id=ig_account.Id, facebook_account_id=None, voice_script_id=None,
-        call_escalation=False, principal=_principal(client.Id), db=db,
-    ))
-    identity = db.query(models.LeadChannelIdentity).filter(
+    assert db.query(models.LeadChannelIdentity).filter(
         models.LeadChannelIdentity.ClientId == client.Id
-    ).one()
-    assert identity.ExternalUserId == "igsid123"
+    ).count() == 0
 
 
 def test_call_escalation_flag_rejected_unless_channel_is_both():
@@ -339,7 +296,7 @@ def test_call_escalation_flag_rejected_unless_channel_is_both():
         _run(leads_import.import_leads(
             request=None, file=_csv_file(csv_text),
             channel="chat", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-            instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+            voice_script_id=None,
             call_escalation=True, principal=_principal(client.Id), db=db,
         ))
         assert False, "should have rejected call_escalation with channel='chat'"
@@ -353,7 +310,7 @@ def test_channel_both_with_escalation_marks_the_campaign():
     result = _run(leads_import.import_leads(
         request=None, file=_csv_file(csv_text),
         channel="both", chat_channel="whatsapp", chat_channel_account_id=account.Id,
-        instagram_account_id=None, facebook_account_id=None, voice_script_id=None,
+        voice_script_id=None,
         call_escalation=True, principal=_principal(client.Id), db=db,
     ))
     campaign = db.get(LeadCampaign, result.batches[0].campaign_id)

@@ -100,11 +100,21 @@ class LeadAIBrainProcessor(FrameProcessor):
         self._inflight: str | None = None   # what is being answered right now
         self._carry = ""                    # words from a turn that was superseded
         self._tts_language: str | None = None
+        # Set once a reply that ends the call is on its way out. A VAD false
+        # positive (background noise, mic bleed-through from the bot's own
+        # voice) during that farewell was broadcasting an interruption that
+        # cut the TTS off mid-sentence — "Of course." then silence, instead
+        # of the whole goodbye _answer() below already queues in full. There
+        # is no next turn to prepare for once the call is ending, so nothing
+        # downstream needs the interruption; it is swallowed here instead.
+        self._call_ending = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, (InterruptionFrame, UserStartedSpeakingFrame)):
+            if self._call_ending:
+                return
             self._generation += 1
             self._supersede_inflight()
             await self.push_frame(frame, direction)
@@ -166,6 +176,12 @@ class LeadAIBrainProcessor(FrameProcessor):
         if generation != self._generation or reply.superseded:
             logger.info("[LeadAI voice] dropped a reply: the caller spoke again first")
             return
+
+        if reply.ends_call or reply.skipped:
+            # Set BEFORE the text frames go out: TTS for this farewell starts
+            # the moment they're pushed, and a VAD blip can fire within a few
+            # hundred ms of the bot starting to speak.
+            self._call_ending = True
 
         if reply.text:
             if reply.language and self._language_frame is not None and reply.language != self._tts_language:
