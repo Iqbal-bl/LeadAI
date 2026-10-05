@@ -205,6 +205,29 @@
           <p-inputSwitch [(ngModel)]="aiConfig.enableSentiment"></p-inputSwitch>
         </div>
 
+        <!-- Read-only Voice Settings (Managed by Support) -->
+        <div
+          class="p-4 rounded-xl border border-solid space-y-2"
+          style="background: var(--app-surface-alt, #f8fafc); border-color: var(--card-border)"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="pi pi-lock text-slate-400 text-xs"></i>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Platform Voice Profile
+              </span>
+            </div>
+            <p-tag
+              value="Read-Only"
+              severity="secondary"
+              [rounded]="true"
+            ></p-tag>
+          </div>
+          <p class="text-xs text-slate-600 dark:text-slate-300">
+            Voice: <span class="font-semibold">{{ companySettings?.voice_gender || 'female' }}</span>, speed <span class="font-semibold">{{ companySettings?.voice_speed ?? 1.1 }}x</span> — contact support to change
+          </p>
+        </div>
+
         <div class="pt-4 flex justify-end">
           <p-button
             label="Update AI Config"

@@ -186,37 +186,18 @@
         <span>Text-To-Speech Settings</span>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <!-- Voice Gender -->
-        <div class="flex flex-col gap-1.5">
-          <label
-            class="text-[10px] font-bold uppercase text-slate-505 dark:text-slate-400"
-            >Voice Gender</label
-          >
-          <p-dropdown
-            appendTo="body"
-            [options]="[
-              { label: 'Male', value: 'male' },
-              { label: 'Female', value: 'female' },
-            ]"
-            [(ngModel)]="scriptForm.voice_gender"
-            [style]="{ width: '100%' }"
-          ></p-dropdown>
-        </div>
-
-        <!-- Voice Speaker -->
-        <div class="flex flex-col gap-1.5">
-          <label
-            class="text-[10px] font-bold uppercase text-slate-550 dark:text-slate-400"
-            >Voice Speaker</label
-          >
-          <p-dropdown
-            appendTo="body"
-            [options]="voiceSpeakers[scriptForm.voice_gender]"
-            [(ngModel)]="scriptForm.voice_speaker"
-            [style]="{ width: '100%' }"
-          ></p-dropdown>
-        </div>
+      <!-- Voice Speaker -->
+      <div class="flex flex-col gap-1.5">
+        <label
+          class="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400"
+          >Voice Speaker</label
+        >
+        <p-dropdown
+          appendTo="body"
+          [options]="allVoiceSpeakers"
+          [(ngModel)]="scriptForm.voice_speaker"
+          [style]="{ width: '100%' }"
+        ></p-dropdown>
       </div>
 
       <!-- Multi-STT Switch -->

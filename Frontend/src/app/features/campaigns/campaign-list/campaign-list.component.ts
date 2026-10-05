@@ -32,14 +32,20 @@ export class CampaignListComponent implements OnInit {
 
   canSend = false;
 
-  // Tab state: 'all' | 'broadcast' | 'lead'
-  selectedTab: 'all' | 'broadcast' | 'lead' = 'all';
+  // Tab state: 'broadcast' | 'lead_campaign' | 'all'
+  selectedTab: 'broadcast' | 'lead_campaign' | 'all' = 'broadcast';
 
   // Start / Restart Menu State
   startMenuCampaign: Campaign | null = null;
   startMenuItems: MenuItem[] = [];
   campaignRowMenuItems: MenuItem[] = [];
   selectedCampaign: Campaign | null = null;
+
+  setTab(tab: 'broadcast' | 'lead_campaign' | 'all'): void {
+    if (this.selectedTab === tab) return;
+    this.selectedTab = tab;
+    this.loadCampaigns();
+  }
 
   isLeadCampaign(c: Campaign): boolean {
     const type = (c.campaign_type || '').toLowerCase().trim();
@@ -64,7 +70,7 @@ export class CampaignListComponent implements OnInit {
     if (this.selectedTab === 'broadcast') {
       return this.campaigns.filter((c) => this.isBroadcast(c));
     }
-    if (this.selectedTab === 'lead') {
+    if (this.selectedTab === 'lead_campaign') {
       return this.campaigns.filter((c) => this.isLeadCampaign(c));
     }
     return this.campaigns;
@@ -122,9 +128,16 @@ export class CampaignListComponent implements OnInit {
 
   loadCampaigns(): void {
     this.loading = true;
-    this.campaignService.getCampaigns().subscribe({
+    const params: { campaign_type?: string } = {};
+    if (this.selectedTab === 'broadcast') {
+      params.campaign_type = 'broadcast';
+    } else if (this.selectedTab === 'lead_campaign') {
+      params.campaign_type = 'lead_campaign';
+    }
+
+    this.campaignService.getCampaigns(params).subscribe({
       next: (res: any) => {
-        const raw = res.items ?? [];
+        const raw = res.items ?? (Array.isArray(res) ? res : []);
         this.campaigns = raw.map((c: any) => ({
           ...c,
           counters: {

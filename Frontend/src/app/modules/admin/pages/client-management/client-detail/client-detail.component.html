@@ -386,5 +386,81 @@
         </div>
       </div>
     </div>
+
+    <!-- Platform Voice Settings Card (Superadmin Only) -->
+    <div class="card-base p-5 lg:col-span-2">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4 pb-3 border-b border-solid" style="border-color: var(--app-border)">
+        <div>
+          <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--app-text)">
+            <i class="pi pi-volume-up text-pink-500"></i> Platform Voice Settings (Superadmin Only)
+          </h3>
+          <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+            Scoped per company. Controls default TTS voice persona and playback speed for AI outbound dialler.
+          </p>
+        </div>
+        <p-tag
+          value="Superadmin Only"
+          severity="warning"
+          [rounded]="true"
+        ></p-tag>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+        <!-- Voice Gender Selector -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-semibold block" style="color: var(--app-text)">
+            Voice Gender
+          </label>
+          <p-dropdown
+            [options]="[
+              { label: 'Female', value: 'female' },
+              { label: 'Male', value: 'male' }
+            ]"
+            [(ngModel)]="voiceGender"
+            placeholder="Select Voice Gender"
+            styleClass="w-full text-sm"
+            [style]="{ width: '100%' }"
+          ></p-dropdown>
+          <span class="text-[11px] block" style="color: var(--app-text-muted)">
+            Sets TTS persona gender & regional language verb agreement.
+          </span>
+        </div>
+
+        <!-- Voice Speed Slider -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between items-center">
+            <label class="text-xs font-semibold block" style="color: var(--app-text)">
+              Voice Speed (0.5x – 2.0x)
+            </label>
+            <span class="text-xs font-bold font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+              {{ voiceSpeed | number:'1.1-2' }}x
+            </span>
+          </div>
+          <p-slider
+            [(ngModel)]="voiceSpeed"
+            [min]="0.5"
+            [max]="2.0"
+            [step]="0.1"
+          ></p-slider>
+          <div class="flex justify-between text-[10px] text-slate-400">
+            <span>0.5x (Slow)</span>
+            <span>1.1x (Default)</span>
+            <span>2.0x (Fast)</span>
+          </div>
+        </div>
+
+        <!-- Save Action -->
+        <div class="flex justify-start md:justify-end">
+          <p-button
+            label="Save Voice Settings"
+            icon="pi pi-check"
+            [loading]="savingVoiceSettings"
+            (onClick)="saveVoiceSettings()"
+            size="small"
+            styleClass="w-full md:w-auto"
+          ></p-button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

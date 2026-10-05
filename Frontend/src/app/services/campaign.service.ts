@@ -51,9 +51,16 @@ export class CampaignService {
     window.open(url, '_blank');
   }
 
-  /** GET /campaigns — list all campaigns */
-  public getCampaigns(): Observable<Campaign[]> {
+  /** GET /campaigns — list all campaigns with optional filters (campaign_type, status, kind, page, page_size) */
+  public getCampaigns(params?: {
+    campaign_type?: 'broadcast' | 'lead_campaign' | string;
+    status?: string;
+    kind?: string;
+    page?: number;
+    page_size?: number;
+  }): Observable<Campaign[]> {
     return this.apiService.get<Campaign[]>('campaigns', {
+      params: params as any,
       companyScoped: true,
     });
   }

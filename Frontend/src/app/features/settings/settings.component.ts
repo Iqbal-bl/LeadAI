@@ -43,7 +43,7 @@ export class SettingsComponent implements OnInit {
   };
 
   companyId: string | null = null;
-  companySettings!: CompanySettings;
+  companySettings: CompanySettings | null = null;
 
   isCompanyAdmin = false;
   loadingPermissions = false;

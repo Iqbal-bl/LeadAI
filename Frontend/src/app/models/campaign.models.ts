@@ -72,7 +72,7 @@ export interface Campaign {
   counters?: CampaignCounters;
   product_id?: string | null;
   product_name?: string | null;
-  campaign_type?: 'broadcast' | 'lead' | string | null;
+  campaign_type?: 'broadcast' | 'lead_campaign' | 'lead' | string | null;
   created_via?: 'manual' | 'import' | string;
   call_escalation_enabled?: boolean;
   output_file_id?: string | null;
