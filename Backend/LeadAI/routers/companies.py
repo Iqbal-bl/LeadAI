@@ -384,10 +384,12 @@ def _settings_out(db: Session, row: LeadCompanySettings) -> CompanySettingsOut:
         auto_call_on_hot_lead=bool(row.AutoCallOnHotLead),
         widget_enabled=bool(row.WidgetEnabled),
         widget_greeting=row.WidgetGreeting,
+        agent_name=row.AgentName,
         effective_handoff_threshold=threshold,
         effective_retrieval_top_k=top_k,
         voice_gender=row.VoiceGender,
         voice_speed=row.VoiceSpeed,
+        voice_speaker=row.VoiceSpeaker,
     )
 
 
@@ -433,6 +435,7 @@ def update_settings(
         ("auto_call_on_hot_lead", "AutoCallOnHotLead"),
         ("widget_enabled", "WidgetEnabled"),
         ("widget_greeting", "WidgetGreeting"),
+        ("agent_name", "AgentName"),
     ):
         value = getattr(payload, field)
         if value is not None:
@@ -468,7 +471,7 @@ def update_voice_settings(
     principal: Principal = Depends(super_admin("company.manage")),
     db: Session = Depends(get_leadai_db),
 ):
-    """Gender and speaking speed for every AI call this company makes.
+    """Gender, speaking speed, and which Sarvam voice speaks on every AI call this company makes.
 
     Deliberately `super_admin(...)`, not `require("settings.manage")` like the
     sibling /settings endpoint above: a company admin has that permission for
@@ -483,6 +486,7 @@ def update_voice_settings(
     for field, column in (
         ("voice_gender", "VoiceGender"),
         ("voice_speed", "VoiceSpeed"),
+        ("voice_speaker", "VoiceSpeaker"),
     ):
         value = getattr(payload, field)
         if value is not None:

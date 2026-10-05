@@ -39,6 +39,7 @@ from pipecat.frames.frames import TranscriptionFrame
 from pipecat.processors.frame_processor import FrameProcessor
 
 from ..config import settings
+from ..services import telephony
 from .brain import LeadAIBrainProcessor
 from .session import CallSession
 
@@ -46,6 +47,14 @@ logger = logging.getLogger(__name__)
 
 # A silent or dead call must not hold a pipeline (and its paid connections) open forever.
 IDLE_TIMEOUT_SECONDS = 120
+# A real incident: Sarvam's STT websocket connect hung mid-handshake and never raised —
+# pipecat's own default setup timeout (20 s) is itself none too fast, and in that call it
+# fired nearly 40 s late besides (something in the hang was blocking the event loop, not
+# just taking a while). The caller heard total silence — the pre-composed opener never
+# even got synthesized — until THEY gave up and hung up, ~57 s in. A bounded wait that
+# fails fast into a clean hangup (see on_setup_timeout below) beats leaving a live person
+# on a dead line for however long a wedged connection to a third party takes to give up.
+PIPELINE_SETUP_TIMEOUT_SECONDS = 8.0
 # Voice activity reports "silence" after this long, and Pipecat's Smart Turn model then
 # decides whether the caller has really finished. 0.2 s is Pipecat's recommended value for
 # that pairing; the first version used 0.6 s and added 0.4 s to EVERY turn for nothing (the
@@ -81,6 +90,20 @@ _TERMINAL_CALL_STATUSES = frozenset({"completed", "failed", "busy", "no-answer",
 
 class CallRejected(Exception):
     """The call may not use this pipeline. The message is safe to log, not to send."""
+
+
+async def handle_pipeline_setup_timeout(call_sid: str, provider: str) -> None:
+    """A processor (almost always STT/TTS connecting to Sarvam) never finished
+    setting up within PIPELINE_SETUP_TIMEOUT_SECONDS. The caller is on a silent
+    line RIGHT NOW — hang up rather than let them sit there for however long the
+    wedged connection takes to give up on its own (see the real incident recorded
+    on PIPELINE_SETUP_TIMEOUT_SECONDS above).
+
+    A plain function, not inlined in the event handler, so it's directly
+    testable without constructing a full pipecat worker/transport.
+    """
+    logger.error("[LeadAI voice] call %s: pipeline setup never completed — hanging up", call_sid)
+    await asyncio.to_thread(telephony.hangup, call_sid, provider)
 
 
 # --------------------------------------------------------------------------- auth
@@ -370,7 +393,7 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
             serializer=serializer,
         ),
     )
-    pipeline, _brain, _aggregators = assemble(
+    pipeline, brain, _aggregators = assemble(
         transport_in=transport.input(),
         transport_out=transport.output(),
         services=services,
@@ -387,7 +410,12 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
         params=PipelineParams(audio_in_sample_rate=sample_rate, audio_out_sample_rate=sample_rate),
         idle_timeout_secs=IDLE_TIMEOUT_SECONDS,
         enable_rtvi=False,
+        setup_timeout_secs=PIPELINE_SETUP_TIMEOUT_SECONDS,
     )
+
+    @worker.event_handler("on_setup_timeout")
+    async def _on_setup_timeout(_worker):
+        await handle_pipeline_setup_timeout(call_sid, transport_type)
 
     # Compose the opening line WHILE the pipeline is starting, not after: the first live call
     # spent about 3 s of dead air generating the greeting only once the pipeline was ready.
@@ -400,7 +428,13 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
         except Exception:  # noqa: BLE001 — no greeting is better than no call
             logger.exception("[LeadAI voice] could not compose the opening line")
             return
-        for frame in opening_frames(opening, services):
+        frames = opening_frames(opening, services)
+        if frames:
+            # Tells the brain an opener was actually queued — only then is a
+            # bare "Hello?" overlapping it treated as noise rather than a
+            # real question (see brain.py's mark_opener_spoken()).
+            brain.mark_opener_spoken()
+        for frame in frames:
             await worker.queue_frame(frame)
 
     @transport.event_handler("on_client_disconnected")

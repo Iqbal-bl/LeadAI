@@ -1,12 +1,17 @@
-"""Pitch, speed and gender for AI calls must be settable by a super admin
-only, never a company admin (explicit product requirement) — and the two
-that actually take effect on a real call (speed, gender; pitch is dropped,
-see models.py's LeadCompanySettings comment: Sarvam's live TTS model,
-bulbul:v3, ignores pitch entirely) must actually reach the call pipeline,
-not just sit in a settings row nobody reads.
+"""Pitch, speed, gender AND which voice speaks must be settable by a super
+admin only, never a company admin (explicit product requirement) — and the
+three that actually take effect on a real call (speed, gender, speaker;
+pitch is dropped, see models.py's LeadCompanySettings comment: Sarvam's
+live TTS model, bulbul:v3, ignores pitch entirely) must actually reach the
+call pipeline, not just sit in a settings row nobody reads.
+
+voice_speaker used to be settable per-script by a company admin
+(script.manage); that ability was removed, not just hidden, when it moved
+here alongside gender/speed — see the deprecated LeadCompanyScript.
+VoiceSpeaker column's comment in models.py.
 
 Covers three links in the chain:
-  1. PUT /companies/{id}/voice-settings actually writes VoiceGender/VoiceSpeed.
+  1. PUT /companies/{id}/voice-settings actually writes VoiceGender/VoiceSpeed/VoiceSpeaker.
   2. call_bridge.prepare_agent_context() reads them back for a real call.
   3. voice.pipeline.build_services() turns them into the Sarvam TTS kwargs.
 
@@ -44,15 +49,17 @@ def test_the_endpoint_writes_gender_and_speed_and_they_come_back_on_read():
     db.commit()
 
     out = companies.update_voice_settings(
-        client.Id, VoiceSettingsIn(voice_gender="male", voice_speed=0.9),
+        client.Id, VoiceSettingsIn(voice_gender="male", voice_speed=0.9, voice_speaker="ritu"),
         request=None, principal=_superadmin(), db=db,
     )
     assert out.voice_gender == "male"
     assert out.voice_speed == 0.9
+    assert out.voice_speaker == "ritu"
 
     read_back = companies.get_settings(client.Id, principal=_superadmin(), db=db)
     assert read_back.voice_gender == "male"
     assert read_back.voice_speed == 0.9
+    assert read_back.voice_speaker == "ritu"
 
 
 def test_prepare_agent_context_reads_the_companys_voice_settings_not_the_script():
@@ -60,7 +67,7 @@ def test_prepare_agent_context_reads_the_companys_voice_settings_not_the_script(
     client = Client(Name="Kestrel Voice 2")
     db.add(client)
     db.flush()
-    db.add(models.LeadCompanySettings(ClientId=client.Id, VoiceGender="male", VoiceSpeed=0.8))
+    db.add(models.LeadCompanySettings(ClientId=client.Id, VoiceGender="male", VoiceSpeed=0.8, VoiceSpeaker="ritu"))
     db.commit()
 
     _sections, _script, voice = call_bridge.prepare_agent_context(
@@ -68,6 +75,15 @@ def test_prepare_agent_context_reads_the_companys_voice_settings_not_the_script(
     )
     assert voice["gender"] == "male"
     assert voice["pace"] == 0.8
+    assert voice["speaker"] == "ritu"
+
+
+def test_a_company_admin_cannot_set_voice_speaker_via_the_script_payload():
+    from LeadAI import schemas
+
+    assert "voice_speaker" not in schemas.ScriptCreate.model_fields
+    assert "voice_speaker" not in schemas.ScriptUpdate.model_fields
+    assert "voice_speaker" not in schemas.ScriptOut.model_fields
 
 
 def test_prepare_agent_context_falls_back_to_platform_defaults_with_no_settings_row():
@@ -81,6 +97,7 @@ def test_prepare_agent_context_falls_back_to_platform_defaults_with_no_settings_
     )
     assert voice["gender"] == "female"
     assert voice["pace"] == 1.1
+    assert voice["speaker"] == "anushka"
 
 
 def test_build_services_passes_the_companys_pace_through_to_sarvam_tts_kwargs():

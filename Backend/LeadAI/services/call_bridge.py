@@ -131,7 +131,7 @@ def prepare_agent_context(
     voice = {
         "language": (getattr(script, "Language", None) or settings.default_language),
         "gender": voice_cfg["gender"],
-        "speaker": getattr(script, "VoiceSpeaker", None) or "anushka",
+        "speaker": voice_cfg["speaker"],
         "pace": voice_cfg["speed"],
         "multi_stt": bool(getattr(script, "MultiStt", False)),
     }

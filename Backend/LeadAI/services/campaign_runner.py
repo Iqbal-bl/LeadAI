@@ -539,6 +539,79 @@ def _active_call_count(db: Session, campaign: LeadCampaign) -> int:
 
 
 # =========================================================================== #
+# SCHEDULE
+# =========================================================================== #
+@jobs.register("campaign.scheduled_start")
+def fire_scheduled_campaign(db: Session, payload: dict) -> dict:
+    """Job handler: the automatic counterpart of an operator clicking Start.
+
+    Enqueued with `run_at=ScheduledAt` the moment a campaign is created or
+    edited with a future `scheduled_at` (see routers/campaigns.py). Building
+    the audience HERE rather than at schedule-time mirrors /start exactly —
+    a list someone keeps adding contacts to should resolve as of send time,
+    not as of whenever it was scheduled, possibly days earlier.
+
+    Must re-check Status is still "scheduled" on arrival: a pause, a manual
+    Start, or a cancel between scheduling and now all move the campaign off
+    "scheduled", and this stale job firing anyway would double-start it.
+    """
+    campaign_id = payload.get("campaign_id")
+    campaign = db.get(LeadCampaign, campaign_id)
+    if campaign is None or campaign.IsDeleted:
+        return {"stopped": "campaign missing"}
+    if campaign.Status != "scheduled":
+        return {"stopped": campaign.Status}
+
+    from . import billing as billing_svc
+
+    allowed, reason = billing_svc.check_channel_access(db, campaign.ClientId, campaign.Channel)
+    if not allowed:
+        campaign.Status = "draft"
+        campaign.StatusMessage = f"Scheduled start skipped: {reason}"
+        activity.log(
+            db, action=A.CAMPAIGN_DEFERRED, client_id=campaign.ClientId, actor_email="system",
+            entity_type="campaign", entity_id=campaign.Id,
+            message=f"Scheduled start of '{campaign.Name}' skipped: {reason}",
+        )
+        db.commit()
+        return {"stopped": "billing", "reason": reason}
+
+    built = (
+        db.query(func.count(LeadCampaignRecipient.Id))
+        .filter(LeadCampaignRecipient.CampaignId == campaign.Id)
+        .scalar()
+        or 0
+    )
+    if built == 0:
+        build_audience(db, campaign, "system")
+        built = campaign.TotalCount or 0
+    if built == 0:
+        campaign.Status = "draft"
+        campaign.StatusMessage = "Scheduled start skipped: no recipients to send to"
+        activity.log(
+            db, action=A.CAMPAIGN_DEFERRED, client_id=campaign.ClientId, actor_email="system",
+            entity_type="campaign", entity_id=campaign.Id,
+            message=f"Scheduled start of '{campaign.Name}' skipped: no recipients",
+        )
+        db.commit()
+        return {"stopped": "no_recipients"}
+
+    execution = start_execution(db, campaign, "all")
+    campaign.Status = "queued"
+    campaign.StatusMessage = "Queued — starting shortly"
+    campaign.CompletedAt = None
+    jobs.enqueue(db, "campaign.run", {"campaign_id": campaign.Id}, client_id=campaign.ClientId, run_at=None, priority=3)
+    activity.log(
+        db, action=A.CAMPAIGN_STARTED, client_id=campaign.ClientId, actor_email="system",
+        entity_type="campaign", entity_id=campaign.Id,
+        message=f"Started scheduled campaign '{campaign.Name}' to {execution.TotalCount} recipients",
+        meta={"recipients": execution.TotalCount, "channel": campaign.Channel, "kind": campaign.Kind, "execution_id": execution.Id},
+    )
+    db.commit()
+    return {"started": execution.TotalCount}
+
+
+# =========================================================================== #
 # EXECUTE
 # =========================================================================== #
 @jobs.register("campaign.run")

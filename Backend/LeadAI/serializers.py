@@ -161,7 +161,6 @@ def script_out(row: LeadCompanyScript) -> ScriptOut:
         version=row.Version,
         is_default=bool(row.IsDefault),
         is_active=bool(row.IsActive),
-        voice_speaker=row.VoiceSpeaker,
         multi_stt=bool(row.MultiStt),
         section_count=len(sections),
         created_at=row.CreatedAt,

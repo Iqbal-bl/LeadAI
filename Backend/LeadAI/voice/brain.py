@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -40,6 +41,17 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 logger = logging.getLogger(__name__)
 
 APOLOGY = "Sorry, I had a technical problem. Could you please say that again?"
+
+# Real call: the opener ("Hi Priya, this is Kabir from Kestrel Homes...") is queued
+# the instant the transport connects, but Twilio audio is already flowing in before
+# that — a caller's reflexive "Hello?" on picking up, said while the opener is still
+# being generated/spoken, was transcribed as a real first turn. The brain, with
+# nothing substantive to answer, replied with another greeting-shaped line ("Hi
+# Priya, I'm here to help...") right after the opener — sounding like two greetings
+# back to back. Matched only against the CALL'S FIRST turn (see _greeted_once below):
+# a bare "hello?" later in the call (e.g. checking the line is still live) still gets
+# a real answer.
+_BARE_GREETING = re.compile(r"^(hello+|he+llo+|hi+|hey+a*|helo+)[\s.,!?]*$", re.IGNORECASE)
 
 
 @dataclass
@@ -108,6 +120,18 @@ class LeadAIBrainProcessor(FrameProcessor):
         # is no next turn to prepare for once the call is ending, so nothing
         # downstream needs the interruption; it is swallowed here instead.
         self._call_ending = False
+        # True once the call's first customer turn has been handled, however it
+        # was handled — used only to decide whether a BARE "hello" deserves the
+        # bare-greeting-overlap suppression below, not to gate anything else.
+        self._greeted_once = False
+        # False until the pipeline confirms an opener was actually queued to be
+        # spoken (see mark_opener_spoken() / voice/pipeline.py's _on_connected).
+        # Deliberately NOT inferred from "is this the first turn" alone: a
+        # company with no opener text at all (opening.text empty) means the
+        # caller heard nothing, so their "Hello?" is the only prompt they get —
+        # suppressing it would leave them talking to silence, a worse bug than
+        # the one being fixed here.
+        self._opener_spoken = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -129,6 +153,11 @@ class LeadAIBrainProcessor(FrameProcessor):
             return
 
         await self.push_frame(frame, direction)
+
+    def mark_opener_spoken(self) -> None:
+        """Called once the pipeline has actually queued the opener to be
+        spoken (non-empty opening.text) — see voice/pipeline.py."""
+        self._opener_spoken = True
 
     def _supersede_inflight(self) -> None:
         """The caller spoke again: whatever is being prepared will not be spoken."""
@@ -153,6 +182,16 @@ class LeadAIBrainProcessor(FrameProcessor):
                 self._on_user_text(text)
             except Exception:  # noqa: BLE001 — the live view must never disturb the call
                 logger.debug("user-text hook failed", exc_info=True)
+
+        if not self._greeted_once:
+            self._greeted_once = True
+            if self._opener_spoken and not self._carry and _BARE_GREETING.match(text.strip()):
+                logger.info(
+                    "[LeadAI voice] caller's first words were just a bare greeting (%r) "
+                    "overlapping the opener — absorbed, not answered again", text,
+                )
+                return
+
         if self._carry:
             # Earlier words of the same thought, from a turn that was superseded.
             text = f"{self._carry} {text}".strip()

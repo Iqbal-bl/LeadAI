@@ -574,6 +574,16 @@ def create_campaign(
     )
     db.add(row)
     db.flush()
+    if scheduled_at is not None:
+        # Nothing actually sends yet — the job queue's own RunAt delay does the
+        # waiting; campaign_runner.fire_scheduled_campaign builds the audience
+        # and starts it when that time arrives. See routers/campaigns.py's
+        # update_campaign for how editing/clearing scheduled_at keeps this in sync.
+        row.Status = "scheduled"
+        jobs.enqueue(
+            db, "campaign.scheduled_start", {"campaign_id": row.Id},
+            client_id=client_id, run_at=scheduled_at, priority=4,
+        )
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_CREATED, client_id=client_id,
         entity_type="campaign", entity_id=row.Id,
@@ -672,6 +682,14 @@ def update_campaign(
     if "scheduled_at" in data and data["scheduled_at"] is not None:
         # TimeZone may have just changed above too — convert using the final value.
         row.ScheduledAt = campaign_runner.local_to_utc(row.ScheduledAt, row.TimeZone)
+        # Any previously-queued fire for the OLD time must not also go off.
+        jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
+        if row.Status in ("draft", "scheduled"):
+            row.Status = "scheduled"
+            jobs.enqueue(
+                db, "campaign.scheduled_start", {"campaign_id": row.Id},
+                client_id=client_id, run_at=row.ScheduledAt, priority=4,
+            )
     row.UpdatedBy = principal.email
     row.UpdatedAt = utcnow()
     activity.log_principal(
@@ -834,6 +852,7 @@ def start_campaign(
 
     # /start is the operator pulling the trigger right now — any ScheduledAt was
     # only ever a plan for an automatic fire, and starting manually overrides it.
+    jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
     row.Status = "queued"
     row.StatusMessage = "Queued — starting shortly"
     row.CompletedAt = None  # stale from a previous run — this one hasn't finished yet
@@ -871,6 +890,7 @@ def pause_campaign(
     row.Status = "paused"
     row.StatusMessage = f"Paused by {principal.email}"
     jobs.cancel_kind(db, "campaign.run", row.Id)
+    jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_PAUSED, client_id=client_id,
         entity_type="campaign", entity_id=row.Id,
@@ -918,6 +938,7 @@ def cancel_campaign(
     row.CompletedAt = utcnow()
     row.StatusMessage = f"Cancelled by {principal.email}"
     jobs.cancel_kind(db, "campaign.run", row.Id)
+    jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
     db.query(LeadCampaignRecipient).filter(
         LeadCampaignRecipient.CampaignId == row.Id,
         LeadCampaignRecipient.Status == "queued",

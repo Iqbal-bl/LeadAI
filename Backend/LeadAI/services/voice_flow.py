@@ -507,29 +507,18 @@ def _returning_opener(
     return text, meta or {}
 
 
-def opening_line(
-    db: Session,
-    client: Client,
-    conversation: LeadConversation,
-    call: LeadCall,
-    *,
-    actor: str = "voice",
-    commit: bool = True,
-    language: str | None = None,
-) -> tuple[str, str | None]:
-    """What the AI says when the call connects. Returns (text, message_id).
+def _compose_opening_text(
+    db: Session, client: Client, conversation: LeadConversation, language: str | None, trace: TurnTrace
+) -> tuple[str, str | None, int, float, list]:
+    """The slow (LLM) part of composing an opening line — deliberately with NO
+    database write, so it can be run speculatively while the phone is still
+    ringing (see voice/warmup.py) without creating a transcript message for a
+    call that never gets answered. opening_line() below is what turns the
+    result into a real, persisted message, and only once the call actually
+    connects.
 
-    `language` is the language the returning customer has been using (see opening_language),
-    so someone who chats in Hindi is not greeted in English.
-
-    A brand-new customer gets the company's own greeting prompt (forced through the
-    greeting branch even if the conversation has system rows). A RETURNING customer gets a
-    follow-up line that uses what we know about them. Either way it is stored as an AI
-    message, so the transcript is complete.
+    Returns (text, model, latency_ms, confidence, sources).
     """
-    if engine_control.is_stopped(conversation):
-        return "", None
-    trace = TurnTrace(conversation_id=conversation.Id, client_id=client.Id, channel="voice")
     prior = [m for m in load_history(db, conversation.Id)
              if (m.Sender or "") in ("customer", "ai", "agent") and (m.Content or "").strip()]
     if prior:
@@ -546,6 +535,70 @@ def opening_line(
         )
         text, model, latency = result["reply"], result["model"], result["latency_ms"]
         confidence, sources = result["confidence"], result["sources"]
+    return text, model, latency, confidence, sources
+
+
+def precompute_opening(db: Session, client_id: str, conversation_id: str) -> dict | None:
+    """Best-effort: compose the opener's TEXT during ringing, before the call
+    is even answered. Twilio/Exotel ring for several seconds before pickup —
+    free time, the same way voice/warmup.py already uses it to open the LLM
+    connection and warm retrieval. The live call this was written for spent
+    2.4s on the opener's own LLM call AFTER connecting, which is exactly how
+    long the caller was left in silence before saying "hello?" themselves.
+
+    Returns None on anything unexpected (missing client/conversation, a
+    paused/terminated conversation) rather than raising — this is purely an
+    optimisation and must never be allowed to affect whether a call connects.
+    """
+    client = db.get(Client, client_id)
+    conversation = db.get(LeadConversation, conversation_id)
+    if client is None or conversation is None or engine_control.is_stopped(conversation):
+        return None
+    language = opening_language(db, conversation)
+    trace = TurnTrace(conversation_id=conversation.Id, client_id=client.Id, channel="voice")
+    text, model, latency, confidence, sources = _compose_opening_text(db, client, conversation, language, trace)
+    return {
+        "text": text, "model": model, "latency_ms": latency,
+        "confidence": confidence, "sources": sources, "language": language,
+    }
+
+
+def opening_line(
+    db: Session,
+    client: Client,
+    conversation: LeadConversation,
+    call: LeadCall,
+    *,
+    actor: str = "voice",
+    commit: bool = True,
+    language: str | None = None,
+    precomposed: dict | None = None,
+) -> tuple[str, str | None]:
+    """What the AI says when the call connects. Returns (text, message_id).
+
+    `language` is the language the returning customer has been using (see opening_language),
+    so someone who chats in Hindi is not greeted in English.
+
+    A brand-new customer gets the company's own greeting prompt (forced through the
+    greeting branch even if the conversation has system rows). A RETURNING customer gets a
+    follow-up line that uses what we know about them. Either way it is stored as an AI
+    message, so the transcript is complete.
+
+    `precomposed`, when given (see precompute_opening — the ringing-time warm-up
+    already ran the LLM call), skips straight to persisting it; this function
+    never does its own caching or staleness check, that is the caller's job.
+    """
+    if engine_control.is_stopped(conversation):
+        return "", None
+    trace = TurnTrace(conversation_id=conversation.Id, client_id=client.Id, channel="voice")
+    if precomposed is not None:
+        text, model, latency, confidence, sources = (
+            precomposed["text"], precomposed["model"], precomposed["latency_ms"],
+            precomposed["confidence"], precomposed["sources"],
+        )
+        trace_step(trace, "opening", "call connected: speaking the line composed while the phone was ringing")
+    else:
+        text, model, latency, confidence, sources = _compose_opening_text(db, client, conversation, language, trace)
     message = LeadMessage(
         ClientId=client.Id,
         ConversationId=conversation.Id,

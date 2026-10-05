@@ -115,7 +115,6 @@ def create_script(
         ScriptXml=payload.script_xml,
         SectionsJson=sections,
         IsActive=True,
-        VoiceSpeaker=payload.voice_speaker,
         MultiStt=payload.multi_stt,
         CreatedBy=principal.email,
     )
@@ -250,7 +249,6 @@ def update_script(
         ("channel", "Channel"),
         ("language", "Language"),
         ("is_active", "IsActive"),
-        ("voice_speaker", "VoiceSpeaker"),
         ("multi_stt", "MultiStt"),
     ):
         value = getattr(payload, field)
@@ -390,6 +388,7 @@ def list_prompts(
 ):
     client_id = resolve_scope(principal)
     company_name = _company_name(db, client_id)
+    agent = script_engine.agent_name(db, client_id)
     script_engine.seed_prompts(db, client_id, created_by=principal.email)
     db.commit()
 
@@ -405,7 +404,7 @@ def list_prompts(
     out = []
     for key, default in script_engine.DEFAULT_PROMPTS.items():
         row = rows.get(key)
-        content = (row.Content if row else default).replace("{company}", company_name)
+        content = script_engine.apply_dynamic_variables(row.Content if row else default, company_name, agent)
         out.append(
             prompt_out(
                 key,

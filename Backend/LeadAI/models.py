@@ -273,7 +273,9 @@ class LeadCompanyScript(LeadAIBase):
     IsActive = Column(Boolean, default=True)
     ScriptXml = Column(Text, nullable=True)
     SectionsJson = Column(JSON, nullable=True)
-    # Voice knobs handed to the existing call pipeline verbatim.
+    # VoiceGender/VoiceSpeaker: UNUSED. Both moved to LeadCompanySettings
+    # (super-admin only, see routers/companies.py's /voice-settings) — kept
+    # here only because additive-only migrations never drop a column.
     VoiceGender = Column(String(20), nullable=True)
     VoiceSpeaker = Column(String(60), nullable=True)
     MultiStt = Column(Boolean, default=False)
@@ -343,6 +345,13 @@ class LeadCompanySettings(LeadAIBase):
     AutoCallOnHotLead = Column(Boolean, default=False)
     WidgetEnabled = Column(Boolean, default=True)
     WidgetGreeting = Column(String(500), nullable=True)
+    # The persona's name (e.g. "Ritu"), usable as the {agent} token in any
+    # script or prompt — see script_engine's placeholder substitution. A
+    # company admin's choice, unlike VoiceGender/VoiceSpeed/VoiceSpeaker
+    # below: picking a name is branding, not a technical voice parameter.
+    # Changing it here updates every script/prompt that uses {agent} at
+    # once, instead of hand-editing the literal name into each one.
+    AgentName = Column(String(80), nullable=True)
 
     # ---- Lead threshold -----------------------------------------------------
     # The score at or above which a lead is considered worth a human's attention
@@ -359,16 +368,18 @@ class LeadCompanySettings(LeadAIBase):
     HideBelowThreshold = Column(Boolean, default=False)
 
     # ---- AI call voice tuning ------------------------------------------------
-    # Deliberately platform-level, not a per-script field (LeadCompanyScript.
-    # VoiceGender/VoiceSpeaker remain for voice *identity*, i.e. which TTS voice
-    # speaks) — these two are the ones only a super admin may set, never a
-    # company admin, so they live on the settings row the companies router
-    # already gates by role, not on something script.manage can reach. None
-    # means "use the platform default". Pitch was deliberately left out: the
-    # live TTS model (Sarvam bulbul:v3) ignores it entirely; only the
-    # deprecated, API-rejected v2 honours it.
-    VoiceGender = Column(String(20), nullable=True)   # male|female
-    VoiceSpeed = Column(Float, nullable=True)          # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
+    # Deliberately platform-level, not a per-script field. LeadCompanyScript
+    # still HAS a VoiceSpeaker column (additive-only migrations never drop
+    # one), but nothing reads it any more — all three voice knobs moved here
+    # so only a super admin may set any of them, never a company admin; they
+    # live on the settings row the companies router already gates by role,
+    # not on anything script.manage can reach. None means "use the platform
+    # default". Pitch was deliberately left out entirely: the live TTS model
+    # (Sarvam bulbul:v3) ignores it; only the deprecated, API-rejected v2
+    # honours it.
+    VoiceGender = Column(String(20), nullable=True)    # male|female
+    VoiceSpeed = Column(Float, nullable=True)           # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
+    VoiceSpeaker = Column(String(60), nullable=True)    # Sarvam voice id, e.g. "anushka"/"ritu"; None = platform default
 
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)

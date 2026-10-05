@@ -75,6 +75,75 @@ def test_a_finished_turn_becomes_the_frames_an_llm_service_would_emit():
     assert not any(isinstance(f, LLMContextFrame) for f in down)        # consumed, like an LLM service
 
 
+def test_a_bare_hello_overlapping_the_opener_is_not_answered_again():
+    """Real bug: the opener ("Hi Priya, this is Kabir...") is queued the
+    instant the call connects, but the caller's reflexive "Hello?" on
+    picking up — said while the opener is still being generated/spoken —
+    was transcribed as a real first turn and got its own greeting-shaped
+    reply, sounding like the bot greeted twice."""
+    seen = []
+
+    async def respond(text):
+        seen.append(text)
+        return BrainReply(text="Hi, I'm here to help. What would you like to know?")
+
+    processor = LeadAIBrainProcessor(respond=respond)
+    processor.mark_opener_spoken()  # the pipeline would call this once the opener was actually queued
+    down, _ = run(run_stage(processor, [ctx("Hello.")]))
+    assert seen == []                  # never even asked the brain for a reply
+    assert texts(down) == []
+
+
+def test_a_bare_hello_is_still_answered_when_no_opener_was_ever_spoken():
+    """The other half of the fix above: if the opener had no text at all
+    (opening.text empty — see pipeline.py's opening_frames), the caller
+    heard nothing when they picked up, so their "Hello?" is the only prompt
+    they get. Suppressing it would leave them talking to silence, a worse
+    bug than the one being fixed — mark_opener_spoken() is never called in
+    that case, so the suppression must not engage."""
+    seen = []
+
+    async def respond(text):
+        seen.append(text)
+        return BrainReply(text="Hi there, how can I help?")
+
+    down, _ = run(run_stage(LeadAIBrainProcessor(respond=respond), [ctx("Hello.")]))
+    assert seen == ["Hello."]
+    assert texts(down) == ["Hi there, how can I help?"]
+
+
+def test_a_first_turn_with_real_content_is_still_answered_normally():
+    """Only a BARE greeting is absorbed — "Hello, I wanted to ask about
+    pricing" still needs a real answer even as the caller's first turn."""
+    seen = []
+
+    async def respond(text):
+        seen.append(text)
+        return BrainReply(text="Sure, here's our pricing.")
+
+    down, _ = run(run_stage(
+        LeadAIBrainProcessor(respond=respond), [ctx("Hello, I wanted to ask about pricing")]
+    ))
+    assert seen == ["Hello, I wanted to ask about pricing"]
+    assert texts(down) == ["Sure, here's our pricing."]
+
+
+def test_a_bare_hello_later_in_the_call_still_gets_a_real_answer():
+    """The suppression is scoped to the FIRST turn only — a bare "hello?"
+    later (e.g. checking the line is still live) gets answered like normal."""
+    seen = []
+
+    async def respond(text):
+        seen.append(text)
+        return BrainReply(text="Yes, I'm here!" if text == "Hello?" else "ok")
+
+    down, _ = run(run_stage(
+        LeadAIBrainProcessor(respond=respond), [ctx("what is the rate"), ctx("Hello?")]
+    ))
+    assert seen == ["what is the rate", "Hello?"]
+    assert texts(down) == ["ok", "Yes, I'm here!"]
+
+
 def test_a_handoff_speaks_first_then_ends_the_call():
     async def respond(text):
         return BrainReply(text="Connecting you now.", ends_call=True)
@@ -254,6 +323,49 @@ def test_the_opening_greeting_is_spoken_and_stored():
     assert reply.text and not reply.skipped
     msg = db.get(models.LeadMessage, reply.message_id)
     assert msg.Sender == "ai" and msg.CallSid == "CA777" and msg.TraceJson["steps"][0]["step"] == "opening"
+
+
+def test_a_precomputed_opening_from_ringing_warmup_is_used_instead_of_recomposing():
+    """Real fix: the live call spent 2.4s on the opener's own LLM call AFTER
+    the call connected — exactly the dead air the caller filled by saying
+    "hello?" themselves. Composing it during ringing (see voice/warmup.py)
+    and caching it by CallSid means _opening_sync() can skip straight to
+    speaking it once the call actually connects."""
+    from LeadAI.voice import warmup
+
+    db, conv, session = make_call()
+    warmup._precomputed_openings["CA777"] = {
+        "text": "Precomputed during ringing.", "model": "warm-test", "latency_ms": 0,
+        "confidence": 1.0, "sources": [], "language": None,
+    }
+    try:
+        reply = run(session.opening())
+    finally:
+        warmup._precomputed_openings.pop("CA777", None)  # in case the pop-on-use assertion below fails
+
+    assert reply.text == "Precomputed during ringing."
+    msg = db.get(models.LeadMessage, reply.message_id)
+    assert msg.Sender == "ai" and msg.ModelUsed == "warm-test"
+    assert "CA777" not in warmup._precomputed_openings      # consumed, not left for a later call
+
+
+def test_precompute_opening_composes_the_text_without_writing_to_the_database():
+    from LeadAI.services import voice_flow
+
+    db, conv, session = make_call()
+    before = db.query(models.LeadMessage).filter_by(ConversationId=conv.Id).count()
+    result = voice_flow.precompute_opening(db, conv.ClientId, conv.Id)
+    after = db.query(models.LeadMessage).filter_by(ConversationId=conv.Id).count()
+    assert result and result["text"]
+    assert after == before                              # no transcript message for an unanswered call
+
+
+def test_discard_precomputed_opening_removes_a_stale_entry():
+    from LeadAI.voice import warmup
+
+    warmup._precomputed_openings["CA_stale"] = {"text": "x"}
+    warmup.discard_precomputed_opening("CA_stale")
+    assert warmup.pop_precomputed_opening("CA_stale") is None
 
 
 def test_a_terminated_conversation_says_nothing_and_ends_the_call():

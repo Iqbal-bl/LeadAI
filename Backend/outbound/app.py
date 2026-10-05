@@ -1656,7 +1656,7 @@ async def call_status(request: Request):
         try:
             from LeadAI.voice.warmup import warm as _warm_call
 
-            asyncio.create_task(asyncio.to_thread(_warm_call, active_calls[call_sid]))
+            asyncio.create_task(asyncio.to_thread(_warm_call, active_calls[call_sid], call_sid))
         except Exception as e:
             logger.debug(f"[voice] model connection warm-up not started: {e}")
 
@@ -1766,6 +1766,12 @@ async def call_status(request: Request):
                 logger.warning(f"[call-status] WS cleanup failed for {sid}: {e}")
         asyncio.create_task(_cleanup_call_ws(call_sid))
         call_hangup_reasons.pop(call_sid, None)
+        try:
+            from LeadAI.voice.warmup import discard_precomputed_opening
+
+            discard_precomputed_opening(call_sid)
+        except Exception:  # noqa: BLE001
+            pass
 
     return Response(status_code=200)
 

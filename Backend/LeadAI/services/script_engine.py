@@ -89,6 +89,35 @@ DEFAULT_PROMPTS: dict[str, str] = {
 VALID_PROMPT_KEYS = tuple(DEFAULT_PROMPTS)
 
 
+def agent_name(db: Session, client_id: str) -> str | None:
+    """The persona name a company admin set (see LeadCompanySettings.AgentName),
+    for the {agent} token — None if they never set one."""
+    row = (
+        db.query(LeadCompanySettings)
+        .filter(LeadCompanySettings.ClientId == client_id, LeadCompanySettings.IsDeleted == False)  # noqa: E712
+        .one_or_none()
+    )
+    return row.AgentName if row else None
+
+
+def apply_dynamic_variables(text: str, company_name: str | None, agent: str | None) -> str:
+    """{company} and {agent} are the two tokens a script or prompt can use
+    instead of hard-coding a literal name — change the company's name or
+    the AgentName setting once and every script/prompt using the token
+    updates, rather than hand-editing the name into each one individually.
+
+    Real example this fixes: a script literally said "I'm Kabir from
+    Kestrel Homes" in its Identity section — renaming the persona meant
+    hunting down every script/prompt that spelled the old name out, with no
+    way to change it in one place.
+    """
+    if not text:
+        return text
+    text = text.replace("{company}", company_name or "our company")
+    text = text.replace("{agent}", agent or "our assistant")
+    return text
+
+
 def get_prompt(db: Session, client_id: str, company_name: str, key: str) -> str:
     """Company override if present, else the built-in default."""
     row = (
@@ -101,7 +130,7 @@ def get_prompt(db: Session, client_id: str, company_name: str, key: str) -> str:
         .one_or_none()
     )
     template = row.Content if row else DEFAULT_PROMPTS.get(key, DEFAULT_PROMPTS["sales"])
-    return template.replace("{company}", company_name or "our company")
+    return apply_dynamic_variables(template, company_name, agent_name(db, client_id))
 
 
 def seed_prompts(db: Session, client_id: str, created_by: str = "system") -> int:
@@ -238,6 +267,7 @@ def build_system_prompt(
 
     script = script or resolve_script(db, client_id, channel=channel)
     script_prompt = sections_to_system_prompt(sections_of(script))
+    script_prompt = apply_dynamic_variables(script_prompt, company_name, agent_name(db, client_id))
     base_prompt += _gender_note(db, client_id, channel)
 
     if script_prompt:
@@ -264,7 +294,8 @@ def company_voice_settings(db: Session, client_id: str) -> dict:
     )
     gender = (row.VoiceGender if row else None) or "female"
     speed = (row.VoiceSpeed if row and row.VoiceSpeed is not None else None) or 1.1
-    return {"gender": gender, "speed": speed}
+    speaker = (row.VoiceSpeaker if row else None) or "anushka"
+    return {"gender": gender, "speed": speed, "speaker": speaker}
 
 
 def _gender_note(db: Session, client_id: str, channel: str) -> str:
