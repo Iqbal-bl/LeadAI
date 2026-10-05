@@ -45,6 +45,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   // Auto-Accept & Automation Settings
   autoAcceptEnabled = false;
+  autoDmLeadsEnabled = true;
   welcomeMessage =
     'Hi {name},\n\nThanks for connecting! Looking forward to staying in touch and exploring potential collaborations.';
   savingSettings = false;
@@ -162,6 +163,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.statusLoading = false;
         if (res) {
           this.autoAcceptEnabled = !!res['auto_accept'];
+          this.autoDmLeadsEnabled = res['auto_dm_leads'] !== false;
           if (res['welcome_message']) {
             this.welcomeMessage = res['welcome_message'];
           }
@@ -395,6 +397,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       .saveSettings({
         auto_accept: this.autoAcceptEnabled,
         welcome_message: this.welcomeMessage.trim() || null,
+        auto_dm_leads: this.autoDmLeadsEnabled,
       })
       .subscribe({
         next: () => {
@@ -402,7 +405,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Settings Saved',
-            detail: 'LinkedIn auto-accept and welcome messaging rules updated.',
+            detail: 'LinkedIn automation rules and CRM lead settings updated.',
           });
           this.loadStatus();
         },
@@ -967,6 +970,14 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   getUnreadConversationsCount(): number {
     return this.unreadConversationsCount;
+  }
+
+  getLeadIntentLabel(intent?: string): string {
+    if (!intent) return 'CRM Lead';
+    if (intent === 'demo_request') return 'Demo Inquiry';
+    if (intent === 'pricing_inquiry') return 'Pricing Inquiry';
+    if (intent === 'consultation_request') return 'Consultation Request';
+    return 'CRM Lead';
   }
 
   loadPreviousMessages(): void {
