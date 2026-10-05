@@ -41,6 +41,8 @@ try:
     from core.base import Base
 except ImportError:
     from core.base import Base
+    # pyrefly: ignore [missing-import]
+    from base import Base
 
 
 def _uuid() -> str:
@@ -102,6 +104,7 @@ class LeadUserRole(LeadAIBase):
     UserEmail = Column(String(200), nullable=False)
     UserId = Column(String(36), nullable=True)      # optional link to users.Id
     FullName = Column(String(160), nullable=True)
+    Phone = Column(String(40), nullable=True)
     Role = Column(String(40), nullable=False, default=ROLE_EMPLOYEE)
     ClientId = Column(String(36), nullable=True)    # NULL => all companies
     IsActive = Column(Boolean, default=True)
@@ -217,6 +220,27 @@ class LeadKbChunk(LeadAIBase):
 
 
 # ===========================================================================
+# Client Products
+# ===========================================================================
+
+
+class LeadProduct(LeadAIBase):
+    """Product catalog item added by a client company with an associated knowledge base file."""
+
+    __tablename__ = "leadai_products"
+    __table_args__ = (
+        Index("ix_leadai_product_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    ProductName = Column(String(200), nullable=False)
+    ProductDescription = Column(Text, nullable=True)
+    KnowledgeBaseFile = Column(String(500), nullable=True)
+    KbDocumentId = Column(String(36), nullable=True)
+    BoundKbDocumentIds = Column(JSON, default=list, nullable=True)
+
+
+# ===========================================================================
 # Per-company dynamic scripts + prompts
 # ===========================================================================
 
@@ -253,6 +277,40 @@ class LeadCompanyScript(LeadAIBase):
     VoiceGender = Column(String(20), nullable=True)
     VoiceSpeaker = Column(String(60), nullable=True)
     MultiStt = Column(Boolean, default=False)
+
+
+# Valid LeadCompanyDataPoint.DataType values.
+DATA_POINT_TYPES = ("text", "number", "boolean", "select", "date", "email")
+
+
+class LeadCompanyDataPoint(LeadAIBase):
+    """One custom field a company admin wants the AI to collect from every lead —
+    "these are the data points AI will collect and give to the company admin."
+
+    Defined once per company (not per script — every script/channel asks toward
+    the same set), then two things happen with no further admin work:
+      * ai_engine.qualify()'s existing extraction call also tries to fill in
+        whatever it can from the conversation so far, keyed by `Key`.
+      * a required data point still missing is worked into the prompt (see
+        memory.missing_data_points_note) so the AI asks for it directly rather
+        than only capturing it if the customer happens to mention it.
+    """
+
+    __tablename__ = "leadai_company_data_points"
+    __table_args__ = (
+        UniqueConstraint("ClientId", "Key", name="uq_leadai_datapoint_client_key"),
+        Index("ix_leadai_datapoint_client", "ClientId"),
+    )
+
+    ClientId = Column(String(36), nullable=False)
+    Key = Column(String(60), nullable=False)          # slug used in FactsJson-style storage
+    Label = Column(String(160), nullable=False)        # shown to the admin and used in the prompt
+    DataType = Column(String(20), nullable=False, default="text")
+    OptionsJson = Column(JSON, nullable=True)          # DataType == "select": list[str] of choices
+    Description = Column(String(300), nullable=True)   # extra guidance for the AI, e.g. "in lakhs"
+    Required = Column(Boolean, default=False)          # required -> the AI proactively asks for it
+    DisplayOrder = Column(Integer, default=0)
+    IsActive = Column(Boolean, default=True)
 
 
 class LeadCompanyPrompt(LeadAIBase):
@@ -300,6 +358,18 @@ class LeadCompanySettings(LeadAIBase):
     # for with ?include_below_threshold=true.
     HideBelowThreshold = Column(Boolean, default=False)
 
+    # ---- AI call voice tuning ------------------------------------------------
+    # Deliberately platform-level, not a per-script field (LeadCompanyScript.
+    # VoiceGender/VoiceSpeaker remain for voice *identity*, i.e. which TTS voice
+    # speaks) — these two are the ones only a super admin may set, never a
+    # company admin, so they live on the settings row the companies router
+    # already gates by role, not on something script.manage can reach. None
+    # means "use the platform default". Pitch was deliberately left out: the
+    # live TTS model (Sarvam bulbul:v3) ignores it entirely; only the
+    # deprecated, API-rejected v2 honours it.
+    VoiceGender = Column(String(20), nullable=True)   # male|female
+    VoiceSpeed = Column(Float, nullable=True)          # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
+
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)
     CampaignConcurrency = Column(Integer, nullable=True)
@@ -334,6 +404,9 @@ class LeadCustomer(LeadAIBase):
     EmailEnc = Column(Text, nullable=True)
     WhatsAppEnc = Column(Text, nullable=True)
     InstagramEnc = Column(Text, nullable=True)
+    # LinkedIn profile URL — stored plain (not PII-encrypted) because it is a
+    # public URL the commenter published on LinkedIn, not a private identifier.
+    LinkedinProfileUrl = Column(String(500), nullable=True)
     # Non-reversible lookup key so a returning customer is recognised without
     # decrypting anything.
     PhoneHash = Column(String(64), nullable=True, index=True)
@@ -384,6 +457,12 @@ class LeadConversation(LeadAIBase):
     # short fixed reply instead of restarting the qualification questions. Cleared
     # if the customer comes back with a real question.
     AiCompletedAt = Column(DateTime, nullable=True)
+    # Set when a campaign with CallEscalationEnabled asks "would you like us to
+    # call you?" — null|asked|accepted|declined. Only "accepted" ever triggers
+    # an actual call; the AI never dials without this being explicitly set here
+    # first by the customer's own reply (see conversation_flow.py).
+    CallConsentStatus = Column(String(20), nullable=True)
+    CallConsentAskedAt = Column(DateTime, nullable=True)
 
     # ---- control plane ------------------------------------------------------
     # Set from OUTSIDE the conversation, by staff or the monitor agent, and checked
@@ -468,6 +547,11 @@ class Lead(LeadAIBase):
     # incrementally by ai_engine.qualify() so they survive after the raw turns fall
     # out of the LLM's window. A JSON list of short strings; see memory.thread_state_note.
     FactsJson = Column(JSON, nullable=True)
+    # Values for this company's admin-defined LeadCompanyDataPoint fields, keyed
+    # by DataPoint.Key. Deliberately separate from FactsJson: these are
+    # structured (typed, admin-named) answers the company asked for by name,
+    # not the model's own loose observations.
+    DataPointsJson = Column(JSON, nullable=True)
     QualifiedAt = Column(DateTime, nullable=True)
     # Threshold bookkeeping. Denormalised onto the lead so the dashboard query is
     # a single indexed WHERE instead of a join to settings per row.
@@ -629,7 +713,9 @@ from .models_ext import (  # noqa: E402
     LeadAccount,
     LeadAccountNote,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadChannelEvent,
     LeadChannelIdentity,
@@ -645,7 +731,9 @@ ALL_LEADAI_TABLES = (
     LeadActivityLog,
     LeadKbDocument,
     LeadKbChunk,
+    LeadProduct,
     LeadCompanyScript,
+    LeadCompanyDataPoint,
     LeadCompanyPrompt,
     LeadCompanySettings,
     LeadCustomer,

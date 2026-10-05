@@ -3,10 +3,13 @@ User management — create users in the identity server.
 """
 from __future__ import annotations
 
+import logging
 import os
+from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,11 +23,14 @@ from ..models import (
     ROLE_COMPANY_ADMIN,
     ROLE_EMPLOYEE,
     ROLE_MANAGER,
+    LeadConversation,
     LeadUserRole,
     utcnow,
 )
 from ..rbac import Principal, require, resolve_scope, super_admin, visible_roles
 from ..schemas import MemberCreate, MemberListOut, MemberOut, MemberUpdate, UserManagementCreate, UserManagementOut, UserManagementUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/user-management", tags=["LeadAI • User Management"])
 
@@ -96,7 +102,7 @@ async def _create_idp_user(
 
 async def _delete_idp_user(*, user_id: str) -> dict:
     """Delete a user from the identity server via DELETE /api/user-management/{userId}."""
-    url = f"{IDP_BASE_URL}/api/user-management/{user_id}"
+    url = f"{IDP_BASE_URL}/api/user-management/{quote(str(user_id), safe='')}"
     timeout = httpx.Timeout(IDP_READ_TIMEOUT, connect=IDP_CONNECT_TIMEOUT)
     async with httpx.AsyncClient(verify=False, timeout=timeout) as client:
         resp = await client.delete(url)
@@ -228,53 +234,81 @@ async def create_user(
     # granting them capability is a separate decision made by ROLE_PERMISSIONS.
     granted_role = payload.role or ROLE_EMPLOYEE
 
-    existing = (
-        db.query(LeadUserRole)
-        .filter(
-            LeadUserRole.UserEmail == payload.email.lower(),
-            LeadUserRole.ClientId == payload.client_id,
-            LeadUserRole.IsDeleted == False,  # noqa: E712
-        )
-        .first()
-    )
-    if existing:
-        existing.Role = granted_role
-        existing.UserId = existing.UserId or str(user_id)
-        existing.FullName = payload.name or existing.FullName
-        existing.IsActive = True
-        existing.UpdatedBy = "system"
-        existing.UpdatedAt = utcnow()
-        client_id = existing.ClientId
-    else:
-        db.add(
-            LeadUserRole(
-                UserEmail=payload.email.lower(),
-                UserId=str(user_id),
-                FullName=payload.name,
-                Role=granted_role,
-                ClientId=payload.client_id,
-                IsActive=True,
-                CreatedBy="system",
+    try:
+        existing = (
+            db.query(LeadUserRole)
+            .filter(
+                LeadUserRole.UserEmail == payload.email.lower(),
+                LeadUserRole.ClientId == payload.client_id,
+                LeadUserRole.IsDeleted == False,  # noqa: E712
             )
+            .first()
         )
-        client_id = payload.client_id
+        if existing:
+            existing.Role = granted_role
+            existing.UserId = existing.UserId or str(user_id)
+            existing.FullName = payload.name or existing.FullName
+            existing.IsActive = True
+            existing.UpdatedBy = "system"
+            existing.UpdatedAt = utcnow()
+            client_id = existing.ClientId
+        else:
+            db.add(
+                LeadUserRole(
+                    UserEmail=payload.email.lower(),
+                    UserId=str(user_id),
+                    FullName=payload.name,
+                    Role=granted_role,
+                    ClientId=payload.client_id,
+                    IsActive=True,
+                    CreatedBy="system",
+                )
+            )
+            client_id = payload.client_id
 
-    activity.log(
-        db,
-        action=A.USER_CREATED,
-        client_id=payload.client_id,
-        actor_email=principal.email,        # who did it, not the user who was created
-        entity_type="user",
-        entity_id=str(user_id),
-        message=f"Created user '{payload.email}' as {granted_role}",
-        meta={
-            "role": granted_role,
-            "role_explicit": bool(payload.role),
-            "client_id": payload.client_id,
-        },
-        request=request,
-    )
-    db.commit()
+        activity.log(
+            db,
+            action=A.USER_CREATED,
+            client_id=payload.client_id,
+            actor_email=principal.email,        # who did it, not the user who was created
+            entity_type="user",
+            entity_id=str(user_id),
+            message=f"Created user '{payload.email}' as {granted_role}",
+            meta={
+                "role": granted_role,
+                "role_explicit": bool(payload.role),
+                "client_id": payload.client_id,
+            },
+            request=request,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "[UserManagement] Database seeding failed for user '%s': %s. Revoking identity server user '%s'...",
+            payload.email,
+            exc,
+            user_id,
+        )
+        try:
+            await _delete_idp_user(user_id=str(user_id))
+            logger.info("[UserManagement] Successfully revoked IDP user '%s'", user_id)
+        except Exception as rollback_exc:
+            logger.critical(
+                "[UserManagement] Rollback failed: Could not revoke IDP user '%s': %s",
+                user_id,
+                rollback_exc,
+            )
+
+        if isinstance(exc, IntegrityError):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"User '{payload.email}' already exists (database conflict). User creation was rolled back.",
+            ) from exc
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error while seeding user data: {exc}. Identity server user was rolled back.",
+        ) from exc
 
     return UserManagementOut(
         id=str(user_id),
@@ -334,6 +368,12 @@ async def create_member(
         .filter(Client.Id == client_id, Client.IsDeleted == False)  # noqa: E712
         .first()
     )
+    if not client:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail="Company not found.",
+        )
+
     try:
         idp_result = await _create_idp_user(
             email=payload.email,
@@ -341,7 +381,7 @@ async def create_member(
             name=payload.name,
             role=payload.role,
             client_id=client_id,
-            client_name=client.Name if client else None,
+            client_name=client.Name,
             send_email_confirmation=payload.send_email_confirmation,
         )
     except HTTPException as exc:
@@ -366,56 +406,83 @@ async def create_member(
 
     user_id = idp_result.get("id") or idp_result.get("userId") or payload.email
 
-    # 2. Grant role in this company
-    if existing:
-        # Reactivate soft-deleted role
-        existing.UserId = user_id
-        existing.FullName = payload.name
-        existing.Role = payload.role
-        existing.IsActive = True
-        existing.IsDeleted = False
-        existing.UpdatedBy = principal.email
-        grant = existing
-    else:
-        grant = LeadUserRole(
-            UserEmail=payload.email.lower(),
-            UserId=user_id,
-            FullName=payload.name,
-            Role=payload.role,
-            ClientId=client_id,
-            IsActive=True,
-            CreatedBy=principal.email,
-        )
-        db.add(grant)
-
-    activity.log_principal(
-        db,
-        principal,
-        action=A.USER_CREATED,
-        client_id=client_id,
-        entity_type="member",
-        entity_id=str(user_id),
-        message=f"Created member '{payload.email}' with role '{payload.role}'",
-        meta={"role": payload.role},
-        request=request,
-    )
+    # 2. Grant role in this company with multi-system rollback
     try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail=f"User '{payload.email}' already exists in this company.",
+        if existing:
+            # Reactivate soft-deleted role
+            existing.UserId = user_id
+            existing.FullName = payload.name
+            existing.Phone = payload.phone
+            existing.Role = payload.role
+            existing.IsActive = True
+            existing.IsDeleted = False
+            existing.UpdatedBy = principal.email
+            grant = existing
+        else:
+            grant = LeadUserRole(
+                UserEmail=payload.email.lower(),
+                UserId=user_id,
+                FullName=payload.name,
+                Phone=payload.phone,
+                Role=payload.role,
+                ClientId=client_id,
+                IsActive=True,
+                CreatedBy=principal.email,
+            )
+            db.add(grant)
+
+        activity.log_principal(
+            db,
+            principal,
+            action=A.USER_CREATED,
+            client_id=client_id,
+            entity_type="member",
+            entity_id=str(user_id),
+            message=f"Created member '{payload.email}' with role '{payload.role}'",
+            meta={"role": payload.role},
+            request=request,
         )
-    db.refresh(grant)
+        db.commit()
+        db.refresh(grant)
+    except Exception as exc:
+        # System 2 (LeadAI Database) failed after System 1 (Identity Server) succeeded.
+        # Roll back the database transaction and revoke the team member created in the Identity Server.
+        db.rollback()
+        logger.error(
+            "[UserManagement] Database seeding failed for member '%s': %s. Revoking identity server user '%s'...",
+            payload.email,
+            exc,
+            user_id,
+        )
+        try:
+            await _delete_idp_user(user_id=str(user_id))
+            logger.info("[UserManagement] Successfully revoked IDP user '%s'", user_id)
+        except Exception as rollback_exc:
+            logger.critical(
+                "[UserManagement] Rollback failed: Could not revoke IDP user '%s': %s",
+                user_id,
+                rollback_exc,
+            )
+
+        if isinstance(exc, IntegrityError):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                detail=f"User '{payload.email}' already exists in this company (conflict). Member creation was rolled back.",
+            ) from exc
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error while seeding member data: {exc}. All systems were rolled back.",
+        ) from exc
 
     return MemberOut(
         id=str(user_id),
         email=payload.email,
         name=payload.name,
+        phone=payload.phone,
         role=payload.role,
         client_id=client_id,
         is_active=True,
+        assigned_leads=0,   # brand new member: nothing assigned yet
         created_at=grant.CreatedAt,
     )
 
@@ -446,14 +513,29 @@ def list_employees(
         .all()
     )
 
+    # One grouped query rather than one COUNT per row — how many conversations each
+    # person is CURRENTLY carrying (AssignedUserEmail), not a lifetime total.
+    assigned_counts = dict(
+        db.query(LeadConversation.AssignedUserEmail, func.count(LeadConversation.Id))
+        .filter(
+            LeadConversation.ClientId == client_id,
+            LeadConversation.IsDeleted == False,  # noqa: E712
+            LeadConversation.AssignedUserEmail.isnot(None),
+        )
+        .group_by(LeadConversation.AssignedUserEmail)
+        .all()
+    )
+
     items = [
         MemberOut(
             id=str(r.Id),
             email=r.UserEmail,
             name=r.FullName,
+            phone=r.Phone,
             role=r.Role,
             client_id=str(r.ClientId) if r.ClientId else "",
             is_active=bool(r.IsActive),
+            assigned_leads=assigned_counts.get(r.UserEmail, 0),
             created_at=r.CreatedAt,
         )
         for r in rows
@@ -508,6 +590,9 @@ def update_employee(
     if payload.full_name is not None:
         row.FullName = payload.full_name
 
+    if payload.phone is not None:
+        row.Phone = payload.phone
+
     if payload.is_active is not None:
         row.IsActive = payload.is_active
 
@@ -533,13 +618,25 @@ def update_employee(
     db.commit()
     db.refresh(row)
 
+    assigned_leads = (
+        db.query(func.count(LeadConversation.Id))
+        .filter(
+            LeadConversation.ClientId == client_id,
+            LeadConversation.IsDeleted == False,  # noqa: E712
+            LeadConversation.AssignedUserEmail == row.UserEmail,
+        )
+        .scalar()
+        or 0
+    )
     return MemberOut(
         id=str(row.Id),
         email=row.UserEmail,
         name=row.FullName,
+        phone=row.Phone,
         role=row.Role,
         client_id=str(row.ClientId) if row.ClientId else "",
         is_active=bool(row.IsActive),
+        assigned_leads=assigned_leads,
         created_at=row.CreatedAt,
     )
 

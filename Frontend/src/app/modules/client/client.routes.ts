@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { ClientPermissionGuard } from './guards/client-permission.guard';
+import { ChannelPlanGuard } from '../../guards/channel-plan.guard';
 
 export const CLIENT_ROUTES: Routes = [
   {
@@ -35,6 +36,20 @@ export const CLIENT_ROUTES: Routes = [
             loadComponent: () =>
               import('../../features/leads/lead-list/lead-list.component').then(
                 (m) => m.LeadListComponent,
+              ),
+          },
+          {
+            path: 'import',
+            loadComponent: () =>
+              import('../../features/leads/lead-import/lead-import.component').then(
+                (m) => m.LeadImportComponent,
+              ),
+          },
+          {
+            path: 'batches',
+            loadComponent: () =>
+              import('../../features/campaigns/batch-list/batch-list.component').then(
+                (m) => m.BatchListComponent,
               ),
           },
           {
@@ -90,6 +105,15 @@ export const CLIENT_ROUTES: Routes = [
           ),
       },
       {
+        path: 'products',
+        canActivate: [ClientPermissionGuard],
+        data: { permission: 'kb.read' },
+        loadComponent: () =>
+          import('./pages/products/product-list/product-list.component').then(
+            (m) => m.ProductListComponent,
+          ),
+      },
+      {
         path: 'prompts',
         canActivate: [ClientPermissionGuard],
         data: { permission: 'prompt.read' },
@@ -118,8 +142,8 @@ export const CLIENT_ROUTES: Routes = [
       },
       {
         path: 'linkedin',
-        canActivate: [ClientPermissionGuard],
-        data: { permission: 'channel.read' },
+        canActivate: [ClientPermissionGuard, ChannelPlanGuard],
+        data: { permission: 'channel.read', requiredChannel: 'linkedin' },
         loadComponent: () =>
           import('../../features/linkedin/linkedin-dashboard.component').then(
             (m) => m.LinkedinDashboardComponent,
@@ -142,9 +166,14 @@ export const CLIENT_ROUTES: Routes = [
           {
             path: '',
             loadComponent: () =>
-              import('../../features/campaigns/campaign-list/campaign-list.component').then(
-                (m) => m.CampaignListComponent,
+              import('../../features/campaigns/broadcast-list/broadcast-list.component').then(
+                (m) => m.BroadcastListComponent,
               ),
+          },
+          {
+            path: 'broadcasts',
+            redirectTo: '',
+            pathMatch: 'full',
           },
           {
             path: ':id',
@@ -155,6 +184,7 @@ export const CLIENT_ROUTES: Routes = [
           },
         ],
       },
+
       {
         path: 'customers',
         canActivate: [ClientPermissionGuard],
@@ -178,6 +208,8 @@ export const CLIENT_ROUTES: Routes = [
       },
       {
         path: 'blog',
+        canActivate: [ClientPermissionGuard, ChannelPlanGuard],
+        data: { permission: 'campaign.read', requiredFeature: 'blog' },
         loadComponent: () =>
           import('../../features/blog/blog-dashboard/blog-dashboard.component').then(
             (m) => m.BlogDashboardComponent,

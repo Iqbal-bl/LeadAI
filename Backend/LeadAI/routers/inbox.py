@@ -34,7 +34,7 @@ from ..db import get_leadai_db
 from ..models import (
     Lead,
     LeadCall,
-    LeadChannelIdentity,
+    LeadCampaign,
     LeadConversation,
     LeadCustomer,
     LeadMessage,
@@ -53,7 +53,6 @@ from ..schemas import (
     ConversationOut,
     DeliveryOut,
     Ok,
-    SocialIdentityOut,
     StatusRequest,
 )
 from ..security import decrypt_pii
@@ -66,6 +65,7 @@ from ..serializers import (
     resolve_display_name,
 )
 from ..services import ai_engine, conversation_flow
+from ..services import channels as ch
 
 try:
     from core.websocket_manager import manager as ws_manager, _fire_and_forget
@@ -149,6 +149,26 @@ def list_conversations(
     campaign_id: str | None = Query(
         default=None, description="Only conversations produced by this campaign."
     ),
+    lead_source: str | None = Query(
+        default=None,
+        pattern="^(inbound|import|broadcast)$",
+        description=(
+            "inbound   = came in on its own (chat/call/social), no campaign behind it; "
+            "import    = produced by a lead-import batch (campaign.created_via == 'import'); "
+            "broadcast = produced by a manually-created campaign. "
+            "Omit to see everything, same as today."
+        ),
+    ),
+    include_unreached: bool = Query(
+        default=False,
+        description=(
+            "Imported leads get a real, trackable conversation the moment they're "
+            "imported — before any message is ever sent. If that send/call is later "
+            "skipped or fails, nothing is ever exchanged. Those empty threads are "
+            "hidden from the inbox by default (there is nothing to read); set this "
+            "true to review which imported leads were never actually reached."
+        ),
+    ),
     sort: str = Query(default="recent", pattern="^(recent|score|oldest)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
@@ -177,6 +197,18 @@ def list_conversations(
 
     if campaign_id:
         query = query.filter(LeadConversation.CampaignId == campaign_id)
+
+    if lead_source == "inbound":
+        query = query.filter(LeadConversation.CampaignId.is_(None))
+    elif lead_source in ("import", "broadcast"):
+        query = query.join(LeadCampaign, LeadCampaign.Id == LeadConversation.CampaignId)
+        if lead_source == "import":
+            query = query.filter(LeadCampaign.CreatedVia == "import")
+        else:
+            query = query.filter(LeadCampaign.CreatedVia != "import")
+
+    if not include_unreached:
+        query = query.filter(LeadConversation.MessageCount > 0)
 
     # --- lead-score threshold ------------------------------------------------
     # `IsAboveThreshold` is denormalised onto the lead row and indexed, so this
@@ -580,8 +612,14 @@ def set_status(
     conversation = _load(db, conversation_id, principal, client_id)
     previous = conversation.Status
 
-    conversation.Status = payload.status
-    conversation.ClosedAt = utcnow() if payload.status == "closed" else None
+    new_status = payload.status
+    # An assignee already means a human owns this conversation, so it can't also
+    # be sitting in the unclaimed needs_human queue.
+    if new_status == "needs_human" and conversation.AssignedUserEmail:
+        new_status = "assigned"
+
+    conversation.Status = new_status
+    conversation.ClosedAt = utcnow() if new_status == "closed" else None
     conversation.UpdatedBy = principal.email
     conversation.UpdatedAt = utcnow()
 
@@ -592,8 +630,8 @@ def set_status(
         client_id=client_id,
         entity_type="conversation",
         entity_id=conversation.Id,
-        message=f"Status {previous} -> {payload.status}",
-        meta={"from": previous, "to": payload.status},
+        message=f"Status {previous} -> {new_status}",
+        meta={"from": previous, "to": new_status},
         request=request,
     )
     db.commit()
@@ -642,36 +680,7 @@ def reveal_contact(
     )
     db.commit()
 
-    identities = (
-        db.query(LeadChannelIdentity)
-        .filter(
-            LeadChannelIdentity.CustomerId == customer.Id,
-            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
-        )
-        .order_by(LeadChannelIdentity.CreatedAt.asc())
-        .all()
-    )
-
-    social = []
-    for ident in identities:
-        handle = ident.ProfileName or ident.ExternalUsername
-        profile_url = None
-        if ident.Channel == "instagram" and handle:
-            # Only a resolved username makes a working link; a raw IGSID does not.
-            profile_url = f"https://instagram.com/{handle.lstrip('@')}"
-        elif ident.Channel == "messenger" and ident.ExternalUserId:
-            profile_url = f"https://m.me/{ident.ExternalUserId}"
-        social.append(
-            SocialIdentityOut(
-                channel=ident.Channel,
-                handle=handle or ident.ExternalUserId,
-                profile_name=ident.ProfileName,
-                external_user_id=ident.ExternalUserId,
-                profile_url=profile_url,
-                opted_out=bool(ident.OptedOut),
-                last_message_at=ident.LastUserMessageAt,
-            )
-        )
+    social = ch.social_identities_for(db, customer.Id)
 
     return ContactReveal(
         phone=customer_number(customer),

@@ -29,10 +29,34 @@ export class CustomerService {
 
   private mapCustomer(data: any): Customer {
     if (!data) return data;
+    const displayName = data.display_name || data.name || '';
+    const companyName = data.company_name !== undefined ? data.company_name : (data.company !== undefined ? data.company : null);
+    const optInWhatsapp = data.opt_in_whatsapp !== undefined ? Boolean(data.opt_in_whatsapp) : Boolean(data.consent?.whatsapp_opt_in);
+    const optInSms = data.opt_in_sms !== undefined ? Boolean(data.opt_in_sms) : Boolean(data.consent?.sms_opt_in);
+    const optInEmail = data.opt_in_email !== undefined ? Boolean(data.opt_in_email) : Boolean(data.consent?.email_opt_in);
+    const optInCall = data.opt_in_call !== undefined ? Boolean(data.opt_in_call) : Boolean(data.consent?.voice_opt_in);
+    const dnd = data.do_not_disturb !== undefined ? Boolean(data.do_not_disturb) : Boolean(data.consent?.do_not_disturb);
+
     return {
       ...data,
-      name: data.name || data.display_name || '',
-      company: data.company || data.company_name || null,
+      display_name: displayName,
+      name: displayName,
+      company_name: companyName,
+      company: companyName,
+      opt_in_whatsapp: optInWhatsapp,
+      opt_in_sms: optInSms,
+      opt_in_email: optInEmail,
+      opt_in_call: optInCall,
+      do_not_disturb: dnd,
+      value: data.value !== undefined && data.value !== null ? Number(data.value) : 0,
+      currency: data.currency || 'INR',
+      consent: {
+        whatsapp_opt_in: optInWhatsapp,
+        sms_opt_in: optInSms,
+        email_opt_in: optInEmail,
+        voice_opt_in: optInCall,
+        do_not_disturb: dnd,
+      },
     };
   }
 

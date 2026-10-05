@@ -1,7 +1,9 @@
 export const environment = {
   production: false,
-  apiPrefix: 'https://concise-tick-cheerful.ngrok-free.app/api/leadai',
-  wsUrl: 'wss://concise-tick-cheerful.ngrok-free.app',
+  // apiPrefix: 'https://concise-tick-cheerful.ngrok-free.app/api/leadai',
+  // wsUrl: 'wss://concise-tick-cheerful.ngrok-free.app',
+  apiPrefix: 'http://localhost:5050/api/leadai',
+  wsUrl: 'ws://localhost:5050',
   authConfig: {
     issuer: 'https://192.168.2.100:7075',
     clientId: 'angular-client',

@@ -1,0 +1,426 @@
+<div class="data-points-container space-y-6">
+  <!-- Top Header Action Bar -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-5 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-2xs">
+    <div>
+      <div class="flex items-center gap-2">
+        <h2 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+          Data Points
+        </h2>
+        <span class="text-xs px-2 py-0.5 rounded-full font-semibold bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20">
+          {{ dataPoints.length }} Defined
+        </span>
+      </div>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl leading-relaxed">
+        Define custom attributes (e.g. location, budget, decision maker) that AI qualification agents collect during conversations. Missing required data points will be highlighted in lead profiles.
+      </p>
+    </div>
+
+    <div class="flex items-center gap-2.5 self-start sm:self-center">
+      <button
+        type="button"
+        (click)="loadDataPoints()"
+        pTooltip="Refresh data points"
+        tooltipPosition="bottom"
+        class="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
+      >
+        <i class="pi pi-refresh" [class.pi-spin]="isLoading"></i>
+      </button>
+
+      <button
+        type="button"
+        (click)="openCreateDialog()"
+        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 font-semibold text-xs transition shadow-sm cursor-pointer"
+      >
+        <i class="pi pi-plus text-xs"></i>
+        <span>Add Data Point</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Data Table Card -->
+  <div class="rounded-2xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
+    <!-- Loading State -->
+    <div *ngIf="isLoading" class="p-8 space-y-4">
+      <p-skeleton width="100%" height="3rem"></p-skeleton>
+      <p-skeleton width="100%" height="3rem"></p-skeleton>
+      <p-skeleton width="100%" height="3rem"></p-skeleton>
+    </div>
+
+    <!-- Empty State -->
+    <div
+      *ngIf="!isLoading && dataPoints.length === 0"
+      class="p-12 text-center flex flex-col items-center justify-center space-y-4"
+    >
+      <div class="w-16 h-16 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center text-2xl">
+        <i class="pi pi-database"></i>
+      </div>
+      <div class="max-w-md">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">
+          No Data Points Defined Yet
+        </h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+          Create structured fields like "Preferred Location", "Property Type", or "Budget Range" so your conversational AI knows exactly what to ask and collect.
+        </p>
+      </div>
+      <button
+        type="button"
+        (click)="openCreateDialog()"
+        class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold text-xs shadow-sm transition flex items-center gap-2 cursor-pointer"
+      >
+        <i class="pi pi-plus text-xs"></i>
+        <span>Create First Data Point</span>
+      </button>
+    </div>
+
+    <!-- Table of Data Points -->
+    <div *ngIf="!isLoading && dataPoints.length > 0" class="overflow-x-auto">
+      <table class="w-full text-left text-sm border-collapse">
+        <thead>
+          <tr class="border-b border-slate-200 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-800/40 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <th class="py-3.5 px-5">Label &amp; Field Key</th>
+            <th class="py-3.5 px-4">Data Type</th>
+            <th class="py-3.5 px-4 text-center">Required</th>
+            <th class="py-3.5 px-4 text-center">Status</th>
+            <th class="py-3.5 px-5 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60">
+          <tr
+            *ngFor="let dp of dataPoints"
+            class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
+          >
+            <!-- Label & Key -->
+            <td class="py-4 px-5">
+              <div class="flex items-start gap-2.5">
+                <div class="flex flex-col">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-slate-900 dark:text-white text-sm">
+                      {{ dp.label }}
+                    </span>
+                    <span
+                      *ngIf="dp.required"
+                      class="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                    >
+                      Required
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 mt-1">
+                    <code class="text-xs font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80">
+                      {{ dp.key }}
+                    </code>
+                    <span *ngIf="dp.display_order" class="text-[11px] text-slate-400">
+                      #{{ dp.display_order }}
+                    </span>
+                  </div>
+                  <p *ngIf="dp.description" class="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
+                    {{ dp.description }}
+                  </p>
+                </div>
+              </div>
+            </td>
+
+            <!-- Data Type -->
+            <td class="py-4 px-4 align-top">
+              <div class="space-y-1.5">
+                <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  <i [class]="getTypeMeta(dp.data_type).icon" class="text-[11px] text-brand-500"></i>
+                  <span>{{ getTypeMeta(dp.data_type).label }}</span>
+                </span>
+
+                <!-- Options Preview for Select -->
+                <div
+                  *ngIf="dp.data_type === 'select' && dp.options && dp.options.length > 0"
+                  class="flex flex-wrap gap-1 max-w-xs pt-0.5"
+                >
+                  <span
+                    *ngFor="let opt of dp.options.slice(0, 3)"
+                    class="text-[10px] font-medium px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                  >
+                    {{ opt }}
+                  </span>
+                  <span
+                    *ngIf="dp.options.length > 3"
+                    class="text-[10px] font-medium px-1.5 py-0.5 text-slate-400"
+                  >
+                    +{{ dp.options.length - 3 }} more
+                  </span>
+                </div>
+              </div>
+            </td>
+
+            <!-- Required Toggle -->
+            <td class="py-4 px-4 text-center align-top">
+              <button
+                type="button"
+                (click)="toggleRequired(dp)"
+                [pTooltip]="dp.required ? 'Click to make optional' : 'Click to make required'"
+                tooltipPosition="top"
+                class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer border"
+                [ngClass]="dp.required
+                  ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25 hover:bg-rose-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'"
+              >
+                <i class="pi" [ngClass]="dp.required ? 'pi-check-circle text-rose-500' : 'pi-circle text-slate-400'"></i>
+                <span>{{ dp.required ? 'Yes' : 'No' }}</span>
+              </button>
+            </td>
+
+            <!-- Active Toggle -->
+            <td class="py-4 px-4 text-center align-top">
+              <button
+                type="button"
+                (click)="toggleActive(dp)"
+                [pTooltip]="dp.is_active ? 'Click to deactivate' : 'Click to activate'"
+                tooltipPosition="top"
+                class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full transition cursor-pointer border"
+                [ngClass]="dp.is_active
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'"
+              >
+                <span class="w-2 h-2 rounded-full" [ngClass]="dp.is_active ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+                <span>{{ dp.is_active ? 'Active' : 'Inactive' }}</span>
+              </button>
+            </td>
+
+            <!-- Actions -->
+            <td class="py-4 px-5 text-right align-top">
+              <div class="inline-flex items-center gap-1.5">
+                <button
+                  type="button"
+                  (click)="openEditDialog(dp)"
+                  pTooltip="Edit Data Point"
+                  tooltipPosition="left"
+                  class="p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <i class="pi pi-pencil text-xs"></i>
+                </button>
+                <button
+                  type="button"
+                  (click)="confirmDelete(dp)"
+                  pTooltip="Delete Data Point"
+                  tooltipPosition="left"
+                  class="p-2 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                >
+                  <i class="pi pi-trash text-xs"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- ADD / EDIT DATA POINT DIALOG MODAL                       -->
+<!-- ======================================================== -->
+<p-dialog
+  [(visible)]="dialogVisible"
+  [modal]="true"
+  [header]="isEditing ? 'Edit Data Point' : 'Add New Data Point'"
+  [style]="{ width: '92vw', 'max-width': '580px' }"
+  [draggable]="false"
+  [resizable]="false"
+  [dismissableMask]="true"
+  (onHide)="closeDialog()"
+>
+  <div class="space-y-5 pt-1">
+    <!-- Display Label Input -->
+    <div>
+      <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+        Display Label <span class="text-rose-500">*</span>
+      </label>
+      <input
+        pInputText
+        type="text"
+        [(ngModel)]="formLabel"
+        (ngModelChange)="onLabelChange()"
+        placeholder="e.g., Preferred Location, Target Budget, Decision Maker"
+        class="w-full text-sm rounded-xl p-3"
+      />
+      <p class="text-[11px] text-slate-400 mt-1">
+        Human-readable name displayed on lead profiles and admin forms.
+      </p>
+    </div>
+
+    <!-- Field Key Input (lowercase, underscore) -->
+    <div>
+      <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+        Field Key (Identifier) <span class="text-rose-500">*</span>
+      </label>
+      <div class="flex items-center">
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="formKey"
+          (input)="onKeyInput()"
+          placeholder="e.g., preferred_location"
+          class="w-full text-sm font-mono rounded-xl p-3 bg-slate-50 dark:bg-slate-800/60"
+        />
+      </div>
+      <p class="text-[11px] text-slate-400 mt-1">
+        Must be lowercase letters, numbers, and underscores only (e.g., <code class="font-mono text-slate-600 dark:text-slate-300">preferred_location</code>). Used by AI for JSON extraction.
+      </p>
+    </div>
+
+    <!-- Data Type Selection -->
+    <div>
+      <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+        Data Type <span class="text-rose-500">*</span>
+      </label>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        <button
+          type="button"
+          *ngFor="let dt of dataTypes"
+          (click)="formDataType = dt.value"
+          [ngClass]="formDataType === dt.value
+            ? 'border-brand-500 bg-brand-500/10 text-brand-600 dark:text-brand-400 shadow-2xs font-bold'
+            : 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 font-medium'"
+          class="p-2.5 rounded-xl border text-left transition flex items-center gap-2 cursor-pointer text-xs"
+        >
+          <i [class]="dt.icon" class="text-sm"></i>
+          <span>{{ dt.label }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Options Tag-Input (Required when data_type === 'select') -->
+    <div
+      *ngIf="formDataType === 'select'"
+      class="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 space-y-3 animate-fade-in"
+    >
+      <div class="flex items-center justify-between">
+        <label class="block text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+          Dropdown Select Options <span class="text-rose-500">* (At least 2 required)</span>
+        </label>
+        <span class="text-xs font-semibold text-blue-500">
+          {{ formOptions.length }} option(s) added
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="newOptionText"
+          (keydown.enter)="$event.preventDefault(); addOption()"
+          placeholder="Type an option and press Enter (e.g. Downtown, Suburbs, Rural)"
+          class="flex-1 text-sm rounded-xl p-2.5 bg-white dark:bg-slate-900"
+        />
+        <button
+          type="button"
+          (click)="addOption()"
+          class="px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition cursor-pointer"
+        >
+          Add
+        </button>
+      </div>
+
+      <!-- Tag/Pill Options List -->
+      <div class="flex flex-wrap gap-2 pt-1">
+        <span
+          *ngFor="let opt of formOptions; let idx = index"
+          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-2xs"
+        >
+          <span>{{ opt }}</span>
+          <button
+            type="button"
+            (click)="removeOption(idx)"
+            class="text-slate-400 hover:text-rose-500 transition cursor-pointer"
+          >
+            <i class="pi pi-times text-[10px]"></i>
+          </button>
+        </span>
+      </div>
+
+      <p *ngIf="formOptions.length < 2" class="text-xs text-rose-500 font-medium">
+        ⚠️ Please add at least 2 predefined options for this dropdown field.
+      </p>
+    </div>
+
+    <!-- Description (Optional) -->
+    <div>
+      <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+        Description / Context (Optional)
+      </label>
+      <input
+        pInputText
+        type="text"
+        [(ngModel)]="formDescription"
+        placeholder="e.g. Customer's preferred target city or area for property investment"
+        class="w-full text-sm rounded-xl p-3"
+      />
+    </div>
+
+    <!-- Configuration Flags: Required, Active, Display Order -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+      <!-- Required Toggle -->
+      <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40">
+        <div>
+          <span class="block text-xs font-bold text-slate-800 dark:text-slate-200">Required</span>
+          <span class="text-[10px] text-slate-400">Must be collected</span>
+        </div>
+        <button
+          type="button"
+          (click)="formRequired = !formRequired"
+          class="w-10 h-6 flex items-center rounded-full p-1 transition cursor-pointer"
+          [ngClass]="formRequired ? 'bg-brand-500 justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'"
+        >
+          <span class="bg-white w-4 h-4 rounded-full shadow-md transform"></span>
+        </button>
+      </div>
+
+      <!-- Active Toggle -->
+      <div class="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40">
+        <div>
+          <span class="block text-xs font-bold text-slate-800 dark:text-slate-200">Active</span>
+          <span class="text-[10px] text-slate-400">Enabled for AI</span>
+        </div>
+        <button
+          type="button"
+          (click)="formIsActive = !formIsActive"
+          class="w-10 h-6 flex items-center rounded-full p-1 transition cursor-pointer"
+          [ngClass]="formIsActive ? 'bg-emerald-500 justify-end' : 'bg-slate-300 dark:bg-slate-700 justify-start'"
+        >
+          <span class="bg-white w-4 h-4 rounded-full shadow-md transform"></span>
+        </button>
+      </div>
+
+      <!-- Display Order -->
+      <div>
+        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+          Display Order
+        </label>
+        <input
+          pInputText
+          type="number"
+          [(ngModel)]="formDisplayOrder"
+          min="1"
+          class="w-full text-sm rounded-xl p-2.5"
+        />
+      </div>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-end gap-2.5 pt-4">
+      <button
+        type="button"
+        (click)="closeDialog()"
+        class="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        (click)="saveDataPoint()"
+        [disabled]="isSaving"
+        class="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-sm transition flex items-center gap-2 cursor-pointer"
+      >
+        <i *ngIf="isSaving" class="pi pi-spinner pi-spin text-xs"></i>
+        <span>{{ isSaving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Data Point') }}</span>
+      </button>
+    </div>
+  </ng-template>
+</p-dialog>

@@ -8,7 +8,6 @@ export interface Script {
   is_default?: boolean;
   is_active?: boolean;
   version?: number;
-  voice_gender?: 'male' | 'female';
   voice_speaker?: string;
   multi_stt?: boolean;
 }
@@ -24,6 +23,8 @@ export interface ScriptPreview {
 
 export interface PromptTemplate {
   key: string;
-  value: string;
-  is_customised: boolean;
+  content: string;
+  value?: string;
+  is_customised?: boolean;
+  updated_at?: string;
 }

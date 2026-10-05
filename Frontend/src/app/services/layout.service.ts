@@ -449,14 +449,19 @@ export class LayoutService {
     });
 
     // Social Media & Content Section
-    sections.push({
-      title: 'SOCIAL & CONTENT',
-      items: [
-        { label: 'Blog & Content Studio', icon: 'pi pi-book', routerLink: '/client/blog' },
-        { label: 'Social Media Analytics', icon: 'pi pi-chart-pie', routerLink: '/client/social-analytics' },
-        { label: 'Create a Post', icon: 'pi pi-send', routerLink: '/client/create-post' }
-      ]
-    });
+    const socialItems: MenuItem[] = [];
+    if (this.authService.hasFeature('blog')) {
+      socialItems.push({ label: 'Blog & Content Studio', icon: 'pi pi-book', routerLink: '/client/blog' });
+    }
+    socialItems.push({ label: 'Social Media Analytics', icon: 'pi pi-chart-pie', routerLink: '/client/social-analytics' });
+    socialItems.push({ label: 'Create a Post', icon: 'pi pi-send', routerLink: '/client/create-post' });
+
+    if (socialItems.length > 0) {
+      sections.push({
+        title: 'SOCIAL & CONTENT',
+        items: socialItems,
+      });
+    }
 
 
     // Channels & Integrations Section
@@ -487,22 +492,32 @@ export class LayoutService {
       });
 
       // Outreach & Campaigns Section
+      const outreachItems: MenuItem[] = [
+        {
+          label: 'BroadCasts',
+          icon: 'pi pi-megaphone',
+          routerLink: '/client/campaigns',
+          permission: 'campaign.read',
+        },
+        {
+          label: 'Lead Batches',
+          icon: 'pi pi-users',
+          routerLink: '/client/lead-batches',
+          permission: 'lead.read.all',
+        },
+      ];
+      if (this.authService.hasFeature('linkedin')) {
+        outreachItems.push({
+          label: 'LinkedIn Automation',
+          icon: 'pi pi-linkedin',
+          routerLink: '/client/linkedin',
+          permission: 'channel.read',
+        });
+      }
+
       sections.push({
         title: 'OUTREACH & CAMPAIGNS',
-        items: [
-          {
-            label: 'Campaigns',
-            icon: 'pi pi-megaphone',
-            routerLink: '/client/campaigns',
-            permission: 'campaign.read',
-          },
-          {
-            label: 'LinkedIn Automation',
-            icon: 'pi pi-linkedin',
-            routerLink: '/client/linkedin',
-            permission: 'channel.read',
-          },
-        ],
+        items: outreachItems,
       });
     }
 

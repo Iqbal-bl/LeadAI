@@ -125,21 +125,21 @@ def test_a_widget_chat_reply_still_uses_the_default_chat_profile():
 
 
 # ------------------------------------------------------------------- hand-off semantics
-def test_a_customer_asking_for_a_person_gets_a_true_callback_promise_and_the_call_continues():
+def test_a_customer_asking_for_a_person_is_told_a_representative_will_contact_them_and_the_call_ends():
     wire()
     db, conv, call, out = turn("I want to talk to a human")
-    assert out.reply_text == voice_flow.callback_line(None) and "call you back" in out.reply_text
-    assert "connecting you now" not in out.reply_text.lower()
-    assert out.ends_call is False and out.handed_off is True
+    assert out.reply_text == voice_flow.callback_line(None) and "as soon as possible" in out.reply_text
+    assert "connecting you now" not in out.reply_text.lower() and "hold" not in out.reply_text.lower()
+    assert out.ends_call is True and out.handed_off is True
     assert conv.Status == "needs_human" and call.HandedOff is True
     assert call.Status != "transferred"                  # nothing was transferred
 
 
-def test_low_confidence_speaks_the_models_honest_answer_flags_staff_and_keeps_the_call_going():
+def test_low_confidence_says_a_representative_will_contact_the_caller_flags_staff_and_ends_the_call():
     wire(reply="I don't have that detail with me, but a specialist will confirm it.", hits=False)
     db, conv, call, out = turn("did you schedule anything for me")
-    assert out.reply_text.startswith("I don't have that detail")     # the model's answer, not a canned line
-    assert out.ends_call is False                                    # this is what the first call got wrong
+    assert out.reply_text == voice_flow.callback_line(None)          # fixed line, not the model's words
+    assert out.ends_call is True
     assert conv.Status == "needs_human" and "below threshold" in conv.HandoffReason
     assert call.HandedOff is True and call.Status != "transferred"
 
@@ -153,35 +153,63 @@ def test_only_the_models_own_end_of_conversation_signal_ends_a_live_call():
     assert conv.Status == "needs_human" and "advisor follow-up" in conv.HandoffReason
 
 
+def test_a_handoff_on_a_live_call_never_knocks_an_assigned_conversation_back_to_the_queue():
+    # Found in production: an agent assigns a conversation (Status -> "assigned"), then a
+    # later live call on that same conversation hits a low-confidence turn. voice_flow used
+    # to unconditionally overwrite Status back to "needs_human", silently un-assigning it
+    # from the agent's point of view even though AssignedUserEmail never changed — exactly
+    # the inconsistent state inbox.set_status's own comment says should be impossible.
+    wire(reply="I don't have that detail with me, but a specialist will confirm it.", hits=False)
+    db, client, conv, call = setup()
+    conv.Status = "assigned"
+    conv.AssignedUserEmail = "agent@kestrel.test"
+    db.commit()
+
+    out = voice_flow.handle_voice_turn(
+        db, client, conv, call, "did you schedule anything for me",
+        live_call=True, defer_scoring=True, commit=True,
+    )
+    db.refresh(conv)
+
+    assert out.handed_off is True                       # the handoff itself still happened
+    assert conv.Status == "assigned"                     # but the agent still owns it
+    assert conv.AssignedUserEmail == "agent@kestrel.test"
+    assert "below threshold" in conv.HandoffReason        # the reason is still recorded
+
+
 def test_a_reply_with_an_invented_figure_is_withheld_on_a_live_call():
     wire(reply="The processing fee is Rs. 15,000.")
     bridge.settings = _Enforce()
     db, conv, call, out = turn("what is the processing fee")
     assert out.reply_text == voice_flow.unsure_line(None) and "15,000" not in out.reply_text
-    assert out.ends_call is False and conv.Status == "needs_human"
+    assert out.ends_call is True and conv.Status == "needs_human"
 
 
-def test_repeated_handoffs_in_a_row_never_end_a_live_call():
-    # There is no live transfer to a human — a handoff is only a FLAG for staff follow-up, so
-    # the call must keep going through it, even across several low-confidence turns in a row,
-    # not just the first one. Only the model's own end-of-conversation signal (checked in the
-    # next test) or the caller saying goodbye may end a live call.
-    wire(hits=False)                          # every question comes back low-confidence
-    db, client, conv, call = setup()
-    for question in ("what is the rate", "what about fees", "and the tenure", "anything else"):
+def test_a_handoff_never_speaks_a_transfer_promise_or_leaves_the_caller_in_silence():
+    # There is no live transfer to a human: whatever triggers a handoff, the caller hears that a
+    # representative will contact them, never "connecting you now" / "please hold".
+    wire(hits=False)                          # low confidence
+    for question in ("what is the rate", "I want to talk to a human"):
+        db, client, conv, call = setup()
         out = voice_flow.handle_voice_turn(db, client, conv, call, question, live_call=True,
                                            defer_scoring=True, commit=True)
-        assert out.ends_call is False, question
-        assert out.reply_text                 # never silently drops the caller either
-    db.refresh(conv)
-    assert conv.Status == "needs_human" and call.HandedOff is True   # flagged, not ended
+        low = out.reply_text.lower()
+        assert out.reply_text and "contact" in low, question
+        assert "connecting you" not in low and "hold" not in low and "join" not in low, question
+        assert out.ends_call is True and out.handed_off is True, question
+        db.refresh(conv)
+        assert conv.Status == "needs_human" and call.HandedOff is True
 
 
-def test_the_simulated_endpoint_keeps_its_original_transfer_behaviour():
+def test_the_simulated_endpoint_behaves_like_a_real_call_on_a_handoff():
+    # Nothing can transfer to a human, so the simulated endpoint says a representative will
+    # contact the caller and ends the call, without marking it "transferred".
     wire(hits=False)
     db, conv, call, out = turn("do you finance a private island", live=False)
-    assert out.reply_text == voice_flow.TRANSFER_LINE and out.ends_call is True
-    assert call.Status == "transferred"
+    assert "connecting you now" not in out.reply_text.lower() and "contact" in out.reply_text.lower()
+    assert out.ends_call is True and out.handed_off is True
+    assert call.HandedOff is True and call.Status != "transferred"
+    assert conv.Status == "needs_human"
 
 
 # ------------------------------------------------------------------------------ memory

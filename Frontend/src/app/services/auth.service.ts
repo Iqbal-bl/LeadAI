@@ -1,6 +1,13 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { BehaviorSubject, Observable, tap, throwError } from 'rxjs';
+import {
+  BehaviorSubject,
+  Observable,
+  finalize,
+  shareReplay,
+  tap,
+  throwError,
+} from 'rxjs';
 import { UserMe, UserProfileUpdatePayload } from '../models/auth.models';
 import {
   ROLE_COMPANY_ADMIN,
@@ -84,6 +91,9 @@ export class AuthService {
 
   // Switch selected company
   public setSelectedCompanyId(companyId: string | null): void {
+    if (this.selectedCompanyIdSubject.value === companyId) {
+      return;
+    }
     if (companyId) {
       localStorage.setItem(this.COMPANY_KEY, companyId);
     } else {
@@ -117,6 +127,29 @@ export class AuthService {
     return role === 'admin';
   }
 
+  // Helper to check if current user is company admin (or platform/super admin)
+  public isCompanyAdmin(): boolean {
+    const role = this.getUserRole()?.toLowerCase();
+    return (
+      role === 'company_admin' || role === 'admin' || role === 'platform_admin'
+    );
+  }
+
+  // Check if current user has a specific permission
+  public hasPermission(permission: string): boolean {
+    const user = this.currentUserSubject.value;
+    if (!user) return false;
+    const role = (user.role || '').toLowerCase();
+    if (
+      role === 'admin' ||
+      role === 'platform_admin' ||
+      role === 'company_admin'
+    ) {
+      return true;
+    }
+    return user.permissions?.includes(permission) ?? false;
+  }
+
   // Initiate OIDC login flow using redirect
   public async initiateOidcLogin(): Promise<void> {
     const url = await this.buildAuthorizeUrl(environment.authConfig);
@@ -135,9 +168,9 @@ export class AuthService {
     return !authConfig.pkce
       ? baseUrl
       : baseUrl +
-          '&code_challenge=' +
-          code_challenge +
-          '&code_challenge_method=S256&scope=openid profile api1 offline_access roles';
+      '&code_challenge=' +
+      code_challenge +
+      '&code_challenge_method=S256&scope=openid profile api1 offline_access roles';
   }
 
   // Generate the oauth token using code
@@ -209,13 +242,13 @@ export class AuthService {
       this.http
         .post(
           environment.authConfig.issuer +
-            '/tokens/revoke/access_token' +
-            '?ngsw-bypass=true',
+          '/tokens/revoke/access_token' +
+          '?ngsw-bypass=true',
           accessToken,
           options,
         )
         .subscribe(
-          (data: any) => {},
+          (data: any) => { },
           (error: any) => console.log(error),
         );
     }
@@ -350,9 +383,8 @@ export class AuthService {
     const idToken = this.getValue('id_token') || '';
     const endsessionPath = 'connect/endsession';
     // this.logout();
-    window.location.href = `${
-      environment.authConfig.issuer
-    }/${endsessionPath}?id_token_hint=${idToken}&post_logout_redirect_uri=${encodeURIComponent(environment.authConfig.postLogoutRedirectUri)}`;
+    window.location.href = `${environment.authConfig.issuer
+      }/${endsessionPath}?id_token_hint=${idToken}&post_logout_redirect_uri=${encodeURIComponent(environment.authConfig.postLogoutRedirectUri)}`;
   }
 
   // set auth attributes by decoding token
@@ -417,26 +449,116 @@ export class AuthService {
     }
   }
 
+  private inFlightAccessMe$: Observable<UserMe> | null = null;
+  private inFlightCompanyId: string | null = null;
+
   // GET /access/me
-  public getAccessMe(): Observable<UserMe> {
-    return this.http.get<UserMe>(`${environment.apiPrefix}/access/me`).pipe(
-      tap((user) => {
-        this.currentUserSubject.next(user);
+  public getAccessMe(companyId?: string): Observable<UserMe> {
+    const targetCompanyId = companyId || this.getSelectedCompanyId();
 
-        const currentCompanyId = this.getSelectedCompanyId();
-        const hasAccess = user.accessible_companies.some(
-          (c: any) => c.id === currentCompanyId,
-        );
+    // If an identical request is already in-flight, return the shared observable
+    if (this.inFlightAccessMe$ && this.inFlightCompanyId === targetCompanyId) {
+      return this.inFlightAccessMe$;
+    }
 
-        if (!currentCompanyId || !hasAccess) {
-          if (user.accessible_companies.length > 0) {
-            this.setSelectedCompanyId(user.accessible_companies[0].id);
-          } else {
-            this.setSelectedCompanyId(user.client_id || null);
+    let params = new HttpParams();
+    if (targetCompanyId) {
+      params = params.set('client_id', targetCompanyId);
+    }
+
+    this.inFlightCompanyId = targetCompanyId || null;
+    this.inFlightAccessMe$ = this.http
+      .get<UserMe>(`${environment.apiPrefix}/access/me`, {
+        params,
+        headers: { 'ngrok-skip-browser-warning': 'skip' },
+      })
+      .pipe(
+        tap((user) => {
+          this.currentUserSubject.next(user);
+
+          const currentCompanyId = this.getSelectedCompanyId();
+          const hasAccess = user.accessible_companies.some(
+            (c: any) => c.id === currentCompanyId,
+          );
+
+          if (!currentCompanyId || !hasAccess) {
+            if (user.accessible_companies.length > 0) {
+              this.setSelectedCompanyId(user.accessible_companies[0].id);
+            } else {
+              this.setSelectedCompanyId(user.client_id || null);
+            }
           }
-        }
-      }),
+        }),
+        finalize(() => {
+          this.inFlightAccessMe$ = null;
+          this.inFlightCompanyId = null;
+        }),
+        shareReplay(1),
+      );
+
+    return this.inFlightAccessMe$;
+  }
+
+  /**
+   * Checks whether the current company has an active subscription.
+   * Platform and super admins always bypass subscription checks.
+   */
+  public hasActiveSubscription(): boolean {
+    if (this.isSuperAdmin() || this.isPlatformAdmin()) {
+      return true;
+    }
+    const user = this.currentUserSubject.value;
+    return user?.has_active_subscription ?? false;
+  }
+
+  /**
+   * Checks whether a specific channel/feature is included in the company's active plan.
+   * Super / platform admins always have access.
+   */
+  public hasChannel(channel: string): boolean {
+    if (this.isSuperAdmin() || this.isPlatformAdmin()) {
+      return true;
+    }
+    const user = this.currentUserSubject.value;
+    if (!user || !user.has_active_subscription) {
+      return false;
+    }
+    const ch = (channel || '').toLowerCase().trim();
+    const channels = (user.active_channels || []).map((c) =>
+      (c || '').toLowerCase().trim(),
     );
+    const features = (user.active_features || []).map((f) =>
+      (f || '').toLowerCase().trim(),
+    );
+
+    if (ch === 'linkedin' || ch === 'li') {
+      return (
+        channels.includes('linkedin') ||
+        channels.includes('li') ||
+        features.includes('linkedin') ||
+        features.includes('li')
+      );
+    }
+    if (
+      ch === 'blog' ||
+      ch === 'blogs' ||
+      ch === 'content_studio' ||
+      ch === 'ai_blog'
+    ) {
+      const blogKeys = ['blog', 'blogs', 'content_studio', 'ai_blog'];
+      return (
+        channels.some((c) => blogKeys.includes(c)) ||
+        features.some((f) => blogKeys.includes(f))
+      );
+    }
+    return channels.includes(ch) || features.includes(ch);
+  }
+
+  /**
+   * Alias for hasChannel to check feature entitlements.
+   */
+  public hasFeature(feature: string): boolean {
+    return this.hasChannel(feature);
   }
 
   /**
@@ -553,7 +675,7 @@ export class AuthService {
   // LinkedIn OAuth: Get authorization URL
   public getLinkedInConnectUrl(): Observable<{ authorize_url: string }> {
     return this.http.get<{ authorize_url: string }>(
-      `${environment.apiPrefix}/channels/linkedin/connect`,
+      `${environment.apiPrefix}/linkedin/connect`,
       {
         headers: {
           'ngrok-skip-browser-warning': 'sdf',
@@ -574,7 +696,7 @@ export class AuthService {
       person_urn?: string;
       access_token_valid?: boolean;
       has_refresh_token?: boolean;
-    }>(`${environment.apiPrefix}/channels/linkedin/status`, {
+    }>(`${environment.apiPrefix}/linkedin/status`, {
       headers: {
         'ngrok-skip-browser-warning': 'sdf',
       },
@@ -584,7 +706,7 @@ export class AuthService {
   // LinkedIn OAuth: Disconnect
   public disconnectLinkedIn(): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>(
-      `${environment.apiPrefix}/channels/linkedin/disconnect`,
+      `${environment.apiPrefix}/linkedin/disconnect`,
       {},
     );
   }

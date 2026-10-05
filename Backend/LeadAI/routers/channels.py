@@ -866,9 +866,17 @@ def list_identities(
             {
                 "id": r.Id,
                 "profile_name": r.ProfileName,
-                # The external id IS the phone number on WhatsApp, so it is
-                # masked exactly like any other contact detail.
-                "external_user_id": f"***{r.ExternalUserId[-4:]}" if r.ExternalUserId else None,
+                # The external id IS the phone number on WhatsApp, so it is masked exactly
+                # like any other contact detail. On Instagram/Messenger it is an opaque
+                # platform id (IGSID/PSID), not personal information, and the frontend needs
+                # the real value here — it is exactly what /channels/{id}/test's `to` field
+                # takes, and there is no username-based way to send a message on those
+                # platforms at all.
+                "external_user_id": (
+                    f"***{r.ExternalUserId[-4:]}"
+                    if r.ExternalUserId and r.Channel == "whatsapp"
+                    else r.ExternalUserId
+                ),
                 "conversation_id": r.ConversationId,
                 "customer_id": r.CustomerId,
                 "opted_out": bool(r.OptedOut),

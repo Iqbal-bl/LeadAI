@@ -1,16 +1,22 @@
+from __future__ import annotations
+
 import logging
 import os
 import secrets
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+from urllib.parse import quote
 import httpx
+from sqlalchemy.orm import Session
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential_jitter
 
 from ..config import settings
 from ..security import encrypt_pii, decrypt_pii
 from ..models import utcnow
 from ..models_ext import LeadChannelAccount
+
+_utcnow = utcnow
 
 logger = logging.getLogger("leadai.social.linkedin")
 
@@ -138,7 +144,7 @@ async def fetch_person_urn(access_token: str) -> str:
 
 
 async def save_tokens(
-    db,
+    db: Session,
     client_id: str,
     person_urn: str,
     access_token: str,
@@ -213,6 +219,18 @@ async def save_tokens(
     db_cred.IsDeleted = False
     db_cred.IsActive = True
     db_cred.UpdatedAt = utcnow()
+
+    # Soft delete existing comments for this company & channel to avoid cross-account comment bleeding
+    from ..models_blog import LeadSocialComment
+    db.query(LeadSocialComment).filter(
+        LeadSocialComment.ClientId == client_id,
+        LeadSocialComment.Channel == "linkedin",
+        LeadSocialComment.IsDeleted == False
+    ).update(
+        {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
+        synchronize_session=False
+    )
+
     db.commit()
 
 
@@ -559,7 +577,6 @@ async def reply_to_post_comment(
     parent_comment_urn: Optional[str] = None,
 ) -> dict:
     """Post a reply to a LinkedIn post or existing comment."""
-    from urllib.parse import quote
     encoded_urn = quote(post_urn, safe="")
     url = f"https://api.linkedin.com/rest/socialActions/{encoded_urn}/comments"
     

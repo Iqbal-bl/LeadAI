@@ -1,11 +1,17 @@
-<div class="card-base p-5">
+<div [ngClass]="cardMode ? 'card-base p-5' : ''">
   <h3
+    *ngIf="showHeader"
     class="text-sm font-semibold mb-4 flex items-center justify-between gap-2"
     style="color: var(--app-text)"
   >
-    <div><i class="pi pi-comments text-brand-500"></i> Conversations</div>
+    <div class="flex items-center gap-2">
+      <i [class]="icon + ' text-brand-500'"></i>
+      <span>{{ title }}</span>
+      <span *ngIf="subtitle" class="text-xs font-normal text-slate-400">· {{ subtitle }}</span>
+    </div>
     <div class="flex items-center gap-3">
       <i
+        *ngIf="showMaximize"
         class="pi pi-window-maximize hover:text-brand-500 cursor-pointer transition-colors"
         (click)="maximizeChat()"
         title="Maximize to Full Size"
@@ -13,25 +19,60 @@
     </div>
   </h3>
 
+  <!-- Optional Call Metadata strip (e.g. status, duration, phone, initiatedBy) -->
+  <div
+    *ngIf="callMetadata"
+    class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 mb-4 rounded-xl border text-xs"
+    style="
+      background-color: var(--app-bg-secondary);
+      border-color: var(--app-border);
+      color: var(--app-text-secondary);
+    "
+  >
+    <div *ngIf="callMetadata.status">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Status</span>
+      <span class="font-medium uppercase">{{ callMetadata.status }}</span>
+    </div>
+    <div *ngIf="callMetadata.duration !== undefined">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Duration</span>
+      <span class="font-medium">{{ callMetadata.duration }}</span>
+    </div>
+    <div *ngIf="callMetadata.phone">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Phone</span>
+      <span class="font-medium font-mono">{{ callMetadata.phone }}</span>
+    </div>
+    <div *ngIf="callMetadata.initiatedBy">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Initiated By</span>
+      <span class="font-medium">{{ callMetadata.initiatedBy }}</span>
+    </div>
+  </div>
+
   <div *ngIf="!isMinimized" class="transition-all duration-300">
     <!-- Messages Log (chat bubble format) -->
     <div
-      class="max-h-[350px] overflow-y-auto mb-4 p-4 space-y-4 rounded-xl border"
+      class="overflow-y-auto mb-4 p-4 space-y-4 rounded-xl border"
+      [style.max-height]="maxHeight"
       style="
         background-color: var(--app-bg-secondary, #fafafa);
         border-color: var(--app-border);
       "
       #chatContainer
     >
-      <ng-container *ngTemplateOutlet="conversationList"></ng-container>
+      <div *ngIf="processedMessages.length === 0" class="text-center py-8 text-xs text-slate-400">
+        <i class="pi pi-comments text-2xl mb-1.5 opacity-40 block"></i>
+        {{ emptyMessage }}
+      </div>
+      <ng-container *ngIf="processedMessages.length > 0">
+        <ng-container *ngTemplateOutlet="conversationList"></ng-container>
+      </ng-container>
     </div>
 
-    <!-- Reply Input Field -->
-    <div class="flex gap-3">
+    <!-- Reply Input Field (Conditional) -->
+    <div *ngIf="showReplyInput" class="flex gap-3">
       <input
         type="text"
         [(ngModel)]="replyMessage"
-        placeholder="Type your response to customer..."
+        [placeholder]="replyPlaceholder"
         class="flex-1 px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         style="
           background-color: var(--card-bg);
@@ -78,7 +119,7 @@
 
 <!-- Reusable Conversation List Template -->
 <ng-template #conversationList>
-  <ng-container *ngFor="let msg of conversations">
+  <ng-container *ngFor="let msg of processedMessages">
     <!-- System message -->
     <div *ngIf="msg.sender === 'system'" class="flex justify-center my-1.5">
       <div
@@ -88,7 +129,7 @@
           border: 1px solid var(--app-border);
         "
       >
-        <span [style.color]="getStatusColor(msg.summary)" class="font-semibold">
+        <span [style.color]="msg.statusColor" class="font-semibold">
           {{ msg.summary }}
         </span>
         <span
@@ -105,81 +146,208 @@
       </div>
     </div>
 
+    <!-- Call Recording Card (rendered wherever a call happened in the conversation) -->
+    <div
+      *ngIf="msg.isCallLastEvent && msg.callSid && callRecordingsMap[msg.callSid]"
+      class="my-2.5 mx-auto max-w-[92%]"
+    >
+      <div
+        class="p-3.5 rounded-2xl border transition-all duration-200 shadow-sm"
+        style="
+          background: var(--card-bg);
+          border-color: var(--app-border);
+        "
+      >
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div
+              class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style="background: rgba(99, 102, 241, 0.1); color: #6366f1"
+            >
+              <i class="pi pi-volume-up text-sm"></i>
+            </div>
+            <div class="min-w-0">
+              <div
+                class="text-xs font-semibold truncate flex items-center gap-1.5"
+                style="color: var(--app-text)"
+              >
+                <span>Call Recording</span>
+                <span
+                  *ngIf="callRecordingsMap[msg.callSid].recording"
+                  class="px-1.5 py-0.2 rounded text-[9px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                >
+                  Ready
+                </span>
+              </div>
+              <div
+                class="text-[11px] truncate opacity-75 mt-0.5"
+                style="color: var(--app-text-muted)"
+              >
+                {{ callRecordingsMap[msg.callSid].subtitle }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Action / State Trigger -->
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <!-- Loading Spinner -->
+            <div
+              *ngIf="callRecordingsMap[msg.callSid].loading"
+              class="flex items-center gap-1.5 text-xs text-brand-500 font-medium px-2 py-1"
+            >
+              <i class="pi pi-spin pi-spinner text-xs"></i>
+              <span>Loading...</span>
+            </div>
+
+            <!-- Fetch / Play trigger when idle -->
+            <button
+              *ngIf="
+                callRecordingsMap[msg.callSid].recording === undefined &&
+                !callRecordingsMap[msg.callSid].loading
+              "
+              (click)="loadRecording(msg.callSid)"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 text-white cursor-pointer transition-all hover:opacity-90"
+              style="background: linear-gradient(135deg, #6366f1, #8b5cf6)"
+            >
+              <i class="pi pi-play text-[10px]"></i>
+              <span>Play Recording</span>
+            </button>
+
+            <!-- Refresh button when recording is loaded -->
+            <button
+              *ngIf="
+                callRecordingsMap[msg.callSid].recording &&
+                !callRecordingsMap[msg.callSid].loading
+              "
+              (click)="loadRecording(msg.callSid, true)"
+              pTooltip="Renew recording link"
+              tooltipPosition="top"
+              class="p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/5 text-slate-400 hover:text-brand-500 cursor-pointer transition-colors"
+            >
+              <i class="pi pi-refresh text-xs"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Playable Audio Element (when recording found) -->
+        <div
+          *ngIf="
+            callRecordingsMap[msg.callSid].recording &&
+            callRecordingsMap[msg.callSid].recording?.url
+          "
+          class="mt-3 pt-2.5 border-t border-dashed"
+          style="border-color: var(--app-border)"
+        >
+          <audio
+            [src]="callRecordingsMap[msg.callSid].recording?.url"
+            controls
+            (error)="onAudioError(msg.callSid)"
+            class="w-full h-8 rounded-lg focus:outline-none"
+            style="accent-color: #6366f1"
+          ></audio>
+        </div>
+
+        <!-- No Recording Notice (e.g. 404 unanswered call) -->
+        <div
+          *ngIf="
+            callRecordingsMap[msg.callSid].recording === null &&
+            !callRecordingsMap[msg.callSid].loading
+          "
+          class="mt-2 pt-2 border-t border-dashed text-[11px] text-slate-400 flex items-center gap-1.5 italic"
+          style="border-color: var(--app-border)"
+        >
+          <i class="pi pi-info-circle text-xs"></i>
+          <span>No recording available for this call (e.g. call never connected).</span>
+        </div>
+
+        <!-- Error State with Retry -->
+        <div
+          *ngIf="
+            callRecordingsMap[msg.callSid].error &&
+            !callRecordingsMap[msg.callSid].loading
+          "
+          class="mt-2 pt-2 border-t border-dashed text-[11px] text-rose-500 flex items-center justify-between gap-2"
+          style="border-color: var(--app-border)"
+        >
+          <span class="flex items-center gap-1">
+            <i class="pi pi-exclamation-circle text-xs"></i>
+            <span>{{ callRecordingsMap[msg.callSid].error }}</span>
+          </span>
+          <button
+            (click)="loadRecording(msg.callSid, true)"
+            class="text-[11px] font-semibold underline cursor-pointer hover:text-rose-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Agent / Customer bubble -->
     <div
       *ngIf="msg.sender !== 'system'"
       class="flex flex-col"
-      [class.items-start]="isCustomer(msg)"
-      [class.items-end]="!isCustomer(msg)"
+      [class.items-start]="msg.isCustomer"
+      [class.items-end]="!msg.isCustomer"
     >
       <div
         class="max-w-[80%] px-4 py-3 rounded-2xl text-sm shadow-sm"
-        [style.background-color]="
-          isCustomer(msg) ? '#6366f1' : 'var(--card-bg)'
-        "
-        [style.color]="isCustomer(msg) ? '#ffffff' : 'var(--app-text)'"
-        [style.border]="
-          isCustomer(msg) ? 'none' : '1px solid var(--app-border)'
-        "
-        [ngClass]="isCustomer(msg) ? 'rounded-tl-none' : 'rounded-tr-none'"
+        [style.background-color]="msg.bubbleBg"
+        [style.color]="msg.textColor"
+        [style.border]="msg.bubbleBorder"
+        [ngClass]="msg.roundedClass"
       >
         <div
           class="font-semibold text-[10px] mb-1.5 opacity-80 flex items-center justify-between gap-2"
-          [style.color]="isCustomer(msg) ? '#e0e7ff' : 'var(--app-text-muted)'"
+          [style.color]="msg.headerTextColor"
         >
           <div class="flex items-center gap-1.5 flex-wrap">
-            <span>{{ getSenderLabel(msg) }}</span>
+            <span>{{ msg.senderLabel }}</span>
             <span class="opacity-60">·</span>
             <span class="opacity-60">{{
-              msg.startTime || msg.created_at || msg.timestamp
-                | date: "mediumTime"
+              msg.startTime | date: "mediumTime"
             }}</span>
           </div>
 
           <!-- AI Response Confidence Score Badge -->
           <span
-            *ngIf="isAi(msg) && getConfidencePercent(msg.confidence) !== null"
+            *ngIf="msg.isAi && msg.confidencePercent !== null"
             class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold tracking-wide"
-            [ngClass]="getConfidenceBadgeClass(msg.confidence)"
-            [pTooltip]="
-              'AI Confidence: ' +
-              getConfidencePercent(msg.confidence) +
-              '%' +
-              (msg.model_used ? ' (' + msg.model_used + ')' : '')
-            "
+            [ngClass]="msg.confidenceBadgeClass"
+            [pTooltip]="msg.confidenceTooltip"
             tooltipPosition="top"
           >
             <i class="pi pi-shield text-[8px]"></i>
-            <span>{{ getConfidencePercent(msg.confidence) }}% confidence</span>
+            <span>{{ msg.confidencePercent }}% confidence</span>
           </span>
         </div>
         <div class="whitespace-pre-wrap leading-relaxed">
-          {{ msg.summary || msg.content || msg.text || msg.message }}
+          {{ msg.summary }}
         </div>
 
         <!-- Social / Omnichannel Delivery Status -->
         <div
-          *ngIf="msg.delivery_status || msg.deliveryStatus"
+          *ngIf="msg.deliveryStatus"
           class="mt-1.5 pt-1 border-t border-dashed border-white/20 text-[10px] flex items-center gap-1.5"
         >
           <span
-            *ngIf="(msg.delivery_status || msg.deliveryStatus) === 'sent'"
+            *ngIf="msg.deliveryStatus === 'sent'"
             class="text-emerald-400 flex items-center gap-1"
           >
             <i class="pi pi-check text-[9px]"></i> Sent to channel
           </span>
           <span
-            *ngIf="(msg.delivery_status || msg.deliveryStatus) === 'failed'"
+            *ngIf="msg.deliveryStatus === 'failed'"
             class="text-rose-400 flex items-center gap-1 font-medium"
-            [pTooltip]="msg.delivery_error || msg.deliveryError"
+            [pTooltip]="msg.deliveryError || ''"
           >
             <i class="pi pi-exclamation-circle text-[9px]"></i> Failed:
-            {{ msg.delivery_error || msg.deliveryError || "Provider rejected" }}
+            {{ msg.deliveryError || "Provider rejected" }}
           </span>
           <span
-            *ngIf="(msg.delivery_status || msg.deliveryStatus) === 'skipped'"
+            *ngIf="msg.deliveryStatus === 'skipped'"
             class="text-amber-400 flex items-center gap-1 font-medium"
-            [pTooltip]="msg.delivery_error || msg.deliveryError"
+            [pTooltip]="msg.deliveryError || ''"
           >
             <i class="pi pi-clock text-[9px]"></i> 24h window closed
           </span>
@@ -190,7 +358,7 @@
 
   <!-- Empty state -->
   <div
-    *ngIf="conversations.length === 0"
+    *ngIf="processedMessages.length === 0"
     class="text-center py-8 text-sm text-slate-400"
   >
     No messages in this conversation.

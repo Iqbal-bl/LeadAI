@@ -24,13 +24,21 @@ from sqlalchemy.orm import Session
 
 from domain.models import Client
 
-from ..models import LeadCall, LeadConversation
+from ..models import LeadCall, LeadConversation, utcnow
 from ..services import voice_flow
 from .brain import BrainReply
 
 logger = logging.getLogger(__name__)
 
 SCORING_DRAIN_SECONDS = 30.0
+
+# A call already in one of these states was ended by something that already knows the
+# real outcome (a manual dashboard hangup, a carrier status webhook, the simulated
+# endpoint's transfer) — _finalize_call() must not relabel it, only backfill a missing
+# duration.
+_TERMINAL_CALL_STATUSES = frozenset(
+    {"completed", "failed", "busy", "no-answer", "canceled", "transferred"}
+)
 
 
 def _default_session_factory() -> Session:
@@ -248,11 +256,48 @@ class CallSession:
             finally:
                 self._scoring.task_done()
 
+    def _finalize_call_sync(self) -> None:
+        """Mark the LeadCall row ended and record how long it actually ran.
+
+        This is the one place every real call reaches on its way out, whatever ended it
+        (caller hung up, the AI ended it, an error, the idle timeout) — so it is where
+        leadai_calls.Status/DurationSec get written at all. Before this, only a manual
+        dashboard hangup or the simulated endpoint ever touched those columns, which is
+        why 16 of 23 live calls sat at Status=initiated forever and every "completed" one
+        still showed DurationSec=0.
+        """
+        db = self._session_factory()
+        try:
+            call = (
+                db.query(LeadCall)
+                .filter(LeadCall.CallSid == self.call_sid, LeadCall.ConversationId == self.conversation_id)
+                .one_or_none()
+            )
+            if call is None:
+                return
+            if not call.DurationSec and call.CreatedAt:
+                created = call.CreatedAt.replace(tzinfo=None)
+                call.DurationSec = max(0, int((utcnow().replace(tzinfo=None) - created).total_seconds()))
+            if (call.Status or "").lower() not in _TERMINAL_CALL_STATUSES:
+                call.Status = "completed"
+            call.UpdatedAt = utcnow()
+            call.UpdatedBy = "pipecat-session"
+            db.commit()
+        except Exception:  # noqa: BLE001 — bookkeeping must never block call shutdown
+            logger.warning("[LeadAI voice] could not finalize call %s", self.call_sid, exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
+
     async def close(self) -> None:
         """Flush the live transcript, finish outstanding scoring (bounded), then stop the worker.
         Call when the call ends."""
         if self._broadcasts:
             await asyncio.wait({*self._broadcasts}, timeout=2.0)     # let the last lines reach the UI
+        try:
+            await asyncio.to_thread(self._finalize_call_sync)
+        except Exception:  # noqa: BLE001 — never let bookkeeping block shutdown
+            logger.warning("[LeadAI voice] call finalize failed for %s", self.call_sid, exc_info=True)
         if self._scoring_task is None:
             return
         self._scoring.put_nowait(None)

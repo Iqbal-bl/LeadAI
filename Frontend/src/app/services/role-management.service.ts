@@ -76,4 +76,25 @@ export class RoleManagementService {
   public resetRolePermissions(role: string): Observable<any> {
     return this.apiService.delete<any>(`access/role-permissions/${role}`);
   }
+
+  // GET /access/company-role-permissions/{role}
+  public getCompanyRolePermissions(
+    role: string,
+  ): Observable<{ role: string; permission_key: string; is_granted: boolean }[]> {
+    return this.apiService.get<
+      { role: string; permission_key: string; is_granted: boolean }[]
+    >(`access/company-role-permissions/${role}`, { companyScoped: true });
+  }
+
+  // PATCH /access/company-role-permissions/{role}
+  public updateCompanyRolePermission(
+    role: string,
+    payload: { permission_key: string; is_granted: boolean },
+  ): Observable<{ role: string; permission_key: string; is_granted: boolean }> {
+    return this.apiService.patch<
+      { role: string; permission_key: string; is_granted: boolean }
+    >(`access/company-role-permissions/${role}`, payload, {
+      companyScoped: true,
+    });
+  }
 }

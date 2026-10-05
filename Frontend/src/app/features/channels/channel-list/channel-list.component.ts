@@ -93,7 +93,9 @@ export class ChannelListComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    window.removeEventListener('message', this.messageEventListener);
+    if (this.messageEventListener) {
+      window.removeEventListener('message', this.messageEventListener);
+    }
     if (this.linkedinPollingInterval) {
       clearInterval(this.linkedinPollingInterval);
     }
@@ -527,11 +529,6 @@ export class ChannelListComponent implements OnInit, OnDestroy {
 
   getChannelMenuItems(channel: Channel): MenuItem[] {
     return [
-      {
-        label: 'Send Test Message',
-        icon: 'pi pi-send',
-        command: () => this.openTestDialog(channel),
-      },
       {
         label: 'View Contacts',
         icon: 'pi pi-users',

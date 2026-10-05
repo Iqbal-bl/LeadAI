@@ -1,8 +1,16 @@
-import { Component, Input, inject } from '@angular/core';
+import {
+  Component,
+  Input,
+  OnInit,
+  OnChanges,
+  SimpleChanges,
+  inject,
+} from '@angular/core';
 import { SharedModule } from '../../../../shared/shared.module';
 import { CustomerService } from '../../../../services/customer.service';
 import { InboxService } from '../../../../services/inbox.service';
 import { ToastService } from '../../../../shared/services/toast.service';
+import { AuthService } from '../../../../services/auth.service';
 import { ContactInfo } from '../../../../models/inbox.models';
 
 @Component({
@@ -11,38 +19,57 @@ import { ContactInfo } from '../../../../models/inbox.models';
   imports: [SharedModule],
   templateUrl: './customer-info.component.html',
 })
-export class CustomerInfoComponent {
+export class CustomerInfoComponent implements OnInit, OnChanges {
   @Input() lead!: any;
 
   private customerService = inject(CustomerService);
   private inboxService = inject(InboxService);
   private toastService = inject(ToastService);
+  private authService = inject(AuthService);
 
   converting = false;
   revealingContact = false;
   isContactRevealed = false;
+  canRevealContact = false;
   revealedContact: ContactInfo | null = null;
   originalPhone = '';
   originalEmail = '';
+  leadInitials = '';
 
-  getInitials(name: string): string {
+  ngOnInit(): void {
+    this.authService.currentUser$.subscribe((user) => {
+      this.canRevealContact = this.authService.hasPermission('lead.reveal_pii');
+    });
+    this.computeLeadInitials();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['lead']) {
+      this.computeLeadInitials();
+    }
+  }
+
+  private computeLeadInitials(): void {
+    const name = this.lead?.name || '';
     if (name) {
-      return name
+      this.leadInitials = name
         .split(' ')
-        .map((n) => n[0])
+        .map((n: string) => n[0])
         .join('')
         .toUpperCase()
         .slice(0, 2);
+    } else {
+      this.leadInitials = 'CU';
     }
-    return '';
   }
 
   toggleRevealContact(): void {
     if (!this.lead?.id) return;
 
     if (this.isContactRevealed) {
-      // Toggle back to masked view
+      // Toggle back to masked view - clear revealed contact from component memory
       this.isContactRevealed = false;
+      this.revealedContact = null;
       if (this.originalPhone) {
         this.lead.phone = this.originalPhone;
       }
@@ -127,8 +154,6 @@ export class CustomerInfoComponent {
   stageOptions = [
     { label: 'Customer', value: 'customer' },
     { label: 'Opportunity', value: 'opportunity' },
-    { label: 'Lead', value: 'lead' },
-    { label: 'Won', value: 'won' },
   ];
 
   openConvertDialog(): void {

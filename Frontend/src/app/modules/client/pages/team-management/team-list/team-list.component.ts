@@ -78,7 +78,6 @@ export class TeamListComponent implements OnInit {
         icon: 'pi pi-user-edit',
         command: () => this.editMember(member),
       },
-      { label: 'Reassign Leads', icon: 'pi pi-arrow-right-left' },
       { separator: true },
       {
         label: 'Remove',
@@ -115,31 +114,39 @@ export class TeamListComponent implements OnInit {
     this.loadTeamMembers();
   }
 
+  private normalizeRoleValue(role: string): string {
+    const r = (role || '').toLowerCase();
+    if (r === 'admin' || r === 'companyadmin' || r === 'company_admin' || r === 'platform_admin') {
+      return 'company_admin';
+    }
+    if (r === 'manager') {
+      return 'manager';
+    }
+    return 'employee';
+  }
+
   loadTeamMembers(): void {
     this.tmService.getEmployees().subscribe({
       next: (data) => {
-        const grants = data.items;
-        const roleMap: Record<string, 'Admin' | 'Manager' | 'Employee'> = {
-          [ROLE_COMPANY_ADMIN]: 'Admin',
-          platform_admin: 'Admin',
-          [ROLE_MANAGER]: 'Manager',
-          [ROLE_EMPLOYEE]: 'Employee',
-          Admin: 'Admin',
-          Manager: 'Manager',
-        };
-
-        this.team = grants.map((g, idx) => ({
-          id: idx + 1,
-          name: (g as any).name || (g as any).full_name || '',
-          email: (g as any).email || (g as any).user_email || '',
-          role: roleMap[g.role] || (g.role as any) || 'Agent',
-          status: g.is_active !== false ? 'Active' : 'Inactive',
-          phone: '+1 (555) 000-0000',
-          avatar: '',
-          lastActive: 'Active',
-          assignedLeads: 0,
-          grantId: g.id,
-        }));
+        const grants = data.items || [];
+        this.team = grants.map((g, idx) => {
+          const rawRole = (g as any).role || '';
+          const normValue = this.normalizeRoleValue(rawRole);
+          const displayRole = normValue === 'company_admin' ? 'Admin' : normValue === 'manager' ? 'Manager' : 'Employee';
+          return {
+            id: idx + 1,
+            name: (g as any).name || (g as any).full_name || '',
+            email: (g as any).email || (g as any).user_email || '',
+            role: displayRole,
+            roleValue: normValue,
+            status: g.is_active !== false ? 'Active' : 'Inactive',
+            phone: (g as any).phone || '',
+            avatar: '',
+            lastActive: '',
+            assignedLeads: (g as any).assigned_leads ?? 0,
+            grantId: g.id,
+          };
+        });
       },
       error: () => {},
     });
@@ -160,7 +167,7 @@ export class TeamListComponent implements OnInit {
       email: member.email,
       password: '',
       confirmPassword: '',
-      role: member.role,
+      role: (member.roleValue || this.normalizeRoleValue(member.role)) as any,
       phone: member.phone || '',
       status: member.status,
     };
@@ -173,36 +180,23 @@ export class TeamListComponent implements OnInit {
         // Edit Mode: update employee
         const payload = {
           full_name: this.newMember.name,
+          phone: this.newMember.phone || null,
           role: this.newMember.role,
           is_active: this.newMember.status !== 'Inactive',
         };
 
         this.tmService.updateEmployee(this.editingMemberId, payload).subscribe({
           next: () => {
+            this.toastService.success('Team member updated successfully');
             this.loadTeamMembers();
             this.showAddDialog = false;
             this.isEditMode = false;
             this.editingMemberId = null;
             this.resetForm();
           },
-          error: () => {
-            // Fallback: update locally
-            const index = this.team.findIndex(
-              (t) => t.grantId === this.editingMemberId,
-            );
-            if (index !== -1) {
-              this.team[index] = {
-                ...this.team[index],
-                name: this.newMember.name,
-                role: this.newMember.role,
-                status: this.newMember.status,
-                phone: this.newMember.phone || this.team[index].phone,
-              };
-            }
-            this.showAddDialog = false;
-            this.isEditMode = false;
-            this.editingMemberId = null;
-            this.resetForm();
+          error: (err) => {
+            const detail = err?.error?.detail || 'Failed to update team member. Changes were rolled back.';
+            this.toastService.error(detail);
           },
         });
       } else {
@@ -211,31 +205,21 @@ export class TeamListComponent implements OnInit {
           email: this.newMember.email,
           password: this.newMember.password,
           name: this.newMember.name,
+          phone: this.newMember.phone || null,
           role: this.newMember.role,
           send_email_confirmation: false,
         };
 
         this.tmService.createMember(payload).subscribe({
           next: () => {
+            this.toastService.success('Team member created successfully');
             this.loadTeamMembers();
             this.showAddDialog = false;
             this.resetForm();
           },
-          error: () => {
-            // Fallback to local push on error
-            this.team.unshift({
-              id: this.team.length + 1,
-              name: this.newMember.name,
-              email: this.newMember.email,
-              role: this.newMember.role,
-              status: this.newMember.status,
-              phone: this.newMember.phone || '+1 (555) 000-0000',
-              avatar: '',
-              lastActive: 'Just now',
-              assignedLeads: 0,
-            });
-            this.showAddDialog = false;
-            this.resetForm();
+          error: (err) => {
+            const detail = err?.error?.detail || 'Failed to create team member. Data seeding was revoked.';
+            this.toastService.error(detail);
           },
         });
       }

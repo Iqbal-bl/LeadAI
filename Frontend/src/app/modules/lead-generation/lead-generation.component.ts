@@ -92,12 +92,13 @@ export class LeadGenerationComponent implements OnInit, OnDestroy {
 
   get isFormValid(): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailVal = this.email.trim();
+    const isEmailValid = emailVal.length === 0 || emailRegex.test(emailVal);
     return (
       !!this.selectedCompany &&
       this.displayName.trim().length >= 2 &&
-      this.email.trim().length > 0 &&
-      emailRegex.test(this.email) &&
-      this.phone.trim().length >= 8
+      this.phone.trim().length >= 8 &&
+      isEmailValid
     );
   }
 
@@ -108,7 +109,7 @@ export class LeadGenerationComponent implements OnInit, OnDestroy {
     const payload: ChatStartPayload = {
       company: this.selectedCompany.id,
       display_name: this.displayName.trim(),
-      email: this.email.trim(),
+      email: this.email.trim() || null,
       phone: this.phone.trim(),
       whatsapp: this.whatsapp.trim() || null,
       instagram: this.instagram.trim() || null,
@@ -121,7 +122,7 @@ export class LeadGenerationComponent implements OnInit, OnDestroy {
         this.chatStarted = true;
         this.startingChat = false;
         this.greetingMessage = session.greeting || this.selectedCompany!.widget_greeting;
-        
+
         // Push initial greeting from assistant
         this.messages.push({
           sender: 'ai',
@@ -231,7 +232,7 @@ export class LeadGenerationComponent implements OnInit, OnDestroy {
             text: m.content || m.message,
             time: m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
           }));
-          
+
           if (mapped.length > this.messages.length) {
             this.messages = mapped;
           }

@@ -106,7 +106,10 @@
     </p-tab>
     <p-tab value="comments">
       <i class="pi pi-comment mr-2"></i> Comments & AI Replies
-      <span *ngIf="pendingReviewCommentsCount > 0" class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-amber-500 text-white">
+      <span
+        *ngIf="pendingReviewCommentsCount > 0"
+        class="ml-2 px-2 py-0.5 text-xs font-bold rounded-full bg-amber-500 text-white"
+      >
         {{ pendingReviewCommentsCount }}
       </span>
     </p-tab>
@@ -298,6 +301,29 @@
                     pTooltip="Clear saved session token & credentials"
                     (onClick)="disconnectBotCredentials()"
                   ></p-button>
+                </div>
+              </div>
+
+              <!-- Active Connected Badge Banner -->
+              <div
+                *ngIf="status?.['has_cookie_credentials']"
+                class="mb-4 p-3.5 rounded-xl border flex items-center justify-between"
+                style="
+                  background: rgba(16, 185, 129, 0.08);
+                  border-color: rgba(16, 185, 129, 0.25);
+                "
+              >
+                <div class="flex items-center gap-2.5">
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <div>
+                    <div class="text-xs font-semibold text-emerald-400 flex items-center gap-2">
+                      <span>Personal Automation Active</span>
+                      <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Active Session Configured</span>
+                    </div>
+                    <div class="text-[11px] text-muted mt-0.5">
+                      Direct Messaging sync, candidate discovery, and comment replies are operational.
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -520,6 +546,26 @@
                   </div>
                   <p-inputSwitch
                     [(ngModel)]="autoAcceptEnabled"
+                  ></p-inputSwitch>
+                </div>
+
+                <!-- Toggle Auto Convert Inbound DMs to CRM Leads -->
+                <div
+                  class="flex items-center justify-between p-3.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10"
+                >
+                  <div class="pr-4">
+                    <span
+                      class="text-sm font-semibold block"
+                      style="color: var(--app-text)"
+                    >
+                      Auto-Convert Inbound Commercial DMs to CRM Leads
+                    </span>
+                    <span class="text-xs" style="color: var(--app-text-muted)">
+                      Automatically detect commercial buying intent (pricing, demo requests, quotes, consultations) in direct messages and convert them directly to Leads on the Customers page.
+                    </span>
+                  </div>
+                  <p-inputSwitch
+                    [(ngModel)]="autoDmLeadsEnabled"
                   ></p-inputSwitch>
                 </div>
 
@@ -814,12 +860,20 @@
                         >
                           {{ invitation.name }}
                         </span>
-                        <span
-                          *ngIf="invitation.public_id"
-                          class="text-xs font-mono text-muted"
-                        >
-                          {{ invitation.public_id }}
-                        </span>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                          <span
+                            *ngIf="invitation.public_id"
+                            class="text-xs font-mono text-muted"
+                          >
+                            {{ invitation.public_id }}
+                          </span>
+                          <span
+                            *ngIf="invitation.is_crm_lead"
+                            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          >
+                            <i class="pi pi-user-check text-[9px]"></i> CRM Lead
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -1625,10 +1679,19 @@
 
                     <p
                       *ngIf="conv.contact_headline"
-                      class="text-[11px] truncate text-muted mb-1"
+                      class="text-[11px] truncate text-muted mb-0.5"
                     >
                       {{ conv.contact_headline }}
                     </p>
+
+                    <!-- Lead Candidate Indicator Badge -->
+                    <div *ngIf="conv.is_lead_candidate" class="flex items-center gap-1.5 my-1">
+                      <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                        <i class="pi pi-bolt text-[9px]"></i>
+                        {{ getLeadIntentLabel(conv.lead_intent) }}
+                      </span>
+                      <span *ngIf="conv.lead_score" class="text-[10px] font-mono text-emerald-500/80">{{ conv.lead_score }}% intent</span>
+                    </div>
 
                     <p
                       class="text-xs truncate"
@@ -1686,12 +1749,21 @@
                     }"
                   ></p-avatar>
                   <div class="truncate">
-                    <h4
-                      class="text-sm font-semibold truncate"
-                      style="color: var(--app-text)"
-                    >
-                      {{ selectedConversation.contact_name }}
-                    </h4>
+                    <div class="flex items-center gap-2">
+                      <h4
+                        class="text-sm font-semibold truncate"
+                        style="color: var(--app-text)"
+                      >
+                        {{ selectedConversation.contact_name }}
+                      </h4>
+                      <span
+                        *ngIf="selectedConversation.is_lead_candidate"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shrink-0"
+                      >
+                        <i class="pi pi-bolt text-[9px]"></i>
+                        {{ getLeadIntentLabel(selectedConversation.lead_intent) }}
+                      </span>
+                    </div>
                     <p class="text-xs truncate text-muted">
                       {{
                         selectedConversation.contact_headline ||
@@ -1988,22 +2060,56 @@
         <div class="mt-4 space-y-6">
           <!-- Top Toolbar / Info Banner -->
           <div class="card-base p-6">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div
+              class="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                     style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                <div
+                  class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+                  style="background: linear-gradient(135deg, #f59e0b, #d97706)"
+                >
                   <i class="pi pi-comment text-lg"></i>
                 </div>
                 <div>
                   <div class="flex items-center gap-2 flex-wrap">
-                    <h3 class="text-base font-semibold" style="color: var(--app-text)">LinkedIn Comments & AI Reply Studio</h3>
-                    <p-tag [value]="comments.length + ' Total Comments'" severity="info" [rounded]="true"></p-tag>
-                    <p-tag *ngIf="pendingReviewCommentsCount > 0" [value]="pendingReviewCommentsCount + ' Pending Review'" severity="warning" [rounded]="true"></p-tag>
-                    <p-tag *ngIf="commentSettings.is_auto_reply_enabled" value="Auto-Pilot Active" severity="success" [rounded]="true" icon="pi pi-bolt"></p-tag>
-                    <p-tag *ngIf="!commentSettings.is_auto_reply_enabled" value="1-Click Approval Mode" severity="secondary" [rounded]="true" icon="pi pi-check-circle"></p-tag>
+                    <h3
+                      class="text-base font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      LinkedIn Comments & AI Reply Studio
+                    </h3>
+                    <p-tag
+                      [value]="comments.length + ' Total Comments'"
+                      severity="info"
+                      [rounded]="true"
+                    ></p-tag>
+                    <p-tag
+                      *ngIf="pendingReviewCommentsCount > 0"
+                      [value]="pendingReviewCommentsCount + ' Pending Review'"
+                      severity="warning"
+                      [rounded]="true"
+                    ></p-tag>
+                    <p-tag
+                      *ngIf="commentSettings.is_auto_reply_enabled"
+                      value="Auto-Pilot Active"
+                      severity="success"
+                      [rounded]="true"
+                      icon="pi pi-bolt"
+                    ></p-tag>
+                    <p-tag
+                      *ngIf="!commentSettings.is_auto_reply_enabled"
+                      value="1-Click Approval Mode"
+                      severity="secondary"
+                      [rounded]="true"
+                      icon="pi pi-check-circle"
+                    ></p-tag>
                   </div>
-                  <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
-                    Context-aware AI response generator grounded in your company profile, knowledge base, and original post topic.
+                  <p
+                    class="text-xs mt-0.5"
+                    style="color: var(--app-text-muted)"
+                  >
+                    Context-aware AI response generator grounded in your company
+                    profile, knowledge base, and original post topic.
                   </p>
                 </div>
               </div>
@@ -2011,12 +2117,16 @@
               <div class="flex items-center gap-2 shrink-0 flex-wrap">
                 <p-button
                   label="Scan Posts for Comments"
-                  icon="{{ syncingComments ? 'pi pi-spin pi-spinner' : 'pi pi-sync' }}"
+                  icon="{{
+                    syncingComments ? 'pi pi-spin pi-spinner' : 'pi pi-sync'
+                  }}"
                   [outlined]="true"
                   [loading]="syncingComments"
                   size="small"
                   [rounded]="true"
-                  [disabled]="!status?.connected || !status?.['has_cookie_credentials']"
+                  [disabled]="
+                    !status?.connected || !status?.['has_cookie_credentials']
+                  "
                   (onClick)="syncLinkedInComments()"
                   pTooltip="Scan your published posts on LinkedIn and pull latest comments"
                 ></p-button>
@@ -2029,6 +2139,8 @@
                   [rounded]="true"
                   (onClick)="showCommentSettingsModal = true"
                 ></p-button>
+
+
 
                 <p-button
                   icon="pi pi-refresh"
@@ -2046,63 +2158,109 @@
 
           <!-- Metrics Grid -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
-              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-blue-500 bg-blue-500/10 shrink-0">
+            <div
+              class="card-base p-4 border flex items-center gap-3.5"
+              style="border-color: var(--app-border)"
+            >
+              <div
+                class="w-10 h-10 rounded-xl flex items-center justify-center text-blue-500 bg-blue-500/10 shrink-0"
+              >
                 <i class="pi pi-comments text-lg"></i>
               </div>
               <div>
                 <p class="text-[11px] text-muted font-medium">Total Comments</p>
-                <h4 class="text-lg font-bold" style="color: var(--app-text)">{{ comments.length }}</h4>
+                <h4 class="text-lg font-bold" style="color: var(--app-text)">
+                  {{ comments.length }}
+                </h4>
               </div>
             </div>
 
-            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
-              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-amber-500 bg-amber-500/10 shrink-0">
+            <div
+              class="card-base p-4 border flex items-center gap-3.5"
+              style="border-color: var(--app-border)"
+            >
+              <div
+                class="w-10 h-10 rounded-xl flex items-center justify-center text-amber-500 bg-amber-500/10 shrink-0"
+              >
                 <i class="pi pi-hourglass text-lg"></i>
               </div>
               <div>
                 <p class="text-[11px] text-muted font-medium">Pending Review</p>
-                <h4 class="text-lg font-bold text-amber-400">{{ pendingReviewCommentsCount }}</h4>
+                <h4 class="text-lg font-bold text-amber-400">
+                  {{ pendingReviewCommentsCount }}
+                </h4>
               </div>
             </div>
 
-            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
-              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-emerald-500 bg-emerald-500/10 shrink-0">
+            <div
+              class="card-base p-4 border flex items-center gap-3.5"
+              style="border-color: var(--app-border)"
+            >
+              <div
+                class="w-10 h-10 rounded-xl flex items-center justify-center text-emerald-500 bg-emerald-500/10 shrink-0"
+              >
                 <i class="pi pi-user-plus text-lg"></i>
               </div>
               <div>
-                <p class="text-[11px] text-muted font-medium">Captured CRM Leads</p>
-                <h4 class="text-lg font-bold text-emerald-400">{{ capturedLeadsCount }}</h4>
+                <p class="text-[11px] text-muted font-medium">
+                  Captured CRM Leads
+                </p>
+                <h4 class="text-lg font-bold text-emerald-400">
+                  {{ capturedLeadsCount }}
+                </h4>
               </div>
             </div>
 
-            <div class="card-base p-4 border flex items-center gap-3.5" style="border-color: var(--app-border)">
-              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-purple-500 bg-purple-500/10 shrink-0">
+            <div
+              class="card-base p-4 border flex items-center gap-3.5"
+              style="border-color: var(--app-border)"
+            >
+              <div
+                class="w-10 h-10 rounded-xl flex items-center justify-center text-purple-500 bg-purple-500/10 shrink-0"
+              >
                 <i class="pi pi-sparkles text-lg"></i>
               </div>
               <div>
                 <p class="text-[11px] text-muted font-medium">Active Tone</p>
-                <h4 class="text-xs font-semibold capitalize" style="color: var(--app-text)">{{ commentSettings.reply_tone.replace('_', ' ') }}</h4>
+                <h4
+                  class="text-xs font-semibold capitalize"
+                  style="color: var(--app-text)"
+                >
+                  {{ commentSettings.reply_tone.replace("_", " ") }}
+                </h4>
               </div>
             </div>
           </div>
 
           <!-- Filter & Search Bar -->
-          <div class="card-base p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border" style="border-color: var(--app-border)">
+          <div
+            class="card-base p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border"
+            style="border-color: var(--app-border)"
+          >
             <div class="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 (click)="commentStatusFilter = 'all'; applyCommentFilter()"
                 class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                [ngClass]="commentStatusFilter === 'all' ? 'bg-brand-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+                [ngClass]="
+                  commentStatusFilter === 'all'
+                    ? 'bg-brand-500 text-white shadow-sm'
+                    : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'
+                "
               >
                 All ({{ comments.length }})
               </button>
               <button
                 type="button"
-                (click)="commentStatusFilter = 'pending_review'; applyCommentFilter()"
+                (click)="
+                  commentStatusFilter = 'pending_review'; applyCommentFilter()
+                "
                 class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                [ngClass]="commentStatusFilter === 'pending_review' ? 'bg-amber-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+                [ngClass]="
+                  commentStatusFilter === 'pending_review'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'
+                "
               >
                 Pending Review ({{ pendingReviewCommentsCount }})
               </button>
@@ -2110,7 +2268,11 @@
                 type="button"
                 (click)="commentStatusFilter = 'leads'; applyCommentFilter()"
                 class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                [ngClass]="commentStatusFilter === 'leads' ? 'bg-emerald-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+                [ngClass]="
+                  commentStatusFilter === 'leads'
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'
+                "
               >
                 High Intent Leads ({{ capturedLeadsCount }})
               </button>
@@ -2118,7 +2280,11 @@
                 type="button"
                 (click)="commentStatusFilter = 'replied'; applyCommentFilter()"
                 class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                [ngClass]="commentStatusFilter === 'replied' ? 'bg-blue-500 text-white shadow-sm' : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'"
+                [ngClass]="
+                  commentStatusFilter === 'replied'
+                    ? 'bg-blue-500 text-white shadow-sm'
+                    : 'bg-black/5 dark:bg-white/5 hover:bg-black/10 text-muted'
+                "
               >
                 Replied
               </button>
@@ -2127,7 +2293,10 @@
             <div class="flex items-center gap-2">
               <div class="p-inputgroup max-w-xs">
                 <span class="p-inputgroup-addon bg-transparent border-r-0">
-                  <i class="pi pi-search text-xs" style="color: var(--app-text-muted)"></i>
+                  <i
+                    class="pi pi-search text-xs"
+                    style="color: var(--app-text-muted)"
+                  ></i>
                 </span>
                 <input
                   pInputText
@@ -2149,266 +2318,410 @@
             </div>
           </div>
 
-        <!-- Comments Feed List -->
-        <div class="space-y-4">
-          <!-- Loading State -->
-          <div *ngIf="loadingComments" class="p-12 text-center card-base">
-            <i class="pi pi-spin pi-spinner text-3xl text-brand-500 mb-3 block"></i>
-            <h4 class="text-sm font-semibold" style="color: var(--app-text)">Scanning LinkedIn Comments...</h4>
-            <p class="text-xs text-muted mt-1">Grounded AI analysis in progress.</p>
-          </div>
-
-          <!-- Empty State -->
-          <div *ngIf="!loadingComments && filteredComments.length === 0" class="p-12 text-center card-base">
-            <div class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-amber-500 mb-3 bg-amber-500/10">
-              <i class="pi pi-comments text-3xl"></i>
+          <!-- Comments Feed List -->
+          <div class="space-y-4">
+            <!-- Loading State -->
+            <div *ngIf="loadingComments" class="p-12 text-center card-base">
+              <i
+                class="pi pi-spin pi-spinner text-3xl text-brand-500 mb-3 block"
+              ></i>
+              <h4 class="text-sm font-semibold" style="color: var(--app-text)">
+                Scanning LinkedIn Comments...
+              </h4>
+              <p class="text-xs text-muted mt-1">
+                Grounded AI analysis in progress.
+              </p>
             </div>
-            <h4 class="text-base font-semibold" style="color: var(--app-text)">No comments in this view</h4>
-            <p class="text-xs mt-1 max-w-md mx-auto" style="color: var(--app-text-muted)">
-              {{ comments.length === 0 ? 'Click "Scan Posts for Comments" to fetch recent activity from your published LinkedIn posts.' : 'No comments match your search or active filter tab.' }}
-            </p>
-            <div class="mt-4" *ngIf="comments.length === 0">
-              <p-button
-                label="Scan Posts for Comments"
-                icon="pi pi-sync"
-                size="small"
-                [rounded]="true"
-                [loading]="syncingComments"
-                (onClick)="syncLinkedInComments()"
-              ></p-button>
-            </div>
-          </div>
 
-          <!-- Comment Card Item -->
-          <div
-            *ngFor="let c of filteredComments"
-            class="card-base p-6 border transition-all duration-200"
-            [ngClass]="{
-              'border-amber-500/30 bg-amber-500/5': c.status === 'pending_review',
-              'border-emerald-500/30 bg-emerald-500/5': c.is_lead_candidate || c.customer_id,
-              'border-black/10 dark:border-white/10': c.status !== 'pending_review' && !c.is_lead_candidate
-            }"
-          >
-            <!-- Post Context Header -->
-            <div class="mb-4 pb-3 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2" style="border-color: var(--app-border)">
-              <div class="flex items-center gap-2 min-w-0">
-                <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-black/10 dark:bg-white/10 text-muted">
-                  Post Context
-                </span>
-                <span class="text-xs font-semibold truncate" style="color: var(--app-text)">
-                  {{ c.post_title || 'LinkedIn Post' }}
-                </span>
+            <!-- Empty State -->
+            <div
+              *ngIf="!loadingComments && filteredComments.length === 0"
+              class="p-12 text-center card-base"
+            >
+              <div
+                class="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center text-amber-500 mb-3 bg-amber-500/10"
+              >
+                <i class="pi pi-comments text-3xl"></i>
               </div>
-
-              <div class="flex items-center gap-2 shrink-0">
-                <!-- Sentiment Tag -->
-                <span
-                  *ngIf="c.sentiment"
-                  class="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
-                  [ngClass]="{
-                    'bg-blue-500/10 text-blue-400': c.sentiment === 'question',
-                    'bg-emerald-500/10 text-emerald-400': c.sentiment === 'lead_inquiry' || c.sentiment === 'positive' || c.sentiment === 'praise',
-                    'bg-red-500/10 text-red-400': c.sentiment === 'critical',
-                    'bg-slate-500/10 text-slate-400': c.sentiment === 'neutral'
-                  }"
-                >
-                  <i class="pi pi-tag mr-1 text-[9px]"></i> {{ c.sentiment.replace('_', ' ') }}
-                </span>
-
-                <!-- Lead Tag -->
-                <span
-                  *ngIf="c.is_lead_candidate || c.customer_id"
-                  class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500 text-white flex items-center gap-1 shadow-sm"
-                >
-                  <i class="pi pi-star-fill text-[9px]"></i> High Intent Lead
-                </span>
-
-                <!-- Status Badge -->
-                <p-tag
-                  [value]="c.status === 'replied' ? 'Replied' : (c.status === 'auto_replied' ? 'Auto-Replied' : (c.status === 'ignored' ? 'Ignored' : 'Pending Review'))"
-                  [severity]="c.status === 'replied' ? 'info' : (c.status === 'auto_replied' ? 'success' : (c.status === 'ignored' ? 'secondary' : 'warning'))"
+              <h4
+                class="text-base font-semibold"
+                style="color: var(--app-text)"
+              >
+                No comments in this view
+              </h4>
+              <p
+                class="text-xs mt-1 max-w-md mx-auto"
+                style="color: var(--app-text-muted)"
+              >
+                {{
+                  comments.length === 0
+                    ? 'Click "Scan Posts for Comments" to fetch recent activity from your published LinkedIn posts.'
+                    : "No comments match your search or active filter tab."
+                }}
+              </p>
+              <div class="mt-4" *ngIf="comments.length === 0">
+                <p-button
+                  label="Scan Posts for Comments"
+                  icon="pi pi-sync"
+                  size="small"
                   [rounded]="true"
-                ></p-tag>
+                  [loading]="syncingComments"
+                  (onClick)="syncLinkedInComments()"
+                ></p-button>
               </div>
             </div>
 
-            <!-- Commenter Profile & Text -->
-            <div class="flex items-start gap-3.5 mb-4">
-              <p-avatar
-                *ngIf="c.author_avatar"
-                [image]="c.author_avatar"
-                shape="circle"
-                size="large"
-                class="shrink-0"
-              ></p-avatar>
-              <p-avatar
-                *ngIf="!c.author_avatar"
-                [label]="c.author_name ? c.author_name.charAt(0) : 'L'"
-                shape="circle"
-                size="large"
-                class="shrink-0"
-                [style]="{ background: 'linear-gradient(135deg, #0A66C2, #004182)', color: 'white' }"
-              ></p-avatar>
-
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center justify-between gap-2">
-                  <h4 class="text-sm font-semibold truncate" style="color: var(--app-text)">
-                    {{ c.author_name }}
-                  </h4>
-                  <span class="text-[11px] text-muted shrink-0">
-                    {{ c.comment_created_at | date:'MMM d, y, h:mm a' }}
+            <!-- Comment Card Item -->
+            <div
+              *ngFor="let c of filteredComments"
+              class="card-base p-6 border transition-all duration-200"
+              [ngClass]="{
+                'border-amber-500/30 bg-amber-500/5':
+                  c.status === 'pending_review',
+                'border-emerald-500/30 bg-emerald-500/5':
+                  c.is_lead_candidate || c.customer_id,
+                'border-black/10 dark:border-white/10':
+                  c.status !== 'pending_review' && !c.is_lead_candidate,
+              }"
+            >
+              <!-- Post Context Header -->
+              <div
+                class="mb-4 pb-3 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                style="border-color: var(--app-border)"
+              >
+                <div class="flex items-center gap-2 min-w-0">
+                  <span
+                    class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-black/10 dark:bg-white/10 text-muted"
+                  >
+                    Post Context
+                  </span>
+                  <span
+                    class="text-xs font-semibold truncate"
+                    style="color: var(--app-text)"
+                  >
+                    {{ c.post_title || "LinkedIn Post" }}
                   </span>
                 </div>
 
-                <p *ngIf="c.author_headline" class="text-xs text-muted truncate mb-2">
-                  {{ c.author_headline }}
-                </p>
+                <div class="flex items-center gap-2 shrink-0">
+                  <!-- Sentiment Tag -->
+                  <span
+                    *ngIf="c.sentiment"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
+                    [ngClass]="{
+                      'bg-blue-500/10 text-blue-400':
+                        c.sentiment === 'question',
+                      'bg-emerald-500/10 text-emerald-400':
+                        c.sentiment === 'lead_inquiry' ||
+                        c.sentiment === 'positive' ||
+                        c.sentiment === 'praise',
+                      'bg-red-500/10 text-red-400': c.sentiment === 'critical',
+                      'bg-slate-500/10 text-slate-400':
+                        c.sentiment === 'neutral',
+                    }"
+                  >
+                    <i class="pi pi-tag mr-1 text-[9px]"></i>
+                    {{ c.sentiment.replace("_", " ") }}
+                  </span>
 
-                <!-- Comment Content Box -->
-                <div class="p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs leading-relaxed" style="color: var(--app-text)">
-                  "{{ c.comment_text }}"
+                  <!-- Lead Tag -->
+                  <span
+                    *ngIf="c.is_lead_candidate || c.customer_id"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500 text-white flex items-center gap-1 shadow-sm"
+                  >
+                    <i class="pi pi-star-fill text-[9px]"></i> High Intent Lead
+                  </span>
+
+                  <!-- Status Badge -->
+                  <p-tag
+                    [value]="
+                      c.status === 'replied'
+                        ? 'Replied'
+                        : c.status === 'auto_replied'
+                          ? 'Auto-Replied'
+                          : c.status === 'ignored'
+                            ? 'Ignored'
+                            : 'Pending Review'
+                    "
+                    [severity]="
+                      c.status === 'replied'
+                        ? 'info'
+                        : c.status === 'auto_replied'
+                          ? 'success'
+                          : c.status === 'ignored'
+                            ? 'secondary'
+                            : 'warning'
+                    "
+                    [rounded]="true"
+                  ></p-tag>
                 </div>
               </div>
-            </div>
 
-            <!-- AI Suggested Response Box -->
-            <div class="mt-4 pt-4 border-t pl-0 sm:pl-12" style="border-color: var(--app-border)">
-              <!-- Status: Already Replied View -->
-              <div *ngIf="c.status === 'replied' || c.status === 'auto_replied'" class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="font-semibold text-emerald-400 flex items-center gap-1.5">
-                    <i class="pi pi-check-circle"></i>
-                    {{ c.status === 'auto_replied' ? 'Auto-Replied by AI' : 'Replied by Operator' }}
-                  </span>
-                  <span class="text-[10px] text-muted" *ngIf="c.replied_at">
-                    {{ c.replied_at | date:'MMM d, h:mm a' }}
-                  </span>
-                </div>
-                <p class="text-xs leading-relaxed" style="color: var(--app-text)">
-                  {{ c.reply_text || c.suggested_reply }}
-                </p>
-              </div>
+              <!-- Commenter Profile & Text -->
+              <div class="flex items-start gap-3.5 mb-4">
+                <p-avatar
+                  *ngIf="c.author_avatar"
+                  [image]="c.author_avatar"
+                  shape="circle"
+                  size="large"
+                  class="shrink-0"
+                ></p-avatar>
+                <p-avatar
+                  *ngIf="!c.author_avatar"
+                  [label]="c.author_name ? c.author_name.charAt(0) : 'L'"
+                  shape="circle"
+                  size="large"
+                  class="shrink-0"
+                  [style]="{
+                    background: 'linear-gradient(135deg, #0A66C2, #004182)',
+                    color: 'white',
+                  }"
+                ></p-avatar>
 
-              <!-- Status: Pending Review / Interactive AI Box -->
-              <div *ngIf="c.status === 'pending_review' || c.status === 'approved'" class="space-y-3">
-                <!-- AI Grounding & Rationale Banner -->
-                <div class="flex items-start gap-2 p-2.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-xs">
-                  <i class="pi pi-sparkles text-brand-400 mt-0.5 shrink-0"></i>
-                  <div class="flex-1">
-                    <span class="font-semibold text-brand-400">AI Contextual Grounding: </span>
-                    <span style="color: var(--app-text-secondary)">
-                      {{ c.suggested_reply_rationale || 'Crafted using company value proposition and post context.' }}
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2">
+                    <h4
+                      class="text-sm font-semibold truncate"
+                      style="color: var(--app-text)"
+                    >
+                      {{ c.author_name }}
+                    </h4>
+                    <span class="text-[11px] text-muted shrink-0">
+                      {{ c.comment_created_at | date: "MMM d, y, h:mm a" }}
                     </span>
                   </div>
-                </div>
 
-                <!-- Suggested Reply Area -->
-                <div *ngIf="!c.isEditing" class="p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-brand-500/30 text-xs relative group">
-                  <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-[11px] font-semibold text-muted uppercase tracking-wider">Suggested Reply</span>
-                    <button
-                      type="button"
-                      (click)="startEditingReply(c)"
-                      class="text-xs text-brand-400 hover:underline flex items-center gap-1"
-                    >
-                      <i class="pi pi-pencil text-[10px]"></i> Edit
-                    </button>
+                  <p
+                    *ngIf="c.author_headline"
+                    class="text-xs text-muted truncate mb-2"
+                  >
+                    {{ c.author_headline }}
+                  </p>
+
+                  <!-- Comment Content Box -->
+                  <div
+                    class="p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs leading-relaxed"
+                    style="color: var(--app-text)"
+                  >
+                    "{{ c.comment_text }}"
                   </div>
-                  <p class="text-xs leading-relaxed whitespace-pre-wrap" style="color: var(--app-text)">
-                    {{ c.draftReply || c.suggested_reply }}
+                </div>
+              </div>
+
+              <!-- AI Suggested Response Box -->
+              <div
+                class="mt-4 pt-4 border-t pl-0 sm:pl-12"
+                style="border-color: var(--app-border)"
+              >
+                <!-- Status: Already Replied View -->
+                <div
+                  *ngIf="c.status === 'replied' || c.status === 'auto_replied'"
+                  class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs"
+                >
+                  <div class="flex items-center justify-between mb-1">
+                    <span
+                      class="font-semibold text-emerald-400 flex items-center gap-1.5"
+                    >
+                      <i class="pi pi-check-circle"></i>
+                      {{
+                        c.status === "auto_replied"
+                          ? "Auto-Replied by AI"
+                          : "Replied by Operator"
+                      }}
+                    </span>
+                    <span class="text-[10px] text-muted" *ngIf="c.replied_at">
+                      {{ c.replied_at | date: "MMM d, h:mm a" }}
+                    </span>
+                  </div>
+                  <p
+                    class="text-xs leading-relaxed"
+                    style="color: var(--app-text)"
+                  >
+                    {{ c.reply_text || c.suggested_reply }}
                   </p>
                 </div>
 
-                <!-- In-Line Editor -->
-                <div *ngIf="c.isEditing" class="space-y-2">
-                  <textarea
-                    pInputText
-                    rows="3"
-                    [(ngModel)]="c.draftReply"
-                    class="w-full text-xs font-sans"
-                    placeholder="Refine your reply..."
-                  ></textarea>
-
-                  <div class="flex items-center justify-between">
-                    <button
-                      type="button"
-                      (click)="cancelEditingReply(c)"
-                      class="text-xs text-muted hover:underline"
-                    >
-                      Cancel Edit
-                    </button>
+                <!-- Status: Pending Review / Interactive AI Box -->
+                <div
+                  *ngIf="
+                    c.status === 'pending_review' || c.status === 'approved'
+                  "
+                  class="space-y-3"
+                >
+                  <!-- AI Grounding & Rationale Banner -->
+                  <div
+                    class="flex items-start gap-2 p-2.5 rounded-lg bg-brand-500/10 border border-brand-500/20 text-xs"
+                  >
+                    <i
+                      class="pi pi-sparkles text-brand-400 mt-0.5 shrink-0"
+                    ></i>
+                    <div class="flex-1">
+                      <span class="font-semibold text-brand-400"
+                        >AI Contextual Grounding:
+                      </span>
+                      <span style="color: var(--app-text-secondary)">
+                        {{
+                          c.suggested_reply_rationale ||
+                            "Crafted using company value proposition and post context."
+                        }}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                <!-- Optional Custom AI Prompt Instruction -->
-                <div class="flex items-center gap-2">
-                  <input
-                    pInputText
-                    type="text"
-                    [(ngModel)]="c.customInstruction"
-                    placeholder="Optional tweak instruction (e.g. 'Make it shorter and mention our demo link')"
-                    class="text-xs flex-1"
-                    (keyup.enter)="regenerateReply(c)"
-                  />
-                  <p-button
-                    label="Regenerate"
-                    icon="{{ c.isGenerating ? 'pi pi-spin pi-spinner' : 'pi pi-refresh' }}"
-                    [outlined]="true"
-                    size="small"
-                    [rounded]="true"
-                    [loading]="c.isGenerating"
-                    (onClick)="regenerateReply(c)"
-                  ></p-button>
-                </div>
+                  <!-- Suggested Reply Area -->
+                  <div
+                    *ngIf="!c.isEditing"
+                    class="p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-brand-500/30 text-xs relative group"
+                  >
+                    <div class="flex items-center justify-between mb-1.5">
+                      <span
+                        class="text-[11px] font-semibold text-muted uppercase tracking-wider"
+                        >Suggested Reply</span
+                      >
+                      <button
+                        type="button"
+                        (click)="startEditingReply(c)"
+                        class="text-xs text-brand-400 hover:underline flex items-center gap-1"
+                      >
+                        <i class="pi pi-pencil text-[10px]"></i> Edit
+                      </button>
+                    </div>
+                    <p
+                      class="text-xs leading-relaxed whitespace-pre-wrap"
+                      style="color: var(--app-text)"
+                    >
+                      {{ c.draftReply || c.suggested_reply }}
+                    </p>
+                  </div>
 
-                <!-- Action Buttons Toolbar -->
-                <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <!-- In-Line Editor -->
+                  <div *ngIf="c.isEditing" class="space-y-2">
+                    <textarea
+                      pInputText
+                      rows="3"
+                      [(ngModel)]="c.draftReply"
+                      class="w-full text-xs font-sans"
+                      placeholder="Refine your reply..."
+                    ></textarea>
+
+                    <div class="flex items-center justify-between">
+                      <button
+                        type="button"
+                        (click)="cancelEditingReply(c)"
+                        class="text-xs text-muted hover:underline"
+                      >
+                        Cancel Edit
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Optional Custom AI Prompt Instruction -->
                   <div class="flex items-center gap-2">
+                    <input
+                      pInputText
+                      type="text"
+                      [(ngModel)]="c.customInstruction"
+                      placeholder="Optional tweak instruction (e.g. 'Make it shorter and mention our demo link')"
+                      class="text-xs flex-1"
+                      (keyup.enter)="regenerateReply(c)"
+                    />
                     <p-button
-                      *ngIf="!c.customer_id"
-                      label="{{ c.isCapturingLead ? 'Saving Lead...' : 'Capture as CRM Lead' }}"
-                      icon="pi pi-user-plus"
+                      label="Regenerate"
+                      icon="{{
+                        c.isGenerating
+                          ? 'pi pi-spin pi-spinner'
+                          : 'pi pi-refresh'
+                      }}"
                       [outlined]="true"
                       size="small"
                       [rounded]="true"
-                      [loading]="c.isCapturingLead"
-                      (onClick)="captureCommentLead(c)"
-                    ></p-button>
-
-                    <span *ngIf="c.customer_id" class="text-xs text-emerald-400 font-medium flex items-center gap-1">
-                      <i class="pi pi-check"></i> CRM Lead Saved
-                    </span>
-
-                    <p-button
-                      label="Ignore"
-                      icon="pi pi-times"
-                      [text]="true"
-                      severity="secondary"
-                      size="small"
-                      [rounded]="true"
-                      (onClick)="ignoreComment(c)"
+                      [loading]="c.isGenerating"
+                      (onClick)="regenerateReply(c)"
                     ></p-button>
                   </div>
 
-                  <div class="flex items-center gap-2">
-                    <p-button
-                      label="{{ c.isReplying ? 'Publishing...' : 'Approve & Post Reply' }}"
-                      icon="{{ c.isReplying ? 'pi pi-spin pi-spinner' : 'pi pi-send' }}"
-                      [loading]="c.isReplying"
-                      size="small"
-                      [rounded]="true"
-                      [style]="{ background: '#10b981', border: 'none' }"
-                      (onClick)="approveAndSendReply(c)"
-                    ></p-button>
+                  <!-- Action Buttons Toolbar -->
+                  <div
+                    class="flex flex-wrap items-center justify-between gap-3 pt-2"
+                  >
+                    <div class="flex items-center gap-2">
+                      <p-button
+                        *ngIf="!c.customer_id"
+                        label="{{
+                          c.isCapturingLead
+                            ? 'Saving Lead...'
+                            : 'Capture as CRM Lead'
+                        }}"
+                        icon="pi pi-user-plus"
+                        [outlined]="true"
+                        size="small"
+                        [rounded]="true"
+                        [loading]="c.isCapturingLead"
+                        (onClick)="captureCommentLead(c)"
+                      ></p-button>
+
+                      <!-- CRM Lead Saved badge + optional LinkedIn profile link -->
+                      <span
+                        *ngIf="c.customer_id"
+                        class="flex items-center gap-2 flex-wrap"
+                      >
+                        <span class="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                          <i class="pi pi-check-circle"></i> CRM Lead Saved
+                        </span>
+                        <a
+                          *ngIf="c.author_profile_url"
+                          [href]="c.author_profile_url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
+                          style="background: rgba(10,102,194,0.12); color: #0A66C2; border: 1px solid rgba(10,102,194,0.25);"
+                          onmouseover="this.style.background='rgba(10,102,194,0.22)'"
+                          onmouseout="this.style.background='rgba(10,102,194,0.12)'"
+                          pTooltip="View LinkedIn Profile"
+                          tooltipPosition="top"
+                        >
+                          <i class="pi pi-linkedin" style="font-size:11px"></i>
+                          <span>View Profile</span>
+                          <i class="pi pi-external-link" style="font-size:9px"></i>
+                        </a>
+                      </span>
+
+                      <p-button
+                        label="Ignore"
+                        icon="pi pi-times"
+                        [text]="true"
+                        severity="secondary"
+                        size="small"
+                        [rounded]="true"
+                        (onClick)="ignoreComment(c)"
+                      ></p-button>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <p-button
+                        label="{{
+                          c.isReplying
+                            ? 'Publishing...'
+                            : 'Approve & Post Reply'
+                        }}"
+                        icon="{{
+                          c.isReplying ? 'pi pi-spin pi-spinner' : 'pi pi-send'
+                        }}"
+                        [loading]="c.isReplying"
+                        size="small"
+                        [rounded]="true"
+                        [style]="{ background: '#10b981', border: 'none' }"
+                        (onClick)="approveAndSendReply(c)"
+                      ></p-button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </ng-template>
-  </p-tabpanel>
+      </ng-template>
+    </p-tabpanel>
   </p-tabpanels>
 </p-tabs>
 
@@ -2423,35 +2736,74 @@
 >
   <div class="space-y-5 p-1">
     <!-- Mode Switch -->
-    <div class="p-4 rounded-xl border flex items-center justify-between gap-4" style="border-color: var(--app-border); background: var(--app-surface-elevated)">
+    <div
+      class="p-4 rounded-xl border flex items-center justify-between gap-4"
+      style="
+        border-color: var(--app-border);
+        background: var(--app-surface-elevated);
+      "
+    >
       <div>
-        <h4 class="text-sm font-semibold" style="color: var(--app-text)">Enable Full Auto-Pilot Replies</h4>
+        <h4 class="text-sm font-semibold" style="color: var(--app-text)">
+          Enable Full Auto-Pilot Replies
+        </h4>
         <p class="text-xs text-muted mt-0.5">
-          Automatically post AI-generated replies to comments in the background without waiting for manual approval.
+          Automatically post AI-generated replies to comments in the background
+          without waiting for manual approval.
         </p>
       </div>
-      <p-inputSwitch [(ngModel)]="commentSettings.is_auto_reply_enabled"></p-inputSwitch>
+      <p-inputSwitch
+        [(ngModel)]="commentSettings.is_auto_reply_enabled"
+      ></p-inputSwitch>
     </div>
 
     <!-- Question Rule -->
-    <div class="flex items-center justify-between gap-4 py-2 border-b" style="border-color: var(--app-border)">
+    <div
+      class="flex items-center justify-between gap-4 py-2 border-b"
+      style="border-color: var(--app-border)"
+    >
       <div>
-        <h5 class="text-xs font-semibold" style="color: var(--app-text)">Require Manual Approval for Technical/Product Questions</h5>
-        <p class="text-[11px] text-muted">Hold inquiries with question marks for operator 1-click approval</p>
+        <h5 class="text-xs font-semibold" style="color: var(--app-text)">
+          Require Manual Approval for Technical/Product Questions
+        </h5>
+        <p class="text-[11px] text-muted">
+          Hold inquiries with question marks for operator 1-click approval
+        </p>
       </div>
-      <p-inputSwitch [(ngModel)]="commentSettings.require_approval_for_questions"></p-inputSwitch>
+      <p-inputSwitch
+        [(ngModel)]="commentSettings.require_approval_for_questions"
+      ></p-inputSwitch>
     </div>
 
     <!-- Tone Selector -->
     <div>
-      <label class="text-xs font-semibold block mb-1.5" style="color: var(--app-text)">AI Reply Tone & Persona</label>
+      <label
+        class="text-xs font-semibold block mb-1.5"
+        style="color: var(--app-text)"
+        >AI Reply Tone & Persona</label
+      >
       <p-dropdown
         [options]="[
-          { label: 'Thought Leadership (Authoritative & Insightful)', value: 'thought_leadership' },
-          { label: 'Friendly & Professional (Warm, helpful & clear)', value: 'friendly_professional' },
-          { label: 'Consultative (Inquisitive & solutions-oriented)', value: 'consultative' },
-          { label: 'Conversational (Casual & authentic networking)', value: 'conversational' },
-          { label: 'Direct & Concise (Brief & action-oriented)', value: 'direct' }
+          {
+            label: 'Thought Leadership (Authoritative & Insightful)',
+            value: 'thought_leadership',
+          },
+          {
+            label: 'Friendly & Professional (Warm, helpful & clear)',
+            value: 'friendly_professional',
+          },
+          {
+            label: 'Consultative (Inquisitive & solutions-oriented)',
+            value: 'consultative',
+          },
+          {
+            label: 'Conversational (Casual & authentic networking)',
+            value: 'conversational',
+          },
+          {
+            label: 'Direct & Concise (Brief & action-oriented)',
+            value: 'direct',
+          },
         ]"
         [(ngModel)]="commentSettings.reply_tone"
         optionLabel="label"
@@ -2462,7 +2814,11 @@
 
     <!-- Custom Prompt Instructions -->
     <div>
-      <label class="text-xs font-semibold block mb-1.5" style="color: var(--app-text)">Custom Company Instructions</label>
+      <label
+        class="text-xs font-semibold block mb-1.5"
+        style="color: var(--app-text)"
+        >Custom Company Instructions</label
+      >
       <textarea
         pInputText
         rows="3"
@@ -2471,23 +2827,40 @@
         class="w-full text-xs font-sans"
       ></textarea>
       <span class="text-[11px] text-muted mt-1 block">
-        These instructions are injected into the AI system prompt alongside your company knowledge base.
+        These instructions are injected into the AI system prompt alongside your
+        company knowledge base.
       </span>
     </div>
 
     <!-- Lead Capture Settings -->
-    <div class="p-3.5 rounded-xl border flex items-center justify-between gap-4" style="border-color: var(--app-border)">
+    <div
+      class="p-3.5 rounded-xl border flex items-center justify-between gap-4"
+      style="border-color: var(--app-border)"
+    >
       <div>
-        <h5 class="text-xs font-semibold" style="color: var(--app-text)">Auto-Capture High-Intent Commenters in CRM</h5>
-        <p class="text-[11px] text-muted">Automatically creates a Lead/Customer profile when someone shows buying interest</p>
+        <h5 class="text-xs font-semibold" style="color: var(--app-text)">
+          Auto-Capture High-Intent Commenters in CRM
+        </h5>
+        <p class="text-[11px] text-muted">
+          Automatically creates a Lead/Customer profile when someone shows
+          buying interest
+        </p>
       </div>
-      <p-inputSwitch [(ngModel)]="commentSettings.auto_capture_leads"></p-inputSwitch>
+      <p-inputSwitch
+        [(ngModel)]="commentSettings.auto_capture_leads"
+      ></p-inputSwitch>
     </div>
   </div>
 
   <ng-template pTemplate="footer">
     <div class="flex items-center justify-end gap-2 pt-2">
-      <p-button label="Cancel" severity="secondary" [outlined]="true" (onClick)="showCommentSettingsModal = false" [rounded]="true"></p-button>
+      <p-button
+        label="Cancel"
+        severity="secondary"
+        [outlined]="true"
+        (onClick)="showCommentSettingsModal = false"
+        [rounded]="true"
+      ></p-button>
       <p-button
         label="{{ savingCommentSettings ? 'Saving...' : 'Save Rules' }}"
         icon="pi pi-check"

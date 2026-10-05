@@ -3,6 +3,7 @@ import { AnalyticsComponent } from "../../../../features/analytics/analytics.com
 
 @Component({
   selector: 'client-dashboard',
+  standalone: true,
   imports: [AnalyticsComponent],
   templateUrl: './client-dashboard.component.html',
   styleUrl: './client-dashboard.component.scss',

@@ -7,7 +7,7 @@
   </p>
 </div>
 
-<p-tabs value="profile">
+<p-tabs [(value)]="activeTab" [lazy]="true">
   <p-tablist>
     <p-tab value="profile"
       ><i class="pi pi-user mr-2"></i> Profile & Account</p-tab
@@ -19,12 +19,18 @@
       ><i class="pi pi-bell mr-2"></i> Notifications</p-tab
     >
     <p-tab value="threshold"><i class="pi pi-bell mr-2"></i> Threshold</p-tab>
+    <p-tab *ngIf="isCompanyAdmin" value="contact-permissions">
+      <i class="pi pi-shield mr-2"></i> Contact Permissions
+    </p-tab>
   </p-tablist>
 
   <p-tabpanels>
     <!-- Profile Tab -->
     <p-tabpanel value="profile">
-      <div class="card-base p-6 mt-4 max-w-2xl space-y-4">
+      <div
+        *ngIf="activeTab === 'profile'"
+        class="card-base p-6 mt-4 max-w-2xl space-y-4"
+      >
         <div class="flex items-center gap-4 mb-4">
           <p-avatar
             label="SN"
@@ -121,7 +127,10 @@
 
     <!-- AI Settings Tab -->
     <p-tabpanel value="ai">
-      <div class="card-base p-6 mt-4 max-w-2xl space-y-6">
+      <div
+        *ngIf="activeTab === 'ai'"
+        class="card-base p-6 mt-4 max-w-2xl space-y-6"
+      >
         <div>
           <label
             class="text-xs font-semibold uppercase tracking-wider block mb-2"
@@ -196,6 +205,29 @@
           <p-inputSwitch [(ngModel)]="aiConfig.enableSentiment"></p-inputSwitch>
         </div>
 
+        <!-- Read-only Voice Settings (Managed by Support) -->
+        <div
+          class="p-4 rounded-xl border border-solid space-y-2"
+          style="background: var(--app-surface-alt, #f8fafc); border-color: var(--card-border)"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="pi pi-lock text-slate-400 text-xs"></i>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Platform Voice Profile
+              </span>
+            </div>
+            <p-tag
+              value="Read-Only"
+              severity="secondary"
+              [rounded]="true"
+            ></p-tag>
+          </div>
+          <p class="text-xs text-slate-600 dark:text-slate-300">
+            Voice: <span class="font-semibold">{{ companySettings?.voice_gender || 'female' }}</span>, speed <span class="font-semibold">{{ companySettings?.voice_speed ?? 1.1 }}x</span> — contact support to change
+          </p>
+        </div>
+
         <div class="pt-4 flex justify-end">
           <p-button
             label="Update AI Config"
@@ -212,7 +244,10 @@
 
     <!-- Notifications Tab -->
     <p-tabpanel value="notifications">
-      <div class="card-base p-6 mt-4 max-w-2xl space-y-4">
+      <div
+        *ngIf="activeTab === 'notifications'"
+        class="card-base p-6 mt-4 max-w-2xl space-y-4"
+      >
         <div class="flex items-center justify-between py-2">
           <div>
             <div class="text-sm font-semibold" style="color: var(--app-text)">
@@ -264,7 +299,123 @@
     </p-tabpanel>
 
     <p-tabpanel value="threshold">
-      <app-lead-threshold></app-lead-threshold>
+      <app-lead-threshold
+        *ngIf="activeTab === 'threshold'"
+      ></app-lead-threshold>
+    </p-tabpanel>
+
+    <!-- Contact Reveal Permissions Tab (Company Admin only) -->
+    <p-tabpanel value="contact-permissions">
+      <div
+        *ngIf="activeTab === 'contact-permissions' && isCompanyAdmin"
+        class="card-base p-6 mt-4 max-w-2xl space-y-6"
+      >
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <h3 class="text-base font-bold" style="color: var(--app-text)">
+              Customer Contact Reveal Permissions
+            </h3>
+            <span
+              class="px-2 py-0.5 rounded text-[10px] font-semibold bg-brand-50 text-brand-600 dark:bg-brand-950/60 dark:text-brand-300 border border-brand-200 dark:border-brand-800"
+            >
+              Company Scoped
+            </span>
+          </div>
+          <p class="text-xs" style="color: var(--app-text-muted)">
+            Control which roles in your company can reveal unmasked customer
+            contact details (phone, email, WhatsApp, Instagram) in the
+            conversation view. Every reveal action is recorded in the activity
+            audit log.
+          </p>
+        </div>
+
+        <!-- Manager Toggle -->
+        <div
+          class="flex items-center justify-between py-3 border-t"
+          style="border-color: var(--card-border)"
+        >
+          <div class="space-y-0.5">
+            <div class="text-sm font-semibold" style="color: var(--app-text)">
+              Managers can reveal customer contact details
+            </div>
+            <div class="text-xs" style="color: var(--app-text-muted)">
+              Allows team members with the Manager role to view real customer
+              phone and email.
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <i
+              *ngIf="savingManager || loadingPermissions"
+              class="pi pi-spin pi-spinner text-xs text-brand-500"
+            ></i>
+            <p-inputSwitch
+              [ngModel]="managerCanReveal"
+              [disabled]="
+                savingManager ||
+                loadingPermissions ||
+                managerCanReveal === undefined
+              "
+              (onChange)="setRolePermission('manager', $event.checked)"
+            ></p-inputSwitch>
+          </div>
+        </div>
+
+        <!-- Employee Toggle -->
+        <div
+          class="flex items-center justify-between py-3 border-t"
+          style="border-color: var(--card-border)"
+        >
+          <div class="space-y-0.5">
+            <div class="text-sm font-semibold" style="color: var(--app-text)">
+              Employees can reveal customer contact details
+            </div>
+            <div class="text-xs" style="color: var(--app-text-muted)">
+              Allows agents and staff with the Employee role to decrypt and
+              reveal customer contacts.
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <i
+              *ngIf="savingEmployee || loadingPermissions"
+              class="pi pi-spin pi-spinner text-xs text-brand-500"
+            ></i>
+            <p-inputSwitch
+              [ngModel]="employeeCanReveal"
+              [disabled]="
+                savingEmployee ||
+                loadingPermissions ||
+                employeeCanReveal === undefined
+              "
+              (onChange)="setRolePermission('employee', $event.checked)"
+            ></p-inputSwitch>
+          </div>
+        </div>
+
+        <!-- Notice / Explainer -->
+        <div
+          class="p-3.5 rounded-xl border text-xs flex items-start gap-2.5"
+          style="
+            background: rgba(99, 102, 241, 0.05);
+            border-color: rgba(99, 102, 241, 0.15);
+            color: var(--app-text-secondary);
+          "
+        >
+          <i class="pi pi-info-circle text-indigo-500 mt-0.5 flex-shrink-0"></i>
+          <div>
+            <span
+              class="font-semibold block mb-0.5"
+              style="color: var(--app-text)"
+            >
+              Company Admin Access
+            </span>
+            <span style="color: var(--app-text-muted)">
+              Company Admins always hold contact reveal privileges by default.
+              Toggles apply strictly to your company's team members and take
+              effect immediately.
+            </span>
+          </div>
+        </div>
+      </div>
     </p-tabpanel>
   </p-tabpanels>
 </p-tabs>

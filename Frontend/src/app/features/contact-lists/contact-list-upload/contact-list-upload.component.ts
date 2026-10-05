@@ -105,11 +105,9 @@ export class ContactListUploadComponent {
     this.fromLeadsLoading = true;
     this.contactListService.createFromLeads({
       name: this.listName,
-      filters: {
-        lead_status: this.leadsFilterStatus || undefined,
-        min_score: this.leadsFilterMinScore ?? undefined,
-        channel: this.leadsFilterChannel || undefined,
-      },
+      status: this.leadsFilterStatus ? [this.leadsFilterStatus] : undefined,
+      min_score: this.leadsFilterMinScore ?? undefined,
+      channel: this.leadsFilterChannel || undefined,
     }).subscribe({
       next: () => {
         this.fromLeadsLoading = false;

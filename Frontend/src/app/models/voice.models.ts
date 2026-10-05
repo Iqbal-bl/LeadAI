@@ -70,7 +70,12 @@ export interface CallSyncResponse {
   imported: number;
   total_messages: number;
   lead_status: string;
-  lead_score: number;
   reason: string | null;
 }
 
+export interface CallRecording {
+  call_sid: string;
+  url: string;
+  recording_url?: string;
+  expires_in_seconds?: number;
+}

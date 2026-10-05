@@ -16,13 +16,16 @@
   </div>
 </div>
 
-<p-tabs [value]="activeTab" [lazy]="true">
+<p-tabs [(value)]="activeTab" [lazy]="true">
   <p-tablist class="mb-4">
     <p-tab value="scripts" (click)="activeTab = 'scripts'">
       <i class="pi pi-file-code mr-2"></i> Scripts Library (XML)
     </p-tab>
     <p-tab value="prompts" (click)="activeTab = 'prompts'">
       <i class="pi pi-sliders-h mr-2"></i> System Prompts
+    </p-tab>
+    <p-tab value="data-points" (click)="activeTab = 'data-points'">
+      <i class="pi pi-database mr-2"></i> Data Points
     </p-tab>
   </p-tablist>
 
@@ -85,6 +88,15 @@
         (onReset)="resetPrompt($event.prompt, $event.event)"
       >
       </app-prompt-grid>
+    </p-tabpanel>
+
+    <!-- ========================================== -->
+    <!-- DATA POINTS TAB PANEL                      -->
+    <!-- ========================================== -->
+    <p-tabpanel value="data-points">
+      <div *ngIf="activeTab === 'data-points'" class="mt-2">
+        <app-data-points></app-data-points>
+      </div>
     </p-tabpanel>
   </p-tabpanels>
 </p-tabs>
@@ -174,37 +186,18 @@
         <span>Text-To-Speech Settings</span>
       </div>
 
-      <div class="grid grid-cols-2 gap-4">
-        <!-- Voice Gender -->
-        <div class="flex flex-col gap-1.5">
-          <label
-            class="text-[10px] font-bold uppercase text-slate-505 dark:text-slate-400"
-            >Voice Gender</label
-          >
-          <p-dropdown
-            appendTo="body"
-            [options]="[
-              { label: 'Male', value: 'male' },
-              { label: 'Female', value: 'female' },
-            ]"
-            [(ngModel)]="scriptForm.voice_gender"
-            [style]="{ width: '100%' }"
-          ></p-dropdown>
-        </div>
-
-        <!-- Voice Speaker -->
-        <div class="flex flex-col gap-1.5">
-          <label
-            class="text-[10px] font-bold uppercase text-slate-550 dark:text-slate-400"
-            >Voice Speaker</label
-          >
-          <p-dropdown
-            appendTo="body"
-            [options]="voiceSpeakers[scriptForm.voice_gender]"
-            [(ngModel)]="scriptForm.voice_speaker"
-            [style]="{ width: '100%' }"
-          ></p-dropdown>
-        </div>
+      <!-- Voice Speaker -->
+      <div class="flex flex-col gap-1.5">
+        <label
+          class="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400"
+          >Voice Speaker</label
+        >
+        <p-dropdown
+          appendTo="body"
+          [options]="allVoiceSpeakers"
+          [(ngModel)]="scriptForm.voice_speaker"
+          [style]="{ width: '100%' }"
+        ></p-dropdown>
       </div>
 
       <!-- Multi-STT Switch -->

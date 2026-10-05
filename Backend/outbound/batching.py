@@ -238,13 +238,13 @@ class BatchingService:
         # Check billing call quota before placing call
         if client_id:
             try:
-                from LeadAI.db import get_leadai_db
+                from LeadAI.db import session as leadai_session
                 from LeadAI.services.billing import check_call_quota
-                db_sess = next(get_leadai_db())
-                has_quota, quota_reason, _ = check_call_quota(db_sess, client_id)
-                if not has_quota:
-                    logger.warning(f"[Batching] Quota check failed for client {client_id} (email {email}): {quota_reason}")
-                    return JSONResponse(status_code=402, content={"errors": [quota_reason]})
+                with leadai_session() as db_sess:
+                    has_quota, quota_reason, _ = check_call_quota(db_sess, client_id)
+                    if not has_quota:
+                        logger.warning(f"[Batching] Quota check failed for client {client_id} (email {email}): {quota_reason}")
+                        return JSONResponse(status_code=402, content={"errors": [quota_reason]})
             except Exception as exc:
                 logger.warning(f"[Batching] Could not check quota for client {client_id}: {exc}")
         else:

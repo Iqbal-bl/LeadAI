@@ -1,12 +1,12 @@
 <div class="space-y-6 animate-fade-in w-full max-w-[1600px] px-4 sm:px-6 lg:px-8 mx-auto pb-24">
   <!-- Page Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
     <div>
-      <h1 class="text-2xl lg:text-3xl font-extrabold tracking-tight" style="color: var(--app-text)">
-        Plan Usage, Ledger & Invoices
+      <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+        Usage & Invoices
       </h1>
-      <p class="text-xs sm:text-sm mt-1" style="color: var(--app-text-muted)">
-        Real-time call balance ledger, downloadable PDF tax invoices, and mid-cycle omni-channel add-ons.
+      <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+        Monitor account usage, active subscriptions, and download billing invoices
       </p>
     </div>
 
@@ -17,23 +17,32 @@
         icon="pi pi-sparkles"
         size="small"
         (click)="navigateToPricing()"
-        styleClass="border-slate-300 dark:border-slate-700"
         [outlined]="true"
       ></p-button>
       <p-button
         icon="pi pi-refresh"
         size="small"
         [outlined]="true"
+        severity="secondary"
         (click)="loadSummary(); loadPaymentHistory(); loadUsageLogs()"
-        pTooltip="Refresh Ledger Data"
+        pTooltip="Refresh Data"
         tooltipPosition="bottom"
       ></p-button>
     </div>
   </div>
 
-  <!-- KPI Overview Stat Cards -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" *ngIf="summary?.active_recharge as active">
-    <!-- Card 1: Available Minutes -->
+  <!-- Loading Skeletons -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" *ngIf="loadingSummary">
+    <div class="card-base p-5 rounded-2xl" *ngFor="let i of [1,2,3,4]">
+      <p-skeleton width="60%" height="1rem" styleClass="mb-2"></p-skeleton>
+      <p-skeleton width="80%" height="2rem" styleClass="mb-2"></p-skeleton>
+      <p-skeleton width="100%" height="0.5rem"></p-skeleton>
+    </div>
+  </div>
+
+  <!-- KPI Overview Stat Cards (Always visible once loaded) -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" *ngIf="!loadingSummary">
+    <!-- Card 1: Available Minutes / Quota -->
     <div class="card-base p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
       <div>
         <div class="flex items-center justify-between mb-2">
@@ -46,43 +55,53 @@
         </div>
         <div class="flex items-baseline gap-2 mb-2">
           <span class="text-3xl font-extrabold" style="color: var(--app-text)">
-            {{ active.remaining_minutes | number:'1.0-1' }}
+            {{ (summary?.active_recharge?.remaining_minutes ?? summary?.total_remaining_minutes ?? 0) | number:'1.0-1' }}
           </span>
           <span class="text-xs font-medium" style="color: var(--app-text-muted)">
-            / {{ active.purchased_minutes }} mins
+            / {{ summary?.active_recharge?.purchased_minutes ?? 0 }} mins
           </span>
         </div>
       </div>
       <p-progressbar [value]="getQuotaPercentage()" [showValue]="false" styleClass="h-2 rounded-full"></p-progressbar>
     </div>
 
-    <!-- Card 2: Active Plan -->
+    <!-- Card 2: Active Plan & Billing Summary -->
     <div class="card-base p-5 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
       <div class="flex items-center justify-between mb-2">
         <span class="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
           <i class="pi pi-bolt text-xs"></i> Active Plan
         </span>
         <p-tag
-          *ngIf="active.is_auto_renew"
+          *ngIf="summary?.active_recharge?.is_auto_renew"
           value="AutoPay"
           severity="success"
           [rounded]="true"
           styleClass="text-[10px] font-bold uppercase"
         ></p-tag>
         <p-tag
-          *ngIf="!active.is_auto_renew"
+          *ngIf="summary?.active_recharge && !summary?.active_recharge?.is_auto_renew"
           value="Manual"
           severity="warn"
+          [rounded]="true"
+          styleClass="text-[10px] font-bold uppercase"
+        ></p-tag>
+        <p-tag
+          *ngIf="!summary?.active_recharge"
+          value="Inactive"
+          severity="secondary"
           [rounded]="true"
           styleClass="text-[10px] font-bold uppercase"
         ></p-tag>
       </div>
       <div>
         <h4 class="text-base font-bold truncate mb-1" style="color: var(--app-text)">
-          {{ active.plan_name_snapshot || 'Voice & Chat Automation' }}
+          {{ summary?.active_recharge?.plan_name_snapshot || 'No Active Plan' }}
         </h4>
-        <p class="text-xs font-extrabold text-brand-600 dark:text-brand-400">
-          ₹{{ active.price_paid | number:'1.0-0' }} <span class="text-[11px] font-normal text-slate-400">/ 30 days</span>
+        <p class="text-xs font-extrabold text-brand-600 dark:text-brand-400" *ngIf="summary?.active_recharge">
+          ₹{{ summary?.active_recharge?.price_paid | number:'1.0-0' }} <span class="text-[11px] font-normal text-slate-400">/ 30 days</span>
+        </p>
+        <p class="text-xs text-slate-400" *ngIf="!summary?.active_recharge">
+          Recharge to unlock automation
         </p>
       </div>
     </div>
@@ -94,7 +113,7 @@
           <i class="pi pi-link text-xs"></i> Omni-Channels
         </span>
         <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400">
-          {{ active.active_channels?.length || 0 }} Active
+          {{ summary?.active_recharge?.active_channels?.length || 0 }} Active
         </span>
       </div>
       <div class="flex items-center gap-2 pt-1">
@@ -123,10 +142,10 @@
       <div>
         <p class="text-xs text-slate-400 mb-1">Cycle Renewal / Expiry:</p>
         <p class="text-sm font-bold" style="color: var(--app-text)">
-          {{ active.expires_at | date:'mediumDate' }}
+          {{ summary?.active_recharge?.expires_at ? (summary?.active_recharge?.expires_at | date:'d MMM y') : '—' }}
         </p>
         <p class="text-[11px] text-slate-400 mt-1">
-          {{ active.is_auto_renew ? 'Automatic recurring AutoPay' : 'Manual recharge required' }}
+          {{ summary?.active_recharge?.is_auto_renew ? 'Automatic recurring AutoPay' : 'Manual recharge mode' }}
         </p>
       </div>
     </div>
@@ -222,7 +241,7 @@
         <tr class="text-xs sm:text-sm border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
           <!-- Date & Time -->
           <td class="font-medium whitespace-nowrap" style="color: var(--app-text)">
-            {{ tx.created_at || tx.recharged_at | date:'medium' }}
+            {{ (tx.created_at || tx.recharged_at) | date: 'd MMM y, h:mm a' }}
           </td>
 
           <!-- Plan Name -->
@@ -361,7 +380,7 @@
         <tr class="text-xs sm:text-sm border-b border-slate-100 dark:border-slate-800/60 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
           <!-- Date & Time -->
           <td class="font-medium whitespace-nowrap" style="color: var(--app-text)">
-            {{ log.deducted_at | date:'medium' }}
+            {{ log.deducted_at | date: 'd MMM y, h:mm a' }}
           </td>
 
           <!-- Activity / Call SID -->
@@ -379,7 +398,7 @@
 
           <!-- Duration -->
           <td class="text-slate-400 font-medium">
-            {{ log.call_duration_seconds ? log.call_duration_seconds + 's' : '—' }}
+            {{ formatDuration(log.call_duration_seconds) }}
           </td>
 
           <!-- Minutes Impact -->
@@ -736,7 +755,7 @@
             <span class="font-medium" style="color: var(--app-text)">₹{{ getSubtotal() | number:'1.2-2' }}</span>
           </div>
 
-          <div class="flex items-center justify-between text-slate-500">
+          <div *ngIf="getGstAmount() > 0" class="flex items-center justify-between text-slate-500">
             <span>GST (18%)</span>
             <span class="font-medium" style="color: var(--app-text)">₹{{ getGstAmount() | number:'1.2-2' }}</span>
           </div>

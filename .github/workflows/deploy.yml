@@ -1,0 +1,283 @@
+name: Build on cloud, deploy backend + frontend to home server via SSH-tunneled registry
+
+# Moved here from Backend/.github/workflows/deploy.yml: GitHub Actions only ever
+# reads .github/workflows/ from the REPO ROOT, so that copy never actually ran.
+# Also: it used to trigger on `with-outbound`, a branch that no longer exists.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # Backend — unchanged in approach from the original workflow, just relocated
+  # and re-pathed (checkout now brings the whole monorepo, so the build
+  # context is ./Backend rather than the runner's working directory).
+  # =========================================================================
+  deploy-backend:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: leadai-backend
+      CONTAINER_NAME: leadai-backend
+      HOST_PORT: 7011
+      CONTAINER_PORT: 7011
+      # Path on the SERVER (Windows). Secrets file is owned by the server
+      # admin; it's never in this repo and never in GitHub Secrets.
+      ENV_FILE: 'C:\ProgramData\leadai\.env'
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Allow plain-HTTP push to localhost:5000
+        run: |
+          echo '{"insecure-registries":["localhost:5000"]}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Install SSH key and trust server host key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "Probing server reachability..."
+          if ! nc -z -w 5 "${{ secrets.SERVER_HOST }}" "${{ secrets.SSH_PORT }}"; then
+            echo "::error::Cannot reach ${{ secrets.SERVER_HOST }}:${{ secrets.SSH_PORT }} from GitHub. Check router port-forward and the SERVER_HOST / SSH_PORT secrets."
+            exit 1
+          fi
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Open SSH tunnel to server-side registry
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} \
+              -i ~/.ssh/id_ed25519 \
+              -L 5000:127.0.0.1:5000 \
+              -N -f \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=120 \
+              ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}
+
+      - name: Compute next version tag
+        id: vars
+        run: |
+          curl -sf http://localhost:5000/v2/$IMAGE_NAME/tags/list \
+            > /tmp/registry_tags_backend.json 2>/dev/null \
+            || echo '{"tags":[]}' > /tmp/registry_tags_backend.json
+
+          CURRENT_VERSION=$(python3 -c "import json; d=json.load(open('/tmp/registry_tags_backend.json')); t=d.get('tags') or []; nums=[int(x[1:]) for x in t if x.startswith('v') and x[1:].isdigit()]; print(max(nums, default=0))")
+          NEXT_VERSION=$((CURRENT_VERSION + 1))
+          echo "VERSION_TAG=v$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Next version: v$NEXT_VERSION"
+
+      # A plain `docker build` on ubuntu-latest starts from an empty cache every
+      # run (fresh VM each time) — every deploy recompiled every wheel
+      # (mysqlclient, numba/llvmlite) from scratch AND produced brand-new layer
+      # digests even when requirements.txt hadn't changed, so the registry had
+      # nothing to recognise and the FULL multi-GB image was re-pushed through
+      # the tunnel every time.
+      #
+      # Cache lives in OUR OWN registry (localhost:5000, the same one behind the
+      # tunnel), not GitHub's `type=gha` cache — that has a 10GB-per-repo cap
+      # with oldest-entry eviction, and this image alone is multi-GB; it would
+      # get evicted between deploys and every run would pay the full "cold
+      # cache" cost again, backend AND frontend competing for the same 10GB.
+      # Our own registry has no such ceiling.
+      #
+      # network=host: the docker-container builder runs in its own network
+      # namespace by default and couldn't otherwise reach the SSH tunnel, which
+      # is bound to the RUNNER's own localhost:5000.
+      # buildkitd-config-inline: that builder has its own internal buildkitd,
+      # which does not read the host's /etc/docker/daemon.json — it needs its
+      # own explicit "trust this registry as plain HTTP" for localhost:5000,
+      # for the cache blobs exactly as much as for the image itself.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+          buildkitd-config-inline: |
+            [registry."localhost:5000"]
+              http = true
+
+      - name: Build and push image (cached — unchanged layers are skipped)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./Backend
+          push: true
+          tags: |
+            localhost:5000/${{ env.IMAGE_NAME }}:latest
+            localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+          cache-from: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Pull and restart container on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            $dockerBin = "C:\Program Files\Docker\Docker\resources\bin"
+            $empty = "$dockerBin\docker-credential-empty.exe"
+            if (Test-Path $empty) {
+              Copy-Item $empty "$dockerBin\docker-credential-wincred.exe" -Force
+              Copy-Item $empty "$dockerBin\docker-credential-desktop.exe" -Force
+            }
+
+            Write-Host "Deploying backend version: ${{ steps.vars.outputs.VERSION_TAG }}"
+
+            docker pull localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+            if ($LASTEXITCODE -ne 0) { throw "docker pull failed" }
+
+            docker rm -f ${{ env.CONTAINER_NAME }} 2>$null
+            $global:LASTEXITCODE = 0
+
+            if (-not (Test-Path '${{ env.ENV_FILE }}')) {
+              Write-Error "Env file not found at ${{ env.ENV_FILE }} - create it on the server first."
+              exit 1
+            }
+
+            docker network create outbound-net 2>$null
+            $global:LASTEXITCODE = 0
+
+            # --network-alias backend: gives this container a second, stable
+            # DNS name on the network so the frontend's nginx.conf never needs
+            # to change even if CONTAINER_NAME does again later.
+            docker run -d `
+              --name ${{ env.CONTAINER_NAME }} `
+              --restart unless-stopped `
+              --network outbound-net `
+              --network-alias backend `
+              --env-file '${{ env.ENV_FILE }}' `
+              -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} `
+              localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+            if ($LASTEXITCODE -ne 0) { throw "docker run failed" }
+
+      - name: Close SSH tunnel
+        if: always()
+        run: pkill -f 'ssh.*-L 5000:127.0.0.1:5000' || true
+
+  # =========================================================================
+  # Frontend — same tunnel-to-local-registry pattern as backend, packaged as
+  # an nginx image (Frontend/Dockerfile) that serves the Angular build and
+  # reverse-proxies /api/leadai and /ws to the backend container by its
+  # "backend" network alias (see Frontend/nginx.conf). Runs on its own
+  # runner VM in parallel with the backend job — no shared state between them
+  # beyond the server itself.
+  # =========================================================================
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: leadai-frontend
+      CONTAINER_NAME: leadai-frontend
+      HOST_PORT: 4302
+      CONTAINER_PORT: 4302
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Allow plain-HTTP push to localhost:5000
+        run: |
+          echo '{"insecure-registries":["localhost:5000"]}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Install SSH key and trust server host key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if ! nc -z -w 5 "${{ secrets.SERVER_HOST }}" "${{ secrets.SSH_PORT }}"; then
+            echo "::error::Cannot reach ${{ secrets.SERVER_HOST }}:${{ secrets.SSH_PORT }} from GitHub. Check router port-forward and the SERVER_HOST / SSH_PORT secrets."
+            exit 1
+          fi
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Open SSH tunnel to server-side registry
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} \
+              -i ~/.ssh/id_ed25519 \
+              -L 5000:127.0.0.1:5000 \
+              -N -f \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=120 \
+              ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}
+
+      - name: Compute next version tag
+        id: vars
+        run: |
+          curl -sf http://localhost:5000/v2/$IMAGE_NAME/tags/list \
+            > /tmp/registry_tags_frontend.json 2>/dev/null \
+            || echo '{"tags":[]}' > /tmp/registry_tags_frontend.json
+
+          CURRENT_VERSION=$(python3 -c "import json; d=json.load(open('/tmp/registry_tags_frontend.json')); t=d.get('tags') or []; nums=[int(x[1:]) for x in t if x.startswith('v') and x[1:].isdigit()]; print(max(nums, default=0))")
+          NEXT_VERSION=$((CURRENT_VERSION + 1))
+          echo "VERSION_TAG=v$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Next version: v$NEXT_VERSION"
+
+      # Same reasoning as the backend job: cached BuildKit layers mean an
+      # unchanged npm-install layer neither rebuilds nor re-uploads. Cache lives
+      # in our own registry rather than GitHub's `type=gha` (10GB/repo cap,
+      # shared with the backend job's much larger cache) for the same reason.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+          buildkitd-config-inline: |
+            [registry."localhost:5000"]
+              http = true
+
+      - name: Build and push image (cached — unchanged layers are skipped)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./Frontend
+          push: true
+          tags: |
+            localhost:5000/${{ env.IMAGE_NAME }}:latest
+            localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+          cache-from: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=localhost:5000/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Pull and restart container on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            $dockerBin = "C:\Program Files\Docker\Docker\resources\bin"
+            $empty = "$dockerBin\docker-credential-empty.exe"
+            if (Test-Path $empty) {
+              Copy-Item $empty "$dockerBin\docker-credential-wincred.exe" -Force
+              Copy-Item $empty "$dockerBin\docker-credential-desktop.exe" -Force
+            }
+
+            Write-Host "Deploying frontend version: ${{ steps.vars.outputs.VERSION_TAG }}"
+
+            docker pull localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+            if ($LASTEXITCODE -ne 0) { throw "docker pull failed" }
+
+            docker rm -f ${{ env.CONTAINER_NAME }} 2>$null
+            $global:LASTEXITCODE = 0
+
+            docker network create outbound-net 2>$null
+            $global:LASTEXITCODE = 0
+
+            # Same network as the backend container so nginx can reach it by
+            # the "backend" alias set on the backend's docker run.
+            docker run -d `
+              --name ${{ env.CONTAINER_NAME }} `
+              --restart unless-stopped `
+              --network outbound-net `
+              -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} `
+              localhost:5000/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.VERSION_TAG }}
+            if ($LASTEXITCODE -ne 0) { throw "docker run failed" }
+
+      - name: Close SSH tunnel
+        if: always()
+        run: pkill -f 'ssh.*-L 5000:127.0.0.1:5000' || true

@@ -58,6 +58,61 @@ from ..security import decrypt_pii
 
 logger = logging.getLogger(__name__)
 
+
+def social_identities_for(db: Session, customer_id: str | None) -> list:
+    """Every social identity (Instagram, Messenger, ...) behind one LeadCustomer,
+    as SocialIdentityOut. Shared by the two reveal endpoints (inbox conversations
+    and CRM customers) so a customer converted from a social channel shows the
+    same handle/profile link either way, and a future change to how the profile
+    URL is built only needs to happen once.
+    """
+    from ..models import LeadChannelIdentity
+    from ..schemas import SocialIdentityOut
+
+    if not customer_id:
+        return []
+    identities = (
+        db.query(LeadChannelIdentity)
+        .filter(
+            LeadChannelIdentity.CustomerId == customer_id,
+            LeadChannelIdentity.IsDeleted == False,  # noqa: E712
+        )
+        .order_by(LeadChannelIdentity.CreatedAt.asc())
+        .all()
+    )
+    social = []
+    for ident in identities:
+        # ProfileName is the person's real display name ("Manmeet Kaur"); ExternalUsername
+        # is the resolved @handle ("_man11_10") — a separate lookup, cached once per contact
+        # (see the bot-loop guard in routers/webhooks.py). On Instagram the handle IS the
+        # @username — SocialIdentityOut's own docstring says so — so it must win whenever
+        # it's known, or a real name with a space in it produces a handle that isn't the
+        # handle at all and a profile_url that isn't a valid link. Messenger has no @handle
+        # concept at all (Meta never exposes one), so ProfileName is the only thing to show.
+        if ident.Channel == CHANNEL_INSTAGRAM:
+            handle = ident.ExternalUsername or ident.ProfileName
+        else:
+            handle = ident.ProfileName or ident.ExternalUsername
+        profile_url = None
+        if ident.Channel == CHANNEL_INSTAGRAM and ident.ExternalUsername:
+            # Only a resolved username makes a working link; a raw IGSID (or a real name
+            # with spaces in it) does not.
+            profile_url = f"https://instagram.com/{ident.ExternalUsername.lstrip('@')}"
+        elif ident.Channel == CHANNEL_MESSENGER and ident.ExternalUserId:
+            profile_url = f"https://m.me/{ident.ExternalUserId}"
+        social.append(
+            SocialIdentityOut(
+                channel=ident.Channel,
+                handle=handle or ident.ExternalUserId,
+                profile_name=ident.ProfileName,
+                external_user_id=ident.ExternalUserId,
+                profile_url=profile_url,
+                opted_out=bool(ident.OptedOut),
+                last_message_at=ident.LastUserMessageAt,
+            )
+        )
+    return social
+
 META_CHANNELS = (CHANNEL_WHATSAPP, CHANNEL_MESSENGER, CHANNEL_INSTAGRAM)
 
 

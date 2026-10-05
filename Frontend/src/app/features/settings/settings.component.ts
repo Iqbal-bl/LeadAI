@@ -1,7 +1,10 @@
 import { Component, OnInit } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { ThemeService } from '../../shared/services/theme.service';
 import { AuthService } from '../../services/auth.service';
 import { CompanyService } from '../../services/company.service';
+import { RoleManagementService } from '../../services/role-management.service';
+import { ToastService } from '../../shared/services/toast.service';
 import { CompanySettings } from '../../models/company.models';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -15,6 +18,7 @@ import { LeadThresholdComponent } from './lead-threshold/lead-threshold.componen
   styleUrl: './settings.component.scss',
 })
 export class SettingsComponent implements OnInit {
+  activeTab: string = 'profile';
   profile = {
     name: 'Sam Nakamura',
     email: 'sam.n@leadai.com',
@@ -39,12 +43,21 @@ export class SettingsComponent implements OnInit {
   };
 
   companyId: string | null = null;
-  companySettings!: CompanySettings;
+  companySettings: CompanySettings | null = null;
+
+  isCompanyAdmin = false;
+  loadingPermissions = false;
+  managerCanReveal: boolean | undefined = undefined;
+  employeeCanReveal: boolean | undefined = undefined;
+  savingManager = false;
+  savingEmployee = false;
 
   constructor(
     public themeService: ThemeService,
     private authService: AuthService,
     private companyService: CompanyService,
+    private roleManagementService: RoleManagementService,
+    private toastService: ToastService,
   ) {}
 
   ngOnInit(): void {
@@ -60,9 +73,77 @@ export class SettingsComponent implements OnInit {
           this.profile.name = user.full_name;
           this.profile.email = user.email;
           this.profile.role = user.role.toUpperCase();
+          this.isCompanyAdmin = this.authService.isCompanyAdmin();
+          if (this.isCompanyAdmin) {
+            this.loadCompanyRolePermissions();
+          }
         }
       },
     });
+  }
+
+  public loadCompanyRolePermissions(): void {
+    this.loadingPermissions = true;
+    forkJoin({
+      manager: this.roleManagementService.getCompanyRolePermissions('manager'),
+      employee:
+        this.roleManagementService.getCompanyRolePermissions('employee'),
+    }).subscribe({
+      next: ({ manager, employee }) => {
+        this.loadingPermissions = false;
+        this.managerCanReveal =
+          manager?.find((r) => r.permission_key === 'lead.reveal_pii')
+            ?.is_granted ?? false;
+        this.employeeCanReveal =
+          employee?.find((r) => r.permission_key === 'lead.reveal_pii')
+            ?.is_granted ?? false;
+      },
+      error: (err) => {
+        this.loadingPermissions = false;
+        console.warn('Failed to load company role permissions:', err);
+      },
+    });
+  }
+
+  public setRolePermission(
+    role: 'manager' | 'employee',
+    isGranted: boolean,
+  ): void {
+    if (role === 'manager') this.savingManager = true;
+    if (role === 'employee') this.savingEmployee = true;
+
+    this.roleManagementService
+      .updateCompanyRolePermission(role, {
+        permission_key: 'lead.reveal_pii',
+        is_granted: isGranted,
+      })
+      .subscribe({
+        next: (res) => {
+          if (role === 'manager') {
+            this.savingManager = false;
+            this.managerCanReveal = res.is_granted;
+          } else {
+            this.savingEmployee = false;
+            this.employeeCanReveal = res.is_granted;
+          }
+          this.toastService.success(
+            `${role === 'manager' ? 'Managers' : 'Employees'} ${
+              res.is_granted ? 'can now' : 'can no longer'
+            } reveal customer contact details.`,
+            'Permission Updated',
+          );
+        },
+        error: (err) => {
+          if (role === 'manager') this.savingManager = false;
+          if (role === 'employee') this.savingEmployee = false;
+          this.toastService.error(
+            err?.error?.detail ||
+              err?.message ||
+              'Failed to update permission.',
+            'Update Failed',
+          );
+        },
+      });
   }
 
   private loadCompanySettings(): void {

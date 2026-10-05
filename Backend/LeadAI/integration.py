@@ -49,6 +49,7 @@ PUBLIC_LEADAI_PATHS = (
     f"{settings.api_prefix}/linkedin/callback",
     f"{settings.api_prefix}/billing/invoices",
     f"{settings.api_prefix}/billing/webhook",
+    f"{settings.api_prefix}/channels/facebook/select"
 )
 
 
@@ -188,6 +189,7 @@ def _register_voice_pipecat(app: FastAPI) -> None:
             import asyncio
 
             from pipecat.utils.prewarm import warm_deferred_imports
+            
 
             asyncio.create_task(asyncio.to_thread(warm_deferred_imports))
         except Exception:  # noqa: BLE001

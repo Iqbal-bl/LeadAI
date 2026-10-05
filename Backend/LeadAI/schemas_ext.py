@@ -302,8 +302,19 @@ class CampaignOut(BaseModel):
     leads_created: int = 0
     created_at: datetime | None = None
     created_by: str | None = None
+    product_id: str | None = None
+    created_via: str = "manual"           # manual|import
+    # Derived from created_via, never stored separately — the two can never
+    # drift out of sync. broadcast: a one-time send to already-known contacts,
+    # no new Lead rows, delivery tracking only. lead_campaign: imported rows
+    # became real Leads (see routers/leads_import.py) and continue as normal
+    # conversations afterward — qualified, scored, data points collected.
+    campaign_type: str = "broadcast"      # broadcast|lead_campaign
+    call_escalation_enabled: bool = False
+    output_file_id: str | None = None
+    output_generated_at: datetime | None = None
 
-    @field_serializer('scheduled_at', 'started_at', 'completed_at', 'created_at')
+    @field_serializer('scheduled_at', 'started_at', 'completed_at', 'created_at', 'output_generated_at')
     def serialize_dates(self, dt: datetime | None, _info):
         if dt is None:
             return None
@@ -323,6 +334,7 @@ class RecipientOut(BaseModel):
     id: str
     name: str | None = None
     phone_masked: str | None = None
+    email_masked: str | None = None
     status: str
     attempts: int = 0
     external_message_id: str | None = None
@@ -334,6 +346,10 @@ class RecipientOut(BaseModel):
     read_at: datetime | None = None
     replied_at: datetime | None = None
     failure_reason: str | None = None
+    # What the AI determined this lead is interested in, snapped to the
+    # company's own product catalog — "unknown" until a conversation has
+    # actually happened, never a freely-invented name.
+    product: str | None = None
 
     @field_serializer('sent_at', 'delivered_at', 'read_at', 'replied_at')
     def serialize_dates(self, dt: datetime | None, _info):
@@ -349,6 +365,112 @@ class RecipientListOut(BaseModel):
     page: int
     page_size: int
     items: list[RecipientOut] = []
+
+
+class CampaignHistoryItemOut(BaseModel):
+    id: str
+    action: str
+    message: str
+    meta: dict[str, Any] | None = None
+    created_at: datetime
+    actor_email: str | None = None
+    log_type: str | None = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime, _info):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class CampaignHistoryListOut(BaseModel):
+    total_items: int
+    page: int
+    page_size: int
+    items: list[CampaignHistoryItemOut] = []
+
+
+class CampaignExecutionOut(BaseModel):
+    """One run (Start/Restart) of a campaign — the Batch -> BatchExecution
+    counterpart, so an operator can see what each individual run actually did."""
+
+    id: str
+    campaign_id: str
+    status: str
+    restart_mode: str
+    total_count: int = 0
+    completed_count: int = 0
+    failed_count: int = 0
+    skipped_count: int = 0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+    @field_serializer('started_at', 'completed_at')
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class CampaignExecutionListOut(BaseModel):
+    total_items: int
+    page: int
+    page_size: int
+    items: list[CampaignExecutionOut] = []
+
+
+class CampaignRecipientAttemptOut(BaseModel):
+    """One recipient's frozen outcome on ONE specific execution — the
+    CallNumberExecution counterpart. Carries the basic identity fields
+    (name/phone/email) alongside what the AI actually determined about the
+    lead, the same "input + what happened" shape the old VoiceAI batch CSV
+    used, instead of making the caller stitch send status and call outcome
+    together from two different endpoints."""
+
+    id: str
+    recipient_id: str
+    name: str | None = None
+    phone_masked: str | None = None
+    email_masked: str | None = None
+    status: str
+    external_message_id: str | None = None
+    sent_at: datetime | None = None
+    delivered_at: datetime | None = None
+    read_at: datetime | None = None
+    replied_at: datetime | None = None
+    failure_reason: str | None = None
+    # Populated only when this recipient's conversation was scored (chat or
+    # voice) — None, not a misleading 0/"", when nothing was ever collected.
+    lead_score: int | None = None
+    lead_status: str | None = None
+    # What the AI determined this lead is interested in, snapped to the
+    # company's own product catalog — "unknown" until classified, never a
+    # freely-invented name.
+    product: str | None = None
+    # The company's own custom data points (see LeadCompanyDataPoint) the AI
+    # collected during this conversation — the same values the CSV export's
+    # per-data-point columns show, keyed by each data point's `key`.
+    data_points: dict[str, Any] | None = None
+    # Call-specific — set only for a call-kind campaign.
+    call_status: str | None = None
+    call_duration_sec: int | None = None
+
+    @field_serializer('sent_at', 'delivered_at', 'read_at', 'replied_at')
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class CampaignRecipientAttemptListOut(BaseModel):
+    total_items: int
+    page: int
+    page_size: int
+    items: list[CampaignRecipientAttemptOut] = []
 
 
 class CampaignPreviewOut(BaseModel):
@@ -412,6 +534,9 @@ class AccountOut(BaseModel):
     company_name: str | None = None
     phone_masked: str | None = None
     email_masked: str | None = None
+    # Public LinkedIn profile URL — present when the lead was captured from a
+    # LinkedIn comment. None for non-LinkedIn sources.
+    linkedin_profile_url: str | None = None
     stage: str
     status: str
     owner_email: str | None = None
@@ -602,3 +727,40 @@ class InstagramCallbackIn(BaseModel):
 
     code: str = Field(min_length=10, description="Authorization code from Instagram")
     state: str = Field(min_length=8, description="State issued by /channels/instagram/connect")
+
+
+# =========================================================================== #
+# lead import -> auto-classified batches
+# =========================================================================== #
+class LeadImportSchemaField(BaseModel):
+    key: str
+    label: str
+    data_type: str
+    required: bool
+    source: Literal["fixed", "data_point"]
+
+
+class LeadImportSchemaOut(BaseModel):
+    fields: list[LeadImportSchemaField]
+    sample_csv_header: str
+
+
+class LeadImportRowError(BaseModel):
+    row_number: int
+    reason: str
+
+
+class LeadImportBatchOut(BaseModel):
+    campaign_id: str
+    name: str
+    product: str
+    lead_count: int
+
+
+class LeadImportResultOut(BaseModel):
+    total: int
+    valid: int
+    invalid: int
+    duplicates: int
+    invalid_rows: list[LeadImportRowError] = []
+    batches: list[LeadImportBatchOut] = []

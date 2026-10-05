@@ -8,8 +8,12 @@
 </div>
 
 <!-- Actions Bar -->
-<div class="flex justify-between items-center mb-4">
-  <div></div>
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+  <div class="flex items-center gap-2">
+    <span class="text-sm" style="color: var(--app-text-muted)">
+      Total Lists: <strong style="color: var(--app-text)">{{ lists.length }}</strong> &bull; Total Records: <strong style="color: var(--app-text)">{{ totalRecordsCount | number }}</strong>
+    </span>
+  </div>
   <div class="flex gap-2">
     <p-button
       label="From Leads"
@@ -52,7 +56,7 @@
         <th pSortableColumn="created_at">
           Created <p-sortIcon field="created_at"></p-sortIcon>
         </th>
-        <th>Actions</th>
+        <th style="width: 80px" class="text-right">Actions</th>
       </tr>
     </ng-template>
     <ng-template pTemplate="body" let-list>
@@ -64,7 +68,7 @@
         </td>
         <td>
           <span style="color: var(--app-text)">{{
-            list.total_rows | number
+            (list.total_rows ?? list.total_count ?? 0) | number
           }}</span>
         </td>
         <td>
@@ -96,36 +100,20 @@
         </td>
         <td>
           <span class="text-sm" style="color: var(--app-text-secondary)">{{
-            list.created_at
+            list.created_at | date: 'd MMM y, h:mm a'
           }}</span>
         </td>
-        <td>
-          <div class="flex gap-1">
-            <p-button
-              icon="pi pi-megaphone"
-              [rounded]="true"
-              [text]="true"
-              severity="success"
-              pTooltip="Launch Campaign with List"
-              (onClick)="launchCampaign(list)"
-            ></p-button>
-            <p-button
-              icon="pi pi-eye"
-              [rounded]="true"
-              [text]="true"
-              severity="info"
-              pTooltip="View Contacts"
-              (onClick)="viewItems(list)"
-            ></p-button>
-            <p-button
-              icon="pi pi-trash"
-              [rounded]="true"
-              [text]="true"
-              severity="danger"
-              pTooltip="Delete List"
-              (onClick)="deleteList(list)"
-            ></p-button>
-          </div>
+        <td class="text-right">
+          <p-button
+            icon="pi pi-ellipsis-v"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            pTooltip="Actions"
+            tooltipPosition="left"
+            (onClick)="openRowMenu($event, list)"
+          ></p-button>
         </td>
       </tr>
     </ng-template>
@@ -149,6 +137,8 @@
     </ng-template>
   </p-table>
 </div>
+
+<p-menu #listActionMenu [popup]="true" appendTo="body" [model]="activeListMenuItems"></p-menu>
 
 <!-- Upload Dialog -->
 <app-contact-list-upload

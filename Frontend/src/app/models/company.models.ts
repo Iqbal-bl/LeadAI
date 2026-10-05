@@ -23,6 +23,13 @@ export interface CompanySettings {
   widget_greeting: string;
   effective_handoff_threshold?: number;
   effective_retrieval_top_k?: number;
+  voice_gender?: 'male' | 'female' | null;
+  voice_speed?: number | null;
+}
+
+export interface CompanyVoiceSettingsUpdate {
+  voice_gender?: 'male' | 'female';
+  voice_speed?: number;
 }
 
 export interface CompanyCreatePayload {

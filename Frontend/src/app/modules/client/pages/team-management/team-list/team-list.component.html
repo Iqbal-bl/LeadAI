@@ -72,9 +72,6 @@
         <th pSortableColumn="assignedLeads">
           Assigned Leads <p-sortIcon field="assignedLeads"></p-sortIcon>
         </th>
-        <th pSortableColumn="lastActive">
-          Last Active <p-sortIcon field="lastActive"></p-sortIcon>
-        </th>
         <th style="width: 5rem">Actions</th>
       </tr>
     </ng-template>
@@ -120,7 +117,7 @@
         </td>
         <td>
           <span class="text-sm" style="color: var(--app-text-secondary)">{{
-            member.phone
+            member.phone || '—'
           }}</span>
         </td>
         <td>
@@ -129,11 +126,6 @@
             style="color: var(--app-text-secondary)"
             >{{ member.assignedLeads }}</span
           >
-        </td>
-        <td>
-          <span class="text-xs" style="color: var(--app-text-muted)">{{
-            member.lastActive
-          }}</span>
         </td>
         <td>
           <p-button

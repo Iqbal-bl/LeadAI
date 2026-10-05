@@ -18,22 +18,12 @@ export class CustomerDetailComponent implements OnInit {
   loading = true;
 
   // Reveal state
+  isRevealed = false;
   revealedPhone: string | null = null;
   revealedEmail: string | null = null;
+  revealedWhatsApp: string | null = null;
+  revealedSocials: any[] = [];
   revealLoading = false;
-
-  // Message form
-  showMessageForm = false;
-  messageChannel: 'whatsapp' | 'sms' | 'email' | 'voice' = 'whatsapp';
-  messageText = '';
-  sendingMessage = false;
-
-  channelOptions: { label: string; value: 'whatsapp' | 'sms' | 'email' | 'voice'; icon: string; consentKey: string }[] = [
-    { label: 'WhatsApp', value: 'whatsapp', icon: 'pi pi-whatsapp', consentKey: 'whatsapp_opt_in' },
-    { label: 'SMS', value: 'sms', icon: 'pi pi-mobile', consentKey: 'sms_opt_in' },
-    { label: 'Email', value: 'email', icon: 'pi pi-envelope', consentKey: 'email_opt_in' },
-    { label: 'Voice', value: 'voice', icon: 'pi pi-phone', consentKey: 'voice_opt_in' },
-  ];
 
   constructor(
     private route: ActivatedRoute,
@@ -41,7 +31,7 @@ export class CustomerDetailComponent implements OnInit {
     private customerService: CustomerService,
     private authService: AuthService,
     private messageService: MessageService,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
@@ -68,8 +58,11 @@ export class CustomerDetailComponent implements OnInit {
     this.revealLoading = true;
     this.customerService.revealContact(this.customer.id).subscribe({
       next: (res: CustomerRevealResponse) => {
+        this.isRevealed = true;
         this.revealedPhone = res.phone;
         this.revealedEmail = res.email;
+        this.revealedWhatsApp = res.whatsapp ?? null;
+        this.revealedSocials = res.social_identities ?? [];
         this.revealLoading = false;
         this.messageService.add({
           severity: 'info',
@@ -78,56 +71,54 @@ export class CustomerDetailComponent implements OnInit {
           life: 3000,
         });
       },
-      error: () => {
+      error: (err) => {
         this.revealLoading = false;
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to reveal contact information.',
+          detail: err?.error?.detail || 'Failed to reveal contact information.',
         });
       },
     });
   }
 
-  hasConsent(channel: string): boolean {
-    if (!this.customer?.consent) return false;
-    if (this.customer.consent.do_not_disturb) return false;
-    const map: Record<string, keyof typeof this.customer.consent> = {
-      whatsapp: 'whatsapp_opt_in',
-      sms: 'sms_opt_in',
-      email: 'email_opt_in',
-      voice: 'voice_opt_in',
+  getStageSeverity(stage: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    const s = (stage || '').toLowerCase();
+    const map: Record<string, 'success' | 'info' | 'warn' | 'danger' | 'secondary'> = {
+      opportunity: 'info',
+      new: 'info',
+      active: 'success',
+      customer: 'success',
+      vip: 'warn',
+      churned: 'danger',
     };
-    return !!this.customer.consent[map[channel]];
+    return map[s] || 'secondary';
   }
 
-  sendMessage(): void {
-    if (!this.customer || !this.messageText.trim()) return;
+  getSourceIcon(source: string | null | undefined): string {
+    const s = (source || '').toLowerCase();
+    const icons: Record<string, string> = {
+      instagram: 'pi pi-instagram',
+      facebook: 'pi pi-facebook',
+      messenger: 'pi pi-comments',
+      whatsapp: 'pi pi-whatsapp',
+      linkedin: 'pi pi-linkedin',
+      voice: 'pi pi-phone',
+      call: 'pi pi-phone',
+      web: 'pi pi-globe',
+      email: 'pi pi-envelope',
+      sms: 'pi pi-mobile',
+    };
+    return icons[s] || 'pi pi-share-alt';
+  }
 
-    this.sendingMessage = true;
-    this.customerService.sendMessage(this.customer.id, {
-      channel: this.messageChannel,
-      message: this.messageText,
-    }).subscribe({
-      next: () => {
-        this.sendingMessage = false;
-        this.showMessageForm = false;
-        this.messageText = '';
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Message Sent',
-          detail: `Message sent via ${this.messageChannel}.`,
-        });
-      },
-      error: (err) => {
-        this.sendingMessage = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Send Failed',
-          detail: err.error?.detail || 'Failed to send message.',
-        });
-      },
-    });
+  formatCurrency(val: number | null | undefined, curr: string | null | undefined): string {
+    const amount = Number(val ?? 0).toFixed(2);
+    const currency = curr || 'INR';
+    if (currency === 'INR') {
+      return `₹${amount}`;
+    }
+    return `${amount} ${currency}`;
   }
 
   goBack(): void {

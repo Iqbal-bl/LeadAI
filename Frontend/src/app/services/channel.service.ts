@@ -18,7 +18,7 @@ import {
   providedIn: 'root',
 })
 export class ChannelService {
-  constructor(private apiService: ApiService) {}
+  constructor(private apiService: ApiService) { }
 
   /** GET /channels — list all channels */
   public getChannels(): Observable<Channel[]> {
@@ -35,7 +35,9 @@ export class ChannelService {
   }
 
   /** POST /channels — create a new channel connection */
-  public createChannel(req: ChannelCreateRequest): Observable<ChannelCreateResponse> {
+  public createChannel(
+    req: ChannelCreateRequest,
+  ): Observable<ChannelCreateResponse> {
     return this.apiService.post<ChannelCreateResponse>('channels', req, {
       companyScoped: true,
     });
@@ -53,9 +55,12 @@ export class ChannelService {
 
   /** DELETE /channels/{account_id} — disconnect/delete a channel */
   public deleteChannel(accountId: string): Observable<ChannelDeleteResponse> {
-    return this.apiService.delete<ChannelDeleteResponse>(`channels/${accountId}`, {
-      companyScoped: true,
-    });
+    return this.apiService.delete<ChannelDeleteResponse>(
+      `channels/${accountId}`,
+      {
+        companyScoped: true,
+      },
+    );
   }
 
   /** POST /channels/{account_id}/test — send test message to verify channel */
@@ -91,33 +96,39 @@ export class ChannelService {
   }
 
   /** Helper to toggle auto_reply */
-  public toggleAutoReply(accountId: string, autoReply: boolean): Observable<Channel> {
+  public toggleAutoReply(
+    accountId: string,
+    autoReply: boolean,
+  ): Observable<Channel> {
     return this.updateChannel(accountId, { auto_reply: autoReply });
   }
 
   /** Helper to toggle is_active */
-  public toggleActiveStatus(accountId: string, isActive: boolean): Observable<Channel> {
+  public toggleActiveStatus(
+    accountId: string,
+    isActive: boolean,
+  ): Observable<Channel> {
     return this.updateChannel(accountId, { is_active: isActive });
   }
 
-  /** GET /channels/linkedin/status — check company LinkedIn profile connection status */
+  /** GET linkedin/status — check company LinkedIn profile connection status */
   public getLinkedInStatus(): Observable<LinkedInStatus> {
-    return this.apiService.get<LinkedInStatus>('channels/linkedin/status', {
+    return this.apiService.get<LinkedInStatus>('linkedin/status', {
       companyScoped: true,
     });
   }
 
-  /** GET /channels/linkedin/connect — get LinkedIn OAuth authorization URL */
+  /** GET linkedin/connect — get LinkedIn OAuth authorization URL */
   public getLinkedInConnectUrl(): Observable<{ authorize_url: string }> {
-    return this.apiService.get<{ authorize_url: string }>('channels/linkedin/connect', {
+    return this.apiService.get<{ authorize_url: string }>('linkedin/connect', {
       companyScoped: true,
     });
   }
 
-  /** POST /channels/linkedin/disconnect — remove/disconnect LinkedIn account */
+  /** POST linkedin/disconnect — remove/disconnect LinkedIn account */
   public disconnectLinkedIn(): Observable<{ ok: boolean }> {
     return this.apiService.post<{ ok: boolean }>(
-      'channels/linkedin/disconnect',
+      'linkedin/disconnect',
       {},
       {
         companyScoped: true,
@@ -127,16 +138,19 @@ export class ChannelService {
 
   /** POST /channels/instagram/connect — get Instagram OAuth authorization URL */
   public getInstagramConnectUrl(): Observable<{ auth_url: string }> {
-    return this.apiService.post<{ auth_url: string }>('channels/instagram/connect', {}, { companyScoped: true });
+    return this.apiService.post<{ auth_url: string }>(
+      'channels/instagram/connect',
+      {},
+      { companyScoped: true },
+    );
   }
 
   /** POST /channels/{channel_id}/refresh-token — refresh Instagram 60-day token */
-  public refreshToken(channelId: string): Observable<import('../models/channel.models').TokenRefreshOut> {
-    return this.apiService.post<import('../models/channel.models').TokenRefreshOut>(
-      `channels/${channelId}/refresh-token`,
-      {},
-      { companyScoped: true }
-    );
+  public refreshToken(
+    channelId: string,
+  ): Observable<import('../models/channel.models').TokenRefreshOut> {
+    return this.apiService.post<
+      import('../models/channel.models').TokenRefreshOut
+    >(`channels/${channelId}/refresh-token`, {}, { companyScoped: true });
   }
 }
-

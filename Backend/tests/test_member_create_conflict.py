@@ -11,7 +11,7 @@ nothing must be written locally when it does. Run: python tests/test_member_crea
 """
 import asyncio
 
-import conftest_stub  # noqa: F401
+# pyrefly: ignore [missing-import]
 from conftest_stub import Base, SessionLocalAdmin, engine
 
 from fastapi import HTTPException
@@ -61,6 +61,54 @@ def test_a_conflicting_email_is_refused_not_silently_granted_a_role():
 
     # Nothing was written: no half-applied member with a password that never took effect.
     rows = db.query(models.LeadUserRole).filter_by(UserEmail="taken@example.com", ClientId=client.Id).all()
+    assert rows == []
+
+
+def test_database_failure_rolls_back_and_revokes_idp_user():
+    db, client, principal = setup()
+    deleted_users = []
+
+    async def _mock_create_idp(**kwargs):
+        return {"id": "idp-user-123", "email": kwargs.get("email")}
+
+    async def _mock_delete_idp(*, user_id: str):
+        deleted_users.append(user_id)
+        return {"success": True}
+
+    real_create = user_management._create_idp_user
+    real_delete = user_management._delete_idp_user
+    user_management._create_idp_user = _mock_create_idp
+    user_management._delete_idp_user = _mock_delete_idp
+
+    orig_commit = db.commit
+    def _failing_commit():
+        from sqlalchemy.exc import IntegrityError
+        raise IntegrityError("simulated DB conflict", params=None, orig=Exception("unique constraint"))
+    db.commit = _failing_commit
+
+    try:
+        payload = MemberCreate(
+            email="failtest@example.com",
+            password="secretPassword123",
+            name="Fail Test",
+            role="employee",
+        )
+        try:
+            asyncio.run(user_management.create_member(payload, request=None, principal=principal, db=db))
+            assert False, "create_member should have failed on DB error"
+        except HTTPException as exc:
+            assert exc.status_code in (409, 500)
+            assert "rolled back" in exc.detail
+
+        # Verify revocation in IDP (System 1 revoked because System 2 failed)
+        assert deleted_users == ["idp-user-123"]
+    finally:
+        user_management._create_idp_user = real_create
+        user_management._delete_idp_user = real_delete
+        db.commit = orig_commit
+
+    # Verify no local data seeding remains in database
+    rows = db.query(models.LeadUserRole).filter_by(UserEmail="failtest@example.com", ClientId=client.Id).all()
     assert rows == []
 
 

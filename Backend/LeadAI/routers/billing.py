@@ -169,7 +169,14 @@ def list_available_plans(
     )
 
     matched = []
+    seen_channel_keys = set()
     for t in rows:
+        if t.PlanCategory == "channel_addon" and t.FeatureKey:
+            fk = t.FeatureKey.lower().strip()
+            if fk in seen_channel_keys:
+                continue
+            seen_channel_keys.add(fk)
+
         if not t.TargetClientId and not t.TargetClientIds:
             matched.append(t)
         elif t.TargetClientId == client_id:
@@ -424,16 +431,16 @@ async def razorpay_webhook(
 @router.get("/payment-history", response_model=list[ClientRechargeOut], summary="List all transaction attempts and recharges with invoice links")
 def get_payment_history(
     limit: int = Query(default=100, ge=1, le=500),
+    include_pending: bool = Query(default=True, description="Include pending payment attempts"),
     scope: tuple[Principal, str] = Depends(scoped("billing.read", "company.read")),
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
+    query = db.query(LeadClientRecharge).filter(LeadClientRecharge.ClientId == client_id)
+    if not include_pending:
+        query = query.filter(LeadClientRecharge.Status != RECHARGE_STATUS_PENDING)
     rows = (
-        db.query(LeadClientRecharge)
-        .filter(
-            LeadClientRecharge.ClientId == client_id,
-            LeadClientRecharge.Status != RECHARGE_STATUS_PENDING,
-        )
+        query
         .order_by(LeadClientRecharge.CreatedAt.desc())
         .limit(limit)
         .all()
@@ -557,6 +564,7 @@ def get_usage_history(
     db: Session = Depends(get_leadai_db),
 ):
     _, client_id = scope
+    billing_svc.consolidate_duplicate_usage_logs(db, client_id)
     rows = (
         db.query(LeadUsageLog)
         .filter(LeadUsageLog.ClientId == client_id)
@@ -633,14 +641,18 @@ def admin_update_plan(
     if not template:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan template not found")
 
+    old_price = template.Price
+    price_changed = False
+    if payload.price is not None and abs(payload.price - old_price) > 0.01:
+        price_changed = True
+        template.Price = payload.price
+
     if payload.name is not None:
         template.Name = payload.name.strip()
     if payload.included_minutes is not None:
         template.IncludedMinutes = payload.included_minutes
     if payload.validity_days is not None:
         template.ValidityDays = payload.validity_days
-    if payload.price is not None:
-        template.Price = payload.price
     if payload.rate_per_minute is not None:
         template.RatePerMinute = payload.rate_per_minute
     if payload.plan_category is not None:
@@ -661,6 +673,41 @@ def admin_update_plan(
         template.Description = payload.description.strip()
 
     template.UpdatedBy = principal.email
+
+    # If price changed, create a new Razorpay recurring plan and schedule update for active subscribers at cycle end
+    if price_changed:
+        template.RazorpayPlanId = None
+        try:
+            new_plan_id = billing_svc.ensure_razorpay_plan(db, template)
+            active_subs = (
+                db.query(LeadClientRecharge)
+                .filter(
+                    LeadClientRecharge.PlanTemplateId == template.Id,
+                    LeadClientRecharge.RazorpaySubscriptionId.isnot(None),
+                    LeadClientRecharge.Status == RECHARGE_STATUS_ACTIVE,
+                )
+                .all()
+            )
+            rzp = billing_svc.get_razorpay_client()
+            for sub in active_subs:
+                try:
+                    rzp.subscription.update(
+                        sub.RazorpaySubscriptionId,
+                        {
+                            "plan_id": new_plan_id,
+                            "schedule_change_at": "cycle_end",
+                        },
+                    )
+                    logger.info(
+                        f"[Admin Billing] Scheduled Razorpay sub {sub.RazorpaySubscriptionId} "
+                        f"to new price plan {new_plan_id} (₹{template.Price}) for client {sub.ClientId} at cycle end"
+                    )
+                except Exception as sub_err:
+                    logger.warning(
+                        f"[Admin Billing] Could not schedule sub {sub.RazorpaySubscriptionId} for client {sub.ClientId}: {sub_err}"
+                    )
+        except Exception as plan_err:
+            logger.warning(f"[Admin Billing] Could not recreate Razorpay recurring plan on price update: {plan_err}")
 
     db.add(template)
     db.commit()
@@ -713,10 +760,8 @@ def admin_recharge_client(
                 payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
                 created_by=principal.email,
             )
-        return _serialize_recharge(last_recharge)
     except ValueError as err:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
-
+        raise HTTPException(status_code=400, detail=str(err))
 
 @admin_router.get("/clients-summary", response_model=list[BillingSummaryOut], summary="Admin: System-wide client billing statuses")
 def admin_clients_summary(

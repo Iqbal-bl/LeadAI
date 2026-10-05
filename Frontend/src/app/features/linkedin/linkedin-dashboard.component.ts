@@ -45,6 +45,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   // Auto-Accept & Automation Settings
   autoAcceptEnabled = false;
+  autoDmLeadsEnabled = true;
   welcomeMessage =
     'Hi {name},\n\nThanks for connecting! Looking forward to staying in touch and exploring potential collaborations.';
   savingSettings = false;
@@ -162,6 +163,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.statusLoading = false;
         if (res) {
           this.autoAcceptEnabled = !!res['auto_accept'];
+          this.autoDmLeadsEnabled = res['auto_dm_leads'] !== false;
           if (res['welcome_message']) {
             this.welcomeMessage = res['welcome_message'];
           }
@@ -272,6 +274,11 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.profiles = [];
             this.invitations = [];
             this.invitationResults = null;
+            this.comments = [];
+            this.filteredComments = [];
+            this.conversations = [];
+            this.selectedConversation = null;
+            this.messages = [];
           },
           error: (err) => {
             this.messageService.add({
@@ -319,6 +326,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       next: () => {
         this.savingCredentials = false;
         this.showCredentialsSuccess = true;
+        this.credentialsForm.password = '';
         this.messageService.add({
           severity: 'success',
           summary: 'Credentials Saved',
@@ -327,6 +335,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.loadStatus();
         this.loadConversations();
         this.loadInvitations();
+        this.loadComments();
       },
       error: (err) => {
         this.savingCredentials = false;
@@ -359,6 +368,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.selectedConversation = null;
             this.messages = [];
             this.invitations = [];
+            this.comments = [];
+            this.filteredComments = [];
             this.messageService.add({
               severity: 'success',
               summary: 'Credentials Removed',
@@ -386,6 +397,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       .saveSettings({
         auto_accept: this.autoAcceptEnabled,
         welcome_message: this.welcomeMessage.trim() || null,
+        auto_dm_leads: this.autoDmLeadsEnabled,
       })
       .subscribe({
         next: () => {
@@ -393,7 +405,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Settings Saved',
-            detail: 'LinkedIn auto-accept and welcome messaging rules updated.',
+            detail: 'LinkedIn automation rules and CRM lead settings updated.',
           });
           this.loadStatus();
         },
@@ -837,18 +849,20 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     this.stopChatPolling();
     if (this.activeTab !== 'messages') return;
     this.chatPollingInterval = setInterval(() => {
-      if (this.activeTab !== 'messages') {
-        this.stopChatPolling();
+      // Pause polling if tab is not messages or browser window is hidden/minimized
+      if (this.activeTab !== 'messages' || typeof document !== 'undefined' && document.hidden) {
+        if (this.activeTab !== 'messages') this.stopChatPolling();
         return;
       }
       if (
         this.selectedConversation &&
         !this.loadingMessages &&
+        !this.syncingThreadMessages &&
         !this.sendingMessage
       ) {
         this.selectConversation(this.selectedConversation, true);
       }
-    }, 15000);
+    }, 20000);
   }
 
   private stopChatPolling(): void {
@@ -956,6 +970,14 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   getUnreadConversationsCount(): number {
     return this.unreadConversationsCount;
+  }
+
+  getLeadIntentLabel(intent?: string): string {
+    if (!intent) return 'CRM Lead';
+    if (intent === 'demo_request') return 'Demo Inquiry';
+    if (intent === 'pricing_inquiry') return 'Pricing Inquiry';
+    if (intent === 'consultation_request') return 'Consultation Request';
+    return 'CRM Lead';
   }
 
   loadPreviousMessages(): void {

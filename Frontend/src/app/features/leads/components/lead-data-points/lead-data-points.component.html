@@ -1,0 +1,153 @@
+<div class="rounded-2xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 p-5 shadow-2xs space-y-4">
+  <!-- Card Header -->
+  <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-sm font-semibold">
+        <i class="pi pi-database"></i>
+      </div>
+      <div>
+        <h3 class="text-sm font-bold text-slate-900 dark:text-white">
+          Qualification Data Points
+        </h3>
+        <p class="text-[11px] text-slate-400">
+          Extracted qualification fields from customer interaction
+        </p>
+      </div>
+    </div>
+
+    <!-- Summary Counters -->
+    <div class="flex items-center gap-1.5 flex-wrap justify-end">
+      <span
+        *ngIf="missingRequiredCount > 0"
+        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+      >
+        <i class="pi pi-exclamation-triangle text-[9px]"></i>
+        <span>{{ missingRequiredCount }} Missing Req.</span>
+      </span>
+
+      <span
+        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+        [ngClass]="collectedCount === displayItems.length && displayItems.length > 0
+          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'"
+      >
+        {{ collectedCount }}/{{ displayItems.length }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Loading Skeletons -->
+  <div *ngIf="isLoading" class="space-y-3 py-2">
+    <div class="flex justify-between items-center">
+      <p-skeleton width="35%" height="1.2rem"></p-skeleton>
+      <p-skeleton width="45%" height="1.2rem"></p-skeleton>
+    </div>
+    <div class="flex justify-between items-center">
+      <p-skeleton width="40%" height="1.2rem"></p-skeleton>
+      <p-skeleton width="30%" height="1.2rem"></p-skeleton>
+    </div>
+    <div class="flex justify-between items-center">
+      <p-skeleton width="30%" height="1.2rem"></p-skeleton>
+      <p-skeleton width="50%" height="1.2rem"></p-skeleton>
+    </div>
+  </div>
+
+  <!-- Empty State -->
+  <div
+    *ngIf="!isLoading && displayItems.length === 0"
+    class="py-6 text-center text-xs text-slate-400 flex flex-col items-center justify-center space-y-1.5"
+  >
+    <i class="pi pi-info-circle text-base text-slate-300 dark:text-slate-600"></i>
+    <span>No data point definitions found for this organization.</span>
+  </div>
+
+  <!-- Key-Value Data Points List -->
+  <div *ngIf="!isLoading && displayItems.length > 0" class="divide-y divide-slate-100 dark:divide-slate-800/60">
+    <div
+      *ngFor="let item of displayItems"
+      class="py-2.5 flex items-start justify-between gap-3 text-xs"
+      [class.opacity-60]="!item.hasValue && !item.required"
+    >
+      <!-- Label with Type Icon & Required Indicator -->
+      <div class="flex items-start gap-2 max-w-[50%]">
+        <i
+          [class]="getTypeIcon(item.data_type)"
+          class="mt-0.5 text-slate-400 text-[11px] shrink-0"
+        ></i>
+        <div class="flex flex-col">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-medium text-slate-700 dark:text-slate-300 leading-tight">
+              {{ item.label }}
+            </span>
+            <span
+              *ngIf="item.required"
+              class="text-rose-500 font-bold"
+              pTooltip="Required Field"
+              tooltipPosition="top"
+            >*</span>
+            <span
+              *ngIf="item.isCustom"
+              class="text-[9px] px-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 font-normal"
+            >Custom</span>
+          </div>
+          <span class="font-mono text-[10px] text-slate-400 leading-none mt-0.5">
+            {{ item.key }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Value or Missing Indicator -->
+      <div class="text-right max-w-[50%] flex items-center justify-end">
+        <!-- Collected Value -->
+        <ng-container *ngIf="item.hasValue">
+          <!-- Boolean Pill -->
+          <span
+            *ngIf="item.data_type === 'boolean'"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold"
+            [ngClass]="item.value === true || item.value === 'true' || item.value === 1
+              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700'"
+          >
+            {{ item.formattedValue }}
+          </span>
+
+          <!-- Select Pill -->
+          <span
+            *ngIf="item.data_type === 'select'"
+            class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 break-words"
+          >
+            {{ item.formattedValue }}
+          </span>
+
+          <!-- Text, Number, Date, Email -->
+          <span
+            *ngIf="item.data_type !== 'boolean' && item.data_type !== 'select'"
+            class="font-semibold text-slate-900 dark:text-white break-words text-right"
+          >
+            {{ item.formattedValue }}
+          </span>
+        </ng-container>
+
+        <!-- Missing Value -->
+        <ng-container *ngIf="!item.hasValue">
+          <!-- Missing Required Field -> Prominent Warning Pill -->
+          <span
+            *ngIf="item.required"
+            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+          >
+            <i class="pi pi-exclamation-circle text-[9px]"></i>
+            <span>Not yet collected</span>
+          </span>
+
+          <!-- Missing Optional Field -> Subtle Text -->
+          <span
+            *ngIf="!item.required"
+            class="text-[11px] text-slate-400 italic"
+          >
+            Not yet collected
+          </span>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+</div>
