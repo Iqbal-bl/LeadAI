@@ -40,6 +40,7 @@ from sqlalchemy.orm import relationship
 try:
     from core.base import Base
 except ImportError:
+    # pyrefly: ignore [missing-import]
     from base import Base
 
 
@@ -228,12 +229,11 @@ class LeadProduct(LeadAIBase):
     __tablename__ = "leadai_products"
     __table_args__ = (
         Index("ix_leadai_product_client", "ClientId"),
-        Index("ix_leadai_product_type", "ProductType"),
     )
 
     ClientId = Column(String(36), nullable=False)
     ProductName = Column(String(200), nullable=False)
-    ProductType = Column(String(100), nullable=False)
+    ProductDescription = Column(Text, nullable=True)
     KnowledgeBaseFile = Column(String(500), nullable=True)
     KbDocumentId = Column(String(36), nullable=True)
     BoundKbDocumentIds = Column(JSON, default=list, nullable=True)
@@ -357,6 +357,18 @@ class LeadCompanySettings(LeadAIBase):
     # for with ?include_below_threshold=true.
     HideBelowThreshold = Column(Boolean, default=False)
 
+    # ---- AI call voice tuning ------------------------------------------------
+    # Deliberately platform-level, not a per-script field (LeadCompanyScript.
+    # VoiceGender/VoiceSpeaker remain for voice *identity*, i.e. which TTS voice
+    # speaks) — these two are the ones only a super admin may set, never a
+    # company admin, so they live on the settings row the companies router
+    # already gates by role, not on something script.manage can reach. None
+    # means "use the platform default". Pitch was deliberately left out: the
+    # live TTS model (Sarvam bulbul:v3) ignores it entirely; only the
+    # deprecated, API-rejected v2 honours it.
+    VoiceGender = Column(String(20), nullable=True)   # male|female
+    VoiceSpeed = Column(Float, nullable=True)          # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
+
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)
     CampaignConcurrency = Column(Integer, nullable=True)
@@ -441,6 +453,12 @@ class LeadConversation(LeadAIBase):
     # short fixed reply instead of restarting the qualification questions. Cleared
     # if the customer comes back with a real question.
     AiCompletedAt = Column(DateTime, nullable=True)
+    # Set when a campaign with CallEscalationEnabled asks "would you like us to
+    # call you?" — null|asked|accepted|declined. Only "accepted" ever triggers
+    # an actual call; the AI never dials without this being explicitly set here
+    # first by the customer's own reply (see conversation_flow.py).
+    CallConsentStatus = Column(String(20), nullable=True)
+    CallConsentAskedAt = Column(DateTime, nullable=True)
 
     # ---- control plane ------------------------------------------------------
     # Set from OUTSIDE the conversation, by staff or the monitor agent, and checked
@@ -691,7 +709,9 @@ from .models_ext import (  # noqa: E402
     LeadAccount,
     LeadAccountNote,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadChannelEvent,
     LeadChannelIdentity,

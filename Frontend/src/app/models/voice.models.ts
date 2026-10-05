@@ -76,5 +76,6 @@ export interface CallSyncResponse {
 export interface CallRecording {
   call_sid: string;
   url: string;
-  expires_in_seconds: number;
+  recording_url?: string;
+  expires_in_seconds?: number;
 }

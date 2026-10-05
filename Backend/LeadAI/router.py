@@ -29,6 +29,7 @@ from .routers import (
     files,
     inbox,
     knowledge,
+    leads_import,
     linkedin,
     products,
     role_permissions,
@@ -64,6 +65,7 @@ api_router.include_router(products.router)
 api_router.include_router(scripts.router)
 api_router.include_router(scripts.prompts_router)
 api_router.include_router(data_points.router)
+api_router.include_router(leads_import.router)
 api_router.include_router(inbox.router)
 api_router.include_router(activity.router)
 api_router.include_router(analytics.router)

@@ -8,6 +8,7 @@ import {
   SidebarSection,
 } from '../../../services/layout.service';
 import { Subscription } from 'rxjs';
+import { distinctUntilChanged } from 'rxjs/operators';
 import { ClientNavigationalMenu } from '../constants/client-navigational-menu';
 import { ClientPermissionService } from '../services/client-permission.service';
 import { AuthService } from '../../../services/auth.service';
@@ -56,26 +57,49 @@ export class ClientShellComponent implements OnInit, OnDestroy {
       }),
     );
 
-    // Global Inbox WebSocket connection and company subscription enforcement
-    this.sub.add(
-      this.authService.selectedCompanyId$.subscribe((clientId) => {
-        if (clientId) {
-          this.leadService.connectInbox(clientId);
+    // Global Inbox WebSocket connection and company subscription enforcement.
+    // Avoid re-fetching /access/me on initial shell load since SubscriptionGuard already verified it.
+    let lastCheckedCompanyId = this.authService.getSelectedCompanyId();
 
-          // If company-scoped user switches to an unsubscribed company, redirect to plans
-          if (!this.authService.isSuperAdmin() && !this.authService.isPlatformAdmin()) {
-            this.authService.getAccessMe(clientId).subscribe({
-              next: (user) => {
-                if (!user.has_active_subscription) {
-                  this.router.navigate(['/plans']);
+    this.sub.add(
+      this.authService.selectedCompanyId$
+        .pipe(distinctUntilChanged())
+        .subscribe((clientId) => {
+          if (clientId) {
+            this.leadService.connectInbox(clientId);
+
+            // If company-scoped user switches to an unsubscribed company, redirect to plans
+            if (
+              !this.authService.isSuperAdmin() &&
+              !this.authService.isPlatformAdmin()
+            ) {
+              // If this is the initial company load or current company is already validated, don't duplicate the check
+              if (clientId === lastCheckedCompanyId) {
+                const currentUser = this.authService.getCurrentUser();
+                if (
+                  currentUser &&
+                  currentUser.has_active_subscription !== undefined
+                ) {
+                  if (!currentUser.has_active_subscription) {
+                    this.router.navigate(['/plans']);
+                  }
+                  return;
                 }
-              },
-            });
+              }
+
+              lastCheckedCompanyId = clientId;
+              this.authService.getAccessMe(clientId).subscribe({
+                next: (user) => {
+                  if (!user.has_active_subscription) {
+                    this.router.navigate(['/plans']);
+                  }
+                },
+              });
+            }
+          } else {
+            this.leadService.disconnectInbox();
           }
-        } else {
-          this.leadService.disconnectInbox();
-        }
-      })
+        }),
     );
 
     // Handle lead threshold crossed notification events

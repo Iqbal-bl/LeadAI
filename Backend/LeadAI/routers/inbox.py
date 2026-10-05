@@ -34,6 +34,7 @@ from ..db import get_leadai_db
 from ..models import (
     Lead,
     LeadCall,
+    LeadCampaign,
     LeadConversation,
     LeadCustomer,
     LeadMessage,
@@ -148,6 +149,26 @@ def list_conversations(
     campaign_id: str | None = Query(
         default=None, description="Only conversations produced by this campaign."
     ),
+    lead_source: str | None = Query(
+        default=None,
+        pattern="^(inbound|import|broadcast)$",
+        description=(
+            "inbound   = came in on its own (chat/call/social), no campaign behind it; "
+            "import    = produced by a lead-import batch (campaign.created_via == 'import'); "
+            "broadcast = produced by a manually-created campaign. "
+            "Omit to see everything, same as today."
+        ),
+    ),
+    include_unreached: bool = Query(
+        default=False,
+        description=(
+            "Imported leads get a real, trackable conversation the moment they're "
+            "imported — before any message is ever sent. If that send/call is later "
+            "skipped or fails, nothing is ever exchanged. Those empty threads are "
+            "hidden from the inbox by default (there is nothing to read); set this "
+            "true to review which imported leads were never actually reached."
+        ),
+    ),
     sort: str = Query(default="recent", pattern="^(recent|score|oldest)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=200),
@@ -176,6 +197,18 @@ def list_conversations(
 
     if campaign_id:
         query = query.filter(LeadConversation.CampaignId == campaign_id)
+
+    if lead_source == "inbound":
+        query = query.filter(LeadConversation.CampaignId.is_(None))
+    elif lead_source in ("import", "broadcast"):
+        query = query.join(LeadCampaign, LeadCampaign.Id == LeadConversation.CampaignId)
+        if lead_source == "import":
+            query = query.filter(LeadCampaign.CreatedVia == "import")
+        else:
+            query = query.filter(LeadCampaign.CreatedVia != "import")
+
+    if not include_unreached:
+        query = query.filter(LeadConversation.MessageCount > 0)
 
     # --- lead-score threshold ------------------------------------------------
     # `IsAboveThreshold` is denormalised onto the lead row and indexed, so this

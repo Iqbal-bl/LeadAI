@@ -20,6 +20,14 @@ export class ConversationsComponent implements OnInit {
   selectedChannel = '';
   showAllLeads = false;
   selectedCampaignId = '';
+  selectedLeadSource = '';
+
+  leadSourceOptions = [
+    { label: 'All sources', value: '' },
+    { label: 'Inbound', value: 'inbound' },
+    { label: 'From import', value: 'import' },
+    { label: 'From broadcast', value: 'broadcast' },
+  ];
 
   campaigns: Campaign[] = [];
 
@@ -62,6 +70,9 @@ export class ConversationsComponent implements OnInit {
     }
     if (this.selectedCampaignId) {
       params.campaign_id = this.selectedCampaignId;
+    }
+    if (this.selectedLeadSource) {
+      params.lead_source = this.selectedLeadSource;
     }
 
     this.inboxService.getInbox(params).subscribe({

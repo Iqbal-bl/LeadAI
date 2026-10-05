@@ -111,7 +111,7 @@ def prepare_agent_context(
                 "type": "text",
                 "content": (
                     "Confirm the customer's interest, capture budget and timeline, and "
-                    "offer to connect a specialist if anything is outside your knowledge."
+                    "say a representative will follow up if anything is outside your knowledge."
                 ),
             },
         ]
@@ -127,10 +127,12 @@ def prepare_agent_context(
                 conversation.Id,
             )
 
+    voice_cfg = script_engine.company_voice_settings(db, client_id)
     voice = {
         "language": (getattr(script, "Language", None) or settings.default_language),
-        "gender": getattr(script, "VoiceGender", None) or "female",
+        "gender": voice_cfg["gender"],
         "speaker": getattr(script, "VoiceSpeaker", None) or "anushka",
+        "pace": voice_cfg["speed"],
         "multi_stt": bool(getattr(script, "MultiStt", False)),
     }
     return sections, script, voice
@@ -152,6 +154,7 @@ def register_call_context(call_sid: str, phone_number: str, sections: list[dict]
         "language": voice.get("language"),
         "gender": voice.get("gender"),
         "speaker": voice.get("speaker"),
+        "pace": voice.get("pace"),
         "multi_stt": voice.get("multi_stt", False),
         "xml_sections": sections,
         # Marker so anything inspecting active_calls can tell this call came from

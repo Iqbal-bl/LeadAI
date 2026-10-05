@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, OnChanges, SimpleChanges } from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
 import { ContactListService } from '../../../services/contact-list.service';
@@ -6,10 +6,13 @@ import { ContactList } from '../../../models/contact-list.models';
 import { ChannelService } from '../../../services/channel.service';
 import { Channel } from '../../../models/channel.models';
 import {
+  Campaign,
   CampaignKind,
   CampaignChannel,
   CampaignPurpose,
   AudienceType,
+  CampaignCreateRequest,
+  CampaignUpdateRequest,
 } from '../../../models/campaign.models';
 import { MessageService } from 'primeng/api';
 
@@ -24,8 +27,10 @@ const ACCOUNT_REQUIRED_CHANNELS: CampaignChannel[] = ['whatsapp', 'messenger', '
   templateUrl: './campaign-create.component.html',
   styleUrl: './campaign-create.component.scss',
 })
-export class CampaignCreateComponent {
+export class CampaignCreateComponent implements OnChanges {
   @Input() visible = false;
+  @Input() campaign: Campaign | null = null;
+  @Input() audienceId = '';
   @Output() complete = new EventEmitter<void>();
   @Output() close = new EventEmitter<void>();
 
@@ -35,10 +40,9 @@ export class CampaignCreateComponent {
   channelAccountId = '';
   purpose: CampaignPurpose = 'promotional';
   audienceType: AudienceType = 'list';
-  @Input() audienceId = '';
   body = '';
   scheduledAt = '';
-  concurrency: number | null = null;
+  concurrency: number = 5; // Integer, 1–50, default 5 (only meaningful for kind: 'call')
   rateLimit: number | null = null;
 
   saving = false;
@@ -104,6 +108,56 @@ export class CampaignCreateComponent {
     this.loadChannels();
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['campaign'] && this.campaign) {
+      this.populateFromCampaign(this.campaign);
+    } else if (changes['visible'] && this.visible && !this.campaign) {
+      this.resetForm();
+    }
+  }
+
+  get isEditMode(): boolean {
+    return !!this.campaign?.id;
+  }
+
+  populateFromCampaign(c: Campaign): void {
+    this.name = c.name || '';
+    this.kind = (c.kind as CampaignKind) || 'message';
+    this.channel = (c.channel as CampaignChannel) || (this.kind === 'call' ? 'voice' : 'whatsapp');
+    this.channelAccountId = c.channel_account_id || '';
+    this.purpose = (c.purpose as CampaignPurpose) || 'promotional';
+    this.audienceType = (c.audience_type as AudienceType) || 'list';
+    this.audienceId = c.list_id || c.audience_id || '';
+    this.body = c.message_body || c.body || '';
+    this.concurrency = c.concurrency != null ? c.concurrency : 5;
+    this.rateLimit = c.rate_per_minute ?? c.rate_limit ?? null;
+    this.scheduledAt = c.scheduled_at ? this.formatDateTimeLocal(c.scheduled_at) : '';
+  }
+
+  resetForm(): void {
+    this.name = '';
+    this.kind = 'message';
+    this.channel = 'whatsapp';
+    this.channelAccountId = '';
+    this.purpose = 'promotional';
+    this.audienceType = 'list';
+    this.body = '';
+    this.scheduledAt = '';
+    this.concurrency = 5;
+    this.rateLimit = null;
+  }
+
+  private formatDateTimeLocal(dateStr: string): string {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+      return '';
+    }
+  }
+
   loadContactLists(): void {
     this.contactListService.getLists().subscribe({
       next: (lists) => {
@@ -118,6 +172,22 @@ export class CampaignCreateComponent {
         this.channels = channels;
       },
     });
+  }
+
+  onKindChange(): void {
+    if (this.kind === 'call') {
+      if (this.concurrency == null || this.concurrency < 1 || this.concurrency > 50) {
+        this.concurrency = 5;
+      }
+      if (this.channel !== 'voice') {
+        this.channel = 'voice';
+      }
+    } else {
+      if (this.channel === 'voice') {
+        this.channel = 'whatsapp';
+      }
+    }
+    this.onChannelChange();
   }
 
   /** Whether the selected channel needs one specific connected account picked. */
@@ -148,29 +218,40 @@ export class CampaignCreateComponent {
     this.body += `{{${variable}}}`;
   }
 
+  get isConcurrencyValid(): boolean {
+    if (this.kind !== 'call') return true;
+    if (this.concurrency == null) return false;
+    const n = Number(this.concurrency);
+    return Number.isInteger(n) && n >= 1 && n <= 50;
+  }
+
   get canSave(): boolean {
     if (!this.name.trim() || !this.body.trim()) return false;
     if (this.needsChannelAccount && !this.channelAccountId) return false;
+    if (this.kind === 'call' && !this.isConcurrencyValid) return false;
     return true;
   }
 
   save(): void {
+    if (!this.canSave) return;
     this.saving = true;
-    this.campaignService
-      .createCampaign({
-        name: this.name,
-        kind: this.kind,
-        channel: this.channel,
-        channel_account_id: this.needsChannelAccount ? this.channelAccountId : undefined,
-        purpose: this.purpose,
-        audience_type: this.audienceType,
-        list_id: this.audienceType === 'list' ? this.audienceId : undefined,
-        message_body: this.body,
-        scheduled_at: this.scheduledAt || undefined,
-        concurrency: this.concurrency ?? undefined,
-        rate_limit: this.rateLimit ?? undefined,
-      })
-      .subscribe({
+
+    if (this.isEditMode && this.campaign?.id) {
+      const updatePayload: CampaignUpdateRequest = {
+        name: this.name.trim(),
+        message_body: this.body.trim(),
+        scheduled_at: this.scheduledAt ? new Date(this.scheduledAt).toISOString() : null,
+      };
+
+      if (this.kind === 'call') {
+        updatePayload.concurrency = this.concurrency
+          ? Math.min(50, Math.max(1, Math.round(Number(this.concurrency))))
+          : 5;
+      } else if (this.rateLimit != null) {
+        updatePayload.rate_per_minute = this.rateLimit;
+      }
+
+      this.campaignService.updateCampaign(this.campaign.id, updatePayload).subscribe({
         next: () => {
           this.saving = false;
           this.complete.emit();
@@ -179,14 +260,54 @@ export class CampaignCreateComponent {
           this.saving = false;
           this.messageService.add({
             severity: 'error',
-            summary: 'Validation Error',
+            summary: 'Update Failed',
             detail:
               err.error?.detail ||
-              'Failed to create campaign. Check your inputs.',
+              'Failed to update campaign. Check your inputs.',
             life: 6000,
           });
         },
       });
+      return;
+    }
+
+    const createPayload: CampaignCreateRequest = {
+      name: this.name.trim(),
+      kind: this.kind,
+      channel: this.channel,
+      channel_account_id: this.needsChannelAccount ? this.channelAccountId : undefined,
+      purpose: this.purpose,
+      audience_type: this.audienceType,
+      list_id: this.audienceType === 'list' ? this.audienceId : undefined,
+      message_body: this.body.trim(),
+      scheduled_at: this.scheduledAt || undefined,
+    };
+
+    if (this.kind === 'call') {
+      createPayload.concurrency = this.concurrency
+        ? Math.min(50, Math.max(1, Math.round(Number(this.concurrency))))
+        : 5;
+    } else if (this.rateLimit != null) {
+      createPayload.rate_limit = this.rateLimit;
+    }
+
+    this.campaignService.createCampaign(createPayload).subscribe({
+      next: () => {
+        this.saving = false;
+        this.complete.emit();
+      },
+      error: (err) => {
+        this.saving = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Validation Error',
+          detail:
+            err.error?.detail ||
+            'Failed to create campaign. Check your inputs.',
+          life: 6000,
+        });
+      },
+    });
   }
 
   onClose(): void {

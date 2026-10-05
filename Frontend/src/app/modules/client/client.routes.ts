@@ -39,6 +39,20 @@ export const CLIENT_ROUTES: Routes = [
               ),
           },
           {
+            path: 'import',
+            loadComponent: () =>
+              import('../../features/leads/lead-import/lead-import.component').then(
+                (m) => m.LeadImportComponent,
+              ),
+          },
+          {
+            path: 'batches',
+            loadComponent: () =>
+              import('../../features/campaigns/batch-list/batch-list.component').then(
+                (m) => m.BatchListComponent,
+              ),
+          },
+          {
             path: ':id',
             loadComponent: () =>
               import('../../features/leads/lead-detail/lead-detail.component').then(
@@ -152,9 +166,14 @@ export const CLIENT_ROUTES: Routes = [
           {
             path: '',
             loadComponent: () =>
-              import('../../features/campaigns/campaign-list/campaign-list.component').then(
-                (m) => m.CampaignListComponent,
+              import('../../features/campaigns/broadcast-list/broadcast-list.component').then(
+                (m) => m.BroadcastListComponent,
               ),
+          },
+          {
+            path: 'broadcasts',
+            redirectTo: '',
+            pathMatch: 'full',
           },
           {
             path: ':id',
@@ -165,6 +184,7 @@ export const CLIENT_ROUTES: Routes = [
           },
         ],
       },
+
       {
         path: 'customers',
         canActivate: [ClientPermissionGuard],

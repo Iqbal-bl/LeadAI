@@ -1,14 +1,25 @@
 <!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+<div
+  class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
+>
   <div>
-    <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+    <h1
+      class="text-2xl font-bold tracking-tight"
+      style="color: var(--app-text)"
+    >
       Leads
     </h1>
     <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
       View and manage all incoming leads and qualification status
     </p>
   </div>
-  <div class="flex items-center gap-3">
+  <div class="flex items-center gap-2.5">
+    <p-button
+      label="Import Leads"
+      icon="pi pi-bolt"
+      size="small"
+      (click)="goToImport()"
+    ></p-button>
     <p-button
       label="Export"
       icon="pi pi-download"
@@ -72,6 +83,24 @@
       optionValue="value"
       (onChange)="onFilterChange()"
       [style]="{ width: '140px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
+  <!-- Lead Source Filter -->
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider"
+      style="color: var(--app-text-muted)"
+      >Source</label
+    >
+    <p-dropdown
+      [options]="leadSourceOptions"
+      [(ngModel)]="selectedLeadSource"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="onFilterChange()"
+      [style]="{ width: '160px' }"
       appendTo="body"
     ></p-dropdown>
   </div>
@@ -160,7 +189,10 @@
         <td>
           <div class="flex items-center gap-3">
             <div class="overflow-hidden">
-              <div class="text-sm font-semibold truncate" style="color: var(--app-text)">
+              <div
+                class="text-sm font-semibold truncate"
+                style="color: var(--app-text)"
+              >
                 {{ lead.name }}
               </div>
             </div>
@@ -215,9 +247,7 @@
               }"
             >
             </p-progressBar>
-            <span
-              class="text-xs font-semibold"
-              style="color: var(--app-text)"
+            <span class="text-xs font-semibold" style="color: var(--app-text)"
               >{{ lead.leadScore }}%</span
             >
           </div>
@@ -225,15 +255,22 @@
 
         <!-- Date of Origin -->
         <td>
-          <span class="text-xs font-mono" style="color: var(--app-text-secondary)">{{
-            (lead.createdAt || lead.updatedAt) ? ((lead.createdAt || lead.updatedAt) | date: 'MM/dd/yyyy hh:mm a') : '—'
-          }}</span>
+          <span
+            class="text-xs font-mono"
+            style="color: var(--app-text-secondary)"
+            >{{
+              lead.createdAt || lead.updatedAt
+                ? (lead.createdAt || lead.updatedAt
+                  | date: "MM/dd/yyyy hh:mm a")
+                : "—"
+            }}</span
+          >
         </td>
 
         <!-- Agent -->
         <td>
           <span class="text-sm" style="color: var(--app-text-secondary)">{{
-            lead.assignedTo || 'AI Assistant'
+            lead.assignedTo || "AI Assistant"
           }}</span>
         </td>
 
@@ -274,7 +311,12 @@
   </p-table>
 </div>
 
-<p-menu #leadActionMenu [popup]="true" appendTo="body" [model]="activeLeadMenuItems"></p-menu>
+<p-menu
+  #leadActionMenu
+  [popup]="true"
+  appendTo="body"
+  [model]="activeLeadMenuItems"
+></p-menu>
 
 <!-- Convert to Customer Dialog -->
 <p-dialog
@@ -288,7 +330,11 @@
 >
   <div class="space-y-4 py-2">
     <p class="text-xs" style="color: var(--app-text-muted)">
-      Promote <span class="font-semibold text-white">{{ convertPayload.leadName }}</span> into a permanent customer record in the CRM.
+      Promote
+      <span class="font-semibold text-white">{{
+        convertPayload.leadName
+      }}</span>
+      into a permanent customer record in the CRM.
     </p>
 
     <!-- Conversation / Lead ID (Readonly) -->
@@ -403,4 +449,3 @@
     </div>
   </ng-template>
 </p-dialog>
-

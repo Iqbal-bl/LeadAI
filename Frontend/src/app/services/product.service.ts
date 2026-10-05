@@ -13,13 +13,10 @@ export class ProductService {
    * List products for the authenticated company
    * GET /api/leadai/products
    */
-  public getProducts(search?: string, productType?: string): Observable<ProductListResponse> {
+  public getProducts(search?: string): Observable<ProductListResponse> {
     const params: Record<string, string> = {};
     if (search) {
       params['search'] = search;
-    }
-    if (productType) {
-      params['product_type'] = productType;
     }
     return this.apiService.get<ProductListResponse>('products', {
       params,

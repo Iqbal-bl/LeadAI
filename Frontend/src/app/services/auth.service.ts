@@ -1,6 +1,13 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { BehaviorSubject, Observable, tap, throwError } from 'rxjs';
+import {
+  BehaviorSubject,
+  Observable,
+  finalize,
+  shareReplay,
+  tap,
+  throwError,
+} from 'rxjs';
 import { UserMe, UserProfileUpdatePayload } from '../models/auth.models';
 import {
   ROLE_COMPANY_ADMIN,
@@ -84,6 +91,9 @@ export class AuthService {
 
   // Switch selected company
   public setSelectedCompanyId(companyId: string | null): void {
+    if (this.selectedCompanyIdSubject.value === companyId) {
+      return;
+    }
     if (companyId) {
       localStorage.setItem(this.COMPANY_KEY, companyId);
     } else {
@@ -121,9 +131,7 @@ export class AuthService {
   public isCompanyAdmin(): boolean {
     const role = this.getUserRole()?.toLowerCase();
     return (
-      role === 'company_admin' ||
-      role === 'admin' ||
-      role === 'platform_admin'
+      role === 'company_admin' || role === 'admin' || role === 'platform_admin'
     );
   }
 
@@ -441,14 +449,25 @@ export class AuthService {
     }
   }
 
+  private inFlightAccessMe$: Observable<UserMe> | null = null;
+  private inFlightCompanyId: string | null = null;
+
   // GET /access/me
   public getAccessMe(companyId?: string): Observable<UserMe> {
-    let params = new HttpParams();
     const targetCompanyId = companyId || this.getSelectedCompanyId();
+
+    // If an identical request is already in-flight, return the shared observable
+    if (this.inFlightAccessMe$ && this.inFlightCompanyId === targetCompanyId) {
+      return this.inFlightAccessMe$;
+    }
+
+    let params = new HttpParams();
     if (targetCompanyId) {
       params = params.set('client_id', targetCompanyId);
     }
-    return this.http
+
+    this.inFlightCompanyId = targetCompanyId || null;
+    this.inFlightAccessMe$ = this.http
       .get<UserMe>(`${environment.apiPrefix}/access/me`, {
         params,
         headers: { 'ngrok-skip-browser-warning': 'skip' },
@@ -470,7 +489,14 @@ export class AuthService {
             }
           }
         }),
+        finalize(() => {
+          this.inFlightAccessMe$ = null;
+          this.inFlightCompanyId = null;
+        }),
+        shareReplay(1),
       );
+
+    return this.inFlightAccessMe$;
   }
 
   /**
@@ -498,15 +524,32 @@ export class AuthService {
       return false;
     }
     const ch = (channel || '').toLowerCase().trim();
-    const channels = (user.active_channels || []).map((c) => (c || '').toLowerCase().trim());
-    const features = (user.active_features || []).map((f) => (f || '').toLowerCase().trim());
+    const channels = (user.active_channels || []).map((c) =>
+      (c || '').toLowerCase().trim(),
+    );
+    const features = (user.active_features || []).map((f) =>
+      (f || '').toLowerCase().trim(),
+    );
 
     if (ch === 'linkedin' || ch === 'li') {
-      return channels.includes('linkedin') || channels.includes('li') || features.includes('linkedin') || features.includes('li');
+      return (
+        channels.includes('linkedin') ||
+        channels.includes('li') ||
+        features.includes('linkedin') ||
+        features.includes('li')
+      );
     }
-    if (ch === 'blog' || ch === 'blogs' || ch === 'content_studio' || ch === 'ai_blog') {
+    if (
+      ch === 'blog' ||
+      ch === 'blogs' ||
+      ch === 'content_studio' ||
+      ch === 'ai_blog'
+    ) {
       const blogKeys = ['blog', 'blogs', 'content_studio', 'ai_blog'];
-      return channels.some((c) => blogKeys.includes(c)) || features.some((f) => blogKeys.includes(f));
+      return (
+        channels.some((c) => blogKeys.includes(c)) ||
+        features.some((f) => blogKeys.includes(f))
+      );
     }
     return channels.includes(ch) || features.includes(ch);
   }

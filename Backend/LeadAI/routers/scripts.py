@@ -115,7 +115,6 @@ def create_script(
         ScriptXml=payload.script_xml,
         SectionsJson=sections,
         IsActive=True,
-        VoiceGender=payload.voice_gender,
         VoiceSpeaker=payload.voice_speaker,
         MultiStt=payload.multi_stt,
         CreatedBy=principal.email,
@@ -251,7 +250,6 @@ def update_script(
         ("channel", "Channel"),
         ("language", "Language"),
         ("is_active", "IsActive"),
-        ("voice_gender", "VoiceGender"),
         ("voice_speaker", "VoiceSpeaker"),
         ("multi_stt", "MultiStt"),
     ):

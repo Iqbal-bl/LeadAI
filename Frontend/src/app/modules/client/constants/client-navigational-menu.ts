@@ -73,10 +73,16 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     title: 'Outreach & Campaigns',
     items: [
       {
-        label: 'Campaigns',
+        label: 'BroadCasts',
         icon: 'pi pi-megaphone',
         routerLink: '/client/campaigns',
         permission: 'campaign.read',
+      },
+      {
+        label: 'Lead Batches',
+        icon: 'pi pi-users',
+        routerLink: '/client/leads/batches',
+        permission: 'lead.read.all',
       },
       {
         label: 'LinkedIn Automation',
