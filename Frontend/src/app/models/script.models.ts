@@ -23,6 +23,8 @@ export interface ScriptPreview {
 
 export interface PromptTemplate {
   key: string;
-  value: string;
-  is_customised: boolean;
+  content: string;
+  value?: string;
+  is_customised?: boolean;
+  updated_at?: string;
 }
