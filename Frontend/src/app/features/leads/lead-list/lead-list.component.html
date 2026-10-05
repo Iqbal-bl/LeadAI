@@ -87,6 +87,24 @@
     ></p-dropdown>
   </div>
 
+  <!-- Lead Source Filter -->
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider"
+      style="color: var(--app-text-muted)"
+      >Source</label
+    >
+    <p-dropdown
+      [options]="leadSourceOptions"
+      [(ngModel)]="selectedLeadSource"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="onFilterChange()"
+      [style]="{ width: '160px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
   <!-- Clear Filters -->
   <div class="self-end pb-0.5" *ngIf="hasActiveFilters()">
     <p-button
@@ -114,16 +132,6 @@
       />
     </p-iconfield>
   </div>
-
-  <p-button
-    *appHasPermission="PERMISSIONS.CAMPAIGN_MANAGE"
-    label="Import Leads & Batches"
-    icon="pi pi-cloud-upload"
-    severity="secondary"
-    [outlined]="true"
-    [rounded]="true"
-    (onClick)="goToImport()"
-  ></p-button>
 </div>
 
 <!-- Leads DataTable -->

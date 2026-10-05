@@ -167,7 +167,9 @@ def build_services(context: dict) -> Services:
     language = sarvam_language(context.get("language")) if not context.get("multi_stt") else None
     stt_settings = SarvamSTTService.Settings(language=language) if language else SarvamSTTService.Settings()
     # 1.0 is Sarvam's normal speaking speed; valid range on bulbul:v3 is 0.5-2.0.
-    tts_kwargs = {"voice": context.get("speaker") or "anushka", "pace": 1.1}
+    # 1.1 (slightly faster) is the platform default; a super admin can override
+    # it per company (see LeadCompanySettings.VoiceSpeed) — never a company admin.
+    tts_kwargs = {"voice": context.get("speaker") or "anushka", "pace": context.get("pace") or 1.1}
     if language:
         tts_kwargs["language"] = language
     def language_frame(code: str):

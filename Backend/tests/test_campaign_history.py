@@ -78,7 +78,13 @@ def test_a_completed_run_is_recorded_batch_by_batch():
     )
 
     batch_entry = next(i for i in out.items if i.action == "campaign.batch_processed")
+    execution_id = batch_entry.meta.pop("execution_id", None)
+    assert execution_id  # ties this log line back to the specific run that produced it
     assert batch_entry.meta == {"sent": 1, "failed": 0, "skipped": 0, "remaining": 0}
+
+    completed_entry = next(i for i in out.items if i.action == "campaign.completed")
+    assert completed_entry.meta.get("execution_id") == execution_id
+    assert campaign.Name in completed_entry.message
 
 
 def test_quiet_hours_deferral_is_recorded_and_nothing_is_sent():

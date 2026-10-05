@@ -52,8 +52,8 @@ def _setup(with_products=True):
     db.add(account)
     db.flush()
     if with_products:
-        db.add(models.LeadProduct(ClientId=client.Id, ProductName="Home Loan", ProductType="loan"))
-        db.add(models.LeadProduct(ClientId=client.Id, ProductName="Personal Loan", ProductType="loan"))
+        db.add(models.LeadProduct(ClientId=client.Id, ProductName="Home Loan", ProductDescription="loan"))
+        db.add(models.LeadProduct(ClientId=client.Id, ProductName="Personal Loan", ProductDescription="loan"))
     db.commit()
     return db, client, account
 

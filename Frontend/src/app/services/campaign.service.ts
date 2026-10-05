@@ -5,11 +5,13 @@ import { AuthService } from './auth.service';
 import {
   Campaign,
   CampaignCreateRequest,
+  CampaignUpdateRequest,
   CampaignHistoryResponse,
   CampaignPreview,
   CampaignRecipient,
   CampaignExecution,
   CampaignExecutionListResponse,
+  CampaignExecutionAttemptsResponse,
   RestartMode,
 } from '../models/campaign.models';
 import { environment } from '../../environments/environment';
@@ -49,9 +51,16 @@ export class CampaignService {
     window.open(url, '_blank');
   }
 
-  /** GET /campaigns — list all campaigns */
-  public getCampaigns(): Observable<Campaign[]> {
+  /** GET /campaigns — list all campaigns with optional filters (campaign_type, status, kind, page, page_size) */
+  public getCampaigns(params?: {
+    campaign_type?: 'broadcast' | 'lead_campaign' | string;
+    status?: string;
+    kind?: string;
+    page?: number;
+    page_size?: number;
+  }): Observable<Campaign[]> {
     return this.apiService.get<Campaign[]>('campaigns', {
+      params: params as any,
       companyScoped: true,
     });
   }
@@ -66,6 +75,16 @@ export class CampaignService {
   /** POST /campaigns — create a new campaign (draft) */
   public createCampaign(req: CampaignCreateRequest): Observable<Campaign> {
     return this.apiService.post<Campaign>('campaigns', req, {
+      companyScoped: true,
+    });
+  }
+
+  /** PATCH /campaigns/{id} — update campaign fields */
+  public updateCampaign(
+    id: string,
+    req: CampaignUpdateRequest | Partial<CampaignCreateRequest>,
+  ): Observable<Campaign> {
+    return this.apiService.patch<Campaign>(`campaigns/${id}`, req, {
       companyScoped: true,
     });
   }
@@ -166,6 +185,25 @@ export class CampaignService {
   ): Observable<CampaignExecutionListResponse> {
     return this.apiService.get<CampaignExecutionListResponse>(
       `campaigns/${id}/executions`,
+      {
+        params: {
+          page: page.toString(),
+          page_size: pageSize.toString(),
+        },
+        companyScoped: true,
+      },
+    );
+  }
+
+  /** GET /campaigns/{campaign_id}/executions/{execution_id}/attempts — paginated call execution attempts */
+  public getExecutionAttempts(
+    campaignId: string,
+    executionId: string,
+    page: number = 1,
+    pageSize: number = 50,
+  ): Observable<CampaignExecutionAttemptsResponse> {
+    return this.apiService.get<CampaignExecutionAttemptsResponse>(
+      `campaigns/${campaignId}/executions/${executionId}/attempts`,
       {
         params: {
           page: page.toString(),

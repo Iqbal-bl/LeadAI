@@ -1,11 +1,17 @@
-<div class="card-base p-5">
+<div [ngClass]="cardMode ? 'card-base p-5' : ''">
   <h3
+    *ngIf="showHeader"
     class="text-sm font-semibold mb-4 flex items-center justify-between gap-2"
     style="color: var(--app-text)"
   >
-    <div><i class="pi pi-comments text-brand-500"></i> Conversations</div>
+    <div class="flex items-center gap-2">
+      <i [class]="icon + ' text-brand-500'"></i>
+      <span>{{ title }}</span>
+      <span *ngIf="subtitle" class="text-xs font-normal text-slate-400">· {{ subtitle }}</span>
+    </div>
     <div class="flex items-center gap-3">
       <i
+        *ngIf="showMaximize"
         class="pi pi-window-maximize hover:text-brand-500 cursor-pointer transition-colors"
         (click)="maximizeChat()"
         title="Maximize to Full Size"
@@ -13,25 +19,60 @@
     </div>
   </h3>
 
+  <!-- Optional Call Metadata strip (e.g. status, duration, phone, initiatedBy) -->
+  <div
+    *ngIf="callMetadata"
+    class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 mb-4 rounded-xl border text-xs"
+    style="
+      background-color: var(--app-bg-secondary);
+      border-color: var(--app-border);
+      color: var(--app-text-secondary);
+    "
+  >
+    <div *ngIf="callMetadata.status">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Status</span>
+      <span class="font-medium uppercase">{{ callMetadata.status }}</span>
+    </div>
+    <div *ngIf="callMetadata.duration !== undefined">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Duration</span>
+      <span class="font-medium">{{ callMetadata.duration }}</span>
+    </div>
+    <div *ngIf="callMetadata.phone">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Phone</span>
+      <span class="font-medium font-mono">{{ callMetadata.phone }}</span>
+    </div>
+    <div *ngIf="callMetadata.initiatedBy">
+      <span class="font-semibold block text-[10px] uppercase text-slate-400">Initiated By</span>
+      <span class="font-medium">{{ callMetadata.initiatedBy }}</span>
+    </div>
+  </div>
+
   <div *ngIf="!isMinimized" class="transition-all duration-300">
     <!-- Messages Log (chat bubble format) -->
     <div
-      class="max-h-[380px] overflow-y-auto mb-4 p-4 space-y-4 rounded-xl border"
+      class="overflow-y-auto mb-4 p-4 space-y-4 rounded-xl border"
+      [style.max-height]="maxHeight"
       style="
         background-color: var(--app-bg-secondary, #fafafa);
         border-color: var(--app-border);
       "
       #chatContainer
     >
-      <ng-container *ngTemplateOutlet="conversationList"></ng-container>
+      <div *ngIf="processedMessages.length === 0" class="text-center py-8 text-xs text-slate-400">
+        <i class="pi pi-comments text-2xl mb-1.5 opacity-40 block"></i>
+        {{ emptyMessage }}
+      </div>
+      <ng-container *ngIf="processedMessages.length > 0">
+        <ng-container *ngTemplateOutlet="conversationList"></ng-container>
+      </ng-container>
     </div>
 
-    <!-- Reply Input Field -->
-    <div class="flex gap-3">
+    <!-- Reply Input Field (Conditional) -->
+    <div *ngIf="showReplyInput" class="flex gap-3">
       <input
         type="text"
         [(ngModel)]="replyMessage"
-        placeholder="Type your response to customer..."
+        [placeholder]="replyPlaceholder"
         class="flex-1 px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         style="
           background-color: var(--card-bg);

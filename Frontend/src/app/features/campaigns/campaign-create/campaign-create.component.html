@@ -1,5 +1,5 @@
 <p-dialog
-  header="Create Campaign"
+  [header]="isEditMode ? 'Edit Campaign' : 'Create Campaign'"
   [(visible)]="visible"
   [modal]="true"
   [style]="{ width: '720px', maxHeight: '90vh' }"
@@ -34,6 +34,8 @@
         <p-dropdown
           [options]="kindOptions"
           [(ngModel)]="kind"
+          (ngModelChange)="onKindChange()"
+          [disabled]="isEditMode"
           optionLabel="label"
           optionValue="value"
           class="w-full"
@@ -50,6 +52,7 @@
           [options]="channelOptions"
           [(ngModel)]="channel"
           (ngModelChange)="onChannelChange()"
+          [disabled]="isEditMode"
           optionLabel="label"
           optionValue="value"
           class="w-full"
@@ -68,6 +71,7 @@
       <p-dropdown
         [options]="accountsForChannel"
         [(ngModel)]="channelAccountId"
+        [disabled]="isEditMode"
         optionLabel="name"
         optionValue="id"
         placeholder="Select a connected account"
@@ -85,7 +89,7 @@
     </div>
 
     <!-- Purpose -->
-    <div>
+    <div *ngIf="!isEditMode">
       <label
         class="block text-sm font-medium mb-1"
         style="color: var(--app-text)"
@@ -118,8 +122,8 @@
       </small>
     </div>
 
-    <!-- Audience -->
-    <div>
+    <!-- Audience (Only when creating) -->
+    <div *ngIf="!isEditMode">
       <label
         class="block text-sm font-medium mb-1"
         style="color: var(--app-text)"
@@ -150,6 +154,12 @@
         class="w-full"
         appendTo="body"
       ></p-dropdown>
+    </div>
+
+    <!-- Notice in Edit Mode -->
+    <div *ngIf="isEditMode" class="text-xs text-slate-400 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
+      <i class="pi pi-info-circle text-indigo-500"></i>
+      <span>Kind, channel, and audience recipients are fixed once a campaign has been created.</span>
     </div>
 
     <!-- Body / Template -->
@@ -188,12 +198,12 @@
       </div>
     </div>
 
-    <!-- Optional: Schedule, Concurrency, Rate Limit -->
-    <div class="grid grid-cols-3 gap-3">
+    <!-- Optional: Schedule, Concurrency (call), Rate Limit (message) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label
-          class="block text-xs font-medium mb-1"
-          style="color: var(--app-text-muted)"
+          class="block text-sm font-medium mb-1"
+          style="color: var(--app-text)"
           >Schedule (optional)</label
         >
         <input
@@ -203,33 +213,69 @@
           class="w-full"
         />
       </div>
-      <div>
-        <label
-          class="block text-xs font-medium mb-1"
-          style="color: var(--app-text-muted)"
-          >Concurrency</label
-        >
-        <input
-          pInputText
-          type="number"
+
+      <!-- Max simultaneous calls (Only for call campaigns) -->
+      <div *ngIf="kind === 'call'">
+        <div class="flex items-center justify-between mb-1">
+          <label
+            class="block text-sm font-medium"
+            style="color: var(--app-text)"
+            >Max simultaneous calls</label
+          >
+          <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+            1–50 (default 5)
+          </span>
+        </div>
+        <p-inputNumber
           [(ngModel)]="concurrency"
-          placeholder="Auto"
+          [min]="1"
+          [max]="50"
+          [step]="1"
+          [showButtons]="true"
+          buttonLayout="horizontal"
+          spinnerMode="horizontal"
+          incrementButtonIcon="pi pi-plus"
+          decrementButtonIcon="pi pi-minus"
+          placeholder="5"
           class="w-full"
-        />
-      </div>
-      <div>
-        <label
-          class="block text-xs font-medium mb-1"
+          styleClass="w-full"
+          inputStyleClass="w-full text-center font-semibold"
+        ></p-inputNumber>
+        <small
+          class="text-xs mt-1 block"
           style="color: var(--app-text-muted)"
-          >Rate Limit / sec</label
+        >
+          How many calls can be ringing/in-progress at once for this campaign.
+        </small>
+        <small
+          *ngIf="concurrency !== null && !isConcurrencyValid"
+          class="text-xs text-rose-500 mt-1 block font-medium"
+        >
+          Please enter an integer between 1 and 50.
+        </small>
+      </div>
+
+      <!-- Rate Limit / sec (Only for message campaigns) -->
+      <div *ngIf="kind === 'message'">
+        <label
+          class="block text-sm font-medium mb-1"
+          style="color: var(--app-text)"
+          >Rate Limit / sec (optional)</label
         >
         <input
           pInputText
           type="number"
+          min="1"
           [(ngModel)]="rateLimit"
           placeholder="Auto"
           class="w-full"
         />
+        <small
+          class="text-xs mt-1 block"
+          style="color: var(--app-text-muted)"
+        >
+          Throughput is governed by rate limit for messaging.
+        </small>
       </div>
     </div>
 
@@ -241,7 +287,7 @@
         (onClick)="onClose()"
       ></p-button>
       <p-button
-        label="Create Draft"
+        [label]="isEditMode ? 'Save Changes' : 'Create Draft'"
         icon="pi pi-check"
         [disabled]="!canSave"
         [loading]="saving"

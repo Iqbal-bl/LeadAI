@@ -28,17 +28,24 @@ export class CampaignListComponent implements OnInit {
   loading = true;
   showCreate = false;
   selectedAudienceId = '';
+  selectedCampaignForEdit: Campaign | null = null;
 
   canSend = false;
 
-  // Tab state: 'all' | 'broadcast' | 'lead'
-  selectedTab: 'all' | 'broadcast' | 'lead' = 'all';
+  // Tab state: 'broadcast' | 'lead_campaign' | 'all'
+  selectedTab: 'broadcast' | 'lead_campaign' | 'all' = 'broadcast';
 
   // Start / Restart Menu State
   startMenuCampaign: Campaign | null = null;
   startMenuItems: MenuItem[] = [];
   campaignRowMenuItems: MenuItem[] = [];
   selectedCampaign: Campaign | null = null;
+
+  setTab(tab: 'broadcast' | 'lead_campaign' | 'all'): void {
+    if (this.selectedTab === tab) return;
+    this.selectedTab = tab;
+    this.loadCampaigns();
+  }
 
   isLeadCampaign(c: Campaign): boolean {
     const type = (c.campaign_type || '').toLowerCase().trim();
@@ -63,7 +70,7 @@ export class CampaignListComponent implements OnInit {
     if (this.selectedTab === 'broadcast') {
       return this.campaigns.filter((c) => this.isBroadcast(c));
     }
-    if (this.selectedTab === 'lead') {
+    if (this.selectedTab === 'lead_campaign') {
       return this.campaigns.filter((c) => this.isLeadCampaign(c));
     }
     return this.campaigns;
@@ -121,9 +128,16 @@ export class CampaignListComponent implements OnInit {
 
   loadCampaigns(): void {
     this.loading = true;
-    this.campaignService.getCampaigns().subscribe({
+    const params: { campaign_type?: string } = {};
+    if (this.selectedTab === 'broadcast') {
+      params.campaign_type = 'broadcast';
+    } else if (this.selectedTab === 'lead_campaign') {
+      params.campaign_type = 'lead_campaign';
+    }
+
+    this.campaignService.getCampaigns(params).subscribe({
       next: (res: any) => {
-        const raw = res.items ?? [];
+        const raw = res.items ?? (Array.isArray(res) ? res : []);
         this.campaigns = raw.map((c: any) => ({
           ...c,
           counters: {
@@ -144,21 +158,32 @@ export class CampaignListComponent implements OnInit {
   }
 
   openCreate(): void {
+    this.selectedCampaignForEdit = null;
+    this.showCreate = true;
+  }
+
+  openEdit(campaign: Campaign): void {
+    this.selectedCampaignForEdit = campaign;
     this.showCreate = true;
   }
 
   onCreateComplete(): void {
+    const isEdit = !!this.selectedCampaignForEdit;
     this.showCreate = false;
+    this.selectedCampaignForEdit = null;
     this.loadCampaigns();
     this.messageService.add({
       severity: 'success',
-      summary: 'Campaign Created',
-      detail: 'Your campaign has been saved as a draft.',
+      summary: isEdit ? 'Campaign Updated' : 'Campaign Created',
+      detail: isEdit
+        ? 'Your campaign settings have been updated.'
+        : 'Your campaign has been saved as a draft.',
     });
   }
 
   onCreateClose(): void {
     this.showCreate = false;
+    this.selectedCampaignForEdit = null;
   }
 
   viewCampaign(campaign: Campaign): void {
@@ -308,6 +333,13 @@ export class CampaignListComponent implements OnInit {
         label: 'View Details',
         icon: 'pi pi-eye',
         command: () => this.viewCampaign(campaign),
+      },
+      {
+        label: 'Edit Campaign',
+        icon: 'pi pi-pencil',
+        disabled: isRunning,
+        title: isRunning ? 'Pause the campaign before editing' : '',
+        command: () => this.openEdit(campaign),
       },
     ];
 

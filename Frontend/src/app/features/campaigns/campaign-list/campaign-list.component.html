@@ -9,41 +9,41 @@
 
 <!-- Actions Bar -->
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-  <!-- Tabs: All vs Broadcasts vs Lead Campaigns based on campaign_type -->
+  <!-- Tabs: Broadcasts vs Batches (Lead Campaigns) vs All -->
   <div class="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 p-1 text-xs">
     <button
       type="button"
-      (click)="selectedTab = 'all'"
+      (click)="setTab('broadcast')"
+      class="px-3.5 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+      [ngClass]="selectedTab === 'broadcast' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
+    >
+      <i class="pi pi-megaphone text-[11px]"></i>
+      Broadcasts
+      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'broadcast' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
+        {{ selectedTab === 'broadcast' ? filteredCampaigns.length : broadcastCampaignsCount }}
+      </span>
+    </button>
+    <button
+      type="button"
+      (click)="setTab('lead_campaign')"
+      class="px-3.5 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+      [ngClass]="selectedTab === 'lead_campaign' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
+    >
+      <i class="pi pi-users text-[11px]"></i>
+      Batches
+      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'lead_campaign' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
+        {{ selectedTab === 'lead_campaign' ? filteredCampaigns.length : leadCampaignsCount }}
+      </span>
+    </button>
+    <button
+      type="button"
+      (click)="setTab('all')"
       class="px-3 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
       [ngClass]="selectedTab === 'all' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
     >
       All
       <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'all' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
         {{ campaigns.length }}
-      </span>
-    </button>
-    <button
-      type="button"
-      (click)="selectedTab = 'broadcast'"
-      class="px-3 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-      [ngClass]="selectedTab === 'broadcast' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
-    >
-      <i class="pi pi-megaphone text-[11px]"></i>
-      Broadcasts
-      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'broadcast' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
-        {{ broadcastCampaignsCount }}
-      </span>
-    </button>
-    <button
-      type="button"
-      (click)="selectedTab = 'lead'"
-      class="px-3 py-1.5 rounded-lg transition-all text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-      [ngClass]="selectedTab === 'lead' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-xs font-bold' : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'"
-    >
-      <i class="pi pi-users text-[11px]"></i>
-      Lead Campaigns
-      <span class="px-1.5 py-0.2 rounded-full text-[10px]" [ngClass]="selectedTab === 'lead' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-500'">
-        {{ leadCampaignsCount }}
       </span>
     </button>
   </div>
@@ -210,10 +210,11 @@
   </p-table>
 </div>
 
-<!-- Create Dialog -->
+<!-- Create / Edit Dialog -->
 <app-campaign-create
   *ngIf="showCreate"
   [visible]="showCreate"
+  [campaign]="selectedCampaignForEdit"
   [audienceId]="selectedAudienceId"
   (complete)="onCreateComplete()"
   (close)="onCreateClose()"

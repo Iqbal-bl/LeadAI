@@ -38,8 +38,16 @@ export class LeadListComponent implements OnInit, OnDestroy {
   selectedChannel = '';
   selectedStatus = '';
   selectedPriority = '';
+  selectedLeadSource = '';
   showAllLeads = true;
   searchText = '';
+
+  leadSourceOptions = [
+    { label: 'All sources', value: '' },
+    { label: 'Inbound', value: 'inbound' },
+    { label: 'From import', value: 'import' },
+    { label: 'From broadcast', value: 'broadcast' },
+  ];
 
   private searchSubject = new Subject<string>();
 
@@ -172,6 +180,10 @@ export class LeadListComponent implements OnInit, OnDestroy {
       }
     }
 
+    if (this.selectedLeadSource) {
+      params.lead_source = this.selectedLeadSource;
+    }
+
     if (this.searchText && this.searchText.trim()) {
       params.search = this.searchText.trim();
     }
@@ -234,6 +246,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
     this.selectedChannel = '';
     this.selectedStatus = '';
     this.selectedPriority = '';
+    this.selectedLeadSource = '';
     this.searchText = '';
     this.showAllLeads = true;
     this.currentPage = 1;
@@ -248,6 +261,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
       this.selectedChannel ||
       this.selectedStatus ||
       this.selectedPriority ||
+      this.selectedLeadSource ||
       this.searchText
     );
   }

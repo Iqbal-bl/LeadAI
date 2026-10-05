@@ -334,6 +334,7 @@ class RecipientOut(BaseModel):
     id: str
     name: str | None = None
     phone_masked: str | None = None
+    email_masked: str | None = None
     status: str
     attempts: int = 0
     external_message_id: str | None = None
@@ -345,6 +346,10 @@ class RecipientOut(BaseModel):
     read_at: datetime | None = None
     replied_at: datetime | None = None
     failure_reason: str | None = None
+    # What the AI determined this lead is interested in, snapped to the
+    # company's own product catalog — "unknown" until a conversation has
+    # actually happened, never a freely-invented name.
+    product: str | None = None
 
     @field_serializer('sent_at', 'delivered_at', 'read_at', 'replied_at')
     def serialize_dates(self, dt: datetime | None, _info):
@@ -418,12 +423,17 @@ class CampaignExecutionListOut(BaseModel):
 
 class CampaignRecipientAttemptOut(BaseModel):
     """One recipient's frozen outcome on ONE specific execution — the
-    CallNumberExecution counterpart."""
+    CallNumberExecution counterpart. Carries the basic identity fields
+    (name/phone/email) alongside what the AI actually determined about the
+    lead, the same "input + what happened" shape the old VoiceAI batch CSV
+    used, instead of making the caller stitch send status and call outcome
+    together from two different endpoints."""
 
     id: str
     recipient_id: str
     name: str | None = None
     phone_masked: str | None = None
+    email_masked: str | None = None
     status: str
     external_message_id: str | None = None
     sent_at: datetime | None = None
@@ -431,6 +441,21 @@ class CampaignRecipientAttemptOut(BaseModel):
     read_at: datetime | None = None
     replied_at: datetime | None = None
     failure_reason: str | None = None
+    # Populated only when this recipient's conversation was scored (chat or
+    # voice) — None, not a misleading 0/"", when nothing was ever collected.
+    lead_score: int | None = None
+    lead_status: str | None = None
+    # What the AI determined this lead is interested in, snapped to the
+    # company's own product catalog — "unknown" until classified, never a
+    # freely-invented name.
+    product: str | None = None
+    # The company's own custom data points (see LeadCompanyDataPoint) the AI
+    # collected during this conversation — the same values the CSV export's
+    # per-data-point columns show, keyed by each data point's `key`.
+    data_points: dict[str, Any] | None = None
+    # Call-specific — set only for a call-kind campaign.
+    call_status: str | None = None
+    call_duration_sec: int | None = None
 
     @field_serializer('sent_at', 'delivered_at', 'read_at', 'replied_at')
     def serialize_dt(self, dt: datetime | None, _info):
