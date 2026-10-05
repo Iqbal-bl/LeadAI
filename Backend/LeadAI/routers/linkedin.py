@@ -1093,7 +1093,7 @@ async def sync_linkedin_messages(
     row = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
         LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False,
+        LeadChannelAccount.IsDeleted == False
     ).first()
 
     if not row or (not row.LinkedinCookieEnc and not (row.LinkedinUsernameEnc and row.LinkedinPasswordEnc)):
@@ -1204,6 +1204,12 @@ async def get_linkedin_comments(
 ):
     _, company_id = scope
     from ..models_blog import LeadSocialComment
+
+    active_account = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
+    ).first()
 
     active_account = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == company_id,
