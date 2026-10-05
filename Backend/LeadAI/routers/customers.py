@@ -84,6 +84,44 @@ def list_customers(
     write time. Listing 200 customers therefore costs zero crypto operations.
     """
     principal, client_id = scope
+
+    # Auto-heal: Ensure any captured LinkedIn comments have an account in leadai_accounts
+    try:
+        from ..models_blog import LeadSocialComment
+        captured_comments = (
+            db.query(LeadSocialComment)
+            .filter(
+                LeadSocialComment.ClientId == client_id,
+                LeadSocialComment.CustomerId != None,
+                LeadSocialComment.IsDeleted == False,
+            )
+            .all()
+        )
+        for c_comm in captured_comments:
+            has_acct = (
+                db.query(LeadAccount)
+                .filter(
+                    LeadAccount.ClientId == client_id,
+                    LeadAccount.CustomerId == c_comm.CustomerId,
+                    LeadAccount.IsDeleted == False,
+                )
+                .first()
+            )
+            if not has_acct:
+                crm.create_account(
+                    db,
+                    client_id,
+                    display_name=c_comm.AuthorName or "LinkedIn Member",
+                    source="linkedin",
+                    stage="lead",
+                    customer_id=c_comm.CustomerId,
+                    linkedin_profile_url=c_comm.AuthorProfileUrl,
+                    actor="linkedin_comment_ai",
+                )
+                db.commit()
+    except Exception as sync_err:
+        logger.warning(f"Error auto-syncing captured LinkedIn comments to accounts: {sync_err}")
+
     query = db.query(LeadAccount).filter(
         LeadAccount.ClientId == client_id,
         LeadAccount.IsDeleted == False,  # noqa: E712

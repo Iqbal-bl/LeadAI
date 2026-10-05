@@ -490,6 +490,9 @@ class LeadAccount(LeadAIBase):
     PhoneHash = Column(String(64), nullable=True)
     PhoneMasked = Column(String(40), nullable=True)
     EmailMasked = Column(String(160), nullable=True)
+    # Public LinkedIn profile URL carried over from the source LeadCustomer so
+    # sales reps can jump straight to the prospect's profile from the CRM view.
+    LinkedinProfileUrl = Column(String(500), nullable=True)
 
     Stage = Column(String(24), nullable=False, default="customer")
     # customer|onboarding|active|at_risk|churned|vip

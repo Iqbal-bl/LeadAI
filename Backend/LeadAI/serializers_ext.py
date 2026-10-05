@@ -225,6 +225,7 @@ def account_out(row: LeadAccount) -> AccountOut:
         company_name=row.CompanyName,
         phone_masked=row.PhoneMasked,
         email_masked=row.EmailMasked,
+        linkedin_profile_url=getattr(row, "LinkedinProfileUrl", None),
         stage=row.Stage,
         status=row.Status,
         owner_email=row.OwnerEmail,

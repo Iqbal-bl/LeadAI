@@ -534,6 +534,9 @@ class AccountOut(BaseModel):
     company_name: str | None = None
     phone_masked: str | None = None
     email_masked: str | None = None
+    # Public LinkedIn profile URL — present when the lead was captured from a
+    # LinkedIn comment. None for non-LinkedIn sources.
+    linkedin_profile_url: str | None = None
     stage: str
     status: str
     owner_email: str | None = None

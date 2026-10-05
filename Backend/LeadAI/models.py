@@ -403,6 +403,9 @@ class LeadCustomer(LeadAIBase):
     EmailEnc = Column(Text, nullable=True)
     WhatsAppEnc = Column(Text, nullable=True)
     InstagramEnc = Column(Text, nullable=True)
+    # LinkedIn profile URL — stored plain (not PII-encrypted) because it is a
+    # public URL the commenter published on LinkedIn, not a private identifier.
+    LinkedinProfileUrl = Column(String(500), nullable=True)
     # Non-reversible lookup key so a returning customer is recognised without
     # decrypting anything.
     PhoneHash = Column(String(64), nullable=True, index=True)
