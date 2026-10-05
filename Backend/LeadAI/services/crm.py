@@ -20,6 +20,7 @@ account rather than creating a duplicate.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -37,6 +38,51 @@ from ..models import (
 from ..security import decrypt_pii, encrypt_pii, mask_email, mask_phone, phone_fingerprint
 
 logger = logging.getLogger(__name__)
+
+
+def extract_linkedin_token(raw_id: str | None) -> str | None:
+    """Extract the core LinkedIn member token or vanity slug from any URN or profile URL."""
+    if not raw_id:
+        return None
+    raw_str = str(raw_id).strip()
+    # Check for profile URL: https://www.linkedin.com/in/{slug}/
+    url_match = re.search(r"linkedin\.com/in/([^/?#]+)", raw_str, re.IGNORECASE)
+    if url_match:
+        return url_match.group(1).strip().rstrip("/")
+    # Check for URN: urn:li:fsd_profile:{token}, urn:li:fs_miniProfile:{token}, urn:li:member:{token}
+    if raw_str.startswith("urn:li:"):
+        parts = raw_str.split(":")
+        if len(parts) >= 4:
+            return parts[-1].strip()
+    return raw_str.strip().rstrip("/")
+
+
+def extract_linkedin_slug(url: str | None) -> str | None:
+    """Extract vanity slug or token from a LinkedIn profile URL."""
+    if not url:
+        return None
+    match = re.search(r"linkedin\.com/in/([^/?#]+)", str(url).strip(), re.IGNORECASE)
+    if match:
+        return match.group(1).strip().rstrip("/")
+    return str(url).strip().rstrip("/")
+
+
+def find_account_by_linkedin(
+    db: Session, client_id: str, linkedin_profile_url: str | None, member_token: str | None = None
+) -> LeadAccount | None:
+    """Find an existing active CRM account by LinkedIn vanity slug, profile URL, or member token."""
+    token = extract_linkedin_slug(linkedin_profile_url) or extract_linkedin_token(member_token)
+    if not token or len(token) < 3:
+        return None
+    return (
+        db.query(LeadAccount)
+        .filter(
+            LeadAccount.ClientId == client_id,
+            LeadAccount.LinkedinProfileUrl.like(f"%{token}%"),
+            LeadAccount.IsDeleted == False,
+        )
+        .first()
+    )
 
 
 def find_account_by_phone(db: Session, client_id: str, phone: str | None) -> LeadAccount | None:
@@ -92,11 +138,54 @@ def create_account(
             )
             .first()
         )
+    # Check by LinkedIn profile URL or member token if not matched by customer_id or phone
+    if existing is None and linkedin_profile_url:
+        existing = find_account_by_linkedin(db, client_id, linkedin_profile_url)
+
     if existing is not None:
-        # Backfill the LinkedIn URL on the existing account if it is missing.
-        if linkedin_profile_url and not existing.LinkedinProfileUrl:
-            existing.LinkedinProfileUrl = linkedin_profile_url
-            db.commit()
+        # Deduplication & enrichment: Update LinkedIn profile URL if new one is verified/better
+        url_updated = False
+        if linkedin_profile_url:
+            current_url = existing.LinkedinProfileUrl or ""
+            # If current URL is missing, or is a raw token, and incoming is a vanity slug, upgrade it!
+            incoming_is_vanity = bool(re.search(r"linkedin\.com/in/[a-zA-Z0-9_-]+", linkedin_profile_url))
+            current_is_raw_token = "ACoAA" in current_url
+            if not current_url or (current_is_raw_token and incoming_is_vanity) or current_url != linkedin_profile_url:
+                existing.LinkedinProfileUrl = linkedin_profile_url
+                url_updated = True
+
+        # Append source tag to existing account if coming from another channel touchpoint
+        if source:
+            current_tags = set((existing.Tags or "").split(",")) if existing.Tags else set()
+            new_tags = [source.strip()]
+            if tags:
+                new_tags.extend(t.strip() for t in tags.split(",") if t.strip())
+            added = False
+            for t in new_tags:
+                if t and t not in current_tags:
+                    current_tags.add(t)
+                    added = True
+            if added:
+                existing.Tags = ",".join(sorted(filter(None, current_tags)))
+
+        if url_updated:
+            existing.UpdatedAt = utcnow()
+            logger.info(
+                "[CRM Lead LinkedIn URL] Stored profile URL '%s' for existing customer '%s' (AccountId: %s, CustomerId: %s, Source: %s)",
+                linkedin_profile_url,
+                existing.DisplayName,
+                existing.Id,
+                existing.CustomerId,
+                source or existing.Source or "unknown",
+            )
+        db.commit()
+        logger.info(
+            "[CRM Lead Deduplication] Merged incoming event (Source: %s) into existing customer '%s' (AccountId: %s, CustomerId: %s)",
+            source or "unknown",
+            existing.DisplayName,
+            existing.Id,
+            existing.CustomerId,
+        )
         return existing
 
     account = LeadAccount(
@@ -122,6 +211,15 @@ def create_account(
     )
     db.add(account)
     db.flush()
+    if linkedin_profile_url:
+        logger.info(
+            "[CRM Lead LinkedIn URL] Stored profile URL '%s' for new customer '%s' (AccountId: %s, CustomerId: %s, Source: %s)",
+            linkedin_profile_url,
+            account.DisplayName,
+            account.Id,
+            customer_id,
+            source or "unknown",
+        )
     activity.log(
         db,
         action=A.ACCOUNT_CREATED,

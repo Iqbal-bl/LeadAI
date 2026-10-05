@@ -189,6 +189,7 @@ def _register_voice_pipecat(app: FastAPI) -> None:
             import asyncio
 
             from pipecat.utils.prewarm import warm_deferred_imports
+            
 
             asyncio.create_task(asyncio.to_thread(warm_deferred_imports))
         except Exception:  # noqa: BLE001

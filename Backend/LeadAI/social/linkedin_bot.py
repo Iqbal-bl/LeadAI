@@ -4,10 +4,13 @@ import logging
 import asyncio
 import random
 import time
-from typing import List, Optional
+from typing import List, Optional, Any, Dict, Union
 from linkedin_api import Linkedin
-from ..security import decrypt_pii
+from ..security import decrypt_pii, encrypt_pii
 from ..models import utcnow
+from ..services.intent_detector import LeadIntentEvaluator, IntentEvaluationResult
+
+_utcnow = utcnow
 
 logger = logging.getLogger("leadai.social.linkedin_bot")
 
@@ -382,6 +385,143 @@ async def fetch_received_invitations_api(account, limit: int = 50) -> list[dict]
 
 
 
+def find_or_link_linkedin_customer(
+    db,
+    client_id: str,
+    channel_account_id: str,
+    sender_urn: Optional[str] = None,
+    public_id: Optional[str] = None,
+    profile_url: Optional[str] = None,
+    display_name: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    created_by: str = "linkedin_bot",
+) -> tuple[Any, Any]:
+    """Find an existing LeadCustomer across URNs, member tokens, profile URLs, and threads.
+    
+    If found, ensures the new URN/token is linked to the SAME customer in LeadChannelIdentity,
+    preventing duplicate customer records across DMs, Connection Requests, and Comments.
+    """
+    import random
+    from ..models import LeadCustomer, LeadAccount, utcnow
+    from ..models_ext import LeadChannelIdentity
+    from ..security import encrypt_pii
+    from ..services.crm import extract_linkedin_token, extract_linkedin_slug
+
+    urn_token = extract_linkedin_token(sender_urn)
+    slug = public_id or extract_linkedin_slug(profile_url)
+    display_name = (display_name or "LinkedIn Member").strip()
+
+    identity = None
+    customer = None
+
+    # 1. Exact match on ExternalUserId
+    if sender_urn:
+        identity = db.query(LeadChannelIdentity).filter(
+            LeadChannelIdentity.ClientId == client_id,
+            LeadChannelIdentity.Channel == "linkedin",
+            LeadChannelIdentity.ExternalUserId == str(sender_urn),
+            LeadChannelIdentity.IsDeleted == False
+        ).first()
+        if identity:
+            customer = db.get(LeadCustomer, identity.CustomerId)
+
+    # 2. Token match on ExternalUserId (bridges fsd_profile and fs_miniProfile)
+    if not customer and urn_token and len(urn_token) >= 5:
+        identity_by_token = db.query(LeadChannelIdentity).filter(
+            LeadChannelIdentity.ClientId == client_id,
+            LeadChannelIdentity.Channel == "linkedin",
+            LeadChannelIdentity.ExternalUserId.like(f"%{urn_token}%"),
+            LeadChannelIdentity.IsDeleted == False
+        ).first()
+        if identity_by_token:
+            customer = db.get(LeadCustomer, identity_by_token.CustomerId)
+            identity = identity_by_token
+
+    # 3. Match by vanity slug or profile URL in existing CRM accounts or customers
+    if not customer and slug and len(slug) >= 3:
+        account_match = db.query(LeadAccount).filter(
+            LeadAccount.ClientId == client_id,
+            LeadAccount.LinkedinProfileUrl.like(f"%{slug}%"),
+            LeadAccount.IsDeleted == False
+        ).first()
+        if account_match and account_match.CustomerId:
+            customer = db.get(LeadCustomer, account_match.CustomerId)
+        if not customer:
+            customer = db.query(LeadCustomer).filter(
+                LeadCustomer.ClientId == client_id,
+                LeadCustomer.LinkedinProfileUrl.like(f"%{slug}%"),
+                LeadCustomer.IsDeleted == False
+            ).first()
+
+    # 4. Check if conversation_id already exists in LeadConversation
+    if not customer and conversation_id:
+        from ..models import LeadConversation
+        db_conv_existing = db.query(LeadConversation).filter(
+            LeadConversation.ClientId == client_id,
+            LeadConversation.Channel == "linkedin",
+            LeadConversation.ExternalThreadId == str(conversation_id),
+            LeadConversation.IsDeleted == False,
+        ).first()
+        if db_conv_existing and db_conv_existing.CustomerId:
+            customer = db.get(LeadCustomer, db_conv_existing.CustomerId)
+
+    # 5. If customer found: ensure this specific sender_urn is linked in LeadChannelIdentity
+    if customer:
+        if sender_urn:
+            exact_ident = db.query(LeadChannelIdentity).filter(
+                LeadChannelIdentity.ClientId == client_id,
+                LeadChannelIdentity.Channel == "linkedin",
+                LeadChannelIdentity.ExternalUserId == str(sender_urn),
+                LeadChannelIdentity.IsDeleted == False
+            ).first()
+            if not exact_ident:
+                exact_ident = LeadChannelIdentity(
+                    ClientId=client_id,
+                    ChannelAccountId=channel_account_id,
+                    Channel="linkedin",
+                    ExternalUserId=str(sender_urn),
+                    CustomerId=customer.Id,
+                    ProfileName=display_name or customer.DisplayName,
+                    CreatedBy=created_by,
+                )
+                db.add(exact_ident)
+                db.flush()
+            identity = exact_ident
+
+        # Upgrade profile URL on customer if incoming is vanity slug
+        if profile_url and (not customer.LinkedinProfileUrl or "ACoAA" in customer.LinkedinProfileUrl):
+            customer.LinkedinProfileUrl = profile_url
+            customer.UpdatedAt = utcnow()
+        return customer, identity
+
+    # 6. If brand new: create LeadCustomer + LeadChannelIdentity
+    customer = LeadCustomer(
+        ClientId=client_id,
+        PublicRef=f"Lead #{random.randint(10000, 99999)}",
+        DisplayName=display_name,
+        LinkedinProfileUrl=profile_url,
+        PhoneEnc=encrypt_pii(None),
+        CreatedBy=created_by,
+    )
+    db.add(customer)
+    db.flush()
+
+    if sender_urn:
+        identity = LeadChannelIdentity(
+            ClientId=client_id,
+            ChannelAccountId=channel_account_id,
+            Channel="linkedin",
+            ExternalUserId=str(sender_urn),
+            CustomerId=customer.Id,
+            ProfileName=display_name,
+            CreatedBy=created_by,
+        )
+        db.add(identity)
+        db.flush()
+
+    return customer, identity
+
+
 def reply_invitation_api(
     db, 
     account, 
@@ -393,9 +533,7 @@ def reply_invitation_api(
     public_id: Optional[str] = None
 ) -> dict:
     """Respond to a single invitation and sync customer record if accepted."""
-    import random
-    from ..models import LeadCustomer, LeadChannelIdentity
-    from ..security import encrypt_pii
+    from ..models import utcnow
 
     api = get_linkedin_client(account)
     
@@ -410,35 +548,39 @@ def reply_invitation_api(
         
     if action == "accept" and sender_urn:
         display_name = sender_name or "LinkedIn Member"
-        identity = db.query(LeadChannelIdentity).filter(
-            LeadChannelIdentity.ChannelAccountId == account.Id,
-            LeadChannelIdentity.ExternalUserId == str(sender_urn),
-            LeadChannelIdentity.IsDeleted == False
-        ).first()
+        profile_url = f"https://www.linkedin.com/in/{public_id}" if public_id else None
 
-        if not identity:
-            customer = LeadCustomer(
-                ClientId=account.ClientId,
-                PublicRef=f"Customer #{random.randint(10000, 99999)}",
-                DisplayName=display_name,
-                PhoneEnc=encrypt_pii(None),
-                CreatedBy="linkedin",
-            )
-            db.add(customer)
-            db.flush()
+        customer, identity = find_or_link_linkedin_customer(
+            db=db,
+            client_id=account.ClientId,
+            channel_account_id=account.Id,
+            sender_urn=sender_urn,
+            public_id=public_id,
+            profile_url=profile_url,
+            display_name=display_name,
+            created_by="linkedin_invite",
+        )
 
-            identity = LeadChannelIdentity(
-                ClientId=account.ClientId,
-                ChannelAccountId=account.Id,
-                Channel="linkedin",
-                ExternalUserId=str(sender_urn),
-                CustomerId=customer.Id,
-                ProfileName=display_name,
-                CreatedBy="linkedin",
+        if customer and profile_url:
+            customer.LinkedinProfileUrl = profile_url
+            customer.UpdatedAt = utcnow()
+            logger.info(
+                "[CRM Lead LinkedIn URL] Accepted connection for '%s' (URN: %s) -> Saved verified URL: %s",
+                display_name, sender_urn, profile_url
             )
-            db.add(identity)
-            db.flush()
-            db.commit()
+
+        from ..services import crm as crm_service
+        crm_service.create_account(
+            db, account.ClientId,
+            display_name=display_name,
+            stage="lead",
+            source="linkedin_invitation",
+            customer_id=customer.Id if customer else (identity.CustomerId if identity else None),
+            linkedin_profile_url=profile_url,
+            tags="linkedin,connection_accepted,auto_captured",
+            actor="linkedin_invite_ai"
+        )
+        db.commit()
 
         # Send welcome message if configured
         meta = account.MetaJson or {}
@@ -502,58 +644,64 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
         if not sender_urn:
             continue
 
-        # Check if they already exist in database
-        identity = db.query(LeadChannelIdentity).filter(
-            LeadChannelIdentity.ChannelAccountId == account.Id,
-            LeadChannelIdentity.ExternalUserId == str(sender_urn),
-            LeadChannelIdentity.IsDeleted == False
-        ).first()
-
-        customer = None
-        if identity:
-            customer = db.get(LeadCustomer, identity.CustomerId)
-        
-        if not identity:
-            # Create new customer
-            customer = LeadCustomer(
-                ClientId=account.ClientId,
-                PublicRef=f"Customer #{random.randint(10000, 99999)}",
-                DisplayName=display_name,
-                PhoneEnc=encrypt_pii(None),
-                CreatedBy="linkedin",
-            )
-            db.add(customer)
-            db.flush()
-
-            # Create new identity
-            identity = LeadChannelIdentity(
-                ClientId=account.ClientId,
-                ChannelAccountId=account.Id,
-                Channel="linkedin",
-                ExternalUserId=str(sender_urn),
-                CustomerId=customer.Id,
-                ProfileName=display_name,
-                CreatedBy="linkedin",
-            )
-            db.add(identity)
-            db.flush()
-            db.commit()
-            logger.info("Created new LinkedIn lead/identity: %s (%s)", display_name, sender_urn)
-
         processed_count += 1
 
-        # Accept invitation if auto_accept is active
+        # Accept invitation if auto_accept is active, and only then capture to CRM
         if auto_accept:
             try:
                 # Accept invitation
-                api.reply_invitation(
+                success = api.reply_invitation(
                     invitation_entity_urn=entity_urn,
                     invitation_shared_secret=shared_secret,
                     action="accept"
                 )
+                if not success:
+                    logger.warning("LinkedIn API returned failure accepting invitation from %s (%s)", display_name, sender_urn)
+                    continue
+
                 accepted_count += 1
                 logger.info("Accepted LinkedIn invitation from %s (%s)", display_name, sender_urn)
-                
+
+                # Find or create identity & customer on accepted connection via unified resolver
+                customer, identity = find_or_link_linkedin_customer(
+                    db=db,
+                    client_id=account.ClientId,
+                    channel_account_id=account.Id,
+                    sender_urn=sender_urn,
+                    public_id=public_id,
+                    profile_url=profile_url,
+                    display_name=display_name,
+                    created_by="linkedin_invite",
+                )
+
+                if customer and profile_url:
+                    customer.LinkedinProfileUrl = profile_url
+                    customer.UpdatedAt = utcnow()
+
+                if profile_url:
+                    logger.info(
+                        "[CRM Lead LinkedIn URL] Accepted auto-invitation for '%s' (URN: %s) -> Saved verified URL: %s",
+                        display_name, sender_urn, profile_url
+                    )
+
+                from ..services import crm as crm_service
+                headline = parsed.get("headline") or ""
+                note = parsed.get("message") or ""
+                crm_service.create_account(
+                    db, account.ClientId,
+                    display_name=display_name,
+                    stage="lead",
+                    source="linkedin_invitation",
+                    customer_id=customer.Id if customer else (identity.CustomerId if identity else None),
+                    linkedin_profile_url=profile_url,
+                    company_name=headline[:100] if headline else None,
+                    tags="linkedin,connection_accepted,auto_captured" + (",has_note" if note else ""),
+                    fields={"headline": headline, "invitation_note": note, "sender_urn": sender_urn},
+                    actor="linkedin_invite_ai"
+                )
+                db.commit()
+                logger.info("Captured accepted LinkedIn connection as CRM lead: %s (%s)", display_name, sender_urn)
+
                 # Send welcome message if configured
                 if welcome_message:
                     recipient_id = public_id or sender_urn.split(":")[-1]
@@ -917,7 +1065,106 @@ def _parse_graphql_comments_payload(data: dict) -> list[dict]:
                 "comment_text": text.strip(),
             })
 
-    return parsed
+def parse_event_text(content: dict) -> str:
+    """Extract plain text string from GraphQL or Voyager event content."""
+    if not isinstance(content, dict):
+        return ""
+    if "attributedBody" in content and isinstance(content["attributedBody"], dict):
+        return content["attributedBody"].get("text", "")
+    for v in content.values():
+        if isinstance(v, dict) and "attributedBody" in v:
+            return v["attributedBody"].get("text", "")
+    return content.get("text", "")
+
+
+def parse_member_profile(item: dict) -> dict:
+    """Parse a GraphQL MessagingMember or MiniProfile item into a standard dict."""
+    if not isinstance(item, dict):
+        return {}
+    mini = item.get("miniProfile") or item
+    fn = mini.get("firstName", "")
+    ln = mini.get("lastName", "")
+    if isinstance(fn, dict): fn = fn.get("text", "")
+    if isinstance(ln, dict): ln = ln.get("text", "")
+    name = f"{fn} {ln}".strip() if (fn or ln) else mini.get("name", "LinkedIn Member")
+    
+    headline = mini.get("occupation") or mini.get("headline") or ""
+    if isinstance(headline, dict): headline = headline.get("text", "")
+    
+    public_id = mini.get("publicIdentifier") or ""
+    profile_url = f"https://www.linkedin.com/in/{public_id}" if public_id else ""
+    urn = mini.get("entityUrn") or item.get("entityUrn") or ""
+    
+    avatar = None
+    if mini.get("picture") and isinstance(mini["picture"], dict):
+        v = mini["picture"].get("com.linkedin.common.VectorImage", {})
+        r_url = v.get("rootUrl", "")
+        arts = v.get("artifacts", [])
+        if r_url and arts:
+            avatar = r_url + arts[-1].get("fileIdentifyingUrlPathSegment", "")
+            
+    return {
+        "name": name or "LinkedIn Member",
+        "headline": headline,
+        "public_id": public_id,
+        "profile_url": profile_url,
+        "urn": urn,
+        "picture_url": avatar,
+    }
+
+
+def parse_message_event(item: dict) -> Optional[dict]:
+    """Parse a GraphQL MessageEvent into standard message format."""
+    if not isinstance(item, dict):
+        return None
+    content = item.get("eventContent", {})
+    text = parse_event_text(content)
+    if not text:
+        return None
+    urn = item.get("entityUrn", "")
+    from_member = item.get("from", {})
+    from_urn = from_member if isinstance(from_member, str) else from_member.get("entityUrn", "")
+    return {
+        "event_urn": urn,
+        "text": text,
+        "sender_urn": from_urn,
+        "created_at": item.get("createdAt"),
+    }
+
+
+def parse_conversation_summary(el: dict) -> Optional[dict]:
+    """Parse a legacy Voyager conversation element."""
+    if not isinstance(el, dict):
+        return None
+    conv_urn = el.get("entityUrn", "")
+    conv_id = extract_clean_conversation_id(conv_urn)
+    events = el.get("events", [])
+    last_msg = ""
+    if events and isinstance(events, list) and isinstance(events[0], dict):
+        last_msg = parse_event_text(events[0].get("eventContent", {}))
+    participants = []
+    other_p = None
+    for p in el.get("participants", []):
+        parsed_p = parse_member_profile(p)
+        participants.append(parsed_p)
+        if not other_p:
+            other_p = parsed_p
+    return {
+        "conversation_id": conv_id,
+        "conversation_urn": conv_urn,
+        "contact_name": other_p.get("name", "LinkedIn Member") if other_p else "LinkedIn Member",
+        "contact_headline": other_p.get("headline", "") if other_p else "",
+        "contact_public_id": other_p.get("public_id", "") if other_p else "",
+        "contact_urn": other_p.get("urn", "") if other_p else "",
+        "contact_avatar": other_p.get("picture_url") if other_p else None,
+        "participants": participants,
+        "last_message": last_msg,
+        "last_sender_name": other_p.get("name") if other_p else None,
+        "last_activity_at": el.get("lastActivityAt"),
+        "unread_count": el.get("unreadCount", 0),
+        "is_read": el.get("unreadCount", 0) == 0,
+        "total_events": len(events),
+    }
 
 
 def _parse_graphql_conversations_payload(data: dict) -> list[dict]:
@@ -1017,7 +1264,7 @@ def persist_refreshed_session_cookie(account_id: int, new_cookie: str):
         from ..db import session as db_session
         from ..models_ext import LeadChannelAccount
         from ..security import encrypt_pii
-        from ..utils import utcnow
+        from ..models import utcnow
 
         with db_session() as s:
             acc = s.query(LeadChannelAccount).filter(LeadChannelAccount.Id == account_id).first()
@@ -1032,30 +1279,51 @@ def persist_refreshed_session_cookie(account_id: int, new_cookie: str):
 
 class LinkedInBrowserManager:
     """Maintains a persistent, warm Playwright browser session with anti-detection evasions.
-    Handles multi-event-loop execution gracefully across FastAPI worker threads.
-    Includes automated session auto-recovery using stored username/password credentials.
+    Enforces strict process isolation between active messaging (DMs/InMail) and background comment scraping.
     """
     def __init__(self):
         self._playwright = None
         self._browser = None
         self._context = None
-        self._page = None
+        self._messaging_page = None
+        self._comments_page = None
         self._account_id = None
         self._cookie_hash = None
         self._last_active = 0
-        self._locks = {}
+        self._messaging_locks = {}
+        self._comments_locks = {}
         self._loop = None
+        self._last_messaging_activity = 0.0
 
-    def get_lock(self):
+    def get_messaging_lock(self):
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
-        if loop not in self._locks:
-            self._locks[loop] = asyncio.Lock()
-        return self._locks[loop]
+        if loop not in self._messaging_locks:
+            self._messaging_locks[loop] = asyncio.Lock()
+        return self._messaging_locks[loop]
 
-    async def get_page(self, account):
+    def get_comments_lock(self):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop not in self._comments_locks:
+            self._comments_locks[loop] = asyncio.Lock()
+        return self._comments_locks[loop]
+
+    def get_lock(self):
+        # Backward compatibility
+        return self.get_messaging_lock()
+
+    def mark_messaging_active(self):
+        self._last_messaging_activity = time.time()
+
+    def is_messaging_active(self, cooldown: float = 60.0) -> bool:
+        return (time.time() - self._last_messaging_activity) < cooldown
+
+    async def _ensure_context(self, account):
         cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
         username = decrypt_pii(account.LinkedinUsernameEnc) if account.LinkedinUsernameEnc else None
         password = decrypt_pii(account.LinkedinPasswordEnc) if account.LinkedinPasswordEnc else None
@@ -1079,19 +1347,17 @@ class LinkedInBrowserManager:
 
         current_loop = asyncio.get_running_loop()
         if self._loop != current_loop:
-            # Playwright async objects cannot be shared across different asyncio event loops
-            self._page = None
+            self._messaging_page = None
+            self._comments_page = None
             self._context = None
             self._browser = None
             self._playwright = None
             self._loop = current_loop
 
-        # If session is already alive and belongs to the same account & cookie
-        if self._page and not self._page.is_closed() and self._account_id == account.Id and self._cookie_hash == cookie_hash:
+        if self._context and self._browser and self._account_id == account.Id and self._cookie_hash == cookie_hash:
             self._last_active = time.time()
-            return self._page
+            return
 
-        # Reset any stale session
         await self.close()
 
         from playwright.async_api import async_playwright
@@ -1112,7 +1378,6 @@ class LinkedInBrowserManager:
             locale="en-US",
             timezone_id="America/New_York",
         )
-        # Inject stealth scripts into all new pages
         await self._context.add_init_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             window.chrome = { runtime: {} };
@@ -1125,15 +1390,38 @@ class LinkedInBrowserManager:
             {"name": "li_at", "value": li_at, "domain": ".linkedin.com", "path": "/"},
             {"name": "JSESSIONID", "value": f'"{clean_jsession}"', "domain": ".linkedin.com", "path": "/"},
         ])
-        self._page = await self._context.new_page()
         self._account_id = account.Id
         self._cookie_hash = cookie_hash
         self._last_active = time.time()
-        self._loop = current_loop
-        return self._page
+
+    async def get_messaging_page(self, account):
+        self.mark_messaging_active()
+        await self._ensure_context(account)
+        if not self._messaging_page or self._messaging_page.is_closed():
+            self._messaging_page = await self._context.new_page()
+        self._last_active = time.time()
+        return self._messaging_page
+
+    async def get_comments_page(self, account):
+        await self._ensure_context(account)
+        if not self._comments_page or self._comments_page.is_closed():
+            self._comments_page = await self._context.new_page()
+        self._last_active = time.time()
+        return self._comments_page
+
+    async def close_comments_page(self):
+        try:
+            if self._comments_page and not self._comments_page.is_closed():
+                await self._comments_page.close()
+        except Exception:
+            pass
+        self._comments_page = None
+
+    async def get_page(self, account):
+        # Backward compatibility
+        return await self.get_messaging_page(account)
 
     async def navigate_with_session(self, page, account, target_url: str, wait_until: str = "domcontentloaded", timeout: int = 20000):
-        """Navigate to target URL, automatically recovering and re-authenticating with saved username/password if session expired or redirect loop occurs."""
         try:
             res = await page.goto(target_url, wait_until=wait_until, timeout=timeout)
             curr_url = page.url.lower()
@@ -1168,8 +1456,13 @@ class LinkedInBrowserManager:
 
     async def close(self):
         try:
-            if self._page and not self._page.is_closed():
-                await self._page.close()
+            if self._messaging_page and not self._messaging_page.is_closed():
+                await self._messaging_page.close()
+        except Exception:
+            pass
+        try:
+            if self._comments_page and not self._comments_page.is_closed():
+                await self._comments_page.close()
         except Exception:
             pass
         try:
@@ -1187,7 +1480,8 @@ class LinkedInBrowserManager:
                 await self._playwright.stop()
         except Exception:
             pass
-        self._page = None
+        self._messaging_page = None
+        self._comments_page = None
         self._context = None
         self._browser = None
         self._playwright = None
@@ -1207,9 +1501,9 @@ async def fetch_conversations_api(account, limit: int = 25) -> list[dict]:
     if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         return []
 
-    async with _browser_manager.get_lock():
+    async with _browser_manager.get_messaging_lock():
         try:
-            page = await _browser_manager.get_page(account)
+            page = await _browser_manager.get_messaging_page(account)
             intercepted_conversations = []
 
             async def handle_response(response):
@@ -1278,19 +1572,38 @@ async def fetch_conversations_api(account, limit: int = 25) -> list[dict]:
                     if (seen.has(dedupeKey)) return;
                     seen.add(dedupeKey);
 
+                    let profileUrl = '';
+                    let publicId = '';
+                    const profileLink = el.querySelector('a[href*="/in/"], a[data-control-name="view_profile"]');
+                    if (profileLink && profileLink.href) {
+                        profileUrl = profileLink.href.split('?')[0];
+                        const m = profileUrl.match(/\/in\/([^\/\?#]+)/);
+                        if (m) publicId = m[1];
+                    }
+                    if (!publicId && nameEl) {
+                        const parentLink = nameEl.closest('a[href*="/in/"]');
+                        if (parentLink && parentLink.href) {
+                            profileUrl = parentLink.href.split('?')[0];
+                            const m = profileUrl.match(/\/in\/([^\/\?#]+)/);
+                            if (m) publicId = m[1];
+                        }
+                    }
+
                     results.push({
                         conversation_id: threadId,
                         conversation_urn: `urn:li:msg_conversation:${threadId}`,
                         contact_name: name,
                         contact_headline: '',
-                        contact_public_id: '',
-                        contact_urn: '',
+                        contact_public_id: publicId,
+                        contact_urn: publicId ? `urn:li:fsd_profile:${publicId}` : '',
+                        profile_url: profileUrl,
                         contact_avatar: imgEl ? imgEl.src : null,
                         participants: [{
                             name: name,
                             headline: '',
-                            public_id: '',
-                            urn: '',
+                            public_id: publicId,
+                            profile_url: profileUrl,
+                            urn: publicId ? `urn:li:fsd_profile:${publicId}` : '',
                             picture_url: imgEl ? imgEl.src : null,
                             is_self: false
                         }],
@@ -1321,9 +1634,9 @@ async def fetch_conversation_messages_api(account, conversation_urn_id: str, loa
     if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         return []
 
-    async with _browser_manager.get_lock():
+    async with _browser_manager.get_messaging_lock():
         try:
-            page = await _browser_manager.get_page(account)
+            page = await _browser_manager.get_messaging_page(account)
             intercepted_messages = []
 
             async def handle_response(response):
@@ -1403,8 +1716,27 @@ async def fetch_conversation_messages_api(account, conversation_urn_id: str, loa
                 const myImg = document.querySelector('.global-nav__me-photo, img[alt*="Photo of"]');
                 const myName = myImg ? (myImg.alt || '').replace('Photo of', '').trim().toLowerCase() : '';
 
+                // Extract active thread header profile link if available
+                const headerLink = document.querySelector('.msg-thread__link-to-profile, .msg-title-bar a[href*="/in/"], .msg-entity-lockup a[href*="/in/"], a.msg-thread__profile-link, .msg-conversation-header a[href*="/in/"], a[href*="/in/"]');
+                let headerProfileUrl = '';
+                let headerPublicId = '';
+                if (headerLink && headerLink.href) {
+                    headerProfileUrl = headerLink.href.split('?')[0];
+                    const m = headerProfileUrl.match(/\/in\/([^\/\?#]+)/);
+                    if (m) headerPublicId = m[1];
+                }
+
                 listItems.forEach((el, idx) => {
                     const senderEl = el.querySelector('.msg-s-message-group__name, .msg-s-message-group__profile-link, h4');
+                    const profileLinkEl = el.querySelector('a.msg-s-message-group__profile-link, a[href*="/in/"]');
+                    let senderProfileUrl = headerProfileUrl;
+                    let senderPublicId = headerPublicId;
+                    if (profileLinkEl && profileLinkEl.href) {
+                        senderProfileUrl = profileLinkEl.href.split('?')[0];
+                        const m = senderProfileUrl.match(/\/in\/([^\/\?#]+)/);
+                        if (m) senderPublicId = m[1];
+                    }
+
                     const timeEl = el.querySelector('time, .msg-s-message-group__timestamp');
                     const time = timeEl ? timeEl.innerText.trim() : '';
                     const sender = senderEl ? senderEl.innerText.trim() : 'LinkedIn Member';
@@ -1428,8 +1760,9 @@ async def fetch_conversation_messages_api(account, conversation_urn_id: str, loa
                             created_at: time,
                             text: text,
                             sender_name: sender,
-                            sender_urn: '',
-                            sender_public_id: '',
+                            sender_urn: isSelf ? '' : (senderPublicId ? `urn:li:fsd_profile:${senderPublicId}` : ''),
+                            sender_public_id: isSelf ? '' : senderPublicId,
+                            sender_profile_url: isSelf ? '' : senderProfileUrl,
                             sender_avatar: imgEl ? imgEl.src : null,
                             is_self: isSelf,
                         });
@@ -1498,6 +1831,159 @@ async def send_conversation_message_api(account, conversation_urn_id: str, messa
         except Exception as exc:
             logger.error("Failed to send message via browser: %s", exc)
             raise RuntimeError(f"Failed to dispatch message: {str(exc)}")
+
+
+def auto_convert_linkedin_dm_to_crm_lead(
+    db,
+    account,
+    conversation_id: str,
+    contact_name: str,
+    contact_urn: Optional[str] = None,
+    public_id: Optional[str] = None,
+    profile_url: Optional[str] = None,
+    last_message: Optional[str] = None,
+    eval_res: Optional[Any] = None,
+) -> Optional[Any]:
+    """Auto-captures a qualified LinkedIn DM / InMail with commercial buying intent into CRM Customers.
+    
+    Idempotent by design: if an account for this customer already exists, it updates metadata
+    and returns the existing account without creating duplicates.
+    """
+    from ..models import LeadCustomer, LeadConversation, Lead, LeadAccount, utcnow
+    from ..models_ext import LeadChannelIdentity
+    from ..security import encrypt_pii
+    from ..services import crm as crm_service
+    from ..services.intent_detector import LeadIntentEvaluator
+
+    # Check settings: is auto_dm_leads enabled for this account?
+    meta = account.MetaJson or {}
+    if not meta.get("linkedin_auto_dm_leads", True):
+        logger.debug("LinkedIn auto DM leads conversion is disabled in settings; skipping CRM capture.")
+        return None
+
+    if not eval_res or not eval_res.is_lead:
+        if not last_message:
+            return None
+        eval_res = LeadIntentEvaluator.evaluate_text(last_message, contact_name=contact_name)
+        if not eval_res.is_lead:
+            return None
+
+    effective_contact_name = contact_name or "LinkedIn Member"
+    effective_urn = contact_urn or (f"urn:li:fsd_profile:{public_id}" if public_id else f"li_{conversation_id}")
+    
+    if not profile_url and public_id:
+        profile_url = f"https://www.linkedin.com/in/{public_id}"
+
+    # 1. Find or link LeadCustomer and LeadChannelIdentity using unified multi-key resolver
+    customer, identity = find_or_link_linkedin_customer(
+        db=db,
+        client_id=account.ClientId,
+        channel_account_id=account.Id,
+        sender_urn=effective_urn,
+        public_id=public_id,
+        profile_url=profile_url,
+        display_name=effective_contact_name,
+        conversation_id=conversation_id,
+        created_by="linkedin_dm_ai",
+    )
+
+    if customer and profile_url and customer.LinkedinProfileUrl != profile_url:
+        customer.LinkedinProfileUrl = profile_url
+        customer.UpdatedAt = utcnow()
+        logger.info(
+            "[CRM Lead LinkedIn URL] Stored profile URL '%s' for LeadCustomer %s ('%s')",
+            profile_url, customer.Id, effective_contact_name
+        )
+
+    # 2. Find or create LeadConversation
+    db_conv = db.query(LeadConversation).filter(
+        LeadConversation.ClientId == account.ClientId,
+        LeadConversation.Channel == "linkedin",
+        LeadConversation.ExternalThreadId == str(conversation_id),
+        LeadConversation.IsDeleted == False,
+    ).first()
+
+    if not db_conv:
+        db_conv = LeadConversation(
+            ClientId=account.ClientId,
+            CustomerId=customer.Id if customer else account.ClientId,
+            Channel="linkedin",
+            Status="open",
+            ChannelAccountId=account.Id,
+            ExternalThreadId=str(conversation_id),
+            Summary=last_message[:500] if last_message else None,
+            LastMessageAt=utcnow(),
+        )
+        db.add(db_conv)
+        db.flush()
+    else:
+        if last_message:
+            db_conv.Summary = last_message[:500]
+        db_conv.LastMessageAt = utcnow()
+
+    # 3. Create or return LeadAccount in CRM
+    crm_lead = crm_service.create_account(
+        db,
+        account.ClientId,
+        display_name=effective_contact_name,
+        stage="lead",
+        source="linkedin_dm",
+        customer_id=customer.Id if customer else None,
+        linkedin_profile_url=profile_url or (customer.LinkedinProfileUrl if customer else None),
+        tags=f"linkedin,dm_lead,{eval_res.category}," + ",".join(eval_res.signals),
+        fields={
+            "intent_score": eval_res.score,
+            "intent_category": eval_res.category,
+            "intent_signals": eval_res.signals,
+            "conversation_id": conversation_id,
+            "last_message": last_message,
+            "rationale": eval_res.rationale,
+        },
+        actor="linkedin_dm_ai",
+    )
+
+    if profile_url and not crm_lead.LinkedinProfileUrl:
+        crm_lead.LinkedinProfileUrl = profile_url
+        crm_lead.UpdatedAt = utcnow()
+
+    # 4. Link or update Lead in leadai_leads
+    db_lead = db.query(Lead).filter(
+        Lead.ConversationId == db_conv.Id,
+        Lead.IsDeleted == False,
+    ).first()
+
+    if not db_lead:
+        db_lead = Lead(
+            ClientId=account.ClientId,
+            ConversationId=db_conv.Id,
+            CreatedBy="linkedin_dm_ai",
+        )
+        db.add(db_lead)
+        db.flush()
+
+    db_lead.Status = "hot" if eval_res.score >= 0.85 else "warm"
+    db_lead.Score = int(eval_res.score * 100)
+    db_lead.Intent = eval_res.category
+    db_lead.ScoreBreakdown = {
+        "signals": eval_res.signals,
+        "rationale": eval_res.rationale,
+        "evaluated_at": utcnow().isoformat(),
+    }
+    db_lead.ConvertedAccountId = crm_lead.Id
+    db_lead.ConvertedAt = utcnow()
+    db_lead.UpdatedAt = utcnow()
+
+    if not crm_lead.SourceConversationId:
+        crm_lead.SourceConversationId = db_conv.Id
+    if not crm_lead.SourceLeadId:
+        crm_lead.SourceLeadId = db_lead.Id
+
+    db.commit()
+    logger.info(
+        "Auto-converted LinkedIn DM to CRM Customer Lead: %s (%s) - Intent: %s (score=%.2f)",
+        effective_contact_name, crm_lead.Id, eval_res.category, eval_res.score
+    )
+    return crm_lead
 
 
 async def sync_linkedin_conversations(db, account) -> dict:
@@ -1583,6 +2069,13 @@ async def sync_linkedin_conversations(db, account) -> dict:
 
         # Fetch messages for this thread to sync turns
         try:
+            from ..services.intent_detector import LeadIntentEvaluator
+            from ..services import crm as crm_service
+            from ..models import Lead
+
+            has_lead_intent = False
+            top_intent_result = None
+
             thread_messages = await fetch_conversation_messages_api(account, conv_id)
             for parsed_msg in thread_messages:
                 if not parsed_msg or not parsed_msg.get("text"):
@@ -1595,8 +2088,8 @@ async def sync_linkedin_conversations(db, account) -> dict:
                     LeadMessage.ExternalMessageId == event_urn
                 ).first() if event_urn else None
 
+                sender_type = "agent" if parsed_msg.get("is_self") else "customer"
                 if not existing_msg:
-                    sender_type = "agent" if parsed_msg.get("is_self") else "customer"
                     new_msg = LeadMessage(
                         ClientId=account.ClientId,
                         ConversationId=db_conv.Id,
@@ -1608,6 +2101,35 @@ async def sync_linkedin_conversations(db, account) -> dict:
                     )
                     db.add(new_msg)
                     synced_messages += 1
+
+                # Evaluate customer turn for commercial buying intent
+                if sender_type == "customer":
+                    eval_res = LeadIntentEvaluator.evaluate_text(parsed_msg["text"], contact_name=contact_name)
+                    if eval_res.is_lead:
+                        has_lead_intent = True
+                        if top_intent_result is None or eval_res.score > top_intent_result.score:
+                            top_intent_result = eval_res
+
+            # Also check the conversation summary/last_message if not yet flagged
+            if not has_lead_intent and summary.get("last_message"):
+                summary_eval = LeadIntentEvaluator.evaluate_text(summary["last_message"], contact_name=contact_name)
+                if summary_eval.is_lead:
+                    has_lead_intent = True
+                    top_intent_result = summary_eval
+
+            # If commercial buying intent was detected, auto-capture into CRM as a qualified Lead!
+            if has_lead_intent and top_intent_result:
+                public_id = summary.get("contact_public_id")
+                auto_convert_linkedin_dm_to_crm_lead(
+                    db=db,
+                    account=account,
+                    conversation_id=conv_id,
+                    contact_name=contact_name,
+                    contact_urn=contact_urn,
+                    public_id=public_id,
+                    last_message=summary.get("last_message"),
+                    eval_res=top_intent_result,
+                )
         except Exception as thread_exc:
             logger.warning("Failed syncing messages for conversation %s: %s", conv_id, thread_exc)
 
@@ -1619,127 +2141,125 @@ async def sync_linkedin_conversations(db, account) -> dict:
 # LinkedIn Comments & Replies Automation via Browser
 # ===========================================================================
 
-async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int = 10) -> dict:
+async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int = 2) -> dict:
     """
     Extract recent posts and comments using hybrid In-Browser Voyager API
     with intelligent DOM fallback, sync into LeadSocialComment table,
     and trigger AI contextual reply generation.
+    Enforces strict process isolation from messaging/InMail to prevent session contention and detection.
     """
     from ..models_blog import LeadSocialComment, LeadCommentSettings, LeadArticle
     from ..services.comment_reply_ai import CommentReplyAIService
+
+    limit_posts = min(max(1, limit_posts), 2)
 
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
     if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         raise ValueError("LinkedIn session credentials not configured")
 
+    if _browser_manager.is_messaging_active():
+        logger.info("[LinkedIn Isolation] Active messaging detected. Deferring background comments scan.")
+        return {"synced_comments": 0, "status": "deferred", "reason": "messaging_in_use"}
+
     settings = CommentReplyAIService.get_or_create_settings(db, account.ClientId, "linkedin")
 
+    extracted_posts = []
     try:
-        async with _browser_manager.get_lock():
-            page = await _browser_manager.get_page(account)
+        async with _browser_manager.get_comments_lock():
+            if _browser_manager.is_messaging_active():
+                logger.info("[LinkedIn Isolation] Messaging became active before comments lock. Deferring.")
+                return {"synced_comments": 0, "status": "deferred", "reason": "messaging_in_use"}
 
-            # Ensure page is on linkedin domain so cookies & origin headers are valid
-            if "linkedin.com" not in page.url or "about:blank" in page.url:
-                try:
-                    await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=20000)
-                    await asyncio.sleep(2)
-                except Exception as feed_err:
-                    logger.debug("Initial feed load notice: %s", feed_err)
+            page = await _browser_manager.get_comments_page(account)
+            if not page:
+                return {"synced_comments": 0, "status": "deferred", "reason": "messaging_in_use"}
 
-            # 1. Discover all live posts from DB articles and user's native posts feed
-            posts_to_scan = []
-            existing_urns = set()
+            try:
+                # Ensure page is on linkedin domain
+                if "linkedin.com" not in page.url or "about:blank" in page.url:
+                    try:
+                        await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=15000)
+                        await asyncio.sleep(1.5)
+                    except Exception as feed_err:
+                        logger.debug("Initial feed load notice: %s", feed_err)
 
-            # Correlate first with published DB articles
-            db_articles = db.query(LeadArticle).filter(
-                LeadArticle.ClientId == account.ClientId,
-                LeadArticle.LinkedInPostId != None,
-                LeadArticle.IsDeleted == False
-            ).order_by(LeadArticle.CreatedAt.desc()).limit(limit_posts).all()
+                # 1. Discover posts to scan (minimal & light to avoid detection)
+                posts_to_scan = []
+                existing_urns = set()
 
-            for art in db_articles:
-                if art.LinkedInPostId and (art.LinkedInPostId.startswith("urn:li:activity:") or art.LinkedInPostId.startswith("urn:li:ugcPost:")):
-                    if art.LinkedInPostId not in existing_urns and len(posts_to_scan) < limit_posts:
-                        posts_to_scan.append({
-                            "post_urn": art.LinkedInPostId,
-                            "post_url": f"https://www.linkedin.com/feed/update/{art.LinkedInPostId}/",
-                            "title": art.Title,
-                            "article_id": art.Id,
-                        })
-                        existing_urns.add(art.LinkedInPostId)
+                # Correlate first with published DB articles
+                db_articles = db.query(LeadArticle).filter(
+                    LeadArticle.ClientId == account.ClientId,
+                    LeadArticle.LinkedInPostId != None,
+                    LeadArticle.IsDeleted == False
+                ).order_by(LeadArticle.CreatedAt.desc()).limit(limit_posts).all()
 
-            # Discover candidate activity tabs & notifications (where comment alerts live)
-            user_profile_url = await safe_evaluate(page, '''() => {
-                const el = document.querySelector('.feed-identity-module a[href*="/in/"], a.feed-identity-module__actor-meta, a.profile-rail-card__actor-link, .global-nav__me a[href*="/in/"], a[href*="/in/"]');
-                return el ? el.href : null;
-            }''', fallback=None)
-
-            candidate_urls = []
-            # 1. Notifications tab is the primary source for posts that received new comments
-            candidate_urls.append("https://www.linkedin.com/notifications/")
-            if user_profile_url and "/in/" in user_profile_url:
-                clean_p = user_profile_url.split("?")[0].rstrip("/")
-                candidate_urls.append(f"{clean_p}/recent-activity/all/")
-                candidate_urls.append(f"{clean_p}/recent-activity/posts/")
-            candidate_urls.append("https://www.linkedin.com/in/me/recent-activity/all/")
-            candidate_urls.append("https://www.linkedin.com/in/me/recent-activity/posts/")
-            candidate_urls.append("https://www.linkedin.com/feed/")
-
-            for target_tab_url in candidate_urls:
-                if len(posts_to_scan) >= limit_posts:
-                    break
-                try:
-                    await _browser_manager.navigate_with_session(page, account, target_tab_url, wait_until="domcontentloaded", timeout=20000)
-                    await safe_evaluate(page, "() => window.scrollBy(0, 600)")
-                    await asyncio.sleep(2)
-
-                    activity_urns = await safe_evaluate(page, '''() => {
-                        const urns = [];
-                        const seen = new Set();
-                        const items = document.querySelectorAll('.feed-shared-update-v2, .profile-creator-shared-feed-update__container, [data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-urn*="urn:li:share"], [data-id*="urn:li:activity"], [data-id*="urn:li:ugcPost"], [data-id*="urn:li:share"], [data-view-name="feed-full-update"], .nt-card');
-                        items.forEach(el => {
-                            const u = el.getAttribute('data-urn') || el.getAttribute('data-id') || el.getAttribute('data-activity-urn') || '';
-                            const match = u.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
-                            if (match && !seen.has(match[0])) {
-                                seen.add(match[0]);
-                                urns.push(match[0]);
-                            }
-                        });
-                        const links = document.querySelectorAll('a[href*="/feed/update/"], a[href*="/analytics/post-summary/"], a[href*="activity:"], a[href*="ugcPost:"], a[href*="share:"], a.nt-card__headline');
-                        links.forEach(l => {
-                            const href = l.href || '';
-                            const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
-                            if (match && !seen.has(match[0])) {
-                                seen.add(match[0]);
-                                urns.push(match[0]);
-                            }
-                        });
-                        return urns;
-                    }''', fallback=[])
-
-                    for act_urn in (activity_urns or []):
-                        if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
-                            p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
+                for art in db_articles:
+                    if art.LinkedInPostId and (art.LinkedInPostId.startswith("urn:li:activity:") or art.LinkedInPostId.startswith("urn:li:ugcPost:")):
+                        if art.LinkedInPostId not in existing_urns and len(posts_to_scan) < limit_posts:
                             posts_to_scan.append({
-                                "post_urn": act_urn,
-                                "post_url": p_url,
-                                "title": None,
-                                "article_id": None,
+                                "post_urn": art.LinkedInPostId,
+                                "post_url": f"https://www.linkedin.com/feed/update/{art.LinkedInPostId}/",
+                                "title": art.Title,
+                                "article_id": art.Id,
                             })
-                            existing_urns.add(act_urn)
-                except Exception as tab_err:
-                    logger.debug("Checking activity tab %s notice: %s", target_tab_url, tab_err)
+                            existing_urns.add(art.LinkedInPostId)
 
-            logger.info("Found %d posts to scan for comments across activity and notifications", len(posts_to_scan))
+                # If needed, check ONLY the notifications tab (never spam 5 URLs)
+                if len(posts_to_scan) < limit_posts:
+                    try:
+                        await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/notifications/", wait_until="domcontentloaded", timeout=15000)
+                        await asyncio.sleep(1.5)
 
-            # 2. Extract comments for each post using Hybrid In-Browser Voyager API
-            extracted_posts = []
+                        activity_urns = await safe_evaluate(page, '''() => {
+                            const urns = [];
+                            const seen = new Set();
+                            const items = document.querySelectorAll('.feed-shared-update-v2, [data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-id*="urn:li:activity"], .nt-card');
+                            items.forEach(el => {
+                                const u = el.getAttribute('data-urn') || el.getAttribute('data-id') || el.getAttribute('data-activity-urn') || '';
+                                const match = u.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
+                                if (match && !seen.has(match[0])) {
+                                    seen.add(match[0]);
+                                    urns.push(match[0]);
+                                }
+                            });
+                            const links = document.querySelectorAll('a[href*="/feed/update/"], a[href*="activity:"], .nt-card__headline');
+                            links.forEach(l => {
+                                const href = l.href || '';
+                                const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
+                                if (match && !seen.has(match[0])) {
+                                    seen.add(match[0]);
+                                    urns.push(match[0]);
+                                }
+                            });
+                            return urns;
+                        }''', fallback=[])
 
-            for p_info in posts_to_scan:
-                post_urn = p_info["post_urn"]
-                target_url = p_info["post_url"]
-                post_comments = []
-                post_text = ""
+                        for act_urn in (activity_urns or []):
+                            if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
+                                p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
+                                posts_to_scan.append({
+                                    "post_urn": act_urn,
+                                    "post_url": p_url,
+                                    "title": None,
+                                    "article_id": None,
+                                })
+                                existing_urns.add(act_urn)
+                    except Exception as tab_err:
+                        logger.debug("Checking notifications notice: %s", tab_err)
+
+                logger.info("[LinkedIn Safe Scan] Found %d post(s) to scan for comments", len(posts_to_scan))
+
+                # 2. Extract comments for each post using Hybrid In-Browser Voyager API
+                for p_info in posts_to_scan:
+                    if _browser_manager.is_messaging_active():
+                        logger.info("[LinkedIn Isolation] Yielding comment scan to active messaging session.")
+                        break
+
+                    post_urn = p_info["post_urn"]
+                    target_url = p_info["post_url"]
+                    post_comments = []
+                    post_text = ""
 
                 # --- Passive Network Interception on GraphQL Comments ---
                 captured_comments = []
@@ -1955,8 +2475,10 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                     "comments": post_comments,
                     "post_text": post_text
                 })
+            finally:
+                await _browser_manager.close_comments_page()
 
-        # 3. Database Sync & AI processing
+        # 3. Database Sync & AI processing (Runs outside browser lock)
         synced_comments_count = 0
         new_leads_count = 0
         auto_replies_count = 0
