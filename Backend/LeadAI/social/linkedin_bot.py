@@ -2141,7 +2141,7 @@ async def sync_linkedin_conversations(db, account) -> dict:
 # LinkedIn Comments & Replies Automation via Browser
 # ===========================================================================
 
-async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int = 2) -> dict:
+async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int = 2, is_background_job: bool = False) -> dict:
     """
     Extract recent posts and comments using hybrid In-Browser Voyager API
     with intelligent DOM fallback, sync into LeadSocialComment table,
@@ -2157,8 +2157,8 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
     if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
         raise ValueError("LinkedIn session credentials not configured")
 
-    if _browser_manager.is_messaging_active():
-        logger.info("[LinkedIn Isolation] Active messaging detected. Deferring background comments scan.")
+    if is_background_job and _browser_manager.is_messaging_active(cooldown=60.0):
+        logger.info("[LinkedIn Isolation] Live messaging active in the last 60s. Deferring scheduled comments scan.")
         return {"synced_comments": 0, "status": "deferred", "reason": "messaging_in_use"}
 
     settings = CommentReplyAIService.get_or_create_settings(db, account.ClientId, "linkedin")
@@ -2166,8 +2166,8 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
     extracted_posts = []
     try:
         async with _browser_manager.get_comments_lock():
-            if _browser_manager.is_messaging_active():
-                logger.info("[LinkedIn Isolation] Messaging became active before comments lock. Deferring.")
+            if is_background_job and _browser_manager.is_messaging_active(cooldown=60.0):
+                logger.info("[LinkedIn Isolation] Messaging became active before comments lock. Deferring scheduled scan.")
                 return {"synced_comments": 0, "status": "deferred", "reason": "messaging_in_use"}
 
             page = await _browser_manager.get_comments_page(account)
@@ -2252,8 +2252,8 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
 
                 # 2. Extract comments for each post using Hybrid In-Browser Voyager API
                 for p_info in posts_to_scan:
-                    if _browser_manager.is_messaging_active():
-                        logger.info("[LinkedIn Isolation] Yielding comment scan to active messaging session.")
+                    if is_background_job and _browser_manager.is_messaging_active(cooldown=60.0):
+                        logger.info("[LinkedIn Isolation] Live messaging active during scheduled scan. Gracefully yielding.")
                         break
 
                     post_urn = p_info["post_urn"]
@@ -2261,220 +2261,220 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                     post_comments = []
                     post_text = ""
 
-                # --- Passive Network Interception on GraphQL Comments ---
-                captured_comments = []
+                    # --- Passive Network Interception on GraphQL Comments ---
+                    captured_comments = []
 
-                async def handle_comment_response(response):
-                    url = response.url
-                    if ("voyagerFeedDashComments" in url or "voyagerSocialDashComments" in url or "comments" in url or "graphql" in url) and response.status == 200:
-                        try:
-                            data = await response.json()
-                            parsed = _parse_graphql_comments_payload(data)
+                    async def handle_comment_response(response):
+                        url = response.url
+                        if ("voyagerFeedDashComments" in url or "voyagerSocialDashComments" in url or "comments" in url or "graphql" in url) and response.status == 200:
+                            try:
+                                data = await response.json()
+                                parsed = _parse_graphql_comments_payload(data)
+                                if parsed:
+                                    captured_comments.extend(parsed)
+                            except Exception:
+                                pass
+
+                    page.on("response", handle_comment_response)
+
+                    try:
+                        await _browser_manager.navigate_with_session(page, account, target_url, wait_until="domcontentloaded", timeout=20000)
+                        # Natural human scroll into comments section to trigger lazy loading
+                        await safe_evaluate(page, "() => window.scrollBy(0, 600)")
+                        await asyncio.sleep(1.0)
+                    
+                        # 1. Switch comment filter dropdown from 'Most relevant' to 'All comments' / 'Most recent' if present
+                        await safe_evaluate(page, '''() => {
+                            const sortDropdown = document.querySelector('button[aria-label*="sort" i], button.comments-sort-order-toggle, button[aria-controls*="sort" i]');
+                            if (sortDropdown) {
+                                sortDropdown.click();
+                            }
+                        }''')
+                        await asyncio.sleep(0.5)
+                        await safe_evaluate(page, '''() => {
+                            const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], li[role="menuitem"], button[role="menuitem"]'));
+                            for (const item of menuItems) {
+                                const t = (item.innerText || '').toLowerCase();
+                                if (t.includes('all comments') || t.includes('most recent') || t.includes('recent')) {
+                                    item.click();
+                                    break;
+                                }
+                            }
+                        }''')
+                        await asyncio.sleep(1.0)
+
+                        # 2. Multi-pass recursive expansion for 'Load more comments', 'Previous comments', and nested replies
+                        for _ in range(3):
+                            clicked_any = await safe_evaluate(page, '''() => {
+                                let clicked = false;
+                                const buttons = Array.from(document.querySelectorAll('button, span[role="button"], a[role="button"]'));
+                                for (const b of buttons) {
+                                    const text = (b.innerText || '').trim().toLowerCase();
+                                    if (
+                                        text.includes('previous comments') ||
+                                        text.includes('more comments') ||
+                                        text.includes('load comments') ||
+                                        text.includes('load previous') ||
+                                        text.includes('previous replies') ||
+                                        text.includes('more replies') ||
+                                        text.includes('show replies') ||
+                                        text.includes('show previous') ||
+                                        /\d+\s+repl(y|ies)/.test(text)
+                                    ) {
+                                        try {
+                                            b.click();
+                                            clicked = true;
+                                        } catch(e) {}
+                                    }
+                                }
+                                return clicked;
+                            }''', fallback=False)
+                            if clicked_any:
+                                await asyncio.sleep(random.uniform(1.2, 2.0))
+                            else:
+                                break
+                    finally:
+                        page.remove_listener("response", handle_comment_response)
+
+                    # 1b. Check Embedded GraphQL Hydration JSON (<code id="bpr-guid-...">)
+                    embedded_json_payloads = await safe_evaluate(page, '''() => {
+                        const payloads = [];
+                        const codeTags = document.querySelectorAll('code[id^="bpr-guid-"]');
+                        codeTags.forEach(el => {
+                            try {
+                                const raw = el.textContent || el.innerText;
+                                if (raw && (raw.includes('Comment') || raw.includes('comment') || raw.includes('included') || raw.includes('dash.feed'))) {
+                                    payloads.push(JSON.parse(raw));
+                                }
+                            } catch(e) {}
+                        });
+                        return payloads;
+                    }''', fallback=[])
+
+                    if embedded_json_payloads:
+                        for p in embedded_json_payloads:
+                            parsed = _parse_graphql_comments_payload(p)
                             if parsed:
                                 captured_comments.extend(parsed)
-                        except Exception:
-                            pass
 
-                page.on("response", handle_comment_response)
+                    all_extracted_comments = []
+                    if captured_comments:
+                        all_extracted_comments.extend(captured_comments)
 
-                try:
-                    await _browser_manager.navigate_with_session(page, account, target_url, wait_until="domcontentloaded", timeout=20000)
-                    # Natural human scroll into comments section to trigger lazy loading
-                    await safe_evaluate(page, "() => window.scrollBy(0, 600)")
-                    await asyncio.sleep(1.0)
-                    
-                    # 1. Switch comment filter dropdown from 'Most relevant' to 'All comments' / 'Most recent' if present
-                    await safe_evaluate(page, '''() => {
-                        const sortDropdown = document.querySelector('button[aria-label*="sort" i], button.comments-sort-order-toggle, button[aria-controls*="sort" i]');
-                        if (sortDropdown) {
-                            sortDropdown.click();
-                        }
-                    }''')
-                    await asyncio.sleep(0.5)
-                    await safe_evaluate(page, '''() => {
-                        const menuItems = Array.from(document.querySelectorAll('div[role="menuitem"], li[role="menuitem"], button[role="menuitem"]'));
-                        for (const item of menuItems) {
-                            const t = (item.innerText || '').toLowerCase();
-                            if (t.includes('all comments') || t.includes('most recent') || t.includes('recent')) {
-                                item.click();
-                                break;
-                            }
-                        }
-                    }''')
-                    await asyncio.sleep(1.0)
-
-                    # 2. Multi-pass recursive expansion for 'Load more comments', 'Previous comments', and nested replies
-                    for _ in range(3):
-                        clicked_any = await safe_evaluate(page, '''() => {
-                            let clicked = false;
-                            const buttons = Array.from(document.querySelectorAll('button, span[role="button"], a[role="button"]'));
-                            for (const b of buttons) {
-                                const text = (b.innerText || '').trim().toLowerCase();
-                                if (
-                                    text.includes('previous comments') ||
-                                    text.includes('more comments') ||
-                                    text.includes('load comments') ||
-                                    text.includes('load previous') ||
-                                    text.includes('previous replies') ||
-                                    text.includes('more replies') ||
-                                    text.includes('show replies') ||
-                                    text.includes('show previous') ||
-                                    /\d+\s+repl(y|ies)/.test(text)
-                                ) {
-                                    try {
-                                        b.click();
-                                        clicked = true;
-                                    } catch(e) {}
-                                }
-                            }
-                            return clicked;
-                        }''', fallback=False)
-                        if clicked_any:
-                            await asyncio.sleep(random.uniform(1.2, 2.0))
-                        else:
-                            break
-                finally:
-                    page.remove_listener("response", handle_comment_response)
-
-                # 1b. Check Embedded GraphQL Hydration JSON (<code id="bpr-guid-...">)
-                embedded_json_payloads = await safe_evaluate(page, '''() => {
-                    const payloads = [];
-                    const codeTags = document.querySelectorAll('code[id^="bpr-guid-"]');
-                    codeTags.forEach(el => {
-                        try {
-                            const raw = el.textContent || el.innerText;
-                            if (raw && (raw.includes('Comment') || raw.includes('comment') || raw.includes('included') || raw.includes('dash.feed'))) {
-                                payloads.push(JSON.parse(raw));
-                            }
-                        } catch(e) {}
-                    });
-                    return payloads;
-                }''', fallback=[])
-
-                if embedded_json_payloads:
-                    for p in embedded_json_payloads:
-                        parsed = _parse_graphql_comments_payload(p)
-                        if parsed:
-                            captured_comments.extend(parsed)
-
-                all_extracted_comments = []
-                if captured_comments:
-                    all_extracted_comments.extend(captured_comments)
-
-                # 1c. DOM Scraper for any dynamically rendered comments
-                try:
-                    dom_comments = await safe_evaluate(page, r'''() => {
-                        const comments = [];
-                        const seenTexts = new Set();
+                    # 1c. DOM Scraper for any dynamically rendered comments
+                    try:
+                        dom_comments = await safe_evaluate(page, r'''() => {
+                            const comments = [];
+                            const seenTexts = new Set();
                         
-                        const postAuthorEl = document.querySelector('.update-components-actor__name, .feed-shared-actor__name, .feed-shared-actor__title');
-                        const postAuthorName = postAuthorEl ? postAuthorEl.innerText.split('\n')[0].replace(/\s+2nd.*/, '').replace(/•.*/, '').trim().toLowerCase() : '';
+                            const postAuthorEl = document.querySelector('.update-components-actor__name, .feed-shared-actor__name, .feed-shared-actor__title');
+                            const postAuthorName = postAuthorEl ? postAuthorEl.innerText.split('\n')[0].replace(/\s+2nd.*/, '').replace(/•.*/, '').trim().toLowerCase() : '';
 
-                        // 1. Target all comment item container blocks
-                        const containers = Array.from(document.querySelectorAll(
-                            'article.comments-comment-item, .comments-comment-item, [data-id*="urn:li:comment"], [data-id*="urn:li:fsd_comment"], .comments-comments-list__comment-item'
-                        ));
+                            // 1. Target all comment item container blocks
+                            const containers = Array.from(document.querySelectorAll(
+                                'article.comments-comment-item, .comments-comment-item, [data-id*="urn:li:comment"], [data-id*="urn:li:fsd_comment"], .comments-comments-list__comment-item'
+                            ));
 
-                        for (const container of containers) {
-                            const textEl = container.querySelector(
-                                '.comments-comment-item__main-content, [data-testid="expandable-text-box"], .comments-comment-item-content-body, span.update-components-text, span[dir="ltr"]'
-                            ) || container.querySelector('p, span');
+                            for (const container of containers) {
+                                const textEl = container.querySelector(
+                                    '.comments-comment-item__main-content, [data-testid="expandable-text-box"], .comments-comment-item-content-body, span.update-components-text, span[dir="ltr"]'
+                                ) || container.querySelector('p, span');
                             
-                            const commentText = textEl ? (textEl.innerText || '').trim() : '';
-                            if (!commentText || commentText.length > 800 || seenTexts.has(commentText)) continue;
-                            seenTexts.add(commentText);
+                                const commentText = textEl ? (textEl.innerText || '').trim() : '';
+                                if (!commentText || commentText.length > 800 || seenTexts.has(commentText)) continue;
+                                seenTexts.add(commentText);
 
-                            const authorLink = container.querySelector('a[href*="/in/"]');
-                            let authorName = 'LinkedIn Member';
-                            let profileUrl = '';
-                            if (authorLink) {
-                                const rawName = authorLink.innerText ? authorLink.innerText.split('\n')[0] : '';
-                                authorName = rawName.replace(/\s+2nd.*/, '').replace(/\s+1st.*/, '').replace(/\s+3rd.*/, '').replace(/•.*/, '').replace(/View.*profile/i, '').trim() || 'LinkedIn Member';
-                                profileUrl = authorLink.href ? authorLink.href.split('?')[0] : '';
-                            }
-
-                            const headlineEl = container.querySelector('.comments-comment-meta__description, .comments-comment-item__headline, .comments-post-meta__headline');
-                            const headline = headlineEl ? headlineEl.innerText.trim() : '';
-
-                            const img = container.querySelector('img');
-                            const avatar = img ? img.src : null;
-                            const cUrn = container.getAttribute('data-id') || container.getAttribute('id') || `c-${authorName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${commentText.slice(0, 15)}`;
-
-                            const isAuthorBadge = Boolean(
-                                container.querySelector('.comments-comment-item__badge, .comments-comment-item__author-badge, [aria-label*="Author"], .comments-post-meta__author-badge') ||
-                                (container.innerText && /\bAuthor\b/i.test(container.innerText.split('\n').slice(0, 4).join(' ')))
-                            );
-                            const isAuthor = isAuthorBadge || (postAuthorName && authorName.toLowerCase() === postAuthorName);
-
-                            comments.push({
-                                comment_urn: cUrn,
-                                author_name: authorName,
-                                author_headline: headline,
-                                author_profile_url: profileUrl,
-                                author_avatar: avatar,
-                                comment_text: commentText,
-                                is_author: isAuthor,
-                            });
-                        }
-
-                        // 2. Secondary scan if container matching was empty
-                        if (comments.length === 0) {
-                            const allTextNodes = Array.from(document.querySelectorAll('.comments-comment-item__main-content, [data-testid="expandable-text-box"]'));
-                            for (const tNode of allTextNodes) {
-                                const txt = (tNode.innerText || '').trim();
-                                if (!txt || txt.length > 800 || seenTexts.has(txt)) continue;
-                                seenTexts.add(txt);
-                                
-                                let p = tNode.parentElement;
-                                let aLink = null;
-                                for (let i = 0; i < 6 && p; i++) {
-                                    aLink = p.querySelector('a[href*="/in/"]');
-                                    if (aLink) break;
-                                    p = p.parentElement;
+                                const authorLink = container.querySelector('a[href*="/in/"]');
+                                let authorName = 'LinkedIn Member';
+                                let profileUrl = '';
+                                if (authorLink) {
+                                    const rawName = authorLink.innerText ? authorLink.innerText.split('\n')[0] : '';
+                                    authorName = rawName.replace(/\s+2nd.*/, '').replace(/\s+1st.*/, '').replace(/\s+3rd.*/, '').replace(/•.*/, '').replace(/View.*profile/i, '').trim() || 'LinkedIn Member';
+                                    profileUrl = authorLink.href ? authorLink.href.split('?')[0] : '';
                                 }
-                                const name = aLink ? aLink.innerText.split('\n')[0].trim() : 'LinkedIn Member';
-                                const url = aLink ? aLink.href.split('?')[0] : '';
+
+                                const headlineEl = container.querySelector('.comments-comment-meta__description, .comments-comment-item__headline, .comments-post-meta__headline');
+                                const headline = headlineEl ? headlineEl.innerText.trim() : '';
+
+                                const img = container.querySelector('img');
+                                const avatar = img ? img.src : null;
+                                const cUrn = container.getAttribute('data-id') || container.getAttribute('id') || `c-${authorName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${commentText.slice(0, 15)}`;
+
+                                const isAuthorBadge = Boolean(
+                                    container.querySelector('.comments-comment-item__badge, .comments-comment-item__author-badge, [aria-label*="Author"], .comments-post-meta__author-badge') ||
+                                    (container.innerText && /\bAuthor\b/i.test(container.innerText.split('\n').slice(0, 4).join(' ')))
+                                );
+                                const isAuthor = isAuthorBadge || (postAuthorName && authorName.toLowerCase() === postAuthorName);
+
                                 comments.push({
-                                    comment_urn: `c-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${txt.slice(0, 15)}`,
-                                    author_name: name,
-                                    author_headline: '',
-                                    author_profile_url: url,
-                                    author_avatar: null,
-                                    comment_text: txt,
-                                    is_author: false,
+                                    comment_urn: cUrn,
+                                    author_name: authorName,
+                                    author_headline: headline,
+                                    author_profile_url: profileUrl,
+                                    author_avatar: avatar,
+                                    comment_text: commentText,
+                                    is_author: isAuthor,
                                 });
                             }
-                        }
 
-                        return comments;
-                    }''', fallback=[])
-                    if dom_comments:
-                        all_extracted_comments.extend(dom_comments)
-                except Exception as dom_err:
-                    logger.debug("DOM scraping fallback notice: %s", dom_err)
+                            // 2. Secondary scan if container matching was empty
+                            if (comments.length === 0) {
+                                const allTextNodes = Array.from(document.querySelectorAll('.comments-comment-item__main-content, [data-testid="expandable-text-box"]'));
+                                for (const tNode of allTextNodes) {
+                                    const txt = (tNode.innerText || '').trim();
+                                    if (!txt || txt.length > 800 || seenTexts.has(txt)) continue;
+                                    seenTexts.add(txt);
+                                
+                                    let p = tNode.parentElement;
+                                    let aLink = null;
+                                    for (let i = 0; i < 6 && p; i++) {
+                                        aLink = p.querySelector('a[href*="/in/"]');
+                                        if (aLink) break;
+                                        p = p.parentElement;
+                                    }
+                                    const name = aLink ? aLink.innerText.split('\n')[0].trim() : 'LinkedIn Member';
+                                    const url = aLink ? aLink.href.split('?')[0] : '';
+                                    comments.push({
+                                        comment_urn: `c-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${txt.slice(0, 15)}`,
+                                        author_name: name,
+                                        author_headline: '',
+                                        author_profile_url: url,
+                                        author_avatar: null,
+                                        comment_text: txt,
+                                        is_author: false,
+                                    });
+                                }
+                            }
 
-                # Deduplicate and merge comments across GraphQL & DOM
-                seen_signatures = set()
-                for c in all_extracted_comments:
-                    c_urn = c.get("comment_urn")
-                    c_author = (c.get("author_name") or "").strip().lower()
-                    c_text = (c.get("comment_text") or "").strip().lower()
-                    if not c_text:
-                        continue
-                    sig = c_urn if (c_urn and not c_urn.startswith("c-")) else f"{c_author}::{c_text[:30]}"
-                    if sig not in seen_signatures:
-                        seen_signatures.add(sig)
-                        post_comments.append(c)
+                            return comments;
+                        }''', fallback=[])
+                        if dom_comments:
+                            all_extracted_comments.extend(dom_comments)
+                    except Exception as dom_err:
+                        logger.debug("DOM scraping fallback notice: %s", dom_err)
 
-                logger.info("Found total %d distinct comments for post %s", len(post_comments), post_urn)
+                    # Deduplicate and merge comments across GraphQL & DOM
+                    seen_signatures = set()
+                    for c in all_extracted_comments:
+                        c_urn = c.get("comment_urn")
+                        c_author = (c.get("author_name") or "").strip().lower()
+                        c_text = (c.get("comment_text") or "").strip().lower()
+                        if not c_text:
+                            continue
+                        sig = c_urn if (c_urn and not c_urn.startswith("c-")) else f"{c_author}::{c_text[:30]}"
+                        if sig not in seen_signatures:
+                            seen_signatures.add(sig)
+                            post_comments.append(c)
 
-                extracted_posts.append({
-                    "post_urn": post_urn,
-                    "post_title": p_info.get("title"),
-                    "article_id": p_info.get("article_id"),
-                    "comments": post_comments,
-                    "post_text": post_text
-                })
+                    logger.info("Found total %d distinct comments for post %s", len(post_comments), post_urn)
+
+                    extracted_posts.append({
+                        "post_urn": post_urn,
+                        "post_title": p_info.get("title"),
+                        "article_id": p_info.get("article_id"),
+                        "comments": post_comments,
+                        "post_text": post_text
+                    })
             finally:
                 await _browser_manager.close_comments_page()
 
