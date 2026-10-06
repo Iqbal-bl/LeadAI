@@ -15,6 +15,8 @@ from ..db import get_leadai_db
 from ..models_blog import LeadBlogSettings
 from ..rbac import Principal, assert_owns, require, resolve_scope
 from ..security import encrypt_pii
+from .. import activity
+from ..activity import A
 from ..services.blog.article_service import ArticleService
 from ..services.blog.generator_service import GeneratorService
 from ..services.blog.topic_picker import TopicPickerService
@@ -185,6 +187,22 @@ def update_blog_settings(
 
     db.commit()
     db.refresh(bs)
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.BLOG_SETTINGS_UPDATED,
+        client_id=target_client,
+        entity_type="blog",
+        message=f"Blog settings updated (auto_blog={bs.IsAutoBlogEnabled}, mode={bs.Mode}, time={bs.ScheduleTime})",
+        meta={
+            "is_auto_blog_enabled": bs.IsAutoBlogEnabled,
+            "mode": bs.Mode,
+            "schedule_time": bs.ScheduleTime,
+            "topic_niche": bs.TopicNiche,
+            "target_channels": bs.TargetChannels,
+        },
+    )
 
     if bs.IsAutoBlogEnabled:
         from ..services.jobs import bootstrap_blog_job

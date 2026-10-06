@@ -161,6 +161,8 @@ import { ConfirmationDialogComponent } from './components/confirmation-dialog/co
 import { SearchBarComponent } from './components/search-bar/search-bar.component';
 import { HasPermissionDirective } from './directives/has-permission.directive';
 
+import { ModuleActivityLogsComponent } from './components/module-activity-logs/module-activity-logs.component';
+
 const SHARED_COMPONENTS = [
   EmptyStateComponent,
   ErrorStateComponent,
@@ -180,6 +182,7 @@ const SHARED_COMPONENTS = [
     ReactiveFormsModule,
     RouterModule,
     ...PRIMENG_MODULES,
+    ModuleActivityLogsComponent,
   ],
   exports: [
     CommonModule,
@@ -188,6 +191,7 @@ const SHARED_COMPONENTS = [
     RouterModule,
     ...PRIMENG_MODULES,
     ...SHARED_COMPONENTS,
+    ModuleActivityLogsComponent,
     HasPermissionDirective,
   ],
 })

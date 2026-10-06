@@ -755,6 +755,18 @@ async def save_auto_connect_settings(
     row.UpdatedAt = utcnow()
     db.commit()
 
+    activity.log(
+        db,
+        action=A.LINKEDIN_SETTINGS_UPDATED,
+        client_id=company_id,
+        entity_type="linkedin",
+        entity_id=row.Id,
+        log_type="Info",
+        message=f"LinkedIn Auto-Pilot settings updated (enabled={payload.enabled}, runs_per_day={payload.runs_per_day}, keywords='{payload.target_keywords}')",
+        meta=auto_cfg,
+        commit=True,
+    )
+
     return {"ok": True, "settings": auto_cfg}
 
 
@@ -780,6 +792,17 @@ async def trigger_auto_connect_now(
         payload={"company_id": company_id},
         commit=True,
     )
+
+    activity.log(
+        db,
+        action=A.LINKEDIN_AUTO_SEARCH_STARTED,
+        client_id=company_id,
+        entity_type="linkedin",
+        log_type="Info",
+        message="Manual run triggered for LinkedIn Auto-Pilot Candidate Search & Connection",
+        commit=True,
+    )
+
     return {"ok": True, "message": "Automated search and connection dispatch enqueued in background"}
 
 
