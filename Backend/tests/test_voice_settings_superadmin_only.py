@@ -67,7 +67,8 @@ def test_prepare_agent_context_reads_the_companys_voice_settings_not_the_script(
     client = Client(Name="Kestrel Voice 2")
     db.add(client)
     db.flush()
-    db.add(models.LeadCompanySettings(ClientId=client.Id, VoiceGender="male", VoiceSpeed=0.8, VoiceSpeaker="ritu"))
+    db.add(models.LeadCompanySettings(ClientId=client.Id, VoiceGender="male", VoiceSpeed=0.8, VoiceSpeaker="ritu",
+                                      SttTtsProvider="deepgram"))
     db.commit()
 
     _sections, _script, voice = call_bridge.prepare_agent_context(
@@ -76,6 +77,7 @@ def test_prepare_agent_context_reads_the_companys_voice_settings_not_the_script(
     assert voice["gender"] == "male"
     assert voice["pace"] == 0.8
     assert voice["speaker"] == "ritu"
+    assert voice["provider"] == "deepgram"
 
 
 def test_a_company_admin_cannot_set_voice_speaker_via_the_script_payload():
@@ -98,6 +100,23 @@ def test_prepare_agent_context_falls_back_to_platform_defaults_with_no_settings_
     assert voice["gender"] == "female"
     assert voice["pace"] == 1.1
     assert voice["speaker"] == "ritu"
+    assert voice["provider"] == "sarvam"
+
+
+def test_the_endpoint_writes_stt_tts_provider_and_it_comes_back_on_read():
+    db = SessionLocalAdmin()
+    client = Client(Name="Kestrel Voice 4")
+    db.add(client)
+    db.commit()
+
+    out = companies.update_voice_settings(
+        client.Id, VoiceSettingsIn(stt_tts_provider="deepgram"),
+        request=None, principal=_superadmin(), db=db,
+    )
+    assert out.stt_tts_provider == "deepgram"
+
+    read_back = companies.get_settings(client.Id, principal=_superadmin(), db=db)
+    assert read_back.stt_tts_provider == "deepgram"
 
 
 def test_build_services_passes_the_companys_pace_through_to_sarvam_tts_kwargs():
@@ -143,6 +162,91 @@ def test_build_services_passes_the_companys_pace_through_to_sarvam_tts_kwargs():
             os.environ["SARVAM_API_KEY"] = saved_key
 
     assert captured.get("pace") == 0.8
+
+
+def _with_fake_deepgram_modules(fn):
+    """Injects fake pipecat.services.deepgram.{stt,tts} modules for the
+    duration of `fn()`, restoring whatever (if anything) was there before."""
+    import os
+    import sys
+    import types
+
+    class _FakeSettings:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class _FakeSttService:
+        Settings = _FakeSettings
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class _FakeTtsService:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    stt_mod = types.ModuleType("pipecat.services.deepgram.stt")
+    stt_mod.DeepgramSTTService = _FakeSttService
+    tts_mod = types.ModuleType("pipecat.services.deepgram.tts")
+    tts_mod.DeepgramTTSService = _FakeTtsService
+    saved = (sys.modules.get("pipecat.services.deepgram.stt"), sys.modules.get("pipecat.services.deepgram.tts"))
+    sys.modules["pipecat.services.deepgram.stt"] = stt_mod
+    sys.modules["pipecat.services.deepgram.tts"] = tts_mod
+    saved_key = os.environ.get("DEEPGRAM_API_KEY")
+    os.environ["DEEPGRAM_API_KEY"] = "test-key"
+    try:
+        return fn(_FakeSttService, _FakeTtsService)
+    finally:
+        if saved[0] is None:
+            sys.modules.pop("pipecat.services.deepgram.stt", None)
+        else:
+            sys.modules["pipecat.services.deepgram.stt"] = saved[0]
+        if saved[1] is None:
+            sys.modules.pop("pipecat.services.deepgram.tts", None)
+        else:
+            sys.modules["pipecat.services.deepgram.tts"] = saved[1]
+        if saved_key is None:
+            os.environ.pop("DEEPGRAM_API_KEY", None)
+        else:
+            os.environ["DEEPGRAM_API_KEY"] = saved_key
+
+
+def test_build_services_switches_to_deepgram_when_the_company_is_set_to_it():
+    def _run(_FakeSttService, _FakeTtsService):
+        services = pipeline.build_services({
+            "provider": "deepgram", "speaker": "ritu", "gender": "male", "pace": 0.8,
+        })
+        assert isinstance(services.stt, _FakeSttService)
+        assert isinstance(services.tts, _FakeTtsService)
+        # Sarvam's voice id/pace must never leak into Deepgram's TTS kwargs —
+        # the exact failure mode the "anushka" bug taught us, for a different vendor.
+        assert "voice" not in services.tts.kwargs
+        assert "pace" not in services.tts.kwargs
+
+    _with_fake_deepgram_modules(_run)
+
+
+def test_build_services_stays_on_sarvam_when_no_provider_is_set():
+    """Every company that existed before this feature has no SttTtsProvider
+    row at all — build_services() must keep calling Sarvam for them, not
+    silently switch anyone to Deepgram."""
+    import os
+
+    def _run(_FakeSttService, _FakeTtsService):
+        saved_key = os.environ.get("SARVAM_API_KEY")
+        os.environ["SARVAM_API_KEY"] = "test-key"
+        try:
+            services = pipeline.build_services({"speaker": "ritu"})
+        finally:
+            if saved_key is None:
+                os.environ.pop("SARVAM_API_KEY", None)
+            else:
+                os.environ["SARVAM_API_KEY"] = saved_key
+        assert not isinstance(services.stt, _FakeSttService)
+        assert not isinstance(services.tts, _FakeTtsService)
+        assert "sarvam" in type(services.stt).__module__
+
+    _with_fake_deepgram_modules(_run)
 
 
 def test_multi_stt_defaults_on_so_a_new_script_can_detect_hinglish():

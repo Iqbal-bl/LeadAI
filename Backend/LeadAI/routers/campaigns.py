@@ -684,7 +684,11 @@ def update_campaign(
         row.ScheduledAt = campaign_runner.local_to_utc(row.ScheduledAt, row.TimeZone)
         # Any previously-queued fire for the OLD time must not also go off.
         jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
-        if row.Status in ("draft", "scheduled"):
+        # Mirrors /start's own rule: only a permanently-dead campaign can't be
+        # (re)scheduled. A "completed"/"paused"/"queued" campaign picking up a
+        # new scheduled_at is exactly the restart-later case, same as /start
+        # already lets you restart a "completed" campaign on demand.
+        if row.Status not in ("cancelled", "failed"):
             row.Status = "scheduled"
             jobs.enqueue(
                 db, "campaign.scheduled_start", {"campaign_id": row.Id},
@@ -871,6 +875,7 @@ def start_campaign(
         request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, execution, db=db)
     return campaign_out(row)
 
 
@@ -897,6 +902,7 @@ def pause_campaign(
         message=f"Paused '{row.Name}' at {row.SentCount} sent", request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, db=db)
     return campaign_out(row)
 
 
@@ -920,6 +926,7 @@ def resume_campaign(
         message=f"Resumed '{row.Name}'", request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, db=db)
     return campaign_out(row)
 
 
@@ -953,6 +960,7 @@ def cancel_campaign(
         message=f"Cancelled '{row.Name}'", log_type="Warning", request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, db=db)
     return campaign_out(row)
 
 

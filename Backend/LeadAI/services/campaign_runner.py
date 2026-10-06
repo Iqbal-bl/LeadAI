@@ -574,6 +574,7 @@ def fire_scheduled_campaign(db: Session, payload: dict) -> dict:
             message=f"Scheduled start of '{campaign.Name}' skipped: {reason}",
         )
         db.commit()
+        broadcast_campaign(campaign, db=db)
         return {"stopped": "billing", "reason": reason}
 
     built = (
@@ -594,6 +595,7 @@ def fire_scheduled_campaign(db: Session, payload: dict) -> dict:
             message=f"Scheduled start of '{campaign.Name}' skipped: no recipients",
         )
         db.commit()
+        broadcast_campaign(campaign, db=db)
         return {"stopped": "no_recipients"}
 
     execution = start_execution(db, campaign, "all")
@@ -608,6 +610,7 @@ def fire_scheduled_campaign(db: Session, payload: dict) -> dict:
         meta={"recipients": execution.TotalCount, "channel": campaign.Channel, "kind": campaign.Kind, "execution_id": execution.Id},
     )
     db.commit()
+    broadcast_campaign(campaign, execution, db=db)
     return {"started": execution.TotalCount}
 
 
@@ -653,6 +656,7 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         campaign.Status = "running"
         campaign.StartedAt = campaign.StartedAt or utcnow()
         db.commit()
+        broadcast_campaign(campaign, db=db)
 
     execution = _active_execution(db, campaign)
     client = db.get(Client, campaign.ClientId)
@@ -708,6 +712,7 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
     execution.FailedCount = (execution.FailedCount or 0) + failed
     execution.SkippedCount = (execution.SkippedCount or 0) + skipped
     _refresh_counters(db, campaign)
+    broadcast_campaign(campaign, execution, db=db)
 
     remaining = (
         db.query(func.count(LeadCampaignRecipient.Id))
@@ -981,6 +986,63 @@ def _place_call(
     return "sent"
 
 
+def _active_calls(db: Session, campaign: LeadCampaign) -> list[dict]:
+    """The actual in-flight calls right now — the same {callSid, recipientId}
+    shape the old VoiceAI batch system's `running_calls_with_ids` used, so a
+    frontend that already knows that shape needs no new parsing logic.
+    Bounded by Concurrency (<=50), so this is always a short list."""
+    rows = (
+        db.query(LeadCall.CallSid, LeadCampaignRecipient.Id)
+        .join(LeadCampaignRecipient, LeadCampaignRecipient.CallId == LeadCall.Id)
+        .filter(
+            LeadCampaignRecipient.CampaignId == campaign.Id,
+            LeadCall.Status.notin_(_TERMINAL_CALL_STATUSES),
+        )
+        .all()
+    )
+    return [{"callSid": sid, "recipientId": rid} for sid, rid in rows]
+
+
+def broadcast_campaign(
+    campaign: LeadCampaign, execution: LeadCampaignExecution | None = None, db: Session | None = None,
+) -> None:
+    """Push a live status/progress snapshot to /ws/leadai/campaign/{id}.
+
+    Best-effort and fire-and-forget by design: `run_campaign_job` runs off
+    the event loop (see jobs.py's `asyncio.to_thread`), so this schedules
+    the actual send onto the main loop via `_fire_and_forget` rather than
+    awaiting it — a dropped or slow websocket send must never slow down or
+    fail the campaign itself. Call after every state change a frontend
+    polling GET /campaigns/{id} would otherwise have to catch by guessing.
+
+    `db` is optional: when given and this is a call campaign, the payload
+    also carries which calls are in flight right now (see _active_calls) —
+    omitted (not just empty) when no session was passed, so a caller that
+    doesn't have one handy isn't forced to run a query just to broadcast.
+    """
+    try:
+        from core.websocket_manager import _fire_and_forget
+        from core.websocket_manager import manager as ws_manager
+    except Exception:  # noqa: BLE001
+        return
+    payload = {
+        "type": "campaign_status",
+        "campaign_id": campaign.Id,
+        "status": campaign.Status,
+        "status_message": campaign.StatusMessage,
+        "total_count": campaign.TotalCount,
+        "queued_count": campaign.QueuedCount,
+        "sent_count": campaign.SentCount,
+        "delivered_count": campaign.DeliveredCount,
+        "failed_count": campaign.FailedCount,
+        "skipped_count": campaign.SkippedCount,
+        "execution_id": execution.Id if execution else None,
+    }
+    if db is not None and campaign.Kind == "call":
+        payload["running_calls"] = _active_calls(db, campaign)
+    _fire_and_forget(ws_manager.broadcast_to_leadai_campaign(campaign.Id, payload))
+
+
 def _refresh_counters(db: Session, campaign: LeadCampaign) -> None:
     """Recompute the denormalised counters from the recipient rows."""
     rows = dict(
@@ -1029,6 +1091,7 @@ def _finish(
         },
     )
     db.commit()
+    broadcast_campaign(campaign, execution, db=db)
     return {"status": "completed", **(extra or {})}
 
 

@@ -134,6 +134,7 @@ def prepare_agent_context(
         "speaker": voice_cfg["speaker"],
         "pace": voice_cfg["speed"],
         "multi_stt": bool(getattr(script, "MultiStt", False)),
+        "provider": voice_cfg["provider"],
     }
     return sections, script, voice
 
@@ -156,6 +157,7 @@ def register_call_context(call_sid: str, phone_number: str, sections: list[dict]
         "speaker": voice.get("speaker"),
         "pace": voice.get("pace"),
         "multi_stt": voice.get("multi_stt", False),
+        "provider": voice.get("provider"),
         "xml_sections": sections,
         # Marker so anything inspecting active_calls can tell this call came from
         # LeadAI and which company/conversation it belongs to.
