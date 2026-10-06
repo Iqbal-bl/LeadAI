@@ -39,7 +39,7 @@
         *ngIf="lead?.customerRef"
         class="text-xs font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500"
       >
-        {{ lead.customerRef }}
+        {{ lead?.customerRef }}
       </span>
     </div>
     <div
@@ -316,7 +316,7 @@
         >Lead Score</span
       >
       <p-knob
-        [(ngModel)]="lead.leadScore"
+        [ngModel]="leadScore"
         [readonly]="true"
         [size]="60"
         [strokeWidth]="8"

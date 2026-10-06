@@ -131,6 +131,26 @@
         *ngIf="activeTab === 'ai'"
         class="card-base p-6 mt-4 max-w-2xl space-y-6"
       >
+        <!-- Agent Name Field -->
+        <div>
+          <label
+            class="text-xs font-semibold uppercase tracking-wider block mb-1"
+            style="color: var(--app-text)"
+            >Agent Name</label
+          >
+          <input
+            pInputText
+            type="text"
+            [(ngModel)]="agentName"
+            maxlength="80"
+            placeholder="e.g. Ritu"
+            class="w-full text-sm"
+          />
+          <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+            Used wherever a script or prompt writes <code>&#123;agent&#125;</code> — change it once here instead of editing every script.
+          </p>
+        </div>
+
         <div>
           <label
             class="text-xs font-semibold uppercase tracking-wider block mb-2"
@@ -205,9 +225,9 @@
           <p-inputSwitch [(ngModel)]="aiConfig.enableSentiment"></p-inputSwitch>
         </div>
 
-        <!-- Read-only Voice Settings (Managed by Support) -->
+        <!-- Read-only Voice Settings (Managed by Super Admin) -->
         <div
-          class="p-4 rounded-xl border border-solid space-y-2"
+          class="p-4 rounded-xl border border-solid space-y-2.5"
           style="background: var(--app-surface-alt, #f8fafc); border-color: var(--card-border)"
         >
           <div class="flex items-center justify-between">
@@ -223,15 +243,34 @@
               [rounded]="true"
             ></p-tag>
           </div>
-          <p class="text-xs text-slate-600 dark:text-slate-300">
-            Voice: <span class="font-semibold">{{ companySettings?.voice_gender || 'female' }}</span>, speed <span class="font-semibold">{{ companySettings?.voice_speed ?? 1.1 }}x</span> — contact support to change
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Voice Gender</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 capitalize">{{ companySettings?.voice_gender || 'female' }}</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Speed</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200">{{ companySettings?.voice_speed ?? 1.1 }}x</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Voice Speaker</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 capitalize">{{ companySettings?.voice_speaker || 'anushka' }}</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">STT/TTS Provider</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 uppercase">{{ companySettings?.stt_tts_provider || 'sarvam' }}</span>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+            Company-wide voice persona and STT/TTS engine are managed exclusively through the super-admin console.
           </p>
         </div>
 
         <div class="pt-4 flex justify-end">
           <p-button
-            label="Update AI Config"
+            label="Save Settings"
             icon="pi pi-check"
+            [loading]="savingAiConfig"
             (click)="saveAiConfig()"
             [style]="{
               background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',

@@ -740,6 +740,26 @@ from .models_ext import (  # noqa: E402
     LeadJob,
 )
 
+
+class LeadCompanyOnboarding(LeadAIBase):
+    """Tracks multi-step onboarding lifecycle for tenant companies."""
+
+    __tablename__ = "leadai_company_onboarding"
+    __table_args__ = (
+        UniqueConstraint("ClientId", name="uq_leadai_onboarding_client"),
+    )
+
+    ClientId = Column(String(36), nullable=False, index=True)
+    Status = Column(String(50), default="channel_pending", nullable=False)
+    CurrentStep = Column(String(50), default="channels", nullable=False)
+    IsCompleted = Column(Boolean, default=False, nullable=False)
+    ChannelConnected = Column(Boolean, default=False, nullable=False)
+    ChannelSkipped = Column(Boolean, default=False, nullable=False)
+    KnowledgeBaseAdded = Column(Boolean, default=False, nullable=False)
+    KnowledgeBaseSkipped = Column(Boolean, default=False, nullable=False)
+    CompletedAt = Column(DateTime, nullable=True)
+
+
 ALL_LEADAI_TABLES = (
     LeadUserRole,
     LeadRolePermission,
@@ -751,6 +771,7 @@ ALL_LEADAI_TABLES = (
     LeadCompanyDataPoint,
     LeadCompanyPrompt,
     LeadCompanySettings,
+    LeadCompanyOnboarding,
     LeadCustomer,
     LeadConversation,
     LeadMessage,

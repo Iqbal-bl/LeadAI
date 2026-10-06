@@ -1,28 +1,21 @@
-<p-dialog
-  [header]="selectedPlatform === 'whatsapp' ? 'Connect WhatsApp Business' : 'Connect Channel'"
-  [(visible)]="visible"
-  [modal]="true"
-  [closable]="true"
-  [style]="{ width: '700px', maxWidth: '95vw', maxHeight: '90vh' }"
-  (onHide)="onClose()"
-  [draggable]="false"
->
+<ng-template #wizardBody>
   <!-- Platform Selection View -->
   <div *ngIf="!selectedPlatform">
     <!-- Dynamic OAuth Platforms List -->
-    <div class="flex flex-col gap-3.5 mt-4" *ngIf="availablePlatforms.length > 0">
+    <div class="flex flex-col gap-3.5" *ngIf="availablePlatforms.length > 0">
       <div
         *ngFor="let platform of availablePlatforms; trackBy: trackByPlatformId"
-        class="platform-card p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+        class="platform-card p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border"
+        style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);"
       >
-        <div class="flex items-start sm:items-center gap-3.5">
+        <div class="flex items-start sm:items-center gap-3.5 min-w-0">
           <div
-            class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+            class="w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
             [style.background]="platform.gradient"
           >
             <i [class]="platform.icon" class="text-2xl"></i>
           </div>
-          <div class="flex flex-col text-left">
+          <div class="flex flex-col text-left min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
               <h4
                 class="text-base font-bold"
@@ -35,35 +28,48 @@
               </span>
             </div>
             <p
-              class="text-xs mt-1 leading-relaxed"
+              class="text-xs mt-1 leading-relaxed line-clamp-2 sm:line-clamp-none"
               style="color: var(--app-text-secondary, #64748b)"
             >
               {{ platform.description }}
             </p>
           </div>
         </div>
-        <div
-          *ngIf="platform.isConnected"
-          class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
-        >
-          <i class="pi pi-check-circle text-xs text-emerald-600 dark:text-emerald-400"></i>
-          <span>Connected</span>
+
+        <div class="flex items-center gap-3 shrink-0 self-end sm:self-center">
+          <div
+            *ngIf="platform.isConnected"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800"
+          >
+            <i class="pi pi-check-circle text-xs text-emerald-600 dark:text-emerald-400"></i>
+            <span>Connected</span>
+          </div>
+
+          <p-button
+            *ngIf="!platform.isConnected"
+            [label]="platform.actionLabel"
+            icon="pi pi-arrow-right"
+            iconPos="right"
+            [rounded]="true"
+            [loading]="platform.loading"
+            (onClick)="onConnectPlatform(platform.id)"
+            [style]="{
+              background: platform.gradient,
+              border: 'none',
+              'white-space': 'nowrap',
+              color: '#ffffff',
+            }"
+          ></p-button>
+
+          <p-button
+            *ngIf="platform.isConnected"
+            label="Connect another"
+            icon="pi pi-plus"
+            [text]="true"
+            size="small"
+            (onClick)="onConnectPlatform(platform.id)"
+          ></p-button>
         </div>
-        <p-button
-          *ngIf="!platform.isConnected"
-          [label]="platform.actionLabel"
-          icon="pi pi-arrow-right"
-          iconPos="right"
-          [rounded]="true"
-          [loading]="platform.loading"
-          (onClick)="onConnectPlatform(platform.id)"
-          [style]="{
-            background: platform.gradient,
-            border: 'none',
-            'white-space': 'nowrap',
-            color: '#ffffff',
-          }"
-        ></p-button>
       </div>
     </div>
 
@@ -73,12 +79,12 @@
       class="p-8 text-center flex flex-col items-center gap-3"
     >
       <i class="pi pi-lock text-4xl text-amber-500"></i>
-      <h3 class="text-base font-bold" style="color: var(--app-text)">
+      <h3 class="text-base font-bold" style="color: var(--app-text, #0f172a)">
         No Communication Channels Provisioned
       </h3>
       <p
         class="text-xs text-muted max-w-md"
-        style="color: var(--app-text-secondary)"
+        style="color: var(--app-text-secondary, #64748b)"
       >
         Your company workspace currently has no active social channel feature
         grants. Please contact your Super Admin to enable channel permissions
@@ -88,27 +94,28 @@
 
     <!-- Security / Info Footer -->
     <div
-      class="info-banner mt-5 p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-left"
+      class="info-banner mt-5 p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-left border"
+      style="border-color: var(--app-border, #e2e8f0); background: var(--app-surface-alt, #f8fafc);"
     >
       <i class="pi pi-shield text-base text-indigo-500 shrink-0"></i>
-      <span class="font-medium"
+      <span class="font-medium text-slate-600 dark:text-slate-300"
         >Connect social channels securely with direct Meta Cloud API and OAuth authentication.</span
       >
     </div>
   </div>
 
   <!-- WhatsApp Cloud API Dedicated Form View -->
-  <div *ngIf="selectedPlatform === 'whatsapp'" class="flex flex-col gap-4 mt-2">
+  <div *ngIf="selectedPlatform === 'whatsapp'" class="flex flex-col gap-4">
     <!-- Header with Back Button -->
-    <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--app-border);">
+    <div class="flex items-center justify-between pb-3 border-b" style="border-color: var(--app-border, #e2e8f0);">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
              style="background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);">
           <i class="pi pi-whatsapp text-xl"></i>
         </div>
         <div>
-          <h3 class="text-base font-bold" style="color: var(--app-text);">WhatsApp Business Cloud API</h3>
-          <p class="text-xs" style="color: var(--app-text-muted);">Enter credentials from your Meta Developer App</p>
+          <h3 class="text-base font-bold" style="color: var(--app-text, #0f172a);">WhatsApp Business Cloud API</h3>
+          <p class="text-xs" style="color: var(--app-text-muted, #64748b);">Enter credentials from your Meta Developer App</p>
         </div>
       </div>
       <p-button label="Change Channel" icon="pi pi-arrow-left" [text]="true" size="small" (onClick)="backToPlatforms()"></p-button>
@@ -117,52 +124,52 @@
     <!-- Step 0: Form Inputs -->
     <div *ngIf="activeStep === 0" class="flex flex-col gap-4">
       <div>
-        <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted);">
+        <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted, #64748b);">
           Display Name <span class="text-red-500">*</span>
         </label>
-        <input pInputText type="text" [(ngModel)]="displayName" placeholder="e.g. WhatsApp Support" class="w-full" />
+        <input pInputText type="text" [(ngModel)]="displayName" placeholder="e.g. WhatsApp Support" class="w-full text-sm" />
       </div>
 
       <div>
-        <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted);">
+        <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted, #64748b);">
           WhatsApp Phone Number ID <span class="text-red-500">*</span>
         </label>
-        <input pInputText type="text" [(ngModel)]="externalId" placeholder="e.g. 1212108915327720" class="w-full font-mono" />
-        <small class="text-xs mt-1 block" style="color: var(--app-text-secondary);">
+        <input pInputText type="text" [(ngModel)]="externalId" placeholder="e.g. 1212108915327720" class="w-full font-mono text-sm" />
+        <small class="text-xs mt-1 block" style="color: var(--app-text-secondary, #64748b);">
           Found in Meta Developer Console ➔ WhatsApp ➔ API Setup ➔ <strong>Phone number ID</strong>
         </small>
       </div>
 
       <div>
-        <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted);">
+        <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted, #64748b);">
           Meta Access Token <span class="text-red-500">*</span>
         </label>
-        <input pInputText type="password" [(ngModel)]="accessToken" placeholder="Paste your Meta Access Token (starts with EAA...)" class="w-full font-mono" />
-        <small class="text-xs mt-1 block" style="color: var(--app-text-secondary);">
+        <input pInputText type="password" [(ngModel)]="accessToken" placeholder="Paste your Meta Access Token (starts with EAA...)" class="w-full font-mono text-sm" />
+        <small class="text-xs mt-1 block" style="color: var(--app-text-secondary, #64748b);">
           Temporary token from API Setup or a permanent System User Token.
         </small>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted);">
+          <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted, #64748b);">
             Display Phone Number <span class="text-xs font-normal lowercase">(optional)</span>
           </label>
-          <input pInputText type="text" [(ngModel)]="displayNumber" placeholder="e.g. +1 555-675-1245" class="w-full font-mono" />
+          <input pInputText type="text" [(ngModel)]="displayNumber" placeholder="e.g. +1 555-675-1245" class="w-full font-mono text-sm" />
         </div>
         <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted);">
+          <label class="block text-xs font-semibold uppercase tracking-wider mb-1.5" style="color: var(--app-text-muted, #64748b);">
             WhatsApp Business Account ID <span class="text-xs font-normal lowercase">(optional)</span>
           </label>
-          <input pInputText type="text" [(ngModel)]="businessAccountId" placeholder="e.g. 919318447895101" class="w-full font-mono" />
+          <input pInputText type="text" [(ngModel)]="businessAccountId" placeholder="e.g. 919318447895101" class="w-full font-mono text-sm" />
         </div>
       </div>
 
       <!-- Auto-Reply Switch -->
-      <div class="flex items-center justify-between p-3.5 rounded-xl border text-left" style="border-color: var(--app-border); background: var(--app-surface-alt);">
+      <div class="flex items-center justify-between p-3.5 rounded-xl border text-left" style="border-color: var(--app-border, #e2e8f0); background: var(--app-surface-alt, #f8fafc);">
         <div class="flex flex-col gap-0.5">
-          <label class="text-sm font-medium" style="color: var(--app-text);">AI Auto-Reply</label>
-          <span class="text-xs" style="color: var(--app-text-muted);">Enable automated AI responses for incoming messages on this channel.</span>
+          <label class="text-sm font-medium" style="color: var(--app-text, #0f172a);">AI Auto-Reply</label>
+          <span class="text-xs" style="color: var(--app-text-muted, #64748b);">Enable automated AI responses for incoming messages on this channel.</span>
         </div>
         <p-inputSwitch [(ngModel)]="autoReply"></p-inputSwitch>
       </div>
@@ -174,7 +181,7 @@
       </div>
 
       <!-- Action Buttons -->
-      <div class="flex justify-between items-center pt-3 border-t" style="border-color: var(--app-border);">
+      <div class="flex justify-between items-center pt-3 border-t" style="border-color: var(--app-border, #e2e8f0);">
         <p-button label="Back" icon="pi pi-arrow-left" [text]="true" (onClick)="backToPlatforms()"></p-button>
         <p-button label="Connect WhatsApp" icon="pi pi-check" [disabled]="!step1Valid" [loading]="step1Loading"
                   (onClick)="submitStep1()" [rounded]="true"
@@ -192,21 +199,40 @@
         </div>
       </div>
 
-      <div class="p-4 rounded-xl flex flex-col gap-2.5" style="background: var(--app-surface-alt); border: 1px solid var(--app-border);">
-        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted);">Registered Webhook URL</span>
-        <div class="flex items-center gap-2 p-2 rounded-lg" style="background: var(--app-bg); border: 1px solid var(--app-border);">
-          <code class="flex-1 text-xs font-mono break-all" style="color: var(--app-text);">{{ webhookUrl }}</code>
+      <div class="p-4 rounded-xl flex flex-col gap-2.5" style="background: var(--app-surface-alt, #f8fafc); border: 1px solid var(--app-border, #e2e8f0);">
+        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted, #64748b);">Registered Webhook URL</span>
+        <div class="flex items-center gap-2 p-2 rounded-lg" style="background: var(--app-surface, #ffffff); border: 1px solid var(--app-border, #e2e8f0);">
+          <code class="flex-1 text-xs font-mono break-all" style="color: var(--app-text, #0f172a);">{{ webhookUrl }}</code>
           <p-button icon="pi pi-copy" [rounded]="true" [text]="true" severity="secondary" size="small"
                     pTooltip="Copy URL" (onClick)="copyToClipboard(webhookUrl, 'Webhook URL')"></p-button>
         </div>
-        <small class="text-xs" style="color: var(--app-text-secondary);">
+        <small class="text-xs" style="color: var(--app-text-secondary, #64748b);">
           Your Meta webhook is already receiving events. You can start sending and receiving messages right away!
         </small>
       </div>
 
-      <div class="flex justify-end pt-3 border-t" style="border-color: var(--app-border);">
+      <div class="flex justify-end pt-3 border-t" style="border-color: var(--app-border, #e2e8f0);">
         <p-button label="Done & View Channels" icon="pi pi-check" severity="success" [rounded]="true" (onClick)="finishWizard()"></p-button>
       </div>
     </div>
   </div>
+</ng-template>
+
+<!-- Non-inline (Standard Modal Dialog for Channel List) -->
+<p-dialog
+  *ngIf="!inline"
+  [header]="selectedPlatform === 'whatsapp' ? 'Connect WhatsApp Business' : 'Connect Channel'"
+  [(visible)]="visible"
+  [modal]="true"
+  [closable]="true"
+  [style]="{ width: '700px', maxWidth: '95vw', maxHeight: '90vh' }"
+  (onHide)="onClose()"
+  [draggable]="false"
+>
+  <ng-container *ngTemplateOutlet="wizardBody"></ng-container>
 </p-dialog>
+
+<!-- Inline Mode (Directly embedded without modal dialog) -->
+<div *ngIf="inline" class="channel-wizard-inline">
+  <ng-container *ngTemplateOutlet="wizardBody"></ng-container>
+</div>

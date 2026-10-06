@@ -91,10 +91,11 @@
                   <i
                     class="pi"
                     [ngClass]="{
-                      'pi-file-pdf text-danger-500': doc.fileType === 'PDF',
-                      'pi-file-word text-info-500': doc.fileType === 'DOCX',
-                      'pi-file-excel text-success-500': doc.fileType === 'CSV',
-                      'pi-file text-brand-500': doc.fileType === 'TXT',
+                      'pi-file-pdf text-danger-500': doc.fileType === 'PDF' || doc.fileName?.toLowerCase()?.endsWith('.pdf'),
+                      'pi-file-word text-info-500': doc.fileType === 'DOCX' || doc.fileName?.toLowerCase()?.endsWith('.docx'),
+                      'pi-file-excel text-success-500': doc.fileType === 'CSV' || doc.fileName?.toLowerCase()?.endsWith('.csv'),
+                      'pi-file-edit text-purple-500': doc.fileType === 'MD' || doc.fileName?.toLowerCase()?.endsWith('.md'),
+                      'pi-file text-brand-500': doc.fileType === 'TXT' || (!doc.fileName?.toLowerCase()?.endsWith('.pdf') && !doc.fileName?.toLowerCase()?.endsWith('.docx') && !doc.fileName?.toLowerCase()?.endsWith('.csv') && !doc.fileName?.toLowerCase()?.endsWith('.md')),
                     }"
                   ></i>
                   {{ doc.fileName }}
@@ -394,21 +395,35 @@
   [(visible)]="showUploadDialog"
   [modal]="true"
   [style]="{ width: '500px' }"
+  [closable]="!isUploading"
 >
-  <div class="py-3 space-y-4">
+  <div class="py-3 space-y-4 relative min-h-[160px]">
+    <!-- Loading Overlay while uploading -->
+    <div
+      *ngIf="isUploading"
+      class="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs gap-3 p-6 text-center animate-fade-in"
+    >
+      <i class="pi pi-spin pi-spinner text-3xl text-indigo-600 dark:text-indigo-400"></i>
+      <div class="space-y-1">
+        <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100">Uploading & Indexing Document...</h4>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Extracting text and generating AI vector embeddings.</p>
+      </div>
+    </div>
+
     <p-fileUpload
       name="demo[]"
       [customUpload]="true"
       [multiple]="true"
-      accept=".pdf,.docx,.txt,.csv"
+      accept=".pdf,.docx,.txt,.csv,.md"
       maxFileSize="10000000"
       (uploadHandler)="onUpload($event)"
+      [disabled]="isUploading"
     >
       <ng-template pTemplate="content">
         <div class="py-8 text-center" style="color: var(--app-text-muted)">
           <i class="pi pi-cloud-upload text-4xl mb-2 text-brand-500"></i>
           <p class="text-sm font-medium">Drag and drop files here to upload</p>
-          <p class="text-xs mt-1">Supports PDF, DOCX, TXT, CSV up to 10MB</p>
+          <p class="text-xs mt-1">Supports PDF, DOCX, TXT, CSV, MD up to 10MB</p>
         </div>
       </ng-template>
     </p-fileUpload>
@@ -418,6 +433,7 @@
       label="Close"
       icon="pi pi-times"
       [text]="true"
+      [disabled]="isUploading"
       (click)="showUploadDialog = false"
     ></p-button>
   </ng-template>

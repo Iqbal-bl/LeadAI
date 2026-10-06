@@ -42,12 +42,24 @@ export class CampaignCreateComponent implements OnChanges {
   audienceType: AudienceType = 'list';
   body = '';
   scheduledAt = '';
+  scheduleMode: 'now' | 'later' = 'now';
+  timezone = 'Asia/Kolkata';
   concurrency: number = 5; // Integer, 1–50, default 5 (only meaningful for kind: 'call')
   rateLimit: number | null = null;
 
   saving = false;
   contactLists: ContactList[] = [];
   channels: Channel[] = [];
+
+  timezoneOptions = [
+    { label: 'Asia/Kolkata (IST)', value: 'Asia/Kolkata' },
+    { label: 'UTC', value: 'UTC' },
+    { label: 'America/New_York (EST/EDT)', value: 'America/New_York' },
+    { label: 'America/Los_Angeles (PST/PDT)', value: 'America/Los_Angeles' },
+    { label: 'Europe/London (GMT/BST)', value: 'Europe/London' },
+    { label: 'Asia/Dubai (GST)', value: 'Asia/Dubai' },
+    { label: 'Asia/Singapore (SGT)', value: 'Asia/Singapore' },
+  ];
 
   kindOptions: { label: string; value: CampaignKind; icon: string }[] = [
     { label: 'Message', value: 'message', icon: 'pi pi-envelope' },
@@ -123,7 +135,9 @@ export class CampaignCreateComponent implements OnChanges {
   populateFromCampaign(c: Campaign): void {
     this.name = c.name || '';
     this.kind = (c.kind as CampaignKind) || 'message';
-    this.channel = (c.channel as CampaignChannel) || (this.kind === 'call' ? 'voice' : 'whatsapp');
+    this.channel =
+      (c.channel as CampaignChannel) ||
+      (this.kind === 'call' ? 'voice' : 'whatsapp');
     this.channelAccountId = c.channel_account_id || '';
     this.purpose = (c.purpose as CampaignPurpose) || 'promotional';
     this.audienceType = (c.audience_type as AudienceType) || 'list';
@@ -131,7 +145,11 @@ export class CampaignCreateComponent implements OnChanges {
     this.body = c.message_body || c.body || '';
     this.concurrency = c.concurrency != null ? c.concurrency : 5;
     this.rateLimit = c.rate_per_minute ?? c.rate_limit ?? null;
-    this.scheduledAt = c.scheduled_at ? this.formatDateTimeLocal(c.scheduled_at) : '';
+    this.scheduleMode = c.scheduled_at ? 'later' : 'now';
+    this.scheduledAt = c.scheduled_at
+      ? this.formatDateTimeLocal(c.scheduled_at)
+      : '';
+    this.timezone = c.timezone || 'Asia/Kolkata';
   }
 
   resetForm(): void {
@@ -142,13 +160,20 @@ export class CampaignCreateComponent implements OnChanges {
     this.purpose = 'promotional';
     this.audienceType = 'list';
     this.body = '';
+    this.scheduleMode = 'now';
     this.scheduledAt = '';
+    this.timezone = 'Asia/Kolkata';
     this.concurrency = 5;
     this.rateLimit = null;
   }
 
   private formatDateTimeLocal(dateStr: string): string {
     try {
+      const trimmed = dateStr.trim();
+      // Match already formatted YYYY-MM-DDTHH:mm or YYYY-MM-DDTHH:mm:ss
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+        return trimmed.substring(0, 16);
+      }
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return '';
       const pad = (n: number) => n.toString().padStart(2, '0');
@@ -156,6 +181,25 @@ export class CampaignCreateComponent implements OnChanges {
     } catch {
       return '';
     }
+  }
+
+  /**
+   * Plain local date-time with NO UTC offset (YYYY-MM-DDTHH:mm:ss).
+   * Backend requires local wall-clock time without 'Z' or offset.
+   */
+  formatToPlainDateTime(dateStr: string): string {
+    if (!dateStr) return '';
+    const trimmed = dateStr.trim();
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
+      return `${trimmed}:00`;
+    }
+    const d = new Date(trimmed);
+    if (isNaN(d.getTime())) return trimmed;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
   loadContactLists(): void {
@@ -176,7 +220,11 @@ export class CampaignCreateComponent implements OnChanges {
 
   onKindChange(): void {
     if (this.kind === 'call') {
-      if (this.concurrency == null || this.concurrency < 1 || this.concurrency > 50) {
+      if (
+        this.concurrency == null ||
+        this.concurrency < 1 ||
+        this.concurrency > 50
+      ) {
         this.concurrency = 5;
       }
       if (this.channel !== 'voice') {
@@ -192,7 +240,10 @@ export class CampaignCreateComponent implements OnChanges {
 
   /** Whether the selected channel needs one specific connected account picked. */
   get needsChannelAccount(): boolean {
-    return this.kind === 'message' && ACCOUNT_REQUIRED_CHANNELS.includes(this.channel);
+    return (
+      this.kind === 'message' &&
+      ACCOUNT_REQUIRED_CHANNELS.includes(this.channel)
+    );
   }
 
   get accountsForChannel(): Channel[] {
@@ -218,6 +269,10 @@ export class CampaignCreateComponent implements OnChanges {
     this.body += `{{${variable}}}`;
   }
 
+  insertToken(token: string): void {
+    this.body += token;
+  }
+
   get isConcurrencyValid(): boolean {
     if (this.kind !== 'call') return true;
     if (this.concurrency == null) return false;
@@ -229,6 +284,7 @@ export class CampaignCreateComponent implements OnChanges {
     if (!this.name.trim() || !this.body.trim()) return false;
     if (this.needsChannelAccount && !this.channelAccountId) return false;
     if (this.kind === 'call' && !this.isConcurrencyValid) return false;
+    if (this.scheduleMode === 'later' && !this.scheduledAt.trim()) return false;
     return true;
   }
 
@@ -240,8 +296,20 @@ export class CampaignCreateComponent implements OnChanges {
       const updatePayload: CampaignUpdateRequest = {
         name: this.name.trim(),
         message_body: this.body.trim(),
-        scheduled_at: this.scheduledAt ? new Date(this.scheduledAt).toISOString() : null,
       };
+
+      if (this.scheduleMode === 'later' && this.scheduledAt) {
+        const formatted = this.formatToPlainDateTime(this.scheduledAt);
+        const existingPlain = this.campaign.scheduled_at
+          ? this.formatToPlainDateTime(this.campaign.scheduled_at)
+          : '';
+        if (formatted !== existingPlain) {
+          updatePayload.scheduled_at = formatted;
+        }
+        if (this.timezone && this.timezone !== this.campaign.timezone) {
+          updatePayload.timezone = this.timezone;
+        }
+      }
 
       if (this.kind === 'call') {
         updatePayload.concurrency = this.concurrency
@@ -251,23 +319,25 @@ export class CampaignCreateComponent implements OnChanges {
         updatePayload.rate_per_minute = this.rateLimit;
       }
 
-      this.campaignService.updateCampaign(this.campaign.id, updatePayload).subscribe({
-        next: () => {
-          this.saving = false;
-          this.complete.emit();
-        },
-        error: (err) => {
-          this.saving = false;
-          this.messageService.add({
-            severity: 'error',
-            summary: 'Update Failed',
-            detail:
-              err.error?.detail ||
-              'Failed to update campaign. Check your inputs.',
-            life: 6000,
-          });
-        },
-      });
+      this.campaignService
+        .updateCampaign(this.campaign.id, updatePayload)
+        .subscribe({
+          next: () => {
+            this.saving = false;
+            this.complete.emit();
+          },
+          error: (err) => {
+            this.saving = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Update Failed',
+              detail:
+                err.error?.detail ||
+                'Failed to update campaign. Check your inputs.',
+              life: 6000,
+            });
+          },
+        });
       return;
     }
 
@@ -275,13 +345,23 @@ export class CampaignCreateComponent implements OnChanges {
       name: this.name.trim(),
       kind: this.kind,
       channel: this.channel,
-      channel_account_id: this.needsChannelAccount ? this.channelAccountId : undefined,
+      channel_account_id: this.needsChannelAccount
+        ? this.channelAccountId
+        : undefined,
       purpose: this.purpose,
       audience_type: this.audienceType,
       list_id: this.audienceType === 'list' ? this.audienceId : undefined,
       message_body: this.body.trim(),
-      scheduled_at: this.scheduledAt || undefined,
     };
+
+    if (this.scheduleMode === 'later' && this.scheduledAt) {
+      createPayload.scheduled_at = this.formatToPlainDateTime(
+        this.scheduledAt,
+      );
+      if (this.timezone) {
+        createPayload.timezone = this.timezone;
+      }
+    }
 
     if (this.kind === 'call') {
       createPayload.concurrency = this.concurrency

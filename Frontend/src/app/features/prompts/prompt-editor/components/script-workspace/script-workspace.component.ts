@@ -38,4 +38,25 @@ export class ScriptWorkspaceComponent {
     this.scriptXmlEditorContent = xml;
     this.scriptXmlEditorContentChange.emit(xml);
   }
+
+  insertToken(token: string): void {
+    const textarea = document.querySelector(
+      'textarea[placeholder*="Write XML schema flow here"]',
+    ) as HTMLTextAreaElement;
+    if (textarea && textarea.selectionStart !== undefined) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const current = this.scriptXmlEditorContent || '';
+      this.scriptXmlEditorContent =
+        current.substring(0, start) + token + current.substring(end);
+      this.scriptXmlEditorContentChange.emit(this.scriptXmlEditorContent);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + token.length, start + token.length);
+      }, 0);
+    } else {
+      this.scriptXmlEditorContent = (this.scriptXmlEditorContent || '') + token;
+      this.scriptXmlEditorContentChange.emit(this.scriptXmlEditorContent);
+    }
+  }
 }

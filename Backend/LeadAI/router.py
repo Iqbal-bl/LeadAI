@@ -31,6 +31,7 @@ from .routers import (
     knowledge,
     leads_import,
     linkedin,
+    onboarding,
     products,
     role_permissions,
     roles,
@@ -72,6 +73,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(user_management.router)
 api_router.include_router(billing.router)
 api_router.include_router(billing.admin_router)
+api_router.include_router(onboarding.router)
 
 
 # Phase 2: social channels, campaigns, CRM, document store, lead threshold.

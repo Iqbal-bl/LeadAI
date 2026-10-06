@@ -314,6 +314,26 @@ export class BroadcastListComponent implements OnInit {
     });
   }
 
+  cancelCampaign(campaign: Campaign): void {
+    this.campaignService.cancelCampaign(campaign.id).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'info',
+          summary: 'Campaign Cancelled',
+          detail: `Campaign "${campaign.name}" has been cancelled.`,
+        });
+        this.loadCampaigns();
+      },
+      error: (err) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: err.error?.detail || 'Failed to cancel campaign.',
+        });
+      },
+    });
+  }
+
   openActionMenu(event: Event, campaign: Campaign, menu: any): void {
     event.stopPropagation();
     this.selectedCampaign = campaign;
@@ -326,6 +346,7 @@ export class BroadcastListComponent implements OnInit {
     const isRunning = campaign.status === 'running';
     const isPaused = campaign.status === 'paused';
     const isDraft = campaign.status === 'draft';
+    const isScheduled = campaign.status === 'scheduled';
 
     const items: MenuItem[] = [
       {
@@ -334,13 +355,32 @@ export class BroadcastListComponent implements OnInit {
         command: () => this.viewCampaign(campaign),
       },
       {
-        label: 'Edit Campaign',
+        label: isScheduled ? 'Reschedule / Edit' : 'Edit Campaign',
         icon: 'pi pi-pencil',
         disabled: isRunning,
         title: isRunning ? 'Pause the campaign before editing' : '',
         command: () => this.openEdit(campaign),
       },
     ];
+
+    if (isScheduled) {
+      items.push({
+        label: 'Start Now',
+        icon: 'pi pi-play',
+        disabled: !this.canSend || this.startingCampaignId !== null,
+        command: () => this.startCampaignWithMode(campaign, 'all'),
+      });
+      items.push({
+        label: 'Pause Scheduled Run',
+        icon: 'pi pi-pause',
+        command: () => this.pauseCampaign(campaign),
+      });
+      items.push({
+        label: 'Cancel Scheduled Run',
+        icon: 'pi pi-times-circle',
+        command: () => this.cancelCampaign(campaign),
+      });
+    }
 
     if (isDraft) {
       items.push({
@@ -420,6 +460,8 @@ export class BroadcastListComponent implements OnInit {
       'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'
     > = {
       draft: 'secondary',
+      scheduled: 'info',
+      queued: 'info',
       building: 'info',
       ready: 'info',
       running: 'success',

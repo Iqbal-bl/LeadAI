@@ -31,6 +31,14 @@
             [severity]="getStatusSeverity(campaign.status)"
             [rounded]="true"
           ></p-tag>
+          <div
+            *ngIf="campaign.status === 'scheduled' && campaign.scheduled_at"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+          >
+            <i class="pi pi-calendar-clock text-xs"></i>
+            <span>Scheduled: {{ campaign.scheduled_at | date: 'd MMM y, h:mm a' }}</span>
+            <span *ngIf="campaign.timezone" class="text-indigo-400 dark:text-indigo-400 font-normal">({{ campaign.timezone }})</span>
+          </div>
           <p-tag
             [value]="getCampaignTypeBadge().label"
             [severity]="getCampaignTypeBadge().severity"
@@ -130,11 +138,11 @@
         ></p-button>
       </div>
 
-      <!-- First-time start -->
+      <!-- First-time start or Start Now for scheduled -->
       <p-button
-        *ngIf="!hasPriorExecutions && canStartCampaign()"
-        label="Start Campaign"
-        icon="pi pi-send"
+        *ngIf="(!hasPriorExecutions && canStartCampaign()) || campaign.status === 'scheduled'"
+        [label]="campaign.status === 'scheduled' ? 'Start Now' : 'Start Campaign'"
+        [icon]="campaign.status === 'scheduled' ? 'pi pi-play' : 'pi pi-send'"
         size="small"
         [loading]="startingCampaign"
         [disabled]="!canSend || startingCampaign"
@@ -142,7 +150,7 @@
       ></p-button>
 
       <p-button
-        *ngIf="campaign.status === 'running' || campaign.status === 'queued'"
+        *ngIf="campaign.status === 'running' || campaign.status === 'queued' || campaign.status === 'scheduled'"
         label="Pause"
         icon="pi pi-pause"
         severity="warn"
@@ -160,8 +168,8 @@
       ></p-button>
 
       <p-button
-        *ngIf="campaign.status === 'running' || campaign.status === 'queued' || campaign.status === 'paused'"
-        label="Cancel"
+        *ngIf="campaign.status === 'running' || campaign.status === 'queued' || campaign.status === 'paused' || campaign.status === 'scheduled'"
+        [label]="campaign.status === 'scheduled' ? 'Cancel Schedule' : 'Cancel'"
         icon="pi pi-times"
         severity="danger"
         size="small"

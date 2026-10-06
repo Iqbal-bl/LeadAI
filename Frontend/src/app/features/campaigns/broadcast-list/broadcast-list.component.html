@@ -98,6 +98,11 @@
             [severity]="getStatusSeverity(campaign.status)"
             [rounded]="true"
           ></p-tag>
+          <div *ngIf="campaign.status === 'scheduled' && campaign.scheduled_at" class="mt-1 flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium whitespace-nowrap">
+            <i class="pi pi-calendar-clock text-[10px]"></i>
+            <span>{{ campaign.scheduled_at | date: 'd MMM, h:mm a' }}</span>
+            <span *ngIf="campaign.timezone" class="text-[10px] text-slate-400">({{ campaign.timezone }})</span>
+          </div>
         </td>
         <td>
           <div

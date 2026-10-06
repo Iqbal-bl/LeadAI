@@ -53,14 +53,61 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   auto_call_on_hot_lead: true,
   widget_enabled: true,
   widget_greeting: 'Hello! How can our AI assistant help you today?',
+  agent_name: null,
   voice_gender: 'female',
   voice_speed: 1.1,
+  voice_speaker: 'anushka',
+  stt_tts_provider: 'sarvam',
 };
 
 export const DEFAULT_VOICE_SETTINGS = {
   voice_gender: 'female' as const,
   voice_speed: 1.1,
+  voice_speaker: 'anushka',
+  stt_tts_provider: 'sarvam' as const,
 };
+
+export interface VoiceSpeakerOption {
+  label: string;
+  value: string;
+  gender: 'female' | 'male';
+}
+
+/**
+ * Supported Sarvam bulbul:v3 voice roster for AI call telephony.
+ * Kept as an independent frontend configuration constant.
+ */
+export const SARVAM_VOICE_ROSTER: VoiceSpeakerOption[] = [
+  // Female Voices
+  { label: 'Anushka (Hindi/English - Recommended)', value: 'anushka', gender: 'female' },
+  { label: 'Priya (Hindi/English)', value: 'priya', gender: 'female' },
+  { label: 'Ritu (Hindi/English)', value: 'ritu', gender: 'female' },
+  { label: 'Neha (Hindi)', value: 'neha', gender: 'female' },
+  { label: 'Pooja (Hindi)', value: 'pooja', gender: 'female' },
+  { label: 'Simran (Hindi)', value: 'simran', gender: 'female' },
+  { label: 'Kavya (Hindi)', value: 'kavya', gender: 'female' },
+  { label: 'Ishita (Hindi)', value: 'ishita', gender: 'female' },
+  { label: 'Shreya (Hindi)', value: 'shreya', gender: 'female' },
+  { label: 'Roopa (Hindi)', value: 'roopa', gender: 'female' },
+  { label: 'Amelia (English)', value: 'amelia', gender: 'female' },
+  { label: 'Sophia (English)', value: 'sophia', gender: 'female' },
+  { label: 'Ana (English)', value: 'ana', gender: 'female' },
+  // Male Voices
+  { label: 'Shubh (Hindi/English - Recommended)', value: 'shubh', gender: 'male' },
+  { label: 'Aditya (Hindi/English)', value: 'aditya', gender: 'male' },
+  { label: 'Ashutosh (Hindi)', value: 'ashutosh', gender: 'male' },
+  { label: 'Rahul (Hindi)', value: 'rahul', gender: 'male' },
+  { label: 'Rohan (English/Hindi)', value: 'rohan', gender: 'male' },
+  { label: 'Amit (Hindi)', value: 'amit', gender: 'male' },
+  { label: 'Dev (Hindi)', value: 'dev', gender: 'male' },
+  { label: 'Ratan (Hindi)', value: 'ratan', gender: 'male' },
+  { label: 'Varun (Hindi)', value: 'varun', gender: 'male' },
+  { label: 'Manan (Hindi)', value: 'manan', gender: 'male' },
+  { label: 'Sumit (Hindi)', value: 'sumit', gender: 'male' },
+  { label: 'Kabir (Hindi)', value: 'kabir', gender: 'male' },
+  { label: 'Aayan (Hindi)', value: 'aayan', gender: 'male' },
+  { label: 'Advait (Hindi)', value: 'advait', gender: 'male' },
+];
 
 export const WIDGET_EMBED_CONFIG = {
   scriptSrc: 'https://cdn.leadai.com/widget.js',

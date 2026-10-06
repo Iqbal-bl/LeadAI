@@ -8,7 +8,6 @@ export interface Script {
   is_default?: boolean;
   is_active?: boolean;
   version?: number;
-  voice_speaker?: string;
   multi_stt?: boolean;
 }
 

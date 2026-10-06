@@ -18,6 +18,8 @@ export type CampaignPurpose =
 
 export type CampaignStatus =
   | 'draft'
+  | 'scheduled'
+  | 'queued'
   | 'building'
   | 'ready'
   | 'running'
@@ -106,6 +108,7 @@ export interface CampaignCreateRequest {
   message_body: string;
   template_id?: string;
   scheduled_at?: string;
+  timezone?: string;
   concurrency?: number;
   rate_limit?: number;
 }

@@ -19,6 +19,11 @@ export const CLIENT_ROUTES: Routes = [
             (m) => m.ClientDashboardComponent,
           ),
       },
+      {
+        path: 'onboarding',
+        redirectTo: '/onboarding',
+        pathMatch: 'full',
+      },
       // {
       //   path: 'companies',
       //   loadComponent: () =>

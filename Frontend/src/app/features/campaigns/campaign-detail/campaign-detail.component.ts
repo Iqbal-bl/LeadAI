@@ -192,7 +192,8 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
         if (
           this.campaign?.status === 'running' ||
           this.campaign?.status === 'queued' ||
-          this.campaign?.status === 'building'
+          this.campaign?.status === 'building' ||
+          this.campaign?.status === 'scheduled'
         ) {
           this.startPolling(id);
         }
@@ -359,7 +360,8 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
           if (
             this.campaign?.status !== 'running' &&
             this.campaign?.status !== 'queued' &&
-            this.campaign?.status !== 'building'
+            this.campaign?.status !== 'building' &&
+            this.campaign?.status !== 'scheduled'
           ) {
             this.stopPolling();
             if (this.campaign?.status === 'ready') {
@@ -408,7 +410,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return (
       this.executionsTotal > 0 ||
       this.executions.length > 0 ||
-      (this.campaign?.status !== 'draft' && this.campaign?.status !== 'ready')
+      (this.campaign?.status !== 'draft' &&
+        this.campaign?.status !== 'ready' &&
+        this.campaign?.status !== 'scheduled')
     );
   }
 

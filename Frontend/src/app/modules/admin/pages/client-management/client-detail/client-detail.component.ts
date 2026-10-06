@@ -9,10 +9,13 @@ import { ConfirmationService } from '../../../../../shared/services/confirmation
 import { SharedModule } from '../../../../../shared/shared.module';
 import {
   DEFAULT_COMPANY_SETTINGS,
+  SARVAM_VOICE_ROSTER,
   SERVICES_STATIC_CONFIG,
   ServiceAccessItem,
+  VoiceSpeakerOption,
   WIDGET_EMBED_CONFIG,
 } from './client-detail.constants';
+import { CompanyVoiceSettingsUpdate } from '../../../../../models/company.models';
 
 export type { ServiceAccessItem };
 
@@ -48,10 +51,23 @@ export class ClientDetailComponent implements OnInit {
 
   isPermissionsLoaded = false;
 
+  get isSuperAdmin(): boolean {
+    return this.authService.isSuperAdmin() || this.authService.isPlatformAdmin();
+  }
+
   // Superadmin Voice Settings Control
-  voiceGender: 'male' | 'female' | null = null;
+  voiceRoster: VoiceSpeakerOption[] = SARVAM_VOICE_ROSTER;
+  voiceGender: 'male' | 'female' = 'female';
   voiceSpeed: number = 1.1;
+  voiceSpeaker: string = 'anushka';
+  sttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
   savingVoiceSettings = false;
+
+  // Baseline state for partial update dirty-tracking
+  savedVoiceGender: 'male' | 'female' = 'female';
+  savedVoiceSpeed: number = 1.1;
+  savedVoiceSpeaker: string = 'anushka';
+  savedSttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
 
   ngOnInit(): void {
     this.route.params.subscribe((params) => {
@@ -144,21 +160,62 @@ export class ClientDetailComponent implements OnInit {
     });
   }
 
+  get filteredVoiceSpeakers(): VoiceSpeakerOption[] {
+    if (!this.voiceGender) return this.voiceRoster;
+    return this.voiceRoster.filter((v) => v.gender === this.voiceGender);
+  }
+
+  onVoiceGenderChange(): void {
+    const matching = this.filteredVoiceSpeakers;
+    if (!matching.some((s) => s.value === this.voiceSpeaker)) {
+      this.voiceSpeaker =
+        matching[0]?.value ||
+        (this.voiceGender === 'male' ? 'shubh' : 'anushka');
+    }
+  }
+
+  get hasVoiceSettingsChanges(): boolean {
+    return (
+      this.voiceGender !== this.savedVoiceGender ||
+      this.voiceSpeed !== this.savedVoiceSpeed ||
+      this.voiceSpeaker !== this.savedVoiceSpeaker ||
+      this.sttTtsProvider !== this.savedSttTtsProvider
+    );
+  }
+
   loadSettings(): void {
     this.companyService.getCompanySettings(this.companyId).subscribe({
       next: (settings) => {
         this.companySettings = settings;
-        this.voiceGender = settings.voice_gender || null;
+        this.voiceGender = settings.voice_gender || 'female';
         this.voiceSpeed =
           settings.voice_speed !== null && settings.voice_speed !== undefined
-            ? settings.voice_speed
+            ? Math.min(2.0, Math.max(0.5, Number(settings.voice_speed)))
             : 1.1;
+        this.voiceSpeaker =
+          settings.voice_speaker ||
+          (this.voiceGender === 'male' ? 'shubh' : 'anushka');
+        this.sttTtsProvider = settings.stt_tts_provider || 'sarvam';
+
+        this.savedVoiceGender = this.voiceGender;
+        this.savedVoiceSpeed = this.voiceSpeed;
+        this.savedVoiceSpeaker = this.voiceSpeaker;
+        this.savedSttTtsProvider = this.sttTtsProvider;
         this.buildServicesList();
       },
       error: () => {
         this.companySettings = { ...DEFAULT_COMPANY_SETTINGS };
         this.voiceGender = DEFAULT_COMPANY_SETTINGS.voice_gender || 'female';
         this.voiceSpeed = DEFAULT_COMPANY_SETTINGS.voice_speed || 1.1;
+        this.voiceSpeaker =
+          DEFAULT_COMPANY_SETTINGS.voice_speaker || 'anushka';
+        this.sttTtsProvider =
+          DEFAULT_COMPANY_SETTINGS.stt_tts_provider || 'sarvam';
+
+        this.savedVoiceGender = this.voiceGender;
+        this.savedVoiceSpeed = this.voiceSpeed;
+        this.savedVoiceSpeaker = this.voiceSpeaker;
+        this.savedSttTtsProvider = this.sttTtsProvider;
         this.buildServicesList();
       },
     });
@@ -166,43 +223,87 @@ export class ClientDetailComponent implements OnInit {
 
   saveVoiceSettings(): void {
     if (!this.companyId) return;
-    this.savingVoiceSettings = true;
-    const payload: { voice_gender?: 'male' | 'female'; voice_speed?: number } =
-      {};
-    if (this.voiceGender) {
-      payload.voice_gender = this.voiceGender;
-    }
-    if (this.voiceSpeed !== null && this.voiceSpeed !== undefined) {
-      payload.voice_speed = Number(this.voiceSpeed);
+
+    // Partial update: only send fields that actually changed
+    const payload: CompanyVoiceSettingsUpdate = {};
+    let hasChanges = false;
+
+    if (this.sttTtsProvider !== this.savedSttTtsProvider) {
+      payload.stt_tts_provider = this.sttTtsProvider;
+      hasChanges = true;
     }
 
+    // Only send Sarvam voice persona attributes if they actually changed
+    if (this.voiceGender !== this.savedVoiceGender) {
+      payload.voice_gender = this.voiceGender;
+      hasChanges = true;
+    }
+
+    if (this.voiceSpeed !== this.savedVoiceSpeed) {
+      payload.voice_speed = Math.min(
+        2.0,
+        Math.max(0.5, Number(this.voiceSpeed)),
+      );
+      hasChanges = true;
+    }
+
+    if (this.voiceSpeaker !== this.savedVoiceSpeaker) {
+      payload.voice_speaker = this.voiceSpeaker;
+      hasChanges = true;
+    }
+
+    if (!hasChanges) {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'No Changes',
+        detail: 'No voice settings were modified.',
+      });
+      return;
+    }
+
+    this.savingVoiceSettings = true;
     this.companyService
       .updateCompanyVoiceSettings(this.companyId, payload)
       .subscribe({
         next: (updatedSettings) => {
           this.savingVoiceSettings = false;
           this.companySettings = updatedSettings;
-          this.voiceGender = updatedSettings.voice_gender || null;
-          this.voiceSpeed =
+
+          this.savedVoiceGender =
+            updatedSettings.voice_gender || this.voiceGender;
+          this.savedVoiceSpeed =
             updatedSettings.voice_speed !== null &&
             updatedSettings.voice_speed !== undefined
               ? updatedSettings.voice_speed
-              : 1.1;
+              : this.voiceSpeed;
+          this.savedVoiceSpeaker =
+            updatedSettings.voice_speaker || this.voiceSpeaker;
+          this.savedSttTtsProvider =
+            updatedSettings.stt_tts_provider || this.sttTtsProvider;
+
+          this.voiceGender = this.savedVoiceGender;
+          this.voiceSpeed = this.savedVoiceSpeed;
+          this.voiceSpeaker = this.savedVoiceSpeaker;
+          this.sttTtsProvider = this.savedSttTtsProvider;
+
           this.messageService.add({
             severity: 'success',
             summary: 'Voice Settings Saved',
-            detail: `Voice configured: ${this.voiceGender || 'Default'}, Speed: ${this.voiceSpeed}x`,
+            detail: `Provider: ${this.sttTtsProvider.toUpperCase()}, Voice: ${this.voiceSpeaker} (${this.voiceGender}), Speed: ${this.voiceSpeed}x`,
           });
+          this.buildServicesList();
         },
         error: (err) => {
           this.savingVoiceSettings = false;
+          const errorDetail =
+            err?.error?.detail ||
+            err?.message ||
+            'Failed to update platform voice settings. Superadmin rights required.';
           this.messageService.add({
             severity: 'error',
-            summary: 'Update Failed',
-            detail:
-              err?.error?.detail ||
-              err?.message ||
-              'Failed to update platform voice settings. Superadmin rights required.',
+            summary:
+              err?.status === 403 ? 'Permission Denied' : 'Update Failed',
+            detail: errorDetail,
           });
         },
       });
