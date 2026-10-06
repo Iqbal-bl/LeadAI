@@ -55,6 +55,8 @@ from ..activity import A
 
 _utcnow = utcnow
 
+_utcnow = utcnow
+
 logger = logging.getLogger(__name__)
 
 # kind -> handler. Handlers are sync functions taking (db, payload) and are run
