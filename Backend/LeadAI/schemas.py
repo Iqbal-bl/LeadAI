@@ -287,6 +287,7 @@ class DocumentOut(BaseModel):
     file_name: str | None = None
     content_type: str
     source_type: str
+    source_url: str | None = None
     status: str
     status_message: str | None = None
     chunk_count: int
@@ -318,6 +319,13 @@ class FaqCreate(BaseModel):
 class TextCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=3)
+    tags: str | None = None
+
+
+class CloudLinkCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    url: str = Field(min_length=5, max_length=1000)
+    notes: str | None = None
     tags: str | None = None
 
 

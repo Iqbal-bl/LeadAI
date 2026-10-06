@@ -33,11 +33,13 @@ export class WebsocketService implements OnDestroy {
   public readonly conversationMessages$ = new Subject<any>();
   public readonly inboxMessages$ = new Subject<any>();
   public readonly callEvents$ = new Subject<any>();
+  public readonly campaignUpdates$ = new Subject<any>();
 
   // Active tracking IDs
   private activeConversationId: string | null = null;
   private activeInboxClientId: string | null = null;
   private activeCallSid: string | null = null;
+  private activeCampaignId: string | null = null;
 
   // ─────────────────────────────────────────────────────────────
   // URL Resolver
@@ -134,6 +136,8 @@ export class WebsocketService implements OnDestroy {
         this.inboxMessages$.next(data);
       } else if (channelKey.startsWith('call:') || channelKey === 'call') {
         this.callEvents$.next(data);
+      } else if (channelKey.startsWith('campaign:') || channelKey === 'campaign') {
+        this.campaignUpdates$.next(data);
       }
     };
 
@@ -287,6 +291,40 @@ export class WebsocketService implements OnDestroy {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Campaign Socket Methods
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Connect to campaign status WebSocket:
+   * /ws/leadai/campaign/{campaign_id}
+   */
+  public connectCampaign(campaignId: string): Subject<any> {
+    if (
+      this.activeCampaignId === campaignId &&
+      this.sockets.has(`campaign:${campaignId}`)
+    ) {
+      return this.messageSubjects.get(`campaign:${campaignId}`)!;
+    }
+
+    if (this.activeCampaignId && this.activeCampaignId !== campaignId) {
+      this.disconnectCampaign();
+    }
+
+    this.activeCampaignId = campaignId;
+    return this.connect(
+      `campaign:${campaignId}`,
+      `/ws/leadai/campaign/${campaignId}`,
+    );
+  }
+
+  public disconnectCampaign(): void {
+    if (this.activeCampaignId) {
+      this.disconnect(`campaign:${this.activeCampaignId}`);
+      this.activeCampaignId = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // State Accessors & Cleanup
   // ─────────────────────────────────────────────────────────────
 
@@ -302,6 +340,10 @@ export class WebsocketService implements OnDestroy {
     return this.activeCallSid;
   }
 
+  get currentCampaignId(): string | null {
+    return this.activeCampaignId;
+  }
+
   public disconnectAll(): void {
     for (const key of Array.from(this.sockets.keys())) {
       this.disconnect(key);
@@ -309,6 +351,7 @@ export class WebsocketService implements OnDestroy {
     this.activeConversationId = null;
     this.activeInboxClientId = null;
     this.activeCallSid = null;
+    this.activeCampaignId = null;
   }
 
   ngOnDestroy(): void {
