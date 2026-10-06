@@ -113,6 +113,9 @@
         {{ pendingReviewCommentsCount }}
       </span>
     </p-tab>
+    <p-tab value="logs">
+      <i class="pi pi-history mr-2"></i> Activity & Audit Logs
+    </p-tab>
   </p-tablist>
 
   <p-tabpanels>
@@ -3252,6 +3255,18 @@
             </div>
           </div>
         </div>
+    </p-tabpanel>
+
+    <!-- TAB 7: ACTIVITY & AUDIT LOGS -->
+    <p-tabpanel value="logs">
+      <div class="mt-4">
+        <app-module-activity-logs
+          entityType="linkedin"
+          actionPrefix="linkedin."
+          title="LinkedIn Automation & Scheduler Logs"
+          subtitle="Real-time chronological execution history of auto-pilot discovery, connection invites, message syncs, and background schedulers."
+        ></app-module-activity-logs>
+      </div>
     </p-tabpanel>
   </p-tabpanels>
 </p-tabs>

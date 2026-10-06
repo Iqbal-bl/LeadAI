@@ -93,6 +93,22 @@ class PublisherService:
 
         db.commit()
         db.refresh(article)
+
+        from ... import activity
+        from ...activity import A
+        activity.log(
+            db,
+            action=A.BLOG_ARTICLE_PUBLISHED,
+            client_id=client_id,
+            actor_email=actor or "system",
+            entity_type="blog",
+            entity_id=article.Id,
+            log_type="Info" if (all_success or any_success) else "Error",
+            message=f"Blog article '{article.Title[:80]}' published to {', '.join(results.keys()) if results else 'configured channels'}",
+            meta={"channels": channels, "results": results, "article_id": article.Id, "article_title": article.Title},
+            commit=True,
+        )
+
         return results
 
     @classmethod

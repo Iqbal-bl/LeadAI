@@ -50,6 +50,8 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import session
 from ..models import LeadJob, utcnow
+from .. import activity
+from ..activity import A
 
 _utcnow = utcnow
 
@@ -367,9 +369,32 @@ def handle_linkedin_invitations(db, payload: dict) -> dict:
             p_cnt, a_cnt = process_pending_invitations(db, account)
             processed_count += p_cnt
             accepted_count += a_cnt
+            if p_cnt > 0 or a_cnt > 0:
+                activity.log(
+                    db,
+                    action=A.LINKEDIN_INVITATION_ACCEPTED if a_cnt > 0 else A.LINKEDIN_SCHEDULER_TICK,
+                    client_id=account.ClientId,
+                    actor_email="scheduler",
+                    entity_type="linkedin",
+                    log_type="Info",
+                    message=f"LinkedIn Invitation Sync: Processed {p_cnt} received invitation(s), accepted {a_cnt}",
+                    meta={"processed": p_cnt, "accepted": a_cnt},
+                    commit=True,
+                )
         except Exception as exc:
             logger.error("Error processing LinkedIn invitations for client %s: %s", account.ClientId, exc)
             errors.append(f"{account.ClientId}: {exc}")
+            activity.log(
+                db,
+                action=A.LINKEDIN_AUTH_FAILED,
+                client_id=account.ClientId,
+                actor_email="scheduler",
+                entity_type="linkedin",
+                log_type="Error",
+                message=f"LinkedIn Invitation Sync failed: {exc}",
+                meta={"error": str(exc)},
+                commit=True,
+            )
             
     # If this is the global scheduled run, schedule the next execution in ~2 hours with jitter
     if not company_id:
@@ -431,9 +456,34 @@ def handle_linkedin_sync_comments(db: Session, payload: dict) -> dict:
             else:
                 res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account, limit_posts=2, is_background_job=True))
             results[account.ClientId] = res
+            
+            # Log activity if comments were harvested or replied
+            if isinstance(res, dict) and res.get("status") not in ("skipped", "deferred"):
+                activity.log(
+                    db,
+                    action=A.LINKEDIN_COMMENT_HARVESTED,
+                    client_id=account.ClientId,
+                    actor_email="scheduler",
+                    entity_type="linkedin",
+                    log_type="Info",
+                    message=f"LinkedIn Comments & AI Auto-Reply Scan: {res.get('processed_comments', 0)} comments processed, {res.get('replied_count', 0)} replies sent",
+                    meta=res,
+                    commit=True,
+                )
         except Exception as exc:
             logger.warning("[LeadAI jobs] LinkedIn comment sync error for client %s: %s", account.ClientId, exc)
             results[account.ClientId] = {"error": str(exc)}
+            activity.log(
+                db,
+                action=A.LINKEDIN_COMMENT_HARVESTED,
+                client_id=account.ClientId,
+                actor_email="scheduler",
+                entity_type="linkedin",
+                log_type="Warning",
+                message=f"LinkedIn comment scan failed: {exc}",
+                meta={"error": str(exc)},
+                commit=True,
+            )
 
     # Schedule next check in ~3 hours (120-210 minutes) with wide human jitter (safe anti-bot cadence).
     # If deferred due to active live messaging, retry in 5 minutes so it runs as soon as messaging is idle!
@@ -614,6 +664,24 @@ def handle_linkedin_auto_search_and_connect(db: Session, payload: dict) -> dict:
                 "targets_found": len(search_batch),
                 "next_run_at": auto_cfg["next_run_at"],
             }
+            activity.log(
+                db,
+                action=A.LINKEDIN_AUTO_SEARCH_COMPLETED,
+                client_id=account.ClientId,
+                actor_email="scheduler",
+                entity_type="linkedin",
+                log_type="Info" if sent_count > 0 else "Warning",
+                message=f"LinkedIn Auto-Pilot: Sent {sent_count} invitation(s) ({failed_count} skipped/failed) for keywords '{keywords}'",
+                meta={
+                    "sent_count": sent_count,
+                    "failed_count": failed_count,
+                    "keywords": keywords,
+                    "next_run_at": auto_cfg["next_run_at"],
+                    "total_today": auto_cfg.get("total_sent_today", 0),
+                    "total_all_time": auto_cfg.get("total_sent_all_time", 0),
+                },
+                commit=True,
+            )
         except Exception as exc:
             logger.error("Error in LinkedIn auto-connect for client %s: %s", account.ClientId, exc)
             auto_cfg["last_run_status"] = "error"
@@ -622,6 +690,17 @@ def handle_linkedin_auto_search_and_connect(db: Session, payload: dict) -> dict:
             account.MetaJson = meta
             db.commit()
             results[account.ClientId] = {"error": str(exc)}
+            activity.log(
+                db,
+                action=A.LINKEDIN_CONNECTION_FAILED,
+                client_id=account.ClientId,
+                actor_email="scheduler",
+                entity_type="linkedin",
+                log_type="Error",
+                message=f"LinkedIn Auto-Pilot run failed: {exc}",
+                meta={"error": str(exc)},
+                commit=True,
+            )
 
     # If global recurring run, schedule the next iteration
     if not company_id:
@@ -793,11 +872,33 @@ def handle_blog_daily_scheduler(db: Session, payload: dict) -> dict:
             db.commit()
             scheduled_count += 1
             logger.info(f"[LeadAI jobs] Scheduled daily blog generation for client {client_id} (topic: '{topic}') at {now_hour_min} UTC")
+            activity.log(
+                db,
+                action=A.BLOG_TOPIC_DISCOVERED,
+                client_id=client_id,
+                actor_email="scheduler",
+                entity_type="blog",
+                log_type="Info",
+                message=f"Auto-Blog Scheduler: Selected topic '{topic}' and enqueued article generation",
+                meta={"topic": topic, "keywords": keywords, "mode": bs.Mode, "schedule_time": bs.ScheduleTime},
+                commit=True,
+            )
         except Exception as exc:
             db.rollback()
             err_msg = f"Failed to schedule daily blog for {client_id}: {exc}"
             logger.error(f"[LeadAI jobs] {err_msg}")
             errors.append(err_msg)
+            activity.log(
+                db,
+                action=A.BLOG_ARTICLE_FAILED,
+                client_id=client_id,
+                actor_email="scheduler",
+                entity_type="blog",
+                log_type="Error",
+                message=f"Auto-Blog Scheduler failed for client {client_id}: {exc}",
+                meta={"error": str(exc)},
+                commit=True,
+            )
 
     # Re-queue next scheduler tick in 5 minutes (ensure only 1 tick exists)
     has_future_scheduler = (
@@ -851,19 +952,45 @@ def handle_blog_generate(db: Session, payload: dict) -> dict:
         admin_reviewer_email=payload.get("admin_email"),
     )
 
-    article_resp = ArticleService.generate_and_save(
-        db=db,
-        client_id=client_id,
-        req=req,
-        company_name=company_name
-    )
-
-    return {
-        "article_id": article_resp.id,
-        "status": article_resp.status,
-        "title": article_resp.title,
-        "requires_approval": article_resp.requires_approval,
-    }
+    try:
+        article_resp = ArticleService.generate_and_save(
+            db=db,
+            client_id=client_id,
+            req=req,
+            company_name=company_name
+        )
+        activity.log(
+            db,
+            action=A.BLOG_ARTICLE_GENERATED,
+            client_id=client_id,
+            actor_email="scheduler",
+            entity_type="blog",
+            entity_id=article_resp.id,
+            log_type="Info",
+            message=f"Auto-Blog Generated: '{article_resp.title}' (Status: {article_resp.status})",
+            meta={"article_id": article_resp.id, "status": article_resp.status, "topic": topic, "requires_approval": article_resp.requires_approval},
+            commit=True,
+        )
+        return {
+            "article_id": article_resp.id,
+            "status": article_resp.status,
+            "title": article_resp.title,
+            "requires_approval": article_resp.requires_approval,
+        }
+    except Exception as exc:
+        logger.error(f"[LeadAI jobs] Blog generation failed for {client_id}: {exc}")
+        activity.log(
+            db,
+            action=A.BLOG_ARTICLE_FAILED,
+            client_id=client_id,
+            actor_email="scheduler",
+            entity_type="blog",
+            log_type="Error",
+            message=f"Auto-Blog generation failed for topic '{topic}': {exc}",
+            meta={"topic": topic, "error": str(exc)},
+            commit=True,
+        )
+        return {"error": str(exc)}
 
 
 @register("blog.publish")
