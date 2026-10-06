@@ -48,8 +48,8 @@ router = APIRouter(prefix="/access", tags=["LeadAI • Access control"])
 
 def _get_subscription_info(db: Session, principal: Principal, effective_client_id: str | None) -> tuple[bool, str | None, list[str], list[str]]:
     ALL_CHANNELS = ["whatsapp", "instagram", "facebook", "linkedin", "blog", "voice_facilities"]
-    if principal.is_platform_admin:
-        return True, "Platform Admin (Unlimited)", ALL_CHANNELS, ALL_CHANNELS
+    if principal.is_platform_admin or (principal.role or "").lower() in ("platform_admin", "superadmin", "super_admin"):
+        return True, "Platform Admin (Full Access)", ALL_CHANNELS, ALL_CHANNELS
 
     if not effective_client_id:
         return False, None, [], []

@@ -21,6 +21,10 @@ import {
   LinkedInCommentSettings,
   GetCommentsResponse,
   SyncCommentsResponse,
+  LinkedInAutoConnectSettings,
+  GetAutoConnectSettingsResponse,
+  SaveAutoConnectSettingsResponse,
+  TriggerAutoConnectResponse,
 } from '../models/linkedin.models';
 
 
@@ -358,6 +362,41 @@ export class LinkedinService {
       { companyScoped: true }
     );
   }
+
+  /**
+   * Fetch automated candidate search & connection scheduler settings
+   */
+  public getAutoConnectSettings(): Observable<GetAutoConnectSettingsResponse> {
+    return this.apiService.get<GetAutoConnectSettingsResponse>(
+      'linkedin/auto-connect/settings',
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Update automated candidate search & connection scheduler settings
+   */
+  public saveAutoConnectSettings(
+    payload: LinkedInAutoConnectSettings
+  ): Observable<SaveAutoConnectSettingsResponse> {
+    return this.apiService.post<SaveAutoConnectSettingsResponse>(
+      'linkedin/auto-connect/settings',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Trigger immediate test execution of auto-connect job
+   */
+  public triggerAutoConnectNow(): Observable<TriggerAutoConnectResponse> {
+    return this.apiService.post<TriggerAutoConnectResponse>(
+      'linkedin/auto-connect/run-now',
+      {},
+      { companyScoped: true }
+    );
+  }
 }
+
 
 
