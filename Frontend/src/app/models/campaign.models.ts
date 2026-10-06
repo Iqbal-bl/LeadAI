@@ -79,9 +79,36 @@ export interface Campaign {
   call_escalation_enabled?: boolean;
   output_file_id?: string | null;
   output_generated_at?: string | null;
+  running_calls?: RunningCall[];
   created_at: string;
   created_by?: string | null;
   updated_at?: string;
+}
+
+export interface RunningCall {
+  callSid: string;
+  recipientId: string;
+  phone?: string;
+  name?: string;
+  conversationId?: string;
+  duration?: number;
+  status?: string;
+  [key: string]: any;
+}
+
+export interface CampaignStatusWsMessage {
+  type: 'campaign_status';
+  campaign_id: string;
+  status: CampaignStatus | string;
+  status_message?: string | null;
+  total_count: number;
+  queued_count: number;
+  sent_count: number;
+  delivered_count: number;
+  failed_count: number;
+  skipped_count: number;
+  execution_id?: string;
+  running_calls?: RunningCall[];
 }
 
 export interface CampaignCounters {

@@ -42,9 +42,9 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   activeStatusFilter: string = 'all';
   searchQuery: string = '';
 
-  // Active Tab: 'articles' | 'history' | 'generator' | 'settings'
-  mainTab: 'articles' | 'history' | 'generator' | 'settings' = 'articles';
-  loadedTabs = new Set<'articles' | 'history' | 'generator' | 'settings'>(['articles']);
+  // Active Tab: 'articles' | 'history' | 'generator' | 'settings' | 'logs'
+  mainTab: 'articles' | 'history' | 'generator' | 'settings' | 'logs' = 'articles';
+  loadedTabs = new Set<'articles' | 'history' | 'generator' | 'settings' | 'logs'>(['articles']);
   settingsLoaded = false;
 
   // Upload History Filters & Search
@@ -143,7 +143,7 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  setMainTab(tab: 'articles' | 'history' | 'generator' | 'settings'): void {
+  setMainTab(tab: 'articles' | 'history' | 'generator' | 'settings' | 'logs'): void {
     this.mainTab = tab;
     this.loadedTabs.add(tab);
     if (tab === 'settings' && !this.settingsLoaded) {

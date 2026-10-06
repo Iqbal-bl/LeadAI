@@ -131,7 +131,11 @@ export class AuthService {
   public isCompanyAdmin(): boolean {
     const role = this.getUserRole()?.toLowerCase();
     return (
-      role === 'company_admin' || role === 'admin' || role === 'platform_admin'
+      role === 'company_admin' ||
+      role === 'companyadmin' ||
+      role === 'admin' ||
+      role === 'platform_admin' ||
+      role === 'superadmin'
     );
   }
 
@@ -185,7 +189,7 @@ export class AuthService {
     if (!authConfig.pkce) {
       headers = headers.set(
         'Authorization',
-        'Basic ' + btoa(authConfig.clientId + ':' + authConfig.clientSecret),
+        'Basic ' + btoa(authConfig.clientId + ':' + ((authConfig as any).clientSecret || '')),
       );
     }
 
@@ -536,7 +540,9 @@ export class AuthService {
         channels.includes('linkedin') ||
         channels.includes('li') ||
         features.includes('linkedin') ||
-        features.includes('li')
+        features.includes('li') ||
+        channels.includes('social.linkedin') ||
+        features.includes('social.linkedin')
       );
     }
     if (
@@ -551,7 +557,30 @@ export class AuthService {
         features.some((f) => blogKeys.includes(f))
       );
     }
-    return channels.includes(ch) || features.includes(ch);
+    if (ch === 'social' || ch === 'social_media') {
+      const socialKeys = [
+        'social',
+        'social_media',
+        'facebook',
+        'instagram',
+        'whatsapp',
+        'linkedin',
+        'social.facebook',
+        'social.instagram',
+        'social.whatsapp',
+        'social.linkedin',
+      ];
+      return (
+        channels.some((c) => socialKeys.includes(c)) ||
+        features.some((f) => socialKeys.includes(f))
+      );
+    }
+    return (
+      channels.includes(ch) ||
+      features.includes(ch) ||
+      channels.includes(`social.${ch}`) ||
+      features.includes(`social.${ch}`)
+    );
   }
 
   /**

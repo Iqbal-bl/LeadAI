@@ -1,14 +1,14 @@
 export const environment = {
   production: true,
-  apiPrefix: '/api/leadai',
-  wsUrl: '',
+  apiPrefix: 'https://leadai.bharatlogicllp.com/api/leadai',
+  wsUrl: 'wss://leadai.bharatlogicllp.com/api',
   authConfig: {
-    issuer: '', // Add production Identity Server URL
-    clientId: 'leadai_frontend',
-    loginRedirectUri: '/login/callback',
-    postLogoutRedirectUri: '/login',
+    issuer: 'https://identity.bharatlogicllp.com',
+    clientId: 'angular-client',
+    loginRedirectUri: 'https://leadai.bharatlogicllp.com/auth/callback',
+    postLogoutRedirectUri: 'https://leadai.bharatlogicllp.com/',
     pkce: true,
     clientSecret: '',
-    checkSessionApi: '/api/session'
-  }
+    checkSessionApi: 'https://identity.bharatlogicllp.com/api/session',
+  },
 };

@@ -127,6 +127,7 @@ def document_out(row: LeadKbDocument) -> DocumentOut:
         file_name=row.FileName,
         content_type=row.ContentType,
         source_type=row.SourceType,
+        source_url=row.SourceUrl,
         status=row.Status,
         status_message=row.StatusMessage,
         chunk_count=row.ChunkCount or 0,

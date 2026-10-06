@@ -6,6 +6,7 @@ export interface Lead {
   company: string;
   address: string;
   industry: string;
+  product?: string;
   tags: string[];
   leadScore: number;
   priority: 'High' | 'Medium' | 'Low';

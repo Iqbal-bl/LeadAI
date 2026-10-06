@@ -39,6 +39,12 @@ export class ClientPermissionService {
           if (item.routerLink === '/client/blog' && !this.authService.hasFeature('blog')) {
             return false;
           }
+          if (
+            (item.routerLink === '/client/create-post' || item.routerLink === '/client/social-analytics') &&
+            !this.authService.hasFeature('social')
+          ) {
+            return false;
+          }
 
           // 2. Permission check
           const reqPermission = item.permission;

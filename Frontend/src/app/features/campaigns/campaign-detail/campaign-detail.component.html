@@ -214,6 +214,27 @@
         </p>
       </div>
 
+      <!-- Active Calls (Only for call campaigns) -->
+      <div
+        *ngIf="campaign.kind === 'call'"
+        class="card-base p-3 text-center bg-emerald-50/50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800"
+      >
+        <div class="flex items-center justify-center gap-1.5">
+          <span
+            *ngIf="runningCalls.length > 0"
+            class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"
+          ></span>
+          <p class="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+            {{ runningCalls.length }}
+          </p>
+        </div>
+        <p
+          class="text-[11px] uppercase tracking-wider mt-0.5 text-emerald-600/80 dark:text-emerald-400/80 font-semibold"
+        >
+          Active Calls
+        </p>
+      </div>
+
       <!-- Concurrency / Max Calls (Only for call campaigns, shown alongside counters) -->
       <div
         *ngIf="campaign.kind === 'call'"
@@ -301,6 +322,111 @@
           Leads Created
         </p>
       </div>
+    </div>
+  </div>
+
+  <!-- Currently Calling / Live Calls Panel (Voice/Call Campaigns only) -->
+  <div
+    *ngIf="campaign.kind === 'call'"
+    class="card-base p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800"
+  >
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+      <div class="flex items-center gap-3">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800">
+          <i
+            class="pi pi-phone text-emerald-600 dark:text-emerald-400 text-lg"
+            [ngClass]="runningCalls.length > 0 ? 'animate-pulse' : ''"
+          ></i>
+          <span
+            *ngIf="runningCalls.length > 0"
+            class="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-ping"
+          ></span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">
+              Currently Calling
+            </h2>
+            <span
+              class="text-xs px-2.5 py-0.5 rounded-full font-bold inline-flex items-center gap-1.5"
+              [ngClass]="runningCalls.length > 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+            >
+              <span *ngIf="runningCalls.length > 0" class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              {{ runningCalls.length }} active
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Real-time calls in progress · Bounded by concurrency limit (max {{ campaign.concurrency ?? 5 }} simultaneous)
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs flex-wrap">
+        <span class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+          Concurrency Cap: <strong class="text-indigo-600 dark:text-indigo-400 font-semibold">{{ campaign.concurrency ?? 5 }}</strong>
+        </span>
+        <span
+          class="px-2.5 py-1 rounded-lg font-semibold capitalize"
+          [ngClass]="campaign.status === 'running' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+        >
+          {{ campaign.status }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Active Calls Cards Grid -->
+    <div *ngIf="runningCalls.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+      <div
+        *ngFor="let call of runningCalls; trackBy: trackByCallSid"
+        class="p-4 rounded-xl border border-emerald-200/80 dark:border-emerald-800/60 bg-emerald-50/20 dark:bg-emerald-950/20 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all flex flex-col justify-between gap-3 shadow-xs"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
+              <span class="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                {{ getRecipientName(call) }}
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1 flex items-center gap-1.5">
+              <i class="pi pi-phone text-[10px] text-slate-400"></i>
+              {{ getRecipientPhone(call) }}
+            </p>
+          </div>
+          <span
+            class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold flex-shrink-0"
+            [pTooltip]="call.callSid"
+          >
+            {{ call.callSid ? (call.callSid | slice:0:10) + '...' : 'Active' }}
+          </span>
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-emerald-100 dark:border-emerald-900/40 text-xs">
+          <span class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+            <i class="pi pi-spin pi-spinner text-[10px]"></i>
+            Live Call Audio
+          </span>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer shadow-xs"
+            (click)="openLiveCallTranscript(call)"
+          >
+            <i class="pi pi-comments text-xs"></i>
+            Live Transcript
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State for Running Calls -->
+    <div
+      *ngIf="runningCalls.length === 0"
+      class="py-6 text-center rounded-xl bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800"
+    >
+      <i class="pi pi-phone text-2xl text-slate-300 dark:text-slate-600 mb-2"></i>
+      <p class="text-xs font-medium text-slate-500 dark:text-slate-400">
+        {{ campaign.status === 'running' ? 'Dialler active: waiting for next batch of calls to start...' : (campaign.status === 'paused' ? 'Campaign paused: no calls currently in progress.' : 'No active calls in progress right now.') }}
+      </p>
     </div>
   </div>
 

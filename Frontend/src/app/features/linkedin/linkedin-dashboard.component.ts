@@ -11,6 +11,7 @@ import {
   LinkedInMessage,
   LinkedInSocialComment,
   LinkedInCommentSettings,
+  LinkedInAutoConnectSettings,
 } from '../../models/linkedin.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../shared/services/confirmation.service';
@@ -57,6 +58,28 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   invitations: LinkedInInvitationItem[] = [];
   loadingInvitations = false;
   acceptingAll = false;
+
+  // Auto-Pilot Outreach & Randomized Connection Scheduler
+  autoConnectSettings: LinkedInAutoConnectSettings = {
+    enabled: false,
+    runs_per_day: 3,
+    profiles_per_run: 5,
+    target_prompt: 'Senior React & Node.js Developers in Bengaluru',
+    target_keywords: '',
+    custom_message: 'Hi {firstName}, I came across your profile and was really impressed by your background. Would love to connect!',
+    active_hours_start: 9,
+    active_hours_end: 19,
+    last_run_at: null,
+    next_run_at: null,
+    total_sent_today: 0,
+    total_sent_all_time: 0,
+    last_run_status: null,
+    last_run_detail: null,
+  };
+  loadingAutoConnect = false;
+  savingAutoConnect = false;
+  triggeringAutoConnect = false;
+  isGeneratingAutoKeywords = false;
 
   // AI Boolean Keyword Search
   aiPrompt = 'Senior React & Node.js Developers in Bengaluru';
@@ -168,6 +191,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     if (tab === 'comments' && this.comments.length === 0 && !this.loadingComments) {
       this.loadComments();
     }
+    if (tab === 'search') {
+      this.loadAutoConnectSettings();
+    }
   }
 
   // --- OAuth 2.0 Connection ---
@@ -188,6 +214,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.loadConversations();
             this.loadCommentSettings();
             this.loadComments();
+            this.loadAutoConnectSettings();
           }
         }
       },
@@ -615,6 +642,163 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           detail: err?.error?.detail || 'Could not generate boolean keywords.',
         });
       },
+    });
+  }
+
+  // --- Auto-Pilot Scheduler ---
+  loadAutoConnectSettings(): void {
+    this.loadingAutoConnect = true;
+    this.linkedinService.getAutoConnectSettings().subscribe({
+      next: (res) => {
+        this.loadingAutoConnect = false;
+        if (res?.settings) {
+          this.autoConnectSettings = {
+            ...this.autoConnectSettings,
+            ...res.settings,
+          };
+          if (!this.autoConnectSettings.custom_message && this.autoConnectSettings.custom_message !== '') {
+            this.autoConnectSettings.custom_message =
+              'Hi {firstName}, I came across your profile and was really impressed by your background. Would love to connect!';
+          }
+        }
+      },
+      error: (err) => {
+        this.loadingAutoConnect = false;
+        console.error('Failed to load auto-connect settings:', err);
+      },
+    });
+  }
+
+  saveAutoConnectSettings(): void {
+    if (
+      this.autoConnectSettings.enabled &&
+      !this.autoConnectSettings.target_keywords?.trim() &&
+      !this.autoConnectSettings.target_prompt?.trim()
+    ) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Target Criteria Required',
+        detail:
+          'Please specify a target candidate description or boolean search keywords before enabling Auto-Pilot.',
+      });
+      return;
+    }
+
+    this.savingAutoConnect = true;
+    this.linkedinService
+      .saveAutoConnectSettings(this.autoConnectSettings)
+      .subscribe({
+        next: (res) => {
+          this.savingAutoConnect = false;
+          if (res?.settings) {
+            this.autoConnectSettings = {
+              ...this.autoConnectSettings,
+              ...res.settings,
+            };
+          }
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Auto-Pilot Schedule Saved',
+            detail: this.autoConnectSettings.enabled
+              ? `Auto-Pilot is ACTIVE: ${this.autoConnectSettings.runs_per_day} randomized runs/day scheduled.`
+              : 'Auto-Pilot schedule settings saved (Paused).',
+          });
+        },
+        error: (err) => {
+          this.savingAutoConnect = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Save Failed',
+            detail:
+              err?.error?.detail ||
+              'Could not save Auto-Pilot schedule settings.',
+          });
+        },
+      });
+  }
+
+  triggerAutoConnectNow(): void {
+    if (
+      !this.autoConnectSettings.target_keywords?.trim() &&
+      !this.autoConnectSettings.target_prompt?.trim()
+    ) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Target Criteria Missing',
+        detail:
+          'Please provide target keywords or a prompt before triggering a run.',
+      });
+      return;
+    }
+
+    this.triggeringAutoConnect = true;
+    this.linkedinService.triggerAutoConnectNow().subscribe({
+      next: (res) => {
+        this.triggeringAutoConnect = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Auto-Pilot Run Dispatched',
+          detail:
+            'Candidate search and connection dispatch started in background.',
+        });
+        setTimeout(() => this.loadAutoConnectSettings(), 4000);
+      },
+      error: (err) => {
+        this.triggeringAutoConnect = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Dispatch Failed',
+          detail:
+            err?.error?.detail ||
+            'Could not trigger immediate auto-connect run.',
+        });
+      },
+    });
+  }
+
+  generateAutoKeywords(): void {
+    if (!this.autoConnectSettings.target_prompt?.trim()) return;
+
+    this.isGeneratingAutoKeywords = true;
+    this.linkedinService
+      .generateKeywords(this.autoConnectSettings.target_prompt.trim())
+      .subscribe({
+        next: (res) => {
+          this.isGeneratingAutoKeywords = false;
+          this.autoConnectSettings.target_keywords = res.keywords || '';
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Keywords Generated',
+            detail: 'Auto-Pilot boolean search keywords updated.',
+          });
+        },
+        error: (err) => {
+          this.isGeneratingAutoKeywords = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Keyword Generation Failed',
+            detail:
+              err?.error?.detail || 'Could not generate boolean search keywords.',
+          });
+        },
+      });
+  }
+
+  applyAutoConnectPreset(templateText: string): void {
+    this.autoConnectSettings.custom_message = templateText;
+  }
+
+  copyAutoKeywordsToSearch(): void {
+    if (this.autoConnectSettings.target_keywords) {
+      this.generatedKeywords = this.autoConnectSettings.target_keywords;
+    }
+    if (this.autoConnectSettings.target_prompt) {
+      this.aiPrompt = this.autoConnectSettings.target_prompt;
+    }
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Copied to Search Bar',
+      detail: 'Target keywords copied to manual search controls above.',
     });
   }
 

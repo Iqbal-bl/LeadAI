@@ -8,6 +8,7 @@ and stored under the right ClientId.
 from __future__ import annotations
 
 import logging
+import re
 
 from fastapi import (
     APIRouter,
@@ -31,6 +32,7 @@ from ..db import get_leadai_db
 from ..models import LeadKbChunk, LeadKbDocument, utcnow
 from ..rbac import Principal, assert_owns, require, resolve_scope
 from ..schemas import (
+    CloudLinkCreate,
     DocumentDetailOut,
     DocumentOut,
     FaqCreate,
@@ -41,7 +43,7 @@ from ..schemas import (
     TextCreate,
 )
 from ..serializers import document_detail_out, document_out
-from ..services import ai_engine, embeddings, ingest, vectorstore
+from ..services import ai_engine, cloud_fetcher, embeddings, ingest, vectorstore
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/knowledge", tags=["LeadAI • Knowledge base"])
@@ -65,6 +67,7 @@ def _index(
     source_type: str,
     text: str,
     tags: str | None,
+    source_url: str | None = None,
     request: Request | None = None,
 ) -> LeadKbDocument:
     """Chunk -> embed -> persist. The single write path for the knowledge base."""
@@ -82,6 +85,7 @@ def _index(
         FileName=filename[:255] if filename else None,
         ContentType=content_type[:120],
         SourceType=source_type,
+        SourceUrl=source_url[:500] if source_url else None,
         Status="indexing",
         CharCount=len(text),
         Tags=tags,
@@ -245,6 +249,97 @@ def add_faq(
 
 
 @router.post(
+    "/cloud-link",
+    response_model=DocumentOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Import and index a document from a Google Drive or Dropbox link",
+)
+@router.post(
+    "/url",
+    response_model=DocumentOut,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+def import_cloud_link(
+    payload: CloudLinkCreate,
+    request: Request,
+    principal: Principal = Depends(require("kb.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    client_id = resolve_scope(principal)
+    _company_name(db, client_id)
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.KB_UPLOADED,
+        client_id=client_id,
+        entity_type="document",
+        message=f"Fetching cloud link '{payload.title}' from {payload.url[:120]}",
+        meta={"url": payload.url},
+        request=request,
+    )
+
+    try:
+        filename, content_type, blob = cloud_fetcher.fetch_cloud_file(payload.url, default_title=payload.title)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Could not download file from link: {exc}",
+        ) from exc
+
+    if len(blob) > settings.max_upload_bytes:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"File exceeds maximum size of {settings.max_upload_bytes // (1024 * 1024)} MB",
+        )
+
+    try:
+        text = ingest.extract_text(filename, content_type, blob)
+    except Exception as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Could not extract readable text from '{filename}': {exc}",
+        ) from exc
+
+    if not text or not text.strip():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"No readable text could be found in '{filename}'. Ensure it contains selectable text.",
+        )
+
+    full_text = text
+    if payload.notes and payload.notes.strip():
+        full_text = f"Context & Notes:\n{payload.notes.strip()}\n\n---\nDocument Content ({filename}):\n{text}"
+
+    lower_url = payload.url.lower()
+    if "drive.google.com" in lower_url or "docs.google.com" in lower_url or "drive.usercontent" in lower_url:
+        stype = "google_drive"
+    elif "dropbox.com" in lower_url:
+        stype = "dropbox"
+    else:
+        stype = "cloud_link"
+
+    return document_out(
+        _index(
+            db,
+            client_id,
+            principal,
+            title=payload.title or filename,
+            filename=filename,
+            content_type=content_type,
+            source_type=stype,
+            text=full_text,
+            tags=payload.tags,
+            source_url=payload.url,
+            request=request,
+        )
+    )
+
+
+@router.post(
     "/text",
     response_model=DocumentOut,
     status_code=status.HTTP_201_CREATED,
@@ -257,6 +352,46 @@ def add_text(
     db: Session = Depends(get_leadai_db),
 ):
     client_id = resolve_scope(principal)
+
+    # Auto-detect if content is a cloud link (Google Drive / Dropbox)
+    cloud_url_match = re.search(
+        r"(https?://(?:drive\.google\.com|docs\.google\.com|www\.dropbox\.com|dropbox\.com)[^\s\n\r]+)",
+        payload.content,
+    )
+    if cloud_url_match:
+        cloud_url = cloud_url_match.group(1).rstrip(">)].,\"'")
+        try:
+            filename, content_type, blob = cloud_fetcher.fetch_cloud_file(cloud_url, default_title=payload.title)
+            extracted = ingest.extract_text(filename, content_type, blob)
+            if extracted and extracted.strip():
+                notes = (
+                    payload.content.replace(cloud_url_match.group(0), "")
+                    .replace("Google Drive Link:", "")
+                    .replace("Dropbox Link:", "")
+                    .strip()
+                )
+                full_text = extracted
+                if notes:
+                    full_text = f"Context & Notes:\n{notes}\n\n---\nDocument Content ({filename}):\n{extracted}"
+                stype = "google_drive" if "google" in cloud_url else "dropbox"
+                return document_out(
+                    _index(
+                        db,
+                        client_id,
+                        principal,
+                        title=payload.title or filename,
+                        filename=filename,
+                        content_type=content_type,
+                        source_type=stype,
+                        text=full_text,
+                        tags=payload.tags,
+                        source_url=cloud_url,
+                        request=request,
+                    )
+                )
+        except Exception as exc:
+            logger.warning("[LeadAI KB] Cloud link fetch in add_text failed, storing as text: %s", exc)
+
     return document_out(
         _index(
             db,
@@ -415,6 +550,33 @@ def reindex_document(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "Original text is not retained for this document — re-upload it instead.",
         )
+
+    # If the document originated from a cloud link or contains a link, attempt re-fetching
+    cloud_url = doc.SourceUrl
+    if not cloud_url and doc.RawText:
+        m = re.search(
+            r"(https?://(?:drive\.google\.com|docs\.google\.com|www\.dropbox\.com|dropbox\.com)[^\s\n\r]+)",
+            doc.RawText,
+        )
+        if m:
+            cloud_url = m.group(1).rstrip(">)].,\"'")
+
+    if cloud_url:
+        try:
+            fn, ct, blob = cloud_fetcher.fetch_cloud_file(cloud_url, default_title=doc.Title)
+            extracted = ingest.extract_text(fn, ct, blob)
+            if extracted and len(extracted.strip()) > 30:
+                doc.FileName = fn
+                doc.ContentType = ct
+                doc.RawText = extracted
+                doc.CharCount = len(extracted)
+                doc.SourceUrl = cloud_url
+                if "google" in cloud_url:
+                    doc.SourceType = "google_drive"
+                elif "dropbox" in cloud_url:
+                    doc.SourceType = "dropbox"
+        except Exception as exc:
+            logger.warning("[LeadAI KB] Re-fetch cloud link for doc %s skipped: %s", doc.Id, exc)
 
     vectorstore.delete_document(db, client_id, document_id)
     chunks = ingest.chunk(doc.RawText)

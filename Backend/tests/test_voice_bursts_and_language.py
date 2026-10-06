@@ -130,6 +130,51 @@ def test_the_language_tracker_reports_each_transcripts_language_and_forwards_the
     assert heard == ["hi-IN"] and [f.text for f in down if isinstance(f, TranscriptionFrame)] == ["namaste"]
 
 
+def test_the_language_tracker_warns_when_stt_is_unusually_slow_to_return_a_transcript():
+    """A real incident: a caller's utterance took ~10s to come back as a
+    transcript, with nothing in our own logs saying so — it took manually
+    diffing pipecat's raw DEBUG timestamps after the fact to even notice.
+    This is the regression test for the fix: the gap between VAD saying the
+    caller stopped and the transcript actually arriving must now be logged
+    on its own when it crosses the slow threshold."""
+    from pipecat.frames.frames import VADUserStoppedSpeakingFrame
+
+    from LeadAI.voice import pipeline
+
+    warnings = []
+    pipeline.logger.warning = lambda *a, **k: warnings.append((a, k))
+    saved_threshold = pipeline.LanguageTracker._SLOW_STT_ROUND_TRIP_SECONDS
+    pipeline.LanguageTracker._SLOW_STT_ROUND_TRIP_SECONDS = 0.05
+    try:
+        frames = [
+            VADUserStoppedSpeakingFrame(),
+            SleepFrame(sleep=0.1),
+            TranscriptionFrame(text="slow one", user_id="u", timestamp="t", language=Language.EN_IN),
+        ]
+        run(run_stage(LanguageTracker(on_language=lambda code: None), frames))
+    finally:
+        pipeline.LanguageTracker._SLOW_STT_ROUND_TRIP_SECONDS = saved_threshold
+
+    assert len(warnings) == 1
+    assert "slow one" in warnings[0][0][-1]
+
+
+def test_the_language_tracker_does_not_warn_when_stt_responds_quickly():
+    from pipecat.frames.frames import VADUserStoppedSpeakingFrame
+
+    from LeadAI.voice import pipeline
+
+    warnings = []
+    pipeline.logger.warning = lambda *a, **k: warnings.append((a, k))
+    frames = [
+        VADUserStoppedSpeakingFrame(),
+        TranscriptionFrame(text="fast one", user_id="u", timestamp="t", language=Language.EN_IN),
+    ]
+    run(run_stage(LanguageTracker(on_language=lambda code: None), frames))
+
+    assert warnings == []
+
+
 # ================================================================ database-backed pieces
 LLM_CALLS = []
 SEARCHED = []

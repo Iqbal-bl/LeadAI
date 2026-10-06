@@ -7,10 +7,10 @@ export const environment = {
   authConfig: {
     issuer: 'https://192.168.2.100:7075',
     clientId: 'angular-client',
+    clientSecret: '',
     loginRedirectUri: 'http://localhost:4300/auth/callback',
     postLogoutRedirectUri: 'http://localhost:4300/',
     pkce: true,
-    clientSecret: '',
     checkSessionApi: 'https://192.168.2.100:7075/api/session',
   },
 };

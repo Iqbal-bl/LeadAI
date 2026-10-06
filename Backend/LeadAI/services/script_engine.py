@@ -299,7 +299,8 @@ def company_voice_settings(db: Session, client_id: str) -> dict:
     # Sarvam on every TTS attempt (3 quick-reconnect failures, then silence for
     # the rest of the call). "ritu" is valid on v3.
     speaker = (row.VoiceSpeaker if row else None) or "ritu"
-    return {"gender": gender, "speed": speed, "speaker": speaker}
+    provider = (row.SttTtsProvider if row else None) or "sarvam"
+    return {"gender": gender, "speed": speed, "speaker": speaker, "provider": provider}
 
 
 def _gender_note(db: Session, client_id: str, channel: str) -> str:

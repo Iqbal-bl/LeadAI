@@ -1,9 +1,11 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
 import { AuthService } from '../../../services/auth.service';
 import { VoiceService } from '../../../services/voice.service';
+import { WebsocketService } from '../../../services/websocket.service';
 import { CallTranscript } from '../../../models/voice.models';
 import {
   Campaign,
@@ -16,6 +18,8 @@ import {
   CampaignExecutionAttempt,
   CampaignExecutionAttemptsResponse,
   RestartMode,
+  RunningCall,
+  CampaignStatusWsMessage,
 } from '../../../models/campaign.models';
 import { MessageService, MenuItem } from 'primeng/api';
 import { ConfirmationService } from '../../../shared/services/confirmation.service';
@@ -40,6 +44,15 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   loading = true;
   previewLoading = false;
   progressPercent = 0;
+
+  // Running Calls State (Voice campaigns)
+  runningCalls: RunningCall[] = [];
+  private campaignWsSub?: Subscription;
+  private liveTranscriptWsSub?: Subscription;
+  liveCallConversationId: string | null = null;
+  liveCallSid: string | null = null;
+  liveCallRecipientName = '';
+  liveCallPhone = '';
 
   showEditDialog = false;
 
@@ -102,6 +115,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     private campaignService: CampaignService,
     private authService: AuthService,
     private voiceService: VoiceService,
+    private wsService: WebsocketService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
     public location: Location,
@@ -114,11 +128,267 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.loadCampaign(id);
+      this.connectCampaignWebSocket(id);
     }
   }
 
   ngOnDestroy(): void {
     this.stopPolling();
+    this.disconnectCampaignWebSocket();
+    if (this.liveTranscriptWsSub) {
+      this.liveTranscriptWsSub.unsubscribe();
+      this.liveTranscriptWsSub = undefined;
+    }
+    if (this.liveCallConversationId) {
+      this.wsService.disconnectConversation();
+      this.liveCallConversationId = null;
+    }
+  }
+
+  connectCampaignWebSocket(campaignId: string): void {
+    this.disconnectCampaignWebSocket();
+    this.wsService.connectCampaign(campaignId);
+    this.campaignWsSub = this.wsService.campaignUpdates$.subscribe({
+      next: (msg: any) => {
+        if (msg && msg.type === 'campaign_status') {
+          this.handleCampaignStatusUpdate(msg);
+        }
+      },
+      error: (err: any) => {
+        console.warn('[CampaignDetail] Campaign WS error:', err);
+      },
+    });
+  }
+
+  disconnectCampaignWebSocket(): void {
+    if (this.campaignWsSub) {
+      this.campaignWsSub.unsubscribe();
+      this.campaignWsSub = undefined;
+    }
+    this.wsService.disconnectCampaign();
+  }
+
+  handleCampaignStatusUpdate(msg: CampaignStatusWsMessage): void {
+    if (!this.campaign) return;
+
+    if (msg.status) {
+      this.campaign.status = msg.status;
+    }
+    if (msg.status_message !== undefined) {
+      this.campaign.status_message = msg.status_message;
+    }
+
+    if (msg.total_count !== undefined) this.campaign.total_count = msg.total_count;
+    if (msg.queued_count !== undefined) this.campaign.queued_count = msg.queued_count;
+    if (msg.sent_count !== undefined) this.campaign.sent_count = msg.sent_count;
+    if (msg.delivered_count !== undefined) this.campaign.delivered_count = msg.delivered_count;
+    if (msg.failed_count !== undefined) this.campaign.failed_count = msg.failed_count;
+    if (msg.skipped_count !== undefined) this.campaign.skipped_count = msg.skipped_count;
+
+    if (!this.campaign.counters) {
+      this.campaign.counters = {
+        total: msg.total_count || 0,
+        sent: msg.sent_count || 0,
+        delivered: msg.delivered_count || 0,
+        failed: msg.failed_count || 0,
+        replied: 0,
+      };
+    }
+    this.campaign.counters.total = msg.total_count ?? this.campaign.counters.total;
+    this.campaign.counters.queued = msg.queued_count ?? this.campaign.counters.queued;
+    this.campaign.counters.sent = msg.sent_count ?? this.campaign.counters.sent;
+    this.campaign.counters.delivered = msg.delivered_count ?? this.campaign.counters.delivered;
+    this.campaign.counters.failed = msg.failed_count ?? this.campaign.counters.failed;
+    this.campaign.counters.skipped = msg.skipped_count ?? this.campaign.counters.skipped;
+
+    const cnt = this.campaign.counters;
+    this.progressPercent =
+      cnt && cnt.total > 0
+        ? Math.round(((cnt.sent + cnt.delivered + cnt.failed) / cnt.total) * 100)
+        : 0;
+
+    if (msg.running_calls !== undefined) {
+      this.runningCalls = msg.running_calls || [];
+      this.campaign.running_calls = this.runningCalls;
+      if (this.runningCalls.length > 0 && this.allRecipients.length === 0) {
+        this.loadRecipients(this.campaign.id);
+      }
+    } else if (
+      msg.status === 'completed' ||
+      msg.status === 'cancelled' ||
+      msg.status === 'failed'
+    ) {
+      this.runningCalls = [];
+      this.campaign.running_calls = [];
+    }
+
+    if (msg.execution_id && this.loadedTabs.has('executions')) {
+      this.loadExecutions(this.campaign.id);
+    }
+    if (this.loadedTabs.has('history')) {
+      this.loadHistory(this.campaign.id);
+    }
+  }
+
+  trackByCallSid(index: number, call: RunningCall): string {
+    return call.callSid || call.recipientId || index.toString();
+  }
+
+  getRecipient(call: RunningCall): CampaignRecipient | undefined {
+    return this.allRecipients.find((r) => r.id === call.recipientId);
+  }
+
+  getRecipientName(call: RunningCall): string {
+    const r = this.getRecipient(call);
+    return r?.name || call.name || 'Recipient ' + (call.recipientId ? call.recipientId.slice(0, 8) : '');
+  }
+
+  getRecipientPhone(call: RunningCall): string {
+    const r = this.getRecipient(call);
+    return r?.phone_masked || r?.phone || r?.identifier_masked || call.phone || '—';
+  }
+
+  openLiveCallTranscript(call: RunningCall): void {
+    const recipient = this.getRecipient(call);
+    const conversationId = call.conversationId || recipient?.conversation_id;
+    this.selectedAttemptForTranscript = null;
+    this.transcriptLoading = true;
+    this.transcriptVisible = true;
+    this.activeTranscript = null;
+    this.liveCallSid = call.callSid;
+    this.liveCallRecipientName = this.getRecipientName(call);
+    this.liveCallPhone = this.getRecipientPhone(call);
+
+    this.dialogConversations = [
+      {
+        id: 'live-init',
+        sender: 'system',
+        summary: `Live call in progress (${call.callSid}) · ${this.liveCallRecipientName}`,
+        startTime: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        isSystem: true,
+      },
+    ];
+
+    if (this.liveTranscriptWsSub) {
+      this.liveTranscriptWsSub.unsubscribe();
+      this.liveTranscriptWsSub = undefined;
+    }
+
+    if (conversationId) {
+      this.liveCallConversationId = conversationId;
+      this.wsService.connectConversation(conversationId);
+      this.liveTranscriptWsSub = this.wsService.conversationMessages$.subscribe({
+        next: (data: any) => {
+          this.handleLiveTranscriptTurn(data);
+        },
+        error: (err) => {
+          console.warn('[LiveTranscript] WS error:', err);
+        },
+      });
+    } else if (this.campaign) {
+      // Recipient not yet in local cache — fetch recipients to resolve conversation_id
+      this.campaignService.getRecipients(this.campaign.id).subscribe({
+        next: (res: any) => {
+          this.allRecipients = Array.isArray(res) ? res : res?.items || [];
+          const found = this.getRecipient(call);
+          const resolvedConvId = call.conversationId || found?.conversation_id;
+          if (resolvedConvId && !this.liveCallConversationId) {
+            this.liveCallConversationId = resolvedConvId;
+            this.wsService.connectConversation(resolvedConvId);
+            this.liveTranscriptWsSub = this.wsService.conversationMessages$.subscribe({
+              next: (data: any) => {
+                this.handleLiveTranscriptTurn(data);
+              },
+              error: (err) => {
+                console.warn('[LiveTranscript] WS error:', err);
+              },
+            });
+          }
+        },
+      });
+    }
+
+    if (call.callSid) {
+      this.voiceService.getCallTranscript(call.callSid).subscribe({
+        next: (transcript) => {
+          this.activeTranscript = transcript;
+          this.transcriptLoading = false;
+          const built = this.buildConversationsFromTranscript(transcript, null);
+          if (built.length > 0) {
+            this.dialogConversations = built;
+          }
+        },
+        error: () => {
+          this.transcriptLoading = false;
+        },
+      });
+    } else {
+      this.transcriptLoading = false;
+    }
+  }
+
+  handleLiveTranscriptTurn(data: any): void {
+    if (!data) return;
+
+    if (data.type === 'status' || data.type === 'call_status') {
+      this.dialogConversations = [
+        ...this.dialogConversations,
+        {
+          id: 'status-' + Date.now(),
+          sender: 'system',
+          summary: `Call status: ${data.status}`,
+          startTime: data.timestamp || new Date().toISOString(),
+          created_at: data.timestamp || new Date().toISOString(),
+          isSystem: true,
+        },
+      ];
+      return;
+    }
+
+    let msgPayload = data;
+    if (data.type === 'message' && data.data) {
+      msgPayload = data.data;
+    } else if (data.message && typeof data.message === 'object') {
+      msgPayload = data.message;
+    }
+
+    if (msgPayload) {
+      const text = msgPayload.text || msgPayload.content || msgPayload.message;
+      const msgId = msgPayload.id || `live-${Date.now()}`;
+      if (text) {
+        const rawSender = (msgPayload.sender || msgPayload.role || 'ai').toLowerCase();
+        const isCust =
+          rawSender === 'customer' ||
+          rawSender === 'user' ||
+          rawSender === 'human' ||
+          rawSender === 'lead';
+
+        const existingIdx = msgPayload.id
+          ? this.dialogConversations.findIndex((c) => c.id === msgPayload.id)
+          : -1;
+
+        const turnObj = {
+          id: msgId,
+          sender: isCust ? 'customer' : 'ai',
+          summary: text,
+          content: text,
+          startTime: msgPayload.timestamp || msgPayload.created_at || new Date().toISOString(),
+          created_at: msgPayload.timestamp || msgPayload.created_at || new Date().toISOString(),
+          confidence: msgPayload.confidence,
+          leadName: this.liveCallRecipientName,
+          isSystem: false,
+        };
+
+        if (existingIdx > -1) {
+          const updated = [...this.dialogConversations];
+          updated[existingIdx] = turnObj;
+          this.dialogConversations = updated;
+        } else {
+          this.dialogConversations = [...this.dialogConversations, turnObj];
+        }
+      }
+    }
   }
 
   openEditDialog(): void {
@@ -189,12 +459,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
         // Lazy load ONLY the active tab data
         this.loadTabData(this.activeTab, id, true);
 
-        if (
-          this.campaign?.status === 'running' ||
-          this.campaign?.status === 'queued' ||
-          this.campaign?.status === 'building' ||
-          this.campaign?.status === 'scheduled'
-        ) {
+        if (this.campaign?.status === 'running') {
           this.startPolling(id);
         }
         if (
@@ -357,12 +622,7 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
           if (this.loadedTabs.has('recipients')) {
             this.loadRecipients(id);
           }
-          if (
-            this.campaign?.status !== 'running' &&
-            this.campaign?.status !== 'queued' &&
-            this.campaign?.status !== 'building' &&
-            this.campaign?.status !== 'scheduled'
-          ) {
+          if (this.campaign?.status !== 'running') {
             this.stopPolling();
             if (this.campaign?.status === 'ready') {
               this.loadPreview(id);
@@ -543,6 +803,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   }
 
   getTranscriptDialogHeader(): string {
+    if (this.liveCallSid) {
+      return `Live Call Audio & Transcript — ${this.liveCallRecipientName || 'Customer'} (${this.liveCallSid.slice(0, 10)}...)`;
+    }
     const name = this.selectedAttemptForTranscript?.name;
     const mode =
       this.activeTranscript?.mode === 'ai_voice'
@@ -559,6 +822,15 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   }
 
   get callMetadataForDialog(): CallMetadataInfo | null {
+    if (this.liveCallSid) {
+      return {
+        status: 'in-progress',
+        duration: 'Live',
+        phone: this.liveCallPhone || undefined,
+        initiatedBy: 'Voice Campaign (Live)',
+        language: this.activeTranscript?.language || undefined,
+      };
+    }
     if (!this.activeTranscript && !this.selectedAttemptForTranscript)
       return null;
     return {
@@ -993,6 +1265,17 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     this.selectedRecipientForTranscript = null;
     this.selectedAttemptForTranscript = null;
     this.dialogConversations = [];
+    if (this.liveTranscriptWsSub) {
+      this.liveTranscriptWsSub.unsubscribe();
+      this.liveTranscriptWsSub = undefined;
+    }
+    if (this.liveCallConversationId) {
+      this.wsService.disconnectConversation();
+      this.liveCallConversationId = null;
+    }
+    this.liveCallSid = null;
+    this.liveCallRecipientName = '';
+    this.liveCallPhone = '';
   }
 
   downloadSingleCsv(recipient: CampaignRecipient): void {
