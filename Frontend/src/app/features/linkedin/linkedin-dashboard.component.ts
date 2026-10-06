@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { SharedModule } from '../../shared/shared.module';
 import { LinkedinService } from '../../services/linkedin.service';
 import {
@@ -32,6 +33,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   private pollingInterval: any = null;
   private messageListener: any = null;
   private chatPollingInterval: any = null;
+  private activeMessageSub?: Subscription;
 
   // Bot Session Credentials (Cookie or Email & Password)
   authMode: 'cookie' | 'credentials' = 'cookie';
@@ -136,6 +138,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.clearPolling();
     this.stopChatPolling();
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     if (this.messageListener) {
       window.removeEventListener('message', this.messageListener);
     }
@@ -145,12 +151,22 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     this.activeTab = tab;
     if (tab !== 'messages') {
       this.stopChatPolling();
+      if (this.activeMessageSub) {
+        this.activeMessageSub.unsubscribe();
+        this.activeMessageSub = undefined;
+        this.loadingMessages = false;
+        this.syncingThreadMessages = false;
+      }
     } else {
       if (this.conversations.length === 0) {
         this.loadConversations();
       } else if (this.selectedConversation) {
-        this.selectConversation(this.selectedConversation);
+        const hasLoadedMessages = this.messages && this.messages.length > 0;
+        this.selectConversation(this.selectedConversation, hasLoadedMessages);
       }
+    }
+    if (tab === 'comments' && this.comments.length === 0 && !this.loadingComments) {
+      this.loadComments();
     }
   }
 
@@ -799,9 +815,14 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     } else {
       this.syncingThreadMessages = true;
     }
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     const convId = conv.conversation_id || conv.conversation_urn;
-    this.linkedinService.getConversationMessages(convId).subscribe({
+    this.activeMessageSub = this.linkedinService.getConversationMessages(convId).subscribe({
       next: (res) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
         this.syncingThreadMessages = false;
         if (this.activeTab !== 'messages') {
@@ -830,6 +851,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         }
       },
       error: (err) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
         this.syncingThreadMessages = false;
         if (!isBackgroundRefresh && this.activeTab === 'messages') {
