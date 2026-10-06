@@ -600,9 +600,12 @@ def handle_linkedin_auto_search_and_connect(db: Session, payload: dict) -> dict:
             sent_count = 0
             failed_count = 0
             
+            sent_profiles_info = []
             for profile in targets:
                 pid = profile.get("public_id")
-                name = profile.get("name", "")
+                name = profile.get("name", "") or profile.get("full_name", "") or pid or "Candidate"
+                headline = profile.get("headline", "") or profile.get("occupation", "") or ""
+                profile_url = profile.get("profile_url") or (f"https://www.linkedin.com/in/{pid}" if pid and not pid.startswith("urn:") else "")
                 first_name = name.split()[0] if name else "there"
                 
                 # Format message template if provided
@@ -620,11 +623,62 @@ def handle_linkedin_auto_search_and_connect(db: Session, payload: dict) -> dict:
                     res = asyncio.run(linkedin_bot.send_connection_invitations_api(account, [profile], message=msg))
                 
                 res_detail = res.get(pid, {})
-                if res_detail.get("success"):
+                success = res_detail.get("success", False)
+                res_msg = res_detail.get("message", "Sent" if success else "Failed")
+
+                if success:
                     sent_count += 1
                     contacted_ids.add(pid)
+                    sent_profiles_info.append({
+                        "name": name,
+                        "public_id": pid,
+                        "headline": headline,
+                        "profile_url": profile_url,
+                        "status": "sent",
+                        "message": res_msg,
+                    })
+                    activity.log(
+                        db,
+                        action=A.LINKEDIN_CONNECTION_SENT,
+                        client_id=account.ClientId,
+                        actor_email="scheduler",
+                        entity_type="linkedin",
+                        entity_id=pid,
+                        log_type="Info",
+                        message=f"Sent connection invitation to {name}" + (f" ({headline})" if headline else ""),
+                        meta={
+                            "name": name,
+                            "public_id": pid,
+                            "headline": headline,
+                            "profile_url": profile_url,
+                            "keywords": keywords,
+                            "invitation_message": msg,
+                            "mode": "auto_pilot",
+                        },
+                        commit=True,
+                    )
                 else:
                     failed_count += 1
+                    activity.log(
+                        db,
+                        action=A.LINKEDIN_CONNECTION_FAILED,
+                        client_id=account.ClientId,
+                        actor_email="scheduler",
+                        entity_type="linkedin",
+                        entity_id=pid,
+                        log_type="Warning",
+                        message=f"Failed to send connection invitation to {name}: {res_msg}",
+                        meta={
+                            "name": name,
+                            "public_id": pid,
+                            "headline": headline,
+                            "profile_url": profile_url,
+                            "keywords": keywords,
+                            "error": res_msg,
+                            "mode": "auto_pilot",
+                        },
+                        commit=True,
+                    )
                 
                 # Anti-bot human delay
                 time.sleep(random.uniform(5.0, 10.0))
@@ -678,6 +732,7 @@ def handle_linkedin_auto_search_and_connect(db: Session, payload: dict) -> dict:
                     "sent_count": sent_count,
                     "failed_count": failed_count,
                     "keywords": keywords,
+                    "sent_profiles": sent_profiles_info,
                     "next_run_at": auto_cfg["next_run_at"],
                     "total_today": auto_cfg.get("total_sent_today", 0),
                     "total_all_time": auto_cfg.get("total_sent_all_time", 0),

@@ -563,6 +563,76 @@ async def linkedin_search_profiles(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LinkedIn search failed: {str(exc)}")
 
 
+async def _send_manual_invitations_task(account_id: str, profiles_dict: list[dict], message: str | None, client_id: str, actor_email: str):
+    from ..social import linkedin_bot
+    from .. import activity
+    from ..activity import A
+    from ..db import session as db_session
+    
+    with db_session() as db:
+        account = db.get(LeadChannelAccount, account_id)
+        if not account:
+            return
+
+    results = await linkedin_bot.send_connection_invitations_api(account, profiles_dict, message=message)
+    
+    with db_session() as db:
+        sent_count = 0
+        failed_count = 0
+        for p in profiles_dict:
+            pid = p.get("public_id")
+            name = p.get("name") or p.get("full_name") or pid or "Candidate"
+            headline = p.get("headline") or ""
+            profile_url = p.get("profile_url") or (f"https://www.linkedin.com/in/{pid}" if pid and not pid.startswith("urn:") else "")
+            
+            res_detail = results.get(pid, {})
+            success = res_detail.get("success", False)
+            res_msg = res_detail.get("message", "Sent" if success else "Failed")
+            
+            if success:
+                sent_count += 1
+                activity.log(
+                    db,
+                    action=A.LINKEDIN_CONNECTION_SENT,
+                    client_id=client_id,
+                    actor_email=actor_email,
+                    entity_type="linkedin",
+                    entity_id=pid,
+                    log_type="Info",
+                    message=f"Sent connection invitation to {name}" + (f" ({headline})" if headline else ""),
+                    meta={
+                        "name": name,
+                        "public_id": pid,
+                        "headline": headline,
+                        "profile_url": profile_url,
+                        "invitation_message": message,
+                        "mode": "manual",
+                    },
+                    commit=True,
+                )
+            else:
+                failed_count += 1
+                activity.log(
+                    db,
+                    action=A.LINKEDIN_CONNECTION_FAILED,
+                    client_id=client_id,
+                    actor_email=actor_email,
+                    entity_type="linkedin",
+                    entity_id=pid,
+                    log_type="Warning",
+                    message=f"Failed to send connection invitation to {name}: {res_msg}",
+                    meta={
+                        "name": name,
+                        "public_id": pid,
+                        "headline": headline,
+                        "profile_url": profile_url,
+                        "error": res_msg,
+                        "mode": "manual",
+                    },
+                    commit=True,
+                )
+
+
 @router.post(
     "/send-invitations",
     summary="Send connection requests to selected profiles",
@@ -573,13 +643,11 @@ async def linkedin_send_invitations(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
-    _, company_id = scope
+    principal, company_id = scope
     from ..services import billing as billing_svc
     allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
-
-    from ..social import linkedin_bot
 
     # Retrieve credentials from database
     row = (
@@ -599,10 +667,12 @@ async def linkedin_send_invitations(
     try:
         profiles_dict = [p.model_dump() for p in payload.profiles]
         background_tasks.add_task(
-            linkedin_bot.send_connection_invitations_api,
-            row,
+            _send_manual_invitations_task,
+            row.Id,
             profiles_dict,
-            payload.message
+            payload.message,
+            company_id,
+            principal.email or "user",
         )
         
         # Generate compatible response mapping so the frontend requires no changes
