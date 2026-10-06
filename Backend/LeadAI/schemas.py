@@ -144,6 +144,7 @@ class CompanySettingsOut(CompanySettingsIn):
     voice_gender: str | None = None
     voice_speed: float | None = None
     voice_speaker: str | None = None
+    stt_tts_provider: str | None = None
 
 
 class VoiceSettingsIn(BaseModel):
@@ -153,6 +154,9 @@ class VoiceSettingsIn(BaseModel):
     voice_gender: str | None = Field(default=None, pattern="^(male|female)$")
     voice_speed: float | None = Field(default=None, ge=0.5, le=2.0)
     voice_speaker: str | None = Field(default=None, min_length=1, max_length=60)
+    # voice_gender/voice_speed/voice_speaker only ever apply to "sarvam" — see
+    # LeadCompanySettings.SttTtsProvider's comment in models.py.
+    stt_tts_provider: str | None = Field(default=None, pattern="^(sarvam|deepgram)$")
 
 
 class PermissionItemOut(BaseModel):

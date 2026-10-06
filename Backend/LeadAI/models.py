@@ -384,6 +384,14 @@ class LeadCompanySettings(LeadAIBase):
     VoiceGender = Column(String(20), nullable=True)    # male|female
     VoiceSpeed = Column(Float, nullable=True)           # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
     VoiceSpeaker = Column(String(60), nullable=True)    # Sarvam bulbul:v3 voice id, e.g. "ritu"/"priya"; None = platform default
+    # Which speech vendor places this company's calls. VoiceGender/VoiceSpeed/
+    # VoiceSpeaker above are Sarvam-specific (bulbul voice ids, 0.5-2.0 pace)
+    # and are simply not read when this is "deepgram" — see
+    # voice/pipeline.py's build_services(), which uses a fixed Deepgram voice
+    # instead of trying to reuse a Sarvam voice id that would just 400 against
+    # Deepgram's API (same failure mode the "anushka" bug already taught us).
+    # None = platform default ("sarvam").
+    SttTtsProvider = Column(String(20), nullable=True)  # sarvam|deepgram
 
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)

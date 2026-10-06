@@ -655,6 +655,134 @@ async def save_linkedin_settings(
     return {"ok": True}
 
 
+class LinkedInAutoConnectSettingsInput(BaseModel):
+    enabled: bool = False
+    runs_per_day: int = Field(default=3, ge=1, le=10)
+    profiles_per_run: int = Field(default=5, ge=1, le=15)
+    target_prompt: str | None = None
+    target_keywords: str | None = None
+    custom_message: str | None = None
+    active_hours_start: int = Field(default=9, ge=0, le=23)
+    active_hours_end: int = Field(default=19, ge=0, le=23)
+
+
+@router.get(
+    "/auto-connect/settings",
+    summary="Get automated candidate search & connection scheduler settings",
+)
+async def get_auto_connect_settings(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
+    ).first()
+
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
+
+    meta = row.MetaJson or {}
+    auto_cfg = meta.get("linkedin_auto_connect") or {}
+    defaults = {
+        "enabled": False,
+        "runs_per_day": 3,
+        "profiles_per_run": 5,
+        "target_prompt": "",
+        "target_keywords": "",
+        "custom_message": "",
+        "active_hours_start": 9,
+        "active_hours_end": 19,
+        "last_run_at": None,
+        "next_run_at": None,
+        "total_sent_today": 0,
+        "total_sent_all_time": 0,
+        "last_run_status": None,
+        "last_run_detail": None,
+    }
+    defaults.update(auto_cfg)
+    return {"settings": defaults}
+
+
+@router.post(
+    "/auto-connect/settings",
+    summary="Update automated candidate search & connection scheduler settings",
+)
+async def save_auto_connect_settings(
+    payload: LinkedInAutoConnectSettingsInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..services import jobs
+    from ..services.jobs import calculate_next_random_schedule
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
+    ).first()
+
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
+
+    meta = row.MetaJson or {}
+    auto_cfg = meta.get("linkedin_auto_connect") or {}
+    
+    auto_cfg["enabled"] = payload.enabled
+    auto_cfg["runs_per_day"] = payload.runs_per_day
+    auto_cfg["profiles_per_run"] = payload.profiles_per_run
+    auto_cfg["target_prompt"] = payload.target_prompt or ""
+    auto_cfg["target_keywords"] = payload.target_keywords or ""
+    auto_cfg["custom_message"] = payload.custom_message or ""
+    auto_cfg["active_hours_start"] = payload.active_hours_start
+    auto_cfg["active_hours_end"] = payload.active_hours_end
+    
+    if payload.enabled:
+        next_dt = calculate_next_random_schedule(
+            runs_per_day=payload.runs_per_day,
+            active_hours_start=payload.active_hours_start,
+            active_hours_end=payload.active_hours_end
+        )
+        auto_cfg["next_run_at"] = next_dt.isoformat()
+    else:
+        auto_cfg["next_run_at"] = None
+
+    meta["linkedin_auto_connect"] = auto_cfg
+    row.MetaJson = meta
+    row.UpdatedAt = utcnow()
+    db.commit()
+
+    return {"ok": True, "settings": auto_cfg}
+
+
+@router.post(
+    "/auto-connect/run-now",
+    summary="Trigger immediate execution of automated candidate search and connect",
+)
+async def trigger_auto_connect_now(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..services import jobs, billing as billing_svc
+    _, company_id = scope
+
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
+    # Enqueue a job to run immediately for this company
+    jobs.enqueue(
+        db,
+        "linkedin.auto_search_and_connect",
+        payload={"company_id": company_id},
+        commit=True,
+    )
+    return {"ok": True, "message": "Automated search and connection dispatch enqueued in background"}
+
+
 @router.post(
     "/sync-invitations",
     summary="Trigger immediate LinkedIn connection request sync",
