@@ -283,6 +283,9 @@ def publish_article(
     if not article:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Article {article_id} not found.")
 
+    if article.Status == "published":
+        return ArticleService._to_response(db, article)
+
     PublisherService.publish_to_all_channels(
         db=db,
         article=article,

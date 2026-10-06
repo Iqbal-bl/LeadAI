@@ -88,9 +88,10 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     tone: 'thought_leadership',
     target_audience: 'B2B Leaders & Practitioners',
     keywords: [],
+    blog_type: 'text_and_image',
     target_words: 1000,
     include_images: true,
-    num_images: 1,
+    num_images: 2,
     cta_text: 'Book Free Strategy Session Today',
     cta_url: '#strategy-session',
     target_channels: ['linkedin', 'wordpress'],
@@ -107,9 +108,10 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     keywords: [],
     target_words: 1000,
     include_images: true,
-    num_images: 1,
+    num_images: 2,
     target_channels: ['linkedin', 'wordpress'],
   };
+  settingsBlogType: 'text_only' | 'text_and_image' = 'text_and_image';
   loadingSettings = false;
   savingSettings = false;
   settingsKeywordsInput = '';
@@ -124,6 +126,60 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   };
 
   private subs: Subscription = new Subscription();
+
+  setBlogType(type: 'text_only' | 'text_and_image'): void {
+    this.customGenForm.blog_type = type;
+    if (type === 'text_only') {
+      this.customGenForm.include_images = false;
+      this.customGenForm.num_images = 0;
+    } else {
+      this.customGenForm.include_images = true;
+      if (!this.customGenForm.num_images || this.customGenForm.num_images < 1) {
+        this.customGenForm.num_images = 2;
+      }
+    }
+  }
+
+  setNumImages(count: number): void {
+    this.customGenForm.num_images = count;
+    this.customGenForm.include_images = count > 0;
+    if (count > 0) {
+      this.customGenForm.blog_type = 'text_and_image';
+    } else {
+      this.customGenForm.blog_type = 'text_only';
+    }
+  }
+
+  setTargetWords(words: number): void {
+    this.customGenForm.target_words = words;
+  }
+
+  setSettingsBlogType(type: 'text_only' | 'text_and_image'): void {
+    this.settingsBlogType = type;
+    if (type === 'text_only') {
+      this.settings.include_images = false;
+      this.settings.num_images = 0;
+    } else {
+      this.settings.include_images = true;
+      if (!this.settings.num_images || this.settings.num_images < 1) {
+        this.settings.num_images = 2;
+      }
+    }
+  }
+
+  setSettingsNumImages(count: number): void {
+    this.settings.num_images = count;
+    this.settings.include_images = count > 0;
+    if (count > 0) {
+      this.settingsBlogType = 'text_and_image';
+    } else {
+      this.settingsBlogType = 'text_only';
+    }
+  }
+
+  setSettingsTargetWords(words: number): void {
+    this.settings.target_words = words;
+  }
 
   constructor(
     private blogService: BlogService,
@@ -196,6 +252,7 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     this.blogService.getBlogSettings().subscribe({
       next: (res) => {
         this.settings = res;
+        this.settingsBlogType = (res.include_images !== false && (res.num_images || 0) > 0) ? 'text_and_image' : 'text_only';
         this.settingsKeywordsInput = (res.keywords || []).join(', ');
         // Set channels map
         const channels = res.target_channels || [];
@@ -293,6 +350,16 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
         .filter((k) => k.length > 0);
     }
 
+    // Ensure blog_type and image configuration are strictly synced
+    if (this.customGenForm.blog_type === 'text_only') {
+      this.customGenForm.include_images = false;
+      this.customGenForm.num_images = 0;
+    } else {
+      this.customGenForm.include_images = true;
+      this.customGenForm.num_images = Number(this.customGenForm.num_images) || 2;
+    }
+    this.customGenForm.target_words = Number(this.customGenForm.target_words) || 1000;
+
     this.blogService.generateAndSave(this.customGenForm).subscribe({
       next: (article) => {
         this.isGeneratingCustom = false;
@@ -336,6 +403,14 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   openReviewModal(article: Article, defaultAction: 'approved' | 'changes_requested' | 'regenerate' = 'approved'): void {
+    if (article.status === 'published') {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article is already published live. No further review actions are permitted.',
+      });
+      return;
+    }
     this.selectedArticle = article;
     this.reviewAction = defaultAction;
     this.reviewNotes = '';
@@ -345,7 +420,17 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   submitReview(): void {
-    if (!this.selectedArticle) return;
+    if (!this.selectedArticle || this.submittingReview) return;
+
+    if (this.selectedArticle.status === 'published') {
+      this.showReviewModal = false;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article has already been published live. No further actions permitted.',
+      });
+      return;
+    }
 
     this.submittingReview = true;
     const req: ReviewActionRequest = {
@@ -380,6 +465,14 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   openPublishModal(article: Article): void {
+    if (article.status === 'published') {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article is already published live.',
+      });
+      return;
+    }
     this.publishingArticle = article;
     this.publishChannels = {
       linkedin: true,
@@ -391,7 +484,17 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   confirmPublish(): void {
-    if (!this.publishingArticle) return;
+    if (!this.publishingArticle || this.isPublishing) return;
+
+    if (this.publishingArticle.status === 'published') {
+      this.showPublishModal = false;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article has already been published live.',
+      });
+      return;
+    }
 
     const channels = Object.keys(this.publishChannels).filter(
       (k) => this.publishChannels[k]
@@ -488,9 +591,9 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
       target_audience: this.settings.target_audience,
       tone: this.settings.tone,
       language: this.settings.language,
-      target_words: this.settings.target_words,
-      include_images: this.settings.include_images,
-      num_images: this.settings.num_images,
+      target_words: Number(this.settings.target_words) || 1000,
+      include_images: this.settingsBlogType === 'text_and_image',
+      num_images: this.settingsBlogType === 'text_and_image' ? (Number(this.settings.num_images) || 2) : 0,
       cta_text: this.settings.cta_text,
       cta_url: this.settings.cta_url,
       target_channels: target_channels,

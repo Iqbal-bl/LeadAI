@@ -472,6 +472,13 @@
             color: #334155;
             &:hover { background: #e2e8f0; }
           }
+
+          &.published-badge-btn {
+            background: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+            cursor: default;
+          }
         }
 
         .btn-icon {
@@ -907,8 +914,22 @@
     border-top: 1px solid #e2e8f0;
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 12px;
     background: #f8fafc;
+
+    .published-locked-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+    }
   }
 }
 
@@ -1864,4 +1885,6 @@
     }
   }
 }
+
+
 
