@@ -156,6 +156,35 @@ def test_editing_the_scheduled_time_cancels_the_old_job_and_queues_a_new_one():
     assert pending[0].RunAt == second
 
 
+def test_rescheduling_a_completed_campaign_actually_queues_the_fire_job():
+    """The real bug this guards against: PATCHing scheduled_at onto a campaign
+    that had already finished a previous run silently updated the ScheduledAt
+    column and queued NOTHING — no error, no job, Status left at "completed".
+    An operator scheduling a restart for later saw it never fire. Mirrors
+    /start's own rule: only a permanently-dead (cancelled/failed) campaign
+    can't be (re)scheduled — completed/paused/queued all can, same as
+    /start already lets you restart a "completed" campaign on demand."""
+    db, client, contact_list, principal = _company_with_one_contact("Kestrel Reschedule")
+    campaign = models.LeadCampaign(ClientId=client.Id, Name="c", Kind="message", Channel="sms",
+                                   AudienceType="list", ListId=contact_list.Id, MessageBody="hi",
+                                   Purpose="transactional", Status="completed", TimeZone="UTC")
+    db.add(campaign)
+    db.commit()
+
+    from datetime import datetime, timedelta
+    when = datetime.utcnow() + timedelta(hours=1)
+    campaigns.update_campaign(
+        campaign.Id, CampaignUpdate(scheduled_at=when),
+        request=None, scope=(principal, client.Id), db=db,
+    )
+    db.refresh(campaign)
+    assert campaign.Status == "scheduled"
+
+    pending = [j for j in _scheduled_jobs(db, campaign.Id) if j.Status == "queued"]
+    assert len(pending) == 1
+    assert pending[0].RunAt == when
+
+
 def test_a_job_that_finds_zero_recipients_reverts_to_draft_instead_of_silently_stalling():
     db = SessionLocalAdmin()
     client = Client(Name="Kestrel Empty")

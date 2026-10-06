@@ -32,10 +32,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Any
 
-from pipecat.frames.frames import TranscriptionFrame
+from pipecat.frames.frames import TranscriptionFrame, VADUserStoppedSpeakingFrame
 from pipecat.processors.frame_processor import FrameProcessor
 
 from ..config import settings
@@ -180,9 +181,28 @@ def sarvam_language(code: str | None):
     return table.get((code or "").strip().lower())        # "multi" / unknown -> auto-detect
 
 
+def deepgram_language(code: str | None):
+    """A Deepgram language for our short codes; None lets Nova auto-detect.
+
+    Deepgram's codes are plain (no "-IN" region suffix the way Sarvam's are) —
+    same short codes we already use, so this is the same table shape as
+    sarvam_language() with the generic (non-regional) Language members.
+    """
+    from pipecat.transcriptions.language import Language
+
+    table = {
+        "hi": Language.HI, "hi-in": Language.HI, "raj": Language.HI,
+        "en": Language.EN, "en-in": Language.EN,
+        "bn": Language.BN, "gu": Language.GU, "kn": Language.KN, "ml": Language.ML,
+        "mr": Language.MR, "od": Language.OR, "pa": Language.PA, "ta": Language.TA,
+        "te": Language.TE,
+    }
+    return table.get((code or "").strip().lower())
+
+
 @dataclass
 class Services:
-    """The speech services. Real ones talk to Sarvam; tests pass stand-ins."""
+    """The speech services. Real ones talk to Sarvam or Deepgram; tests pass stand-ins."""
 
     stt: Any
     tts: Any
@@ -190,8 +210,7 @@ class Services:
     language_frame: Any = None
 
 
-def build_services(context: dict) -> Services:
-    """Sarvam speech-to-text and text-to-speech, the same vendor the legacy loop uses."""
+def _build_sarvam_services(context: dict) -> Services:
     from pipecat.services.sarvam.stt import SarvamSTTService
     from pipecat.services.sarvam.tts import SarvamTTSService
 
@@ -223,6 +242,48 @@ def build_services(context: dict) -> Services:
         tts=SarvamTTSService(api_key=api_key, settings=SarvamTTSService.Settings(**tts_kwargs)),
         language_frame=language_frame,
     )
+
+
+def _build_deepgram_services(context: dict) -> Services:
+    """Deepgram Nova (STT) + Aura (TTS). Switched to per company via
+    LeadCompanySettings.SttTtsProvider — see routers/companies.py's
+    update_voice_settings (super-admin only).
+
+    Deliberately ignores context["speaker"]/["gender"]/["pace"]: those are
+    Sarvam voice ids and a 0.5-2.0 pace range, neither valid for Deepgram's
+    Aura voices (fixed voice-name-per-language-and-gender, 0.7-1.5 speed) —
+    passing a Sarvam value through would 400 against Deepgram's API exactly
+    like the old hardcoded "anushka" default 400'd against bulbul:v3.
+
+    Aura's Indic-language coverage is far narrower than Sarvam bulbul's at
+    time of writing — mainly English and Spanish voices. A company whose
+    callers speak Hindi/other Indic languages should stay on Sarvam; this
+    path exists for companies that specifically want Deepgram's English
+    accuracy/latency, not as a drop-in replacement for every company.
+    """
+    from pipecat.services.deepgram.stt import DeepgramSTTService
+    from pipecat.services.deepgram.tts import DeepgramTTSService
+
+    api_key = os.getenv("DEEPGRAM_API_KEY")
+    if not api_key:
+        raise CallRejected("DEEPGRAM_API_KEY is not set")
+    language = deepgram_language(context.get("language")) if not context.get("multi_stt") else None
+    stt_settings = DeepgramSTTService.Settings(language=language) if language else DeepgramSTTService.Settings()
+
+    return Services(
+        stt=DeepgramSTTService(api_key=api_key, settings=stt_settings),
+        tts=DeepgramTTSService(api_key=api_key),   # fixed "aura-2-helena-en" default voice/speed
+        language_frame=None,   # Aura's voice name bakes in the language; no per-reply switch to make
+    )
+
+
+def build_services(context: dict) -> Services:
+    """Dispatches to whichever speech vendor this company is configured for
+    (see LeadCompanySettings.SttTtsProvider) — "sarvam" unless a super admin
+    explicitly switched it."""
+    if (context.get("provider") or "sarvam") == "deepgram":
+        return _build_deepgram_services(context)
+    return _build_sarvam_services(context)
 
 
 # ----------------------------------------------------------------------- assembly
@@ -315,19 +376,42 @@ class LanguageTracker(FrameProcessor):
 
     Sits between speech-to-text and the turn aggregator, which consumes transcripts, so the
     language would otherwise be lost before the brain runs. Forwards every frame untouched.
+
+    Also times the STT round trip (VAD says the caller stopped -> STT finally delivers that
+    utterance's transcript) and logs it when it's unusually slow. A real incident: a caller's
+    utterance took ~10s to come back as a transcript even though Sarvam's own self-reported
+    processing_latency was 78ms — the delay was somewhere in transit/queueing, not in Sarvam's
+    transcription itself, and nothing surfaced that gap on its own; it took manually diffing
+    raw DEBUG timestamps after the fact to even see it. This makes that visible without having
+    to do that again.
     """
+
+    # Above this, the gap is worth a log line of its own rather than scrolling past unremarked.
+    _SLOW_STT_ROUND_TRIP_SECONDS = 3.0
 
     def __init__(self, *, on_language, **kwargs):
         super().__init__(**kwargs)
         self._on_language = on_language
+        self._stopped_speaking_at: float | None = None
 
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
-        if isinstance(frame, TranscriptionFrame) and frame.language:
-            try:
-                self._on_language(getattr(frame.language, "value", str(frame.language)))
-            except Exception:  # noqa: BLE001 — tracking must never disturb the audio path
-                logger.debug("language tracker hook failed", exc_info=True)
+        if isinstance(frame, VADUserStoppedSpeakingFrame):
+            self._stopped_speaking_at = time.monotonic()
+        elif isinstance(frame, TranscriptionFrame):
+            if self._stopped_speaking_at is not None:
+                elapsed = time.monotonic() - self._stopped_speaking_at
+                self._stopped_speaking_at = None
+                if elapsed >= self._SLOW_STT_ROUND_TRIP_SECONDS:
+                    logger.warning(
+                        "[LeadAI voice] STT took %.1fs to return a transcript after the "
+                        "caller stopped speaking (text=%r)", elapsed, frame.text[:80],
+                    )
+            if frame.language:
+                try:
+                    self._on_language(getattr(frame.language, "value", str(frame.language)))
+                except Exception:  # noqa: BLE001 — tracking must never disturb the audio path
+                    logger.debug("language tracker hook failed", exc_info=True)
         await self.push_frame(frame, direction)
 
 
@@ -426,6 +510,7 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
 
     @transport.event_handler("on_client_connected")
     async def _on_connected(_transport, _client):
+        connected_at = time.monotonic()
         try:
             opening = await opening_task
         except Exception:  # noqa: BLE001 — no greeting is better than no call
@@ -439,6 +524,18 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
             brain.mark_opener_spoken()
         for frame in frames:
             await worker.queue_frame(frame)
+        if frames:
+            # A real incident: pipeline setup reported fully ready, but TTS
+            # didn't start generating the (already-composed) opener until
+            # ~4.3s later — with nothing logged in between to say why. This
+            # timestamp pins down OUR side of that gap precisely, so the next
+            # time it's slow, whatever's logged next (pipecat's own "Generating
+            # TTS [...]" debug line) shows exactly how much of the delay is
+            # on our side of queue_frame() versus pipecat's own worker.
+            logger.info(
+                "[LeadAI voice] call %s: opener queued %.2fs after client-connected",
+                call_sid, time.monotonic() - connected_at,
+            )
 
     @transport.event_handler("on_client_disconnected")
     async def _on_disconnected(_transport, _client):
