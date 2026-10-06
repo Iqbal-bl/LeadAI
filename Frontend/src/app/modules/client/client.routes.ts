@@ -37,7 +37,7 @@ export const CLIENT_ROUTES: Routes = [
         data: { permission: 'lead.read.all' },
         children: [
           {
-            path: '',
+            path: 'list',
             loadComponent: () =>
               import('../../features/leads/lead-list/lead-list.component').then(
                 (m) => m.LeadListComponent,

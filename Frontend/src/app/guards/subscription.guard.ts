@@ -23,7 +23,7 @@ export const SubscriptionGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
 
   // 1. Super admin / Platform admin bypass
-  if (authService.isSuperAdmin() || authService.isPlatformAdmin()) {
+  if (authService.isPlatformAdmin()) {
     return true;
   }
 

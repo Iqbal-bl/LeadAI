@@ -65,7 +65,16 @@ export class OnboardingComponent implements OnInit {
   activeKbMethod: 'drive' | 'dropbox' | 'upload' | 'editor' | null = null;
   hasAddedDocs = false;
   kbSkipped = false;
-  recentDocs: Array<{ title: string; type: string; date: string; status: string }> = [];
+  currentUser: any = null;
+  recentDocs: Array<{
+    id?: string;
+    title: string;
+    type: string;
+    date: string;
+    status: string;
+    charCount?: number;
+    chunkCount?: number;
+  }> = [];
 
   // Google Drive Link form
   driveTitle = '';
@@ -93,6 +102,7 @@ export class OnboardingComponent implements OnInit {
 
   ngOnInit(): void {
     this.isLoading = true;
+    this.currentUser = this.authService.getCurrentUser();
 
     // 1. Fetch backend onboarding state as single source of truth
     this.onboardingService.fetchBackendState().subscribe({
@@ -189,16 +199,53 @@ export class OnboardingComponent implements OnInit {
       next: (docs) => {
         if (docs && docs.length > 0) {
           this.hasAddedDocs = true;
-          this.recentDocs = docs.slice(0, 5).map((d) => ({
+          this.recentDocs = docs.map((d) => ({
+            id: d.id,
             title: d.title || d.file_name || 'Untitled Document',
-            type: d.content_type || 'Document',
+            type:
+              d.source_type === 'google_drive'
+                ? 'Google Drive'
+                : d.source_type === 'dropbox'
+                  ? 'Dropbox'
+                  : d.content_type?.toUpperCase().replace('APPLICATION/', '') || 'Document',
             date: d.created_at ? d.created_at.split('T')[0] : 'Recently',
             status: d.status || 'Indexed',
+            charCount: d.char_count,
+            chunkCount: d.chunk_count,
           }));
         }
       },
       error: () => {},
     });
+  }
+
+  removeDoc(docItem: any, event: Event): void {
+    event.stopPropagation();
+    if (docItem.id) {
+      this.kbService.deleteDocument(docItem.id).subscribe({
+        next: () => {
+          this.recentDocs = this.recentDocs.filter((d) => d !== docItem);
+          this.hasAddedDocs = this.recentDocs.length > 0;
+          this.toastService.info(`"${docItem.title}" removed from knowledge base.`);
+        },
+        error: (err) => {
+          this.toastService.error(err?.error?.detail || 'Failed to remove document.');
+        },
+      });
+    } else {
+      this.recentDocs = this.recentDocs.filter((d) => d !== docItem);
+      this.hasAddedDocs = this.recentDocs.length > 0;
+    }
+  }
+
+  get progressPercentage(): number {
+    if (this.currentStep === 'channels') {
+      return this.hasConnectedChannels ? 50 : 35;
+    }
+    if (this.currentStep === 'knowledge-base') {
+      return this.hasAddedDocs ? 90 : 70;
+    }
+    return 100;
   }
 
   togglePlatformExpand(id: string): void {
@@ -209,6 +256,38 @@ export class OnboardingComponent implements OnInit {
     return this.channels.filter(
       (c) => c.channel?.toLowerCase() === platformId.toLowerCase() && c.is_active !== false
     );
+  }
+
+  isAddingNewDoc: { [key: string]: boolean } = {};
+
+  getDocsForType(type: 'drive' | 'dropbox' | 'upload' | 'editor'): Array<any> {
+    if (type === 'drive') {
+      return this.recentDocs.filter((d) => d.type.toLowerCase().includes('google'));
+    }
+    if (type === 'dropbox') {
+      return this.recentDocs.filter((d) => d.type.toLowerCase().includes('dropbox'));
+    }
+    if (type === 'editor') {
+      return this.recentDocs.filter(
+        (d) =>
+          d.type.toLowerCase().includes('text') ||
+          d.type.toLowerCase().includes('manual') ||
+          d.type.toLowerCase().includes('editor')
+      );
+    }
+    // upload
+    return this.recentDocs.filter(
+      (d) =>
+        !d.type.toLowerCase().includes('google') &&
+        !d.type.toLowerCase().includes('dropbox') &&
+        !d.type.toLowerCase().includes('text') &&
+        !d.type.toLowerCase().includes('manual') &&
+        !d.type.toLowerCase().includes('editor')
+    );
+  }
+
+  toggleAddDocForm(type: string): void {
+    this.isAddingNewDoc[type] = !this.isAddingNewDoc[type];
   }
 
   selectLanguage(lang: LanguageOption): void {
@@ -287,14 +366,11 @@ export class OnboardingComponent implements OnInit {
     }
 
     this.isSavingDrive = true;
-    const content = `Google Drive Link: ${this.driveUrl.trim()}${
-      this.driveNotes.trim() ? '\n\nDescription:\n' + this.driveNotes.trim() : ''
-    }`;
-
     this.kbService
-      .createText({
+      .importCloudLink({
         title: this.driveTitle.trim(),
-        content,
+        url: this.driveUrl.trim(),
+        notes: this.driveNotes.trim() || undefined,
         tags: 'google_drive,cloud_link,onboarding',
       })
       .subscribe({
@@ -302,22 +378,25 @@ export class OnboardingComponent implements OnInit {
           this.isSavingDrive = false;
           this.hasAddedDocs = true;
           this.recentDocs.unshift({
+            id: doc.id,
             title: doc.title || this.driveTitle,
-            type: 'Google Drive Link',
+            type: 'Google Drive',
             date: 'Just now',
             status: 'Indexed',
+            charCount: doc.char_count,
+            chunkCount: doc.chunk_count,
           });
           this.driveTitle = '';
           this.driveUrl = '';
           this.driveNotes = '';
           this.activeKbMethod = null;
-          this.toastService.success('Google Drive link added to your knowledge base!', 'Saved');
+          this.toastService.success('Google Drive file downloaded and indexed successfully!', 'Saved');
         },
         error: (err) => {
           this.isSavingDrive = false;
           this.toastService.error(
-            err?.error?.detail || 'Failed to save Google Drive link. Please try again.',
-            'Error'
+            err?.error?.detail || 'Failed to download Google Drive document. Ensure the file sharing is set to "Anyone with the link can view".',
+            'Download Error'
           );
         },
       });
@@ -335,14 +414,11 @@ export class OnboardingComponent implements OnInit {
     }
 
     this.isSavingDropbox = true;
-    const content = `Dropbox Link: ${this.dropboxUrl.trim()}${
-      this.dropboxNotes.trim() ? '\n\nDescription:\n' + this.dropboxNotes.trim() : ''
-    }`;
-
     this.kbService
-      .createText({
+      .importCloudLink({
         title: this.dropboxTitle.trim(),
-        content,
+        url: this.dropboxUrl.trim(),
+        notes: this.dropboxNotes.trim() || undefined,
         tags: 'dropbox,cloud_link,onboarding',
       })
       .subscribe({
@@ -350,22 +426,25 @@ export class OnboardingComponent implements OnInit {
           this.isSavingDropbox = false;
           this.hasAddedDocs = true;
           this.recentDocs.unshift({
+            id: doc.id,
             title: doc.title || this.dropboxTitle,
-            type: 'Dropbox Link',
+            type: 'Dropbox',
             date: 'Just now',
             status: 'Indexed',
+            charCount: doc.char_count,
+            chunkCount: doc.chunk_count,
           });
           this.dropboxTitle = '';
           this.dropboxUrl = '';
           this.dropboxNotes = '';
           this.activeKbMethod = null;
-          this.toastService.success('Dropbox link added to your knowledge base!', 'Saved');
+          this.toastService.success('Dropbox file downloaded and indexed successfully!', 'Saved');
         },
         error: (err) => {
           this.isSavingDropbox = false;
           this.toastService.error(
-            err?.error?.detail || 'Failed to save Dropbox link. Please try again.',
-            'Error'
+            err?.error?.detail || 'Failed to download Dropbox document. Please ensure the link is public and accessible.',
+            'Download Error'
           );
         },
       });
@@ -389,10 +468,13 @@ export class OnboardingComponent implements OnInit {
           this.isSavingEditor = false;
           this.hasAddedDocs = true;
           this.recentDocs.unshift({
+            id: doc.id,
             title: doc.title || this.editorTitle,
             type: 'Editor Entry',
             date: 'Just now',
             status: 'Indexed',
+            charCount: doc.char_count,
+            chunkCount: doc.chunk_count,
           });
           this.editorTitle = '';
           this.editorContent = '';
@@ -424,10 +506,13 @@ export class OnboardingComponent implements OnInit {
           completedCount++;
           this.hasAddedDocs = true;
           this.recentDocs.unshift({
+            id: doc.id,
             title: doc.file_name || doc.title || file.name,
-            type: doc.content_type || 'Uploaded File',
+            type: doc.content_type?.toUpperCase().replace('APPLICATION/', '') || 'File',
             date: 'Just now',
             status: 'Indexed',
+            charCount: doc.char_count,
+            chunkCount: doc.chunk_count,
           });
           if (completedCount === total) {
             this.isUploading = false;

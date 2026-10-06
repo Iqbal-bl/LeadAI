@@ -21,6 +21,7 @@ export interface InboxQueryParams {
   above_threshold?: boolean;
   campaign_id?: string;
   lead_source?: 'inbound' | 'import' | 'broadcast' | string;
+  product?: string;
 }
 
 @Injectable({
