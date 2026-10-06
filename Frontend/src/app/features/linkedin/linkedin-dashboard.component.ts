@@ -11,6 +11,7 @@ import {
   LinkedInMessage,
   LinkedInSocialComment,
   LinkedInCommentSettings,
+  LinkedInAccountItem,
 } from '../../models/linkedin.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../shared/services/confirmation.service';
@@ -25,6 +26,10 @@ import { ConfirmationService } from '../../shared/services/confirmation.service'
 export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   // Tab State
   activeTab: string | number = 'connection';
+
+  // Connected Accounts List (Multi-Account)
+  accounts: LinkedInAccountItem[] = [];
+  accountsLoading = false;
 
   // LinkedIn OAuth Status
   status: LinkedInStatus | null = null;
@@ -132,6 +137,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadStatus();
+    this.loadAccounts();
     this.setupOAuthMessageListener();
   }
 
@@ -170,6 +176,50 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  // --- Multi-Account Management ---
+  loadAccounts(): void {
+    this.accountsLoading = true;
+    this.linkedinService.getAccounts().subscribe({
+      next: (res) => {
+        this.accounts = res?.accounts || [];
+        this.accountsLoading = false;
+      },
+      error: () => {
+        this.accounts = [];
+        this.accountsLoading = false;
+      },
+    });
+  }
+
+  disconnectAccount(account: LinkedInAccountItem): void {
+    this.confirmationService.confirm({
+      message: `Are you sure you want to disconnect "${account.name}"? All tokens and session credentials for this profile will be cleared.`,
+      header: 'Disconnect LinkedIn Account',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.linkedinService.disconnectAccount(account.id).subscribe({
+          next: () => {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Account Disconnected',
+              detail: `"${account.name}" has been disconnected and its credentials cleared.`,
+            });
+            this.loadAccounts();
+            this.loadStatus();
+          },
+          error: (err) => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: err?.error?.detail || err?.message || 'Failed to disconnect account.',
+            });
+          },
+        });
+      },
+    });
+  }
+
   // --- OAuth 2.0 Connection ---
   loadStatus(): void {
     this.statusLoading = true;
@@ -205,21 +255,36 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       if (event.data.type === 'LINKEDIN_OAUTH_SUCCESS') {
         this.oauthLoading = false;
         this.clearPolling();
+        const accountName = event.data.name || 'LinkedIn Profile';
+        const personUrn = event.data.person_urn;
+        const alreadyExists = this.accounts.some((a) => a.person_urn === personUrn);
+
         this.loadStatus();
-        this.messageService.add({
-          severity: 'success',
-          summary: 'LinkedIn Connected',
-          detail:
-            'OAuth authorization completed. You can now use LinkedIn posting and automation.',
-        });
+        this.loadAccounts();
+
+        if (alreadyExists) {
+          this.messageService.add({
+            severity: 'info',
+            summary: 'Account Refreshed',
+            detail: `"${accountName}" is already connected. Its access token was refreshed. To connect a DIFFERENT profile, please sign in with that profile's credentials.`,
+            life: 6000,
+          });
+        } else {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'LinkedIn Connected',
+            detail: `Profile "${accountName}" linked successfully via OAuth.`,
+          });
+        }
       }
     };
     window.addEventListener('message', this.messageListener);
   }
 
-  connectOAuth(): void {
+  connectOAuth(forcePrompt?: boolean): void {
     this.oauthLoading = true;
-    this.linkedinService.getConnectUrl().subscribe({
+    const promptLogin = forcePrompt !== undefined ? forcePrompt : this.accounts.length > 0;
+    this.linkedinService.getConnectUrl(promptLogin).subscribe({
       next: (res) => {
         if (res?.authorize_url) {
           const width = 600;
@@ -232,27 +297,40 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,status=yes`,
           );
 
+          const initialAccountCount = this.accounts.length;
           this.clearPolling();
           this.pollingInterval = setInterval(() => {
-            this.linkedinService.getStatus().subscribe({
-              next: (status) => {
-                if (status?.connected) {
+            // If user closed the popup manually without completing
+            if (popup && popup.closed) {
+              this.clearPolling();
+              this.oauthLoading = false;
+              this.loadAccounts();
+              this.loadStatus();
+              return;
+            }
+
+            // Fallback polling: check if a NEW account was added (count increased)
+            this.linkedinService.getAccounts().subscribe({
+              next: (res) => {
+                const currentAccounts = res?.accounts || [];
+                if (currentAccounts.length > initialAccountCount) {
                   this.clearPolling();
                   this.oauthLoading = false;
-                  this.status = status;
+                  this.accounts = currentAccounts;
+                  this.loadStatus();
                   if (popup && !popup.closed) {
                     popup.close();
                   }
+                  const latest = currentAccounts[currentAccounts.length - 1];
                   this.messageService.add({
                     severity: 'success',
                     summary: 'Connected to LinkedIn',
-                    detail: `Account linked successfully (${status.person_urn || 'Profile'}).`,
+                    detail: `Profile "${latest.name}" linked successfully via OAuth.`,
                   });
-                  this.loadStatus();
                 }
               },
             });
-          }, 3000);
+          }, 2500);
         } else {
           this.oauthLoading = false;
         }
@@ -287,6 +365,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
               detail: 'LinkedIn profile disconnected successfully.',
             });
             this.status = { connected: false };
+            this.loadAccounts();
             this.profiles = [];
             this.invitations = [];
             this.invitationResults = null;

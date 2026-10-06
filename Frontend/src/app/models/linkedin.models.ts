@@ -1,3 +1,22 @@
+export interface LinkedInAccountItem {
+  id: string;
+  name: string;
+  person_urn: string;
+  profile_picture_url?: string | null;
+  headline?: string | null;
+  token_valid: boolean;
+  token_expires_at?: string | null;
+  has_refresh_token: boolean;
+  has_cookie_credentials: boolean;
+  is_active: boolean;
+  created_at?: string | null;
+}
+
+export interface LinkedInAccountsResponse {
+  accounts: LinkedInAccountItem[];
+  total: number;
+}
+
 export interface LinkedInStatus {
   connected: boolean;
   person_urn?: string;

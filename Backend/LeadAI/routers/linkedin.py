@@ -60,6 +60,7 @@ async def _bg_auto_sync_comments(company_id: str):
     summary="Retrieve LinkedIn authorization link",
 )
 async def linkedin_connect(
+    prompt: Optional[str] = Query(default=None),
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -72,7 +73,8 @@ async def linkedin_connect(
         raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
 
     try:
-        url = await linkedin.build_authorize_url(db, client_id)
+        force_login = prompt == "login"
+        url = await linkedin.build_authorize_url(db, client_id, prompt_login=force_login)
         return {"authorize_url": url}
     except Exception as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -139,42 +141,139 @@ async def linkedin_status(
 
 
 
+@router.get(
+    "/accounts",
+    summary="List all connected LinkedIn accounts for this company",
+)
+async def list_linkedin_accounts(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..models_ext import LeadChannelAccount
+
+    principal, client_id = scope
+    rows = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == client_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.CreatedAt.asc())
+        .all()
+    )
+
+    now = utcnow()
+    if now.tzinfo is not None:
+        now = now.replace(tzinfo=None)
+
+    accounts = []
+    for r in rows:
+        meta = r.MetaJson or {}
+        access_token_valid = (
+            r.TokenExpiresAt > now
+            if r.TokenExpiresAt and r.AccessTokenEnc
+            else False
+        )
+        has_credentials = bool(
+            r.LinkedinCookieEnc or (r.LinkedinUsernameEnc and r.LinkedinPasswordEnc)
+        )
+        accounts.append({
+            "id": r.Id,
+            "name": r.Name or "LinkedIn Profile",
+            "person_urn": r.ExternalId,
+            "profile_picture_url": meta.get("profile_picture_url"),
+            "headline": meta.get("headline"),
+            "token_valid": access_token_valid,
+            "token_expires_at": r.TokenExpiresAt.isoformat() if r.TokenExpiresAt else None,
+            "has_refresh_token": bool(r.AppSecretEnc),
+            "has_cookie_credentials": has_credentials,
+            "is_active": bool(r.IsActive),
+            "created_at": r.CreatedAt.isoformat() if r.CreatedAt else None,
+        })
+
+    return {
+        "accounts": accounts,
+        "total": len(accounts),
+    }
+
+
+@router.delete(
+    "/accounts/{account_id}",
+    summary="Disconnect a specific LinkedIn account and wipe all its credentials",
+)
+async def disconnect_linkedin_account(
+    account_id: str,
+    request: Request,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..models_ext import LeadChannelAccount
+
+    principal, client_id = scope
+    account = db.get(LeadChannelAccount, account_id)
+    if not account or account.IsDeleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn account not found.")
+
+    assert_owns(account.ClientId, client_id)
+
+    account_name = account.Name
+    # Explicitly clear li_at cookie and all auth credentials
+    account.IsDeleted = True
+    account.LinkedinCookieEnc = None
+    account.LinkedinUsernameEnc = None
+    account.LinkedinPasswordEnc = None
+    account.AccessTokenEnc = None
+    account.AppSecretEnc = None
+    account.UpdatedAt = utcnow()
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.CHANNEL_UPDATED,
+        client_id=client_id,
+        entity_type="channel_account",
+        entity_id=account.Id,
+        message=f"Disconnected LinkedIn account {account_name}",
+        request=request,
+    )
+    db.commit()
+    return {"ok": True, "message": f"Account '{account_name}' disconnected and credentials cleared."}
+
+
 @router.post(
     "/disconnect",
     summary="Disconnect LinkedIn account",
 )
 async def linkedin_disconnect(
     request: Request,
+    account_id: Optional[str] = Query(default=None),
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
     from ..models_ext import LeadChannelAccount
-    from ..models_blog import LeadSocialComment
 
     principal, client_id = scope
-    cred = db.query(LeadChannelAccount).filter(
+    query = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == client_id,
         LeadChannelAccount.Channel == "linkedin",
         LeadChannelAccount.IsDeleted == False
-    ).first()
+    )
+    if account_id:
+        query = query.filter(LeadChannelAccount.Id == account_id)
+
+    cred = query.order_by(LeadChannelAccount.UpdatedAt.desc()).first()
 
     if cred:
+        account_name = cred.Name
+        # Explicitly clear li_at cookie and all credentials for this account
         cred.IsDeleted = True
         cred.LinkedinCookieEnc = None
         cred.LinkedinUsernameEnc = None
         cred.LinkedinPasswordEnc = None
+        cred.AccessTokenEnc = None
+        cred.AppSecretEnc = None
         cred.UpdatedAt = utcnow()
-        
-        # Soft-delete all existing comments for this company & channel so old account comments do not persist
-        db.query(LeadSocialComment).filter(
-            LeadSocialComment.ClientId == client_id,
-            LeadSocialComment.Channel == "linkedin",
-            LeadSocialComment.IsDeleted == False
-        ).update(
-            {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
-            synchronize_session=False
-        )
-        _LAST_COMMENT_SYNC_BY_CLIENT.pop(client_id, None)
 
         activity.log_principal(
             db,
@@ -183,7 +282,7 @@ async def linkedin_disconnect(
             client_id=client_id,
             entity_type="channel_account",
             entity_id=cred.Id,
-            message="Disconnected LinkedIn account",
+            message=f"Disconnected LinkedIn account {account_name}",
             request=request,
         )
         db.commit()
@@ -250,7 +349,10 @@ async def linkedin_callback(
     try:
         token_data = await linkedin.exchange_code_for_tokens(code)
         access_token = token_data["access_token"]
-        person_urn = await linkedin.fetch_person_urn(access_token)
+        profile_info = await linkedin.fetch_user_profile(access_token)
+        person_urn = profile_info["person_urn"]
+        name = profile_info.get("name")
+        picture = profile_info.get("picture")
 
         await linkedin.save_tokens(
             db=db,
@@ -260,8 +362,11 @@ async def linkedin_callback(
             expires_in_seconds=token_data["expires_in"],
             refresh_token=token_data.get("refresh_token"),
             refresh_token_expires_in_seconds=token_data.get("refresh_token_expires_in"),
+            name=name,
+            picture_url=picture,
         )
 
+        safe_name = (name or "LinkedIn Profile").replace("'", "\\'")
         # Return a simple script to notify the opener window and close the popup
         html_content = f"""<!DOCTYPE html>
 <html>
@@ -273,7 +378,8 @@ async def linkedin_callback(
             window.opener.postMessage({{
                 type: 'LINKEDIN_OAUTH_SUCCESS',
                 state: '{state}',
-                person_urn: '{person_urn}'
+                person_urn: '{person_urn}',
+                name: '{safe_name}'
             }}, '*');
         }}
         window.close();
@@ -312,9 +418,12 @@ async def linkedin_callback_json(
     try:
         token_data = await linkedin.exchange_code_for_tokens(payload.code)
         access_token = token_data["access_token"]
-        person_urn = await linkedin.fetch_person_urn(access_token)
+        profile_info = await linkedin.fetch_user_profile(access_token)
+        person_urn = profile_info["person_urn"]
+        name = profile_info.get("name")
+        picture = profile_info.get("picture")
 
-        await linkedin.save_tokens(
+        saved = await linkedin.save_tokens(
             db=db,
             client_id=company_id,
             person_urn=person_urn,
@@ -322,8 +431,10 @@ async def linkedin_callback_json(
             expires_in_seconds=token_data["expires_in"],
             refresh_token=token_data.get("refresh_token"),
             refresh_token_expires_in_seconds=token_data.get("refresh_token_expires_in"),
+            name=name,
+            picture_url=picture,
         )
-        return {"success": True, "person_urn": person_urn}
+        return {"success": True, "account_id": saved.Id, "name": saved.Name, "person_urn": person_urn}
     except Exception as exc:
         logger.error("LinkedIn OAuth JSON callback failed: %s", exc)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc))
@@ -467,15 +578,20 @@ async def save_linkedin_credentials(
 )
 async def disconnect_linkedin_credentials(
     request: Request,
+    account_id: Optional[str] = Query(default=None),
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
     principal, client_id = scope
-    row = db.query(LeadChannelAccount).filter(
+    query = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == client_id,
         LeadChannelAccount.Channel == "linkedin",
         LeadChannelAccount.IsDeleted == False
-    ).first()
+    )
+    if account_id:
+        query = query.filter(LeadChannelAccount.Id == account_id)
+
+    row = query.first()
 
     if row:
         row.LinkedinCookieEnc = None
@@ -483,16 +599,6 @@ async def disconnect_linkedin_credentials(
         row.LinkedinPasswordEnc = None
         row.UpdatedAt = utcnow()
         
-        # Soft-delete all existing comments for this company & channel so disconnected account data is wiped
-        from ..models_blog import LeadSocialComment
-        db.query(LeadSocialComment).filter(
-            LeadSocialComment.ClientId == client_id,
-            LeadSocialComment.Channel == "linkedin",
-            LeadSocialComment.IsDeleted == False
-        ).update(
-            {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
-            synchronize_session=False
-        )
         _LAST_COMMENT_SYNC_BY_CLIENT.pop(client_id, None)
 
         activity.log_principal(

@@ -46,8 +46,11 @@ class _PlatformsMixin(BaseModel):
     )
     account_id: str | None = Field(
         default=None,
-        description="Pin a specific connected channel account (for companies with more "
-        "than one Page). Omit to use the company's first active account.",
+        description="Pin a specific connected channel account. Omit to publish to all active accounts.",
+    )
+    account_ids: list[str] | None = Field(
+        default=None,
+        description="Optional list of specific account IDs to publish to. If omitted, publishes to all active accounts for the platform.",
     )
     schedule_time: datetime | None = Field(
         default=None,

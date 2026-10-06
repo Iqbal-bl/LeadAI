@@ -21,6 +21,8 @@ import {
   LinkedInCommentSettings,
   GetCommentsResponse,
   SyncCommentsResponse,
+  LinkedInAccountItem,
+  LinkedInAccountsResponse,
 } from '../models/linkedin.models';
 
 
@@ -30,6 +32,25 @@ import {
 })
 export class LinkedinService {
   constructor(private apiService: ApiService) {}
+
+  /**
+   * List all connected LinkedIn accounts for company
+   */
+  public getAccounts(): Observable<LinkedInAccountsResponse> {
+    return this.apiService.get<LinkedInAccountsResponse>('linkedin/accounts', {
+      companyScoped: true,
+    });
+  }
+
+  /**
+   * Disconnect a specific LinkedIn account and wipe its credentials
+   */
+  public disconnectAccount(accountId: string): Observable<{ ok: boolean; message?: string }> {
+    return this.apiService.delete<{ ok: boolean; message?: string }>(
+      `linkedin/accounts/${encodeURIComponent(accountId)}`,
+      { companyScoped: true }
+    );
+  }
 
   /**
    * Check connection status of company LinkedIn account
@@ -43,20 +64,26 @@ export class LinkedinService {
   /**
    * Retrieve LinkedIn OAuth 2.0 authorization URL
    */
-  public getConnectUrl(): Observable<{ authorize_url: string }> {
+  public getConnectUrl(promptLogin: boolean = false): Observable<{ authorize_url: string }> {
+    const params: any = {};
+    if (promptLogin) {
+      params.prompt = 'login';
+    }
     return this.apiService.get<{ authorize_url: string }>('linkedin/connect', {
       companyScoped: true,
+      params: Object.keys(params).length ? params : undefined,
     });
   }
 
   /**
    * Disconnect LinkedIn profile
    */
-  public disconnect(): Observable<{ ok: boolean }> {
+  public disconnect(accountId?: string): Observable<{ ok: boolean }> {
+    const params = accountId ? { account_id: accountId } : undefined;
     return this.apiService.post<{ ok: boolean }>(
       'linkedin/disconnect',
       {},
-      { companyScoped: true }
+      { companyScoped: true, params }
     );
   }
 

@@ -146,19 +146,96 @@ def test_reconnecting_the_same_linkedin_person_is_a_refresh_not_a_new_account():
     assert rows[0].ExternalId == "urn:li:person:A"
 
 
-def test_a_different_linkedin_person_is_refused_not_silently_swapped_in():
-    # Before this fix, save_tokens silently repointed the existing row at the NEW person,
-    # losing the original connection with no warning to the operator.
+def test_a_second_linkedin_person_is_connected_alongside_not_swapped_in():
+    # Multi-account support: connecting a second LinkedIn profile adds it alongside
+    # the first without overwriting or losing the original connection.
     db, client, principal = setup()
-    asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:A", "tok-a", 3600))
+    asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:X1", "tok-x1", 3600))
+    asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:X2", "tok-x2", 3600))
+    rows = (
+        db.query(models.LeadChannelAccount)
+        .filter_by(ClientId=client.Id, Channel="linkedin", IsDeleted=False)
+        .order_by(models.LeadChannelAccount.CreatedAt.asc())
+        .all()
+    )
+    assert len(rows) == 2
+    assert rows[0].ExternalId == "urn:li:person:X1"
+    assert rows[1].ExternalId == "urn:li:person:X2"
+
+
+def test_a_linkedin_person_already_connected_to_another_company_is_refused():
+    db, client1, _ = setup()
+    _, client2, _ = setup()
+    asyncio.run(linkedin.save_tokens(db, client1.Id, "urn:li:person:Y1", "tok-y1", 3600))
     try:
-        asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:B", "tok-b", 3600))
-        assert False, "a second, different LinkedIn person should have been refused"
+        asyncio.run(linkedin.save_tokens(db, client2.Id, "urn:li:person:Y1", "tok-y1-dup", 3600))
+        assert False, "should have refused claiming an account connected to another company"
     except ValueError as exc:
-        assert "already has a LinkedIn account" in str(exc)
-    rows = db.query(models.LeadChannelAccount).filter_by(ClientId=client.Id, Channel="linkedin").all()
+        assert "already connected to another organization" in str(exc)
+
+
+def test_disconnect_linkedin_account_clears_li_at_and_tokens():
+    from LeadAI.routers import linkedin as linkedin_router
+    db, client, principal = setup()
+    acc1 = asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:Z1", "tok-z1", 3600))
+    # Emulate setting personal li_at cookie
+    acc1.LinkedinCookieEnc = "encrypted-li-at-cookie"
+    db.commit()
+
+    # Disconnect acc1
+    req = fake_request()
+    res = asyncio.run(
+        linkedin_router.disconnect_linkedin_account(
+            account_id=acc1.Id, request=req, scope=(principal, client.Id), db=db
+        )
+    )
+    assert res["ok"] is True
+
+    # Re-query
+    db.refresh(acc1)
+    assert acc1.IsDeleted is True
+    assert acc1.LinkedinCookieEnc is None, "li_at cookie must be wiped on disconnect"
+    assert acc1.AccessTokenEnc is None, "access token must be wiped on disconnect"
+    assert acc1.AppSecretEnc is None, "refresh token must be wiped on disconnect"
+
+
+def test_disconnected_linkedin_person_can_be_connected_to_another_company():
+    # If Company 1 connects a LinkedIn account, then disconnects it,
+    # Company 2 must be able to connect that same LinkedIn account without
+    # encountering a UNIQUE constraint error or duplicate entry crash.
+    from LeadAI.routers import linkedin as linkedin_router
+    db, client1, principal1 = setup()
+    _, client2, principal2 = setup()
+
+    # Company 1 connects account
+    acc = asyncio.run(linkedin.save_tokens(db, client1.Id, "urn:li:person:Transfer1", "tok-1", 3600, name="Transfer Profile"))
+    assert acc.ClientId == client1.Id
+    assert acc.IsDeleted is False
+
+    # Company 1 disconnects account
+    req = fake_request()
+    res = asyncio.run(
+        linkedin_router.disconnect_linkedin_account(
+            account_id=acc.Id, request=req, scope=(principal1, client1.Id), db=db
+        )
+    )
+    assert res["ok"] is True
+    db.refresh(acc)
+    assert acc.IsDeleted is True
+
+    # Company 2 connects the same LinkedIn account
+    acc2 = asyncio.run(linkedin.save_tokens(db, client2.Id, "urn:li:person:Transfer1", "tok-2", 3600, name="Transfer Profile"))
+
+    # Must be successfully reassigned/reclaimed by Company 2 without duplicate entry error
+    assert acc2.Id == acc.Id
+    assert acc2.ClientId == client2.Id
+    assert acc2.IsDeleted is False
+    assert acc2.IsActive is True
+
+    # Verify only 1 active row exists across database
+    rows = db.query(models.LeadChannelAccount).filter_by(Channel="linkedin", ExternalId="urn:li:person:Transfer1").all()
     assert len(rows) == 1
-    assert rows[0].ExternalId == "urn:li:person:A", "the original connection must survive the refused attempt"
+    assert rows[0].ClientId == client2.Id
 
 
 if __name__ == "__main__":

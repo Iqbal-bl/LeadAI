@@ -116,18 +116,25 @@ def channel_status(
     )
 
 
+MULTI_ACCOUNT_CHANNELS = {"linkedin"}
+
+
 def _assert_single_account_per_channel(
     db: Session, client_id: str, channel: str, external_id: str
 ) -> None:
-    """A company may have at most one connected account per channel (whatsapp,
-    messenger, instagram, linkedin, ...).
+    """A company may have at most one connected account per single-account channel (whatsapp,
+    messenger, instagram). Channels in MULTI_ACCOUNT_CHANNELS (e.g. linkedin) allow multiple
+    distinct connected accounts per company.
 
     Reconnecting the SAME account (identical ExternalId) is always fine — that is a
     token refresh or re-authorisation, not a second account, so callers only run this
     check when they are about to create a genuinely NEW row. A different account of
-    the same channel type is refused until the existing one is disconnected, rather
-    than silently added alongside it or silently replacing it.
+    the same channel type is refused until the existing one is disconnected, unless
+    the channel supports multi-account.
     """
+    if channel in MULTI_ACCOUNT_CHANNELS:
+        return
+
     other = (
         db.query(LeadChannelAccount)
         .filter(
@@ -579,18 +586,17 @@ def _upsert_fb_account(
         .filter(
             LeadChannelAccount.Channel == channel,
             LeadChannelAccount.ExternalId == external_id,
-            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .first()
     )
-    if existing is not None and existing.ClientId != client_id:
+    if existing is not None and existing.ClientId != client_id and not existing.IsDeleted:
         # Inbound webhooks route by ExternalId, so one Page serving two tenants
         # would deliver one company's messages into another company's inbox.
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             f"{name} is already connected to a different company.",
         )
-    if existing is None:
+    if existing is None or (existing.IsDeleted and existing.ClientId != client_id):
         _assert_single_account_per_channel(db, client_id, channel, external_id)
 
     account = existing or LeadChannelAccount(
@@ -600,6 +606,8 @@ def _upsert_fb_account(
         ExternalId=external_id,
         CreatedBy="facebook-login",
     )
+    account.ClientId = client_id
+    account.IsDeleted = False
     account.LoginType = fb_login.LOGIN_TYPE_FACEBOOK
     account.AppId = settings.meta_app_id
     account.Name = name

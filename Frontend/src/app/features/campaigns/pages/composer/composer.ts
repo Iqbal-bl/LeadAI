@@ -419,7 +419,19 @@ export class ComposerComponent {
       const resultsMap = response.results || response.platforms || response.data;
       Object.entries(resultsMap).forEach(([key, val]: [string, any]) => {
         const platName = formatName(key);
-        if (val && typeof val === 'object') {
+        if (val && typeof val === 'object' && Array.isArray(val.accounts) && val.accounts.length > 1) {
+          for (const acc of val.accounts) {
+            const accLabel = `${platName} (${acc.account_name || 'Account'})`;
+            if (acc.success || acc.post_id || acc.id) {
+              successful.push(accLabel);
+            } else {
+              failed.push({
+                platform: accLabel,
+                reason: acc.error || 'Failed to publish to this account',
+              });
+            }
+          }
+        } else if (val && typeof val === 'object') {
           const isSuccess =
             val.status === 'success' ||
             val.status === 'published' ||
@@ -449,7 +461,19 @@ export class ComposerComponent {
           matchedPlatform = true;
           const val = response[k];
           const platName = formatName(k);
-          if (val && typeof val === 'object') {
+          if (val && typeof val === 'object' && Array.isArray(val.accounts) && val.accounts.length > 1) {
+            for (const acc of val.accounts) {
+              const accLabel = `${platName} (${acc.account_name || 'Account'})`;
+              if (acc.success || acc.post_id || acc.id) {
+                successful.push(accLabel);
+              } else {
+                failed.push({
+                  platform: accLabel,
+                  reason: acc.error || 'Failed to publish to this account',
+                });
+              }
+            }
+          } else if (val && typeof val === 'object') {
             const isSuccess =
               val.status === 'success' ||
               val.status === 'published' ||

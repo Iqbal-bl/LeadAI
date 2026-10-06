@@ -112,6 +112,7 @@ async def publish(
     *,
     actor: str = "system",
     account_id: str | None = None,
+    account_ids: list[str] | None = None,
     mode: str = "direct",
     topic: str | None = None,
     instructions: str | None = None,
@@ -155,17 +156,7 @@ async def publish(
             try:
                 from .linkedin import get_valid_access_token, post_to_linkedin
                 from ..models_ext import LeadChannelAccount
-                
-                # Retrieve credential and access token
-                access_token = await get_valid_access_token(db, client_id)
-                db_cred = db.query(LeadChannelAccount).filter(
-                    LeadChannelAccount.ClientId == client_id,
-                    LeadChannelAccount.Channel == "linkedin",
-                    LeadChannelAccount.IsDeleted == False
-                ).first()
-                person_urn = db_cred.ExternalId if db_cred else None
-                if not person_urn:
-                    raise ValueError("LinkedIn account is connected but missing Person URN. Please reconnect.")
+                import asyncio
                 
                 # Check capabilities
                 capabilities = PLATFORM_CAPABILITIES.get(platform)
@@ -176,15 +167,121 @@ async def publish(
                         "error": f"{platform} does not support this media combination ({media_shape}).",
                     }
                     continue
-                
-                result = await post_to_linkedin(access_token, person_urn, caption, uploaded, media_shape)
+
+                # Query all active connected LinkedIn accounts for this company
+                query = db.query(LeadChannelAccount).filter(
+                    LeadChannelAccount.ClientId == client_id,
+                    LeadChannelAccount.Channel == "linkedin",
+                    LeadChannelAccount.IsDeleted == False,
+                    LeadChannelAccount.IsActive == True,
+                )
+                if account_ids:
+                    query = query.filter(LeadChannelAccount.Id.in_(account_ids))
+                elif account_id:
+                    query = query.filter(LeadChannelAccount.Id == account_id)
+
+                lk_accounts = query.order_by(LeadChannelAccount.CreatedAt.asc()).all()
+                if not lk_accounts:
+                    results[platform] = {
+                        "success": False,
+                        "not_connected": True,
+                        "error": "No active LinkedIn accounts found. Please connect your LinkedIn profile first.",
+                    }
+                    continue
+
+                def _format_linkedin_post_url(post_id: str | None) -> str | None:
+                    if not post_id:
+                        return None
+                    if post_id.startswith("http"):
+                        return post_id
+                    if ":" in post_id:
+                        return f"https://www.linkedin.com/feed/update/{post_id}/"
+                    return f"https://www.linkedin.com/feed/update/urn:li:share:{post_id}/"
+
+                # Prepare accounts & tokens sequentially to avoid DB session contention
+                valid_accounts_with_tokens = []
+                account_outcomes: list[dict] = []
+
+                for acc in lk_accounts:
+                    if not acc.ExternalId:
+                        account_outcomes.append({
+                            "account_id": acc.Id,
+                            "account_name": acc.Name or "LinkedIn Account",
+                            "person_urn": None,
+                            "success": False,
+                            "error": f"LinkedIn account '{acc.Name}' is missing Person URN. Please reconnect.",
+                        })
+                        continue
+                    try:
+                        token = await get_valid_access_token(db, client_id, acc.Id)
+                        valid_accounts_with_tokens.append((acc, token))
+                    except Exception as exc:
+                        logger.warning(
+                            "[social] Failed to resolve token for LinkedIn account %s (%s): %s",
+                            acc.Id, acc.Name, exc,
+                        )
+                        account_outcomes.append({
+                            "account_id": acc.Id,
+                            "account_name": acc.Name or "LinkedIn Account",
+                            "person_urn": acc.ExternalId,
+                            "success": False,
+                            "error": str(exc),
+                        })
+
+                # Broadcast concurrently to all valid LinkedIn accounts
+                async def _post_one(acc: LeadChannelAccount, token: str) -> dict:
+                    try:
+                        res = await post_to_linkedin(token, acc.ExternalId, caption, uploaded, media_shape)
+                        post_id = res.get("post_id")
+                        post_url = _format_linkedin_post_url(post_id)
+                        return {
+                            "account_id": acc.Id,
+                            "account_name": acc.Name or "LinkedIn Account",
+                            "person_urn": acc.ExternalId,
+                            "success": True,
+                            "post_id": post_id,
+                            "url": post_url,
+                            "result": res,
+                        }
+                    except Exception as exc:
+                        logger.warning(
+                            "[social] LinkedIn publish failed for account %s (%s): %s",
+                            acc.Id, acc.Name, exc,
+                        )
+                        return {
+                            "account_id": acc.Id,
+                            "account_name": acc.Name or "LinkedIn Account",
+                            "person_urn": acc.ExternalId,
+                            "success": False,
+                            "error": str(exc),
+                        }
+
+                if valid_accounts_with_tokens:
+                    parallel_results = await asyncio.gather(
+                        *[_post_one(acc, token) for acc, token in valid_accounts_with_tokens]
+                    )
+                    account_outcomes.extend(parallel_results)
+
+                successful = [o for o in account_outcomes if o.get("success")]
+                any_success = len(successful) > 0
+                all_success = len(successful) == len(account_outcomes)
+
                 results[platform] = {
-                    "success": True,
-                    "account_id": client_id,
-                    "account_name": "LinkedIn User",
-                    "result": result,
-                    "id": result.get("post_id"),
+                    "success": any_success,
+                    "all_success": all_success,
+                    "accounts": account_outcomes,
+                    "total_accounts": len(account_outcomes),
+                    "successful_accounts": len(successful),
+                    "id": successful[0]["post_id"] if successful else None,
+                    "post_id": successful[0]["post_id"] if successful else None,
+                    "url": successful[0].get("url") if successful else None,
+                    "account_name": ", ".join(a.Name for a in lk_accounts if a.Name),
                 }
+                if not all_success and any_success:
+                    results[platform]["partial"] = True
+                if not any_success and account_outcomes:
+                    results[platform]["error"] = account_outcomes[0].get("error") or "Publishing failed across all accounts."
+
             except Exception as exc:
                 logger.warning(
                     "[social] %s publish failed for client %s: %s", platform, client_id, exc
@@ -356,8 +453,10 @@ def execute_scheduled_post(db: Session, payload: dict) -> dict | None:
 
     fb = results.get("facebook") or {}
     ig = results.get("instagram") or {}
+    li = results.get("linkedin") or {}
     row.FacebookPostId = fb.get("id")
     row.InstagramMediaId = ig.get("id")
+    row.LinkedInPostId = li.get("id")
     row.UpdatedAt = utcnow()
     db.commit()
 

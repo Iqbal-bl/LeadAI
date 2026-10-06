@@ -289,6 +289,7 @@ async def create_direct_post(
         platforms=list(body.platforms),
         actor=principal.email,
         account_id=body.account_id,
+        account_ids=body.account_ids,
         mode="direct",
     )
 
@@ -372,6 +373,7 @@ async def create_direct_post_from_urls(
         platforms=list(body.platforms),
         actor=principal.email,
         account_id=body.account_id,
+        account_ids=body.account_ids,
         mode="direct",
     )
     db.commit()
