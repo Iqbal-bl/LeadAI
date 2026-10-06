@@ -65,7 +65,7 @@ export class ModuleActivityLogsComponent implements OnInit, OnDestroy {
         }
         this.cdr.markForCheck();
       },
-      error: () => {},
+      error: () => { },
     });
   }
 

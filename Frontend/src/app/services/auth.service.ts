@@ -189,7 +189,7 @@ export class AuthService {
     if (!authConfig.pkce) {
       headers = headers.set(
         'Authorization',
-        'Basic ' + btoa(authConfig.clientId + ':' + authConfig.clientSecret),
+        'Basic ' + btoa(authConfig.clientId + ':' + ((authConfig as any).clientSecret || '')),
       );
     }
 

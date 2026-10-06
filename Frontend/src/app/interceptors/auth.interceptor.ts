@@ -51,7 +51,7 @@ export class AuthInterceptor implements HttpInterceptor {
         headers = headers.set(
           'Authorization',
           'Basic ' +
-          btoa(`${authConfig.clientId}:${authConfig.clientSecret || ''}`),
+          btoa(`${authConfig.clientId}:${(authConfig as any).clientSecret || ''}`),
         );
       }
       req = req.clone({ headers });
