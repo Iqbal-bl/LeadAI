@@ -96,7 +96,10 @@ export class ApiService {
       url.startsWith('http') || url.startsWith('/')
         ? url
         : `${this.apiPrefix}/${url}`;
-    return this.http.get<T>(fullUrl, this.buildOptions(options) as any) as any as Observable<T>;
+    return this.http.get<T>(
+      fullUrl,
+      this.buildOptions(options) as any,
+    ) as any as Observable<T>;
   }
 
   public post<T>(url: string, body: any, options?: ApiOptions): Observable<T> {
@@ -104,7 +107,11 @@ export class ApiService {
       url.startsWith('http') || url.startsWith('/')
         ? url
         : `${this.apiPrefix}/${url}`;
-    return this.http.post<T>(fullUrl, body, this.buildOptions(options) as any) as any as Observable<T>;
+    return this.http.post<T>(
+      fullUrl,
+      body,
+      this.buildOptions(options) as any,
+    ) as any as Observable<T>;
   }
 
   public put<T>(url: string, body: any, options?: ApiOptions): Observable<T> {
@@ -112,7 +119,11 @@ export class ApiService {
       url.startsWith('http') || url.startsWith('/')
         ? url
         : `${this.apiPrefix}/${url}`;
-    return this.http.put<T>(fullUrl, body, this.buildOptions(options) as any) as any as Observable<T>;
+    return this.http.put<T>(
+      fullUrl,
+      body,
+      this.buildOptions(options) as any,
+    ) as any as Observable<T>;
   }
 
   public patch<T>(url: string, body: any, options?: ApiOptions): Observable<T> {
@@ -120,7 +131,11 @@ export class ApiService {
       url.startsWith('http') || url.startsWith('/')
         ? url
         : `${this.apiPrefix}/${url}`;
-    return this.http.patch<T>(fullUrl, body, this.buildOptions(options) as any) as any as Observable<T>;
+    return this.http.patch<T>(
+      fullUrl,
+      body,
+      this.buildOptions(options) as any,
+    ) as any as Observable<T>;
   }
 
   public delete<T>(url: string, options?: ApiOptions): Observable<T> {
@@ -128,6 +143,9 @@ export class ApiService {
       url.startsWith('http') || url.startsWith('/')
         ? url
         : `${this.apiPrefix}/${url}`;
-    return this.http.delete<T>(fullUrl, this.buildOptions(options) as any) as any as Observable<T>;
+    return this.http.delete<T>(
+      fullUrl,
+      this.buildOptions(options) as any,
+    ) as any as Observable<T>;
   }
 }

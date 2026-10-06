@@ -25,7 +25,7 @@ from sqlalchemy import (
 try:
     from core.base import Base
 except ImportError:
-    from base import Base
+    from core.base import Base
 
 
 def _uuid() -> str:

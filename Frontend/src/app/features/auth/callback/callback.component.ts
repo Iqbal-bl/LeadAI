@@ -4,6 +4,7 @@ import { AuthService } from '../../../services/auth.service';
 import { PermissionService } from '../../../services/permission.service';
 import { CommonLibService } from '../../../services/common-lib.service';
 import { BillingService } from '../../../services/billing.service';
+import { OnboardingService } from '../../../services/onboarding.service';
 import { environment } from '../../../../environments/environment';
 import { first } from 'rxjs';
 
@@ -69,6 +70,7 @@ export class CallbackComponent implements OnInit {
   private permissionService = inject(PermissionService);
   private commonLibService = inject(CommonLibService);
   private billingService = inject(BillingService);
+  private onboardingService = inject(OnboardingService);
   error: any;
 
   ngOnInit() {
@@ -135,8 +137,11 @@ export class CallbackComponent implements OnInit {
             // Check company subscription immediately upon login
             this.authService.getAccessMe().subscribe({
               next: (me) => {
+                const targetClientPath = this.onboardingService.isOnboardingInProgress(me?.client_id)
+                  ? '/onboarding'
+                  : '/client/dashboard';
                 if (me.has_active_subscription) {
-                  this.router.navigate(['/client/dashboard']);
+                  this.router.navigate([targetClientPath]);
                 } else {
                   this.billingService.getCurrentPlan().subscribe({
                     next: (summary) => {
@@ -145,7 +150,7 @@ export class CallbackComponent implements OnInit {
                         (summary.active_recharge.status === 'active' ||
                           summary.active_recharge.status === 'exhausted')
                       );
-                      this.router.navigate([hasPlan ? '/client/dashboard' : '/plans']);
+                      this.router.navigate([hasPlan ? targetClientPath : '/plans']);
                     },
                     error: () => this.router.navigate(['/plans']),
                   });
@@ -159,7 +164,14 @@ export class CallbackComponent implements OnInit {
                       (summary.active_recharge.status === 'active' ||
                         summary.active_recharge.status === 'exhausted')
                     );
-                    this.router.navigate([hasPlan ? '/client/dashboard' : '/plans']);
+                    const targetClientPath = this.onboardingService.isOnboardingInProgress()
+                      ? '/onboarding'
+                      : '/client/dashboard';
+                    this.router.navigate([hasPlan ? targetClientPath : '/plans']);
+                  },
+                  error: () => this.router.navigate(['/plans']),
+                });
+              },
                   },
                   error: () => this.router.navigate(['/plans']),
                 });

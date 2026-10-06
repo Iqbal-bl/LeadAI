@@ -23,7 +23,6 @@ for _table in Base.metadata.sorted_tables:
     except Exception:  # noqa: BLE001
         pass
 
-TRANSFER = "Let me bring in a specialist who can help with that — connecting you now."
 
 
 class _Settings:
@@ -97,12 +96,13 @@ def test_a_normal_turn_replies_stores_both_sides_and_scores_the_lead():
     assert len(logs) == 1 and "Voice turn" in logs[0].LogMessage
 
 
-def test_a_handoff_speaks_the_transfer_line_and_marks_the_call_transferred():
+def test_a_handoff_flags_staff_and_says_a_representative_will_contact():
     db, conv, call, msgs, out = turn("do you finance a private island", score=0.0)
-    assert out.reply == TRANSFER and out.handed_off is True
-    assert call.HandedOff is True and call.Status == "transferred"
+    assert out.handed_off is True and out.reply
+    assert "connecting you now" not in out.reply.lower() and "hold" not in out.reply.lower()
+    assert call.HandedOff is True and call.Status != "transferred"
     assert conv.Status == "needs_human" and "below threshold" in conv.HandoffReason
-    assert msgs[1].Content == TRANSFER                        # the spoken line is what is stored
+    assert msgs[1].Content == out.reply                       # the spoken line is what is stored
 
 
 def test_the_ai_message_carries_a_voice_decision_trace():

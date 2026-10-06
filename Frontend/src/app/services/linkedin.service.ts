@@ -338,13 +338,15 @@ export class LinkedinService {
    */
   public captureCommentLead(
     commentId: string
-  ): Observable<{ ok: boolean; message: string; customer_id?: string; display_name?: string }> {
-    return this.apiService.post<{ ok: boolean; message: string; customer_id?: string; display_name?: string }>(
+  ): Observable<{ ok: boolean; message: string; customer_id?: string; display_name?: string; linkedin_profile_url?: string | null }> {
+    return this.apiService.post<{ ok: boolean; message: string; customer_id?: string; display_name?: string; linkedin_profile_url?: string | null }>(
       `linkedin/comments/${encodeURIComponent(commentId)}/capture-lead`,
       {},
       { companyScoped: true }
     );
   }
+
+
 
   /**
    * Poll LinkedIn for latest post comments and trigger AI reply generation

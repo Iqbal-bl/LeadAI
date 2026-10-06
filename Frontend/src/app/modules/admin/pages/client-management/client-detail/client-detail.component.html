@@ -365,6 +365,21 @@
           ></p-tag>
         </div>
 
+        <!-- Company Agent Name -->
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+              Company Agent Name
+            </span>
+            <span class="text-[11px]" style="color: var(--app-text-muted)">
+              Default identity substituted for &#123;agent&#125; in AI call scripts
+            </span>
+          </div>
+          <span class="font-bold text-sm text-indigo-500">
+            {{ companySettings.agent_name || 'Not configured' }}
+          </span>
+        </div>
+
         <!-- Website Widget Code Snippet -->
         <div class="pt-2">
           <div class="flex items-center justify-between mb-1.5">
@@ -384,6 +399,164 @@
             style="background: var(--app-bg); border: 1px solid var(--app-border); color: var(--app-text-secondary);"
           >{{ getWidgetEmbedSnippet() }}</pre>
         </div>
+      </div>
+    </div>
+
+    <!-- Platform Voice Settings Card (Superadmin Only) -->
+    <div *ngIf="isSuperAdmin" class="card-base p-5 lg:col-span-2 space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-solid" style="border-color: var(--app-border)">
+        <div>
+          <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--app-text)">
+            <i class="pi pi-volume-up text-pink-500"></i> Platform Voice & Telephony Engine (Superadmin Only)
+          </h3>
+          <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
+            Scoped per company. Controls STT/TTS engine, synthetic voice persona, speaker, and speaking speed for AI phone calls.
+          </p>
+        </div>
+        <p-tag
+          value="Superadmin Only"
+          severity="warning"
+          [rounded]="true"
+        ></p-tag>
+      </div>
+
+      <!-- STT / TTS Provider Selection -->
+      <div class="p-4 rounded-xl border space-y-3" style="background: var(--app-bg-hover); border-color: var(--app-border)">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <label class="text-xs font-bold uppercase tracking-wider block" style="color: var(--app-text)">
+              STT / TTS Provider
+            </label>
+            <span class="text-[11px]" style="color: var(--app-text-muted)">
+              Select speech-to-text and text-to-speech synthesis pipeline for this client.
+            </span>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
+              [ngClass]="sttTtsProvider === 'sarvam' ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'">
+              <input type="radio" name="sttTtsProvider" value="sarvam" [(ngModel)]="sttTtsProvider" class="accent-indigo-600" />
+              <span>Sarvam (Bulbul:v3)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
+              [ngClass]="sttTtsProvider === 'deepgram' ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'">
+              <input type="radio" name="sttTtsProvider" value="deepgram" [(ngModel)]="sttTtsProvider" class="accent-amber-600" />
+              <span>Deepgram</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Deepgram Warning Banner -->
+        <div
+          *ngIf="sttTtsProvider === 'deepgram'"
+          class="p-3.5 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/50 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 transition-all"
+        >
+          <i class="pi pi-exclamation-triangle text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0 text-base"></i>
+          <div>
+            <strong class="font-bold block mb-0.5">Deepgram Language Limitation Warning</strong>
+            <span>Deepgram has limited support for Hindi and other Indic languages. Only switch a company to Deepgram if its callers speak primarily English.</span>
+          </div>
+        </div>
+
+        <!-- Deepgram inactive note for voice controls -->
+        <div
+          *ngIf="sttTtsProvider === 'deepgram'"
+          class="text-[11px] text-slate-500 dark:text-slate-400 italic flex items-center gap-1.5"
+        >
+          <i class="pi pi-info-circle text-slate-400"></i>
+          <span>These voice settings apply only to Sarvam. Gender, speed, and speaker settings are saved and will resume if switched back to Sarvam.</span>
+        </div>
+      </div>
+
+      <!-- Sarvam Voice Persona Controls (Disabled when provider is Deepgram) -->
+      <div
+        class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end p-4 rounded-xl border transition-opacity"
+        [ngClass]="sttTtsProvider === 'deepgram' ? 'opacity-50 pointer-events-none' : ''"
+        style="border-color: var(--app-border)"
+      >
+        <!-- Voice Gender Selector -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-semibold block" style="color: var(--app-text)">
+            Voice Gender
+          </label>
+          <p-dropdown
+            [options]="[
+              { label: 'Female', value: 'female' },
+              { label: 'Male', value: 'male' }
+            ]"
+            [(ngModel)]="voiceGender"
+            (onChange)="onVoiceGenderChange()"
+            [disabled]="sttTtsProvider === 'deepgram'"
+            placeholder="Select Voice Gender"
+            styleClass="w-full text-sm"
+            [style]="{ width: '100%' }"
+          ></p-dropdown>
+          <span class="text-[11px] block" style="color: var(--app-text-muted)">
+            Sets TTS persona gender & regional language verb agreement.
+          </span>
+        </div>
+
+        <!-- Voice Speaker (Sarvam Bulbul:v3 Roster) -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-semibold block" style="color: var(--app-text)">
+            Voice Speaker (Sarvam Bulbul:v3)
+          </label>
+          <p-dropdown
+            [options]="filteredVoiceSpeakers"
+            [(ngModel)]="voiceSpeaker"
+            [disabled]="sttTtsProvider === 'deepgram'"
+            placeholder="Select Speaker"
+            optionLabel="label"
+            optionValue="value"
+            styleClass="w-full text-sm"
+            [style]="{ width: '100%' }"
+          ></p-dropdown>
+          <span class="text-[11px] block" style="color: var(--app-text-muted)">
+            Selectable voice persona from Sarvam bulbul:v3 catalog.
+          </span>
+        </div>
+
+        <!-- Voice Speed Slider -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between items-center">
+            <label class="text-xs font-semibold block" style="color: var(--app-text)">
+              Voice Speed (0.5x – 2.0x)
+            </label>
+            <span class="text-xs font-bold font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
+              {{ voiceSpeed | number:'1.1-2' }}x
+            </span>
+          </div>
+          <p-slider
+            [(ngModel)]="voiceSpeed"
+            [min]="0.5"
+            [max]="2.0"
+            [step]="0.1"
+            [disabled]="sttTtsProvider === 'deepgram'"
+          ></p-slider>
+          <div class="flex justify-between text-[10px] text-slate-400">
+            <span>0.5x (Slow)</span>
+            <span>1.1x (Default)</span>
+            <span>2.0x (Fast)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Save Voice Action -->
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+        <span *ngIf="hasVoiceSettingsChanges" class="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1.5">
+          <i class="pi pi-pencil"></i> You have unsaved voice settings changes.
+        </span>
+        <span *ngIf="!hasVoiceSettingsChanges" class="text-xs text-slate-400">
+          All platform voice settings synchronized with backend.
+        </span>
+        <p-button
+          label="Save Voice Settings"
+          icon="pi pi-check"
+          [loading]="savingVoiceSettings"
+          [disabled]="!hasVoiceSettingsChanges || savingVoiceSettings"
+          (onClick)="saveVoiceSettings()"
+          size="small"
+          styleClass="w-full sm:w-auto"
+        ></p-button>
       </div>
     </div>
   </div>

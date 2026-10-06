@@ -45,10 +45,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session
 from ..models import LeadJob, utcnow
+
+_utcnow = utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -416,27 +419,33 @@ def handle_linkedin_sync_comments(db: Session, payload: dict) -> dict:
             if _main_loop is not None and _main_loop.is_running() and not _main_loop.is_closed():
                 try:
                     future = asyncio.run_coroutine_threadsafe(
-                        fetch_recent_posts_and_comments_browser(db, account),
+                        fetch_recent_posts_and_comments_browser(db, account, limit_posts=2, is_background_job=True),
                         _main_loop,
                     )
                     res = future.result(timeout=240)
                 except RuntimeError as r_err:
                     if "closed" in str(r_err).lower():
-                        res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account))
+                        res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account, limit_posts=2, is_background_job=True))
                     else:
                         raise
             else:
-                res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account))
+                res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account, limit_posts=2, is_background_job=True))
             results[account.ClientId] = res
         except Exception as exc:
             logger.warning("[LeadAI jobs] LinkedIn comment sync error for client %s: %s", account.ClientId, exc)
             results[account.ClientId] = {"error": str(exc)}
 
-    # Schedule next check in ~1 hour (45-75 minutes) with wide human jitter (safe anti-bot cadence)
+    # Schedule next check in ~3 hours (120-210 minutes) with wide human jitter (safe anti-bot cadence).
+    # If deferred due to active live messaging, retry in 5 minutes so it runs as soon as messaging is idle!
     if not company_id:
-        run_at = calculate_next_periodic_run(base_minutes=60, jitter_minutes=15, min_minutes=45)
+        has_deferred = any(isinstance(r, dict) and r.get("status") == "deferred" for r in results.values())
+        if has_deferred:
+            run_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
+            logger.info("[LeadAI jobs] Live messaging active during comment sync. Rescheduling quick retry in 5 mins at %s", run_at)
+        else:
+            run_at = calculate_next_periodic_run(base_minutes=180, jitter_minutes=30, min_minutes=120)
+            logger.info("[LeadAI jobs] Scheduled next periodic linkedin.sync_comments at %s", run_at)
         enqueue(db, "linkedin.sync_comments", run_at=run_at)
-        logger.info("[LeadAI jobs] Scheduled next periodic linkedin.sync_comments at %s", run_at)
 
     return {"synced_accounts": len(accounts), "details": results}
 
@@ -459,7 +468,7 @@ def bootstrap_linkedin_job(db) -> None:
         enqueue(db, "linkedin.process_invitations", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.process_invitations at %s", run_at)
 
-    # 2. Comments & AI Replies scanner (~1 hour, 45-75 mins with wide jitter)
+    # 2. Comments & AI Replies scanner (~3 hours, safe anti-detection cadence)
     existing_comments = (
         db.query(LeadJob)
         .filter(
@@ -470,7 +479,7 @@ def bootstrap_linkedin_job(db) -> None:
         .first()
     )
     if not existing_comments:
-        run_at = now + timedelta(seconds=10)
+        run_at = now + timedelta(minutes=180)
         enqueue(db, "linkedin.sync_comments", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.sync_comments at %s", run_at)
 

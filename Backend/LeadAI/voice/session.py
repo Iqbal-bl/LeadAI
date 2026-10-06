@@ -177,11 +177,16 @@ class CallSession:
         return await asyncio.to_thread(self._respond_sync, text, token)
 
     def _opening_sync(self) -> BrainReply:
+        from . import warmup
+
         db = self._session_factory()
         try:
             client, conversation, call = self._load(db)
-            language = voice_flow.opening_language(db, conversation)
-            text, message_id = voice_flow.opening_line(db, client, conversation, call, language=language)
+            precomposed = warmup.pop_precomputed_opening(self.call_sid)
+            language = precomposed["language"] if precomposed else voice_flow.opening_language(db, conversation)
+            text, message_id = voice_flow.opening_line(
+                db, client, conversation, call, language=language, precomposed=precomposed,
+            )
             self._save_legacy_transcript("agent", text)
             return BrainReply(text=text, skipped=not text, message_id=message_id, language=language)
         except Exception:

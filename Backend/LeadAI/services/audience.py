@@ -45,6 +45,9 @@ FIELD_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("phone", ("phone", "mobile", "contact number", "contact no", "cell",
                "msisdn", "number", "tel", "mob")),
     ("email", ("email", "e-mail", "mail id", "emailid")),
+    ("instagram_id", ("instagram", "insta id", "ig id", "igsid")),
+    ("facebook_id", ("facebook", "fb id", "messenger id", "psid")),
+    ("product", ("product", "interested in", "interest")),
     ("name", ("name", "customer", "client name", "full name", "contact name",
               "first name", "fname")),
     ("company", ("company", "organisation", "organization", "firm", "business")),
@@ -60,6 +63,9 @@ class ParsedRow:
     phone: str | None = None       # normalised E.164, or None
     email: str | None = None
     whatsapp: str | None = None
+    instagram_id: str | None = None   # raw IGSID, as given — not resolvable without a connected account
+    facebook_id: str | None = None    # raw PSID
+    product: str | None = None        # raw text, matched against the company's catalog by the caller
     country_code: str | None = None
     is_valid: bool = True
     invalid_reason: str | None = None
@@ -340,6 +346,9 @@ def parse_contacts(
         parsed = ParsedRow(row_number=offset)
         parsed.name = (str(cell("name")).strip() if cell("name") else None) or None
         parsed.email = _valid_email(cell("email"))
+        parsed.instagram_id = (str(cell("instagram_id")).strip() if cell("instagram_id") else None) or None
+        parsed.facebook_id = (str(cell("facebook_id")).strip() if cell("facebook_id") else None) or None
+        parsed.product = (str(cell("product")).strip() if cell("product") else None) or None
 
         raw_phone = cell("phone") or cell("whatsapp")
         phone, error = normalise_phone(raw_phone, region)
@@ -357,7 +366,7 @@ def parse_contacts(
         }
         parsed.fields = {k: v for k, v in parsed.fields.items() if v}
 
-        if not phone and not parsed.email:
+        if not phone and not parsed.email and not parsed.instagram_id and not parsed.facebook_id:
             parsed.is_valid = False
             parsed.invalid_reason = f"No contactable address ({error or 'no email'})"
         elif dedupe and phone:

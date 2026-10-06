@@ -1,0 +1,391 @@
+<!-- Independent Lead Batches Page Header -->
+<div class="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight" style="color: var(--app-text)">
+      Lead Batches
+    </h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+      Manage and monitor targeted lead campaign batches and imported segments
+    </p>
+  </div>
+  <div class="flex items-center gap-2.5">
+    <p-button
+      *appHasPermission="PERMISSIONS.CAMPAIGN_MANAGE"
+      label="Import Lead Batches"
+      icon="pi pi-upload"
+      (onClick)="goToImport()"
+      [rounded]="true"
+    ></p-button>
+  </div>
+</div>
+
+<!-- Batches Table -->
+<div class="card-base overflow-hidden">
+  <p-table
+    [value]="campaigns"
+    [loading]="loading"
+    [paginator]="true"
+    [rows]="10"
+    [rowHover]="true"
+    dataKey="id"
+    [tableStyle]="{ 'min-width': '60rem' }"
+  >
+    <ng-template pTemplate="header">
+      <tr>
+        <th pSortableColumn="name">
+          Campaign <p-sortIcon field="name"></p-sortIcon>
+        </th>
+        <th>Channel</th>
+        <th>Kind</th>
+        <th>Purpose</th>
+        <th pSortableColumn="status">
+          Status <p-sortIcon field="status"></p-sortIcon>
+        </th>
+        <th>Progress</th>
+        <th pSortableColumn="created_at">
+          Created <p-sortIcon field="created_at"></p-sortIcon>
+        </th>
+        <th>Actions</th>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="body" let-campaign>
+      <tr class="cursor-pointer" (click)="viewCampaign(campaign)">
+        <td>
+          <div class="flex flex-col gap-1.5 py-0.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-medium" style="color: var(--app-text)">{{ campaign.name }}</span>
+              <p-tag
+                value="Lead Campaign"
+                severity="info"
+                icon="pi pi-users"
+                [rounded]="true"
+                class="text-[10px]"
+              ></p-tag>
+              <span
+                *ngIf="campaign.created_via === 'import'"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+                pTooltip="Generated via Lead Import & Product Classification"
+              >
+                <i class="pi pi-sparkles text-[9px]"></i>
+                Auto-classified
+              </span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="flex items-center gap-2">
+            <i
+              [class]="getChannelIcon(campaign.channel)"
+              class="text-lg"
+              style="color: var(--app-text-secondary)"
+            ></i>
+            <span
+              class="text-sm capitalize"
+              style="color: var(--app-text-secondary)"
+              >{{ campaign.channel }}</span
+            >
+          </div>
+        </td>
+        <td>
+          <p-tag
+            [value]="campaign.kind"
+            [rounded]="true"
+            [severity]="campaign.kind === 'call' ? 'warn' : 'info'"
+          ></p-tag>
+        </td>
+        <td>
+          <span
+            class="text-sm capitalize"
+            style="color: var(--app-text-secondary)"
+            >{{ campaign.purpose | titlecase }}</span
+          >
+        </td>
+        <td>
+          <p-tag
+            [value]="campaign.status"
+            [severity]="getStatusSeverity(campaign.status)"
+            [rounded]="true"
+          ></p-tag>
+          <div *ngIf="campaign.status === 'scheduled' && campaign.scheduled_at" class="mt-1 flex items-center gap-1 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium whitespace-nowrap">
+            <i class="pi pi-calendar-clock text-[10px]"></i>
+            <span>{{ campaign.scheduled_at | date: 'd MMM, h:mm a' }}</span>
+            <span *ngIf="campaign.timezone" class="text-[10px] text-slate-400">({{ campaign.timezone }})</span>
+          </div>
+        </td>
+        <td>
+          <div
+            class="flex items-center gap-2"
+            *ngIf="campaign.counters?.total > 0"
+          >
+            <p-progressBar
+              [value]="getProgressPercent(campaign)"
+              [style]="{ height: '6px', width: '80px' }"
+              [showValue]="false"
+            ></p-progressBar>
+            <span
+              class="text-xs font-medium"
+              style="color: var(--app-text-muted)"
+              >{{ getProgressPercent(campaign) }}%</span
+            >
+          </div>
+          <span
+            *ngIf="!campaign.counters || campaign.counters.total === 0"
+            class="text-sm"
+            style="color: var(--app-text-muted)"
+            >—</span
+          >
+        </td>
+        <td class="whitespace-nowrap">
+          <span class="text-sm" style="color: var(--app-text-secondary)">
+            {{ campaign.created_at ? (campaign.created_at | date: 'd MMM y, h:mm a') : '—' }}
+          </span>
+        </td>
+        <td>
+          <div class="flex items-center" (click)="$event.stopPropagation()">
+            <p-button
+              icon="pi pi-ellipsis-v"
+              [rounded]="true"
+              [text]="true"
+              severity="secondary"
+              pTooltip="Actions"
+              (onClick)="openActionMenu($event, campaign, campaignRowMenu)"
+            ></p-button>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="8">
+          <div class="flex flex-col items-center justify-center py-12 gap-3">
+            <i
+              class="pi pi-users text-4xl"
+              style="color: var(--app-text-muted)"
+            ></i>
+            <p class="text-lg font-medium" style="color: var(--app-text-muted)">
+              No campaign batches yet
+            </p>
+            <p class="text-sm" style="color: var(--app-text-muted)">
+              Import leads or create a campaign batch to reach targeted product groups
+            </p>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<!-- Preview Dialog -->
+<p-dialog
+  header="Campaign Preview"
+  [(visible)]="showPreviewDialog"
+  [modal]="true"
+  [style]="{ width: '600px', maxHeight: '90vh' }"
+  [draggable]="false"
+  [resizable]="false"
+>
+  <div
+    *ngIf="previewLoading"
+    class="flex flex-col items-center justify-center py-10 gap-3"
+  >
+    <p-progressSpinner
+      strokeWidth="3"
+      [style]="{ width: '40px', height: '40px' }"
+    ></p-progressSpinner>
+    <p class="text-sm font-medium" style="color: var(--app-text)">
+      Building audience and preparing preview...
+    </p>
+  </div>
+
+  <div *ngIf="!previewLoading && activePreview && activePreviewCampaign">
+    <!-- Preview Metrics -->
+    <div class="grid grid-cols-3 gap-4 mb-5 text-center">
+      <div class="p-3 rounded-xl" style="background: var(--app-surface-alt)">
+        <p class="text-xl font-bold" style="color: var(--app-text)">
+          {{ activePreview.recipient_count | number }}
+        </p>
+        <p class="text-xs" style="color: var(--app-text-muted)">Recipients</p>
+      </div>
+      <div class="p-3 rounded-xl" style="background: var(--app-surface-alt)">
+        <p class="text-xl font-bold" style="color: var(--app-text)">
+          ~{{ activePreview.eta_minutes }} min
+        </p>
+        <p class="text-xs" style="color: var(--app-text-muted)">Est. Time</p>
+      </div>
+      <div class="p-3 rounded-xl" style="background: var(--app-surface-alt)">
+        <p class="text-xl font-bold" style="color: var(--app-text)">
+          {{ activePreview.warnings.length }}
+        </p>
+        <p class="text-xs" style="color: var(--app-text-muted)">Warnings</p>
+      </div>
+    </div>
+
+    <!-- Warnings List -->
+    <div *ngIf="activePreview.warnings.length > 0" class="mb-4">
+      <div
+        *ngFor="let w of activePreview.warnings"
+        class="p-3 rounded-lg mb-2 text-xs flex items-start gap-2"
+        [style.background]="getWarningSeverity(w.severity)"
+        [style.color]="getWarningColor(w.severity)"
+      >
+        <i class="pi pi-exclamation-triangle mt-0.5 animate-pulse"></i>
+        <span>{{ w.message }}</span>
+      </div>
+    </div>
+
+    <!-- Sample Messages -->
+    <div
+      *ngIf="
+        activePreview.sample_messages &&
+        activePreview.sample_messages.length > 0
+      "
+      class="mb-5"
+    >
+      <h3 class="text-sm font-semibold mb-2" style="color: var(--app-text)">
+        Sample Rendered Message
+      </h3>
+      <div
+        class="p-4 rounded-xl text-sm"
+        style="
+          background: var(--app-surface-alt);
+          border: 1px solid var(--app-border);
+        "
+      >
+        <p
+          class="text-xs font-semibold mb-1"
+          style="color: var(--app-text-muted)"
+        >
+          To: {{ activePreview.sample_messages[0].recipient }}
+        </p>
+        <p
+          class="leading-relaxed font-sans"
+          style="color: var(--app-text); white-space: pre-wrap"
+        >
+          {{ activePreview.sample_messages[0].rendered_body }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div
+      class="flex justify-end gap-2 pt-4 border-t border-solid"
+      style="border-color: var(--app-border)"
+    >
+      <p-button
+        label="Close"
+        [text]="true"
+        severity="secondary"
+        (onClick)="showPreviewDialog = false"
+      ></p-button>
+      <p-button
+        label="Start Campaign"
+        icon="pi pi-send"
+        severity="success"
+        [loading]="startingCampaignId === activePreviewCampaign.id"
+        [disabled]="!canSend || startingCampaignId !== null"
+        [pTooltip]="
+          !canSend
+            ? 'You need the campaign.send permission to start campaigns'
+            : ''
+        "
+        (onClick)="startFromPreview()"
+      ></p-button>
+    </div>
+  </div>
+</p-dialog>
+
+<!-- Recipients Dialog -->
+<p-dialog
+  [header]="'Recipients — ' + (activeRecipientsCampaign?.name || '')"
+  [(visible)]="showRecipientsDialog"
+  [modal]="true"
+  [style]="{ width: '750px', maxHeight: '85vh' }"
+  [draggable]="false"
+  [resizable]="false"
+>
+  <div
+    *ngIf="recipientsLoading"
+    class="flex flex-col items-center justify-center py-12 gap-3"
+  >
+    <p-progressSpinner
+      strokeWidth="3"
+      [style]="{ width: '40px', height: '40px' }"
+    ></p-progressSpinner>
+    <p class="text-sm font-medium" style="color: var(--app-text)">
+      Loading recipients...
+    </p>
+  </div>
+
+  <div *ngIf="!recipientsLoading">
+    <p-table
+      [value]="recipients"
+      [paginator]="true"
+      [rows]="10"
+      [rowHover]="true"
+      [tableStyle]="{ 'min-width': '100%' }"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Recipient</th>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Info</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-r>
+        <tr>
+          <td>
+            <span class="font-mono text-sm" style="color: var(--app-text)">{{
+              r.phone || r.email || "—"
+            }}</span>
+          </td>
+          <td>
+            <span class="text-sm" style="color: var(--app-text)">{{
+              r.name || "—"
+            }}</span>
+          </td>
+          <td>
+            <p-tag
+              [value]="r.status"
+              [severity]="getRecipientSeverity(r.status)"
+              [rounded]="true"
+            ></p-tag>
+          </td>
+          <td>
+            <span
+              class="text-xs"
+              [style.color]="
+                r.status === 'failed' ? '#f87171' : 'var(--app-text-muted)'
+              "
+            >
+              {{ r.failure_reason || r.status_message || "—" }}
+            </span>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="4" class="text-center py-8">
+            <span class="text-sm" style="color: var(--app-text-muted)"
+              >No recipients generated yet.</span
+            >
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</p-dialog>
+
+<!-- Row Actions Context Menu -->
+<p-menu #campaignRowMenu [popup]="true" appendTo="body" [model]="campaignRowMenuItems"></p-menu>
+
+<!-- Create / Edit Dialog -->
+<app-campaign-create
+  *ngIf="showCreate"
+  [visible]="showCreate"
+  [campaign]="selectedCampaignForEdit"
+  [audienceId]="selectedAudienceId"
+  (complete)="onCreateComplete()"
+  (close)="onCreateClose()"
+>
+</app-campaign-create>

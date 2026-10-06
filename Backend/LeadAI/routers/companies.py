@@ -45,6 +45,7 @@ from ..schemas import (
     CompanyUsersOut,
     Ok,
     PermissionItemOut,
+    VoiceSettingsIn,
 )
 from ..serializers import company_out
 from ..services import ai_engine, script_engine
@@ -383,8 +384,12 @@ def _settings_out(db: Session, row: LeadCompanySettings) -> CompanySettingsOut:
         auto_call_on_hot_lead=bool(row.AutoCallOnHotLead),
         widget_enabled=bool(row.WidgetEnabled),
         widget_greeting=row.WidgetGreeting,
+        agent_name=row.AgentName,
         effective_handoff_threshold=threshold,
         effective_retrieval_top_k=top_k,
+        voice_gender=row.VoiceGender,
+        voice_speed=row.VoiceSpeed,
+        voice_speaker=row.VoiceSpeaker,
     )
 
 
@@ -430,6 +435,7 @@ def update_settings(
         ("auto_call_on_hot_lead", "AutoCallOnHotLead"),
         ("widget_enabled", "WidgetEnabled"),
         ("widget_greeting", "WidgetGreeting"),
+        ("agent_name", "AgentName"),
     ):
         value = getattr(payload, field)
         if value is not None:
@@ -446,6 +452,57 @@ def update_settings(
         entity_type="company_settings",
         entity_id=row.Id,
         message="Updated company AI settings",
+        meta=changed,
+        request=request,
+    )
+    db.commit()
+    return _settings_out(db, row)
+
+
+@router.put(
+    "/{company_id}/voice-settings",
+    response_model=CompanySettingsOut,
+    summary="Set a company's AI call voice (super admin only)",
+)
+def update_voice_settings(
+    company_id: str,
+    payload: VoiceSettingsIn,
+    request: Request,
+    principal: Principal = Depends(super_admin("company.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Gender, speaking speed, and which Sarvam voice speaks on every AI call this company makes.
+
+    Deliberately `super_admin(...)`, not `require("settings.manage")` like the
+    sibling /settings endpoint above: a company admin has that permission for
+    their own company, and must NOT be able to use it to change this. This
+    checks the ROLE first, so it holds even for a company admin whose role has
+    been granted matching permissions through the role-permissions overrides.
+    Pitch is deliberately not configurable here — the live TTS model
+    (Sarvam bulbul:v3) ignores it entirely.
+    """
+    row = _settings_row(db, company_id, principal.email)
+    changed = {}
+    for field, column in (
+        ("voice_gender", "VoiceGender"),
+        ("voice_speed", "VoiceSpeed"),
+        ("voice_speaker", "VoiceSpeaker"),
+    ):
+        value = getattr(payload, field)
+        if value is not None:
+            changed[field] = value
+            setattr(row, column, value)
+    row.UpdatedBy = principal.email
+    row.UpdatedAt = utcnow()
+
+    activity.log_principal(
+        db,
+        principal,
+        action=A.SETTINGS_UPDATED,
+        client_id=company_id,
+        entity_type="company_settings",
+        entity_id=row.Id,
+        message="Updated company AI call voice settings",
         meta=changed,
         request=request,
     )

@@ -1,0 +1,691 @@
+<div class="lead-import-container max-w-6xl mx-auto space-y-6 pb-16">
+  <!-- Top Navigation & Header -->
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div>
+      <div class="flex items-center gap-2 mb-2">
+        <button
+          type="button"
+          (click)="goBackToLeads()"
+          class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors group cursor-pointer"
+        >
+          <i class="pi pi-arrow-left text-[10px] group-hover:-translate-x-0.5 transition-transform"></i>
+          <span>{{ fromBatches ? 'Back to Lead Batches' : 'Back to Leads' }}</span>
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight" style="color: var(--app-text)">
+          Lead Import & Product Batching
+        </h1>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-xs">
+          <i class="pi pi-sparkles text-[11px]"></i>
+          Auto Product Classifier
+        </span>
+      </div>
+
+      <p class="text-sm mt-1 max-w-3xl" style="color: var(--app-text-muted)">
+        Upload raw lead sheets. The system automatically classifies contacts by product and builds targeted campaign batches ready for immediate execution.
+      </p>
+    </div>
+
+    <!-- Header Action Buttons -->
+    <div class="flex items-center gap-2.5 shrink-0">
+      <button
+        type="button"
+        (click)="downloadSampleCsv()"
+        class="btn-secondary-modern"
+        pTooltip="Download CSV template with all supported column headers"
+        tooltipPosition="bottom"
+      >
+        <i class="pi pi-download text-xs text-indigo-500"></i>
+        <span>Download Sample CSV</span>
+      </button>
+
+      <button
+        type="button"
+        (click)="showSchemaReference = !showSchemaReference"
+        class="btn-secondary-modern"
+      >
+        <i [class]="showSchemaReference ? 'pi pi-chevron-up text-purple-500 text-xs' : 'pi pi-table text-purple-500 text-xs'"></i>
+        <span>{{ showSchemaReference ? 'Hide Guide' : 'Column Reference' }}</span>
+        <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono font-bold">
+          {{ schemaFields.length || 7 }}
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Collapsible Column Reference Guide -->
+  <div *ngIf="showSchemaReference" class="import-card p-6 border-indigo-500/30 bg-gradient-to-br from-indigo-50/40 via-purple-50/20 to-transparent dark:from-indigo-950/20 dark:via-purple-950/10">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <i class="pi pi-info-circle text-base"></i>
+        </div>
+        <div>
+          <h3 class="text-sm font-bold" style="color: var(--app-text)">
+            Supported Import Columns Reference
+          </h3>
+          <p class="text-xs" style="color: var(--app-text-muted)">
+            Header matching is case-insensitive. Column headers can match either the key or label.
+          </p>
+        </div>
+      </div>
+      <span class="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium">
+        <i class="pi pi-check text-[10px]"></i> Auto Header Matching
+      </span>
+    </div>
+
+    <p class="text-xs mb-4 text-slate-600 dark:text-slate-400">
+      Including a <code class="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono font-semibold">product</code> column will automatically group leads into product-specific campaign batches. Leads without a matching product will be assigned to a general batch.
+    </p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Fixed Fields -->
+      <div class="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 p-4 shadow-xs">
+        <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+          <i class="pi pi-lock text-slate-400 text-xs"></i>
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Fixed System Fields</span>
+        </div>
+        <div class="space-y-2">
+          <div *ngFor="let f of fixedFields" class="flex items-center justify-between text-xs py-1.5 px-2 rounded-lg hover:bg-slate-100/60 dark:hover:bg-slate-800/50 transition-colors">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold" style="color: var(--app-text)">{{ f.label }}</span>
+              <span class="text-[11px] font-mono text-slate-400">({{ f.key }})</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold">{{ f.data_type }}</span>
+              <span *ngIf="f.required" class="text-[10px] font-bold text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded">Required</span>
+              <span *ngIf="!f.required" class="text-[10px] text-slate-400 font-medium">Optional</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom Data Points -->
+      <div class="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 p-4 shadow-xs">
+        <div class="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+          <i class="pi pi-database text-purple-500 text-xs"></i>
+          <span class="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Company Data Points (Custom)</span>
+        </div>
+        <div *ngIf="customFields.length === 0" class="text-center py-6 text-xs text-slate-400">
+          No custom data points defined for this workspace. Standard columns will be mapped.
+        </div>
+        <div *ngIf="customFields.length > 0" class="space-y-2">
+          <div *ngFor="let f of customFields" class="flex items-center justify-between text-xs py-1.5 px-2 rounded-lg hover:bg-slate-100/60 dark:hover:bg-slate-800/50 transition-colors">
+            <div class="flex items-center gap-2">
+              <span class="font-semibold" style="color: var(--app-text)">{{ f.label }}</span>
+              <span class="text-[11px] font-mono text-purple-500">({{ f.key }})</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-500 font-semibold">{{ f.data_type }}</span>
+              <span *ngIf="f.required" class="text-[10px] font-bold text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded">Required</span>
+              <span *ngIf="!f.required" class="text-[10px] text-slate-400 font-medium">Optional</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN UPLOAD & CONFIGURATION FORM (Shown when receipt is null) -->
+  <div *ngIf="!receipt" class="space-y-6">
+    <!-- STEP 1: Upload Leads Sheet Card -->
+    <div class="import-card p-6 sm:p-7">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-500/25">
+            1
+          </div>
+          <div>
+            <h2 class="text-base font-bold" style="color: var(--app-text)">Upload Leads Sheet</h2>
+            <p class="text-xs" style="color: var(--app-text-muted)">
+              Attach your leads file to parse contacts and automatically segment them by product
+            </p>
+          </div>
+        </div>
+
+        <span *ngIf="selectedFile" class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          <i class="pi pi-check-circle text-xs"></i> File Ready
+        </span>
+      </div>
+
+      <!-- Dropzone Area (When no file selected) -->
+      <div
+        *ngIf="!selectedFile"
+        class="upload-dropzone p-8 sm:p-12 text-center flex flex-col items-center justify-center gap-3"
+        [class.dragging]="isDragging"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave($event)"
+        (drop)="onDrop($event)"
+        (click)="fileInput.click()"
+      >
+        <input
+          #fileInput
+          type="file"
+          class="hidden"
+          accept=".csv,.xlsx,.xls,.docx"
+          (change)="onFileSelected($event)"
+        />
+
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500/15 to-purple-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shadow-inner border border-indigo-500/20">
+          <i class="pi pi-cloud-upload text-3xl"></i>
+        </div>
+
+        <div>
+          <p class="text-sm font-bold" style="color: var(--app-text)">
+            Drag & drop your leads sheet here, or <span class="text-indigo-600 dark:text-indigo-400 underline font-semibold">browse files</span>
+          </p>
+          <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+            Supports CSV, Excel (.xlsx, .xls), or Word table documents (.docx) up to 25MB
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-2 mt-2">
+          <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[11px] font-bold border border-emerald-500/20">.CSV</span>
+          <span class="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 font-mono text-[11px] font-bold border border-blue-500/20">.XLSX</span>
+          <span class="px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-mono text-[11px] font-bold border border-cyan-500/20">.XLS</span>
+          <span class="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-mono text-[11px] font-bold border border-indigo-500/20">.DOCX</span>
+        </div>
+      </div>
+
+      <!-- Selected File Preview Card (When file is selected) -->
+      <div
+        *ngIf="selectedFile"
+        class="p-4 sm:p-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-50/50 via-purple-50/30 to-indigo-50/20 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-indigo-950/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm"
+      >
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+            <i class="pi pi-file text-xl"></i>
+          </div>
+
+          <div>
+            <div class="flex items-center gap-2">
+              <p class="text-sm font-bold text-slate-900 dark:text-white tracking-tight break-all">
+                {{ selectedFile.name }}
+              </p>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 uppercase">
+                {{ getFileExt(selectedFile.name) }}
+              </span>
+            </div>
+
+            <div class="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+              <span class="font-medium">{{ formatFileSize(selectedFile.size) }}</span>
+              <span>•</span>
+              <span>{{ getFileTypeLabel(selectedFile.name) }}</span>
+              <span>•</span>
+              <span class="text-emerald-600 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
+                <i class="pi pi-check text-[10px]"></i> Validated
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 self-end sm:self-center shrink-0">
+          <input
+            #replaceFileInput
+            type="file"
+            class="hidden"
+            accept=".csv,.xlsx,.xls,.docx"
+            (change)="onFileSelected($event)"
+          />
+
+          <button
+            type="button"
+            (click)="replaceFileInput.click()"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-700 dark:text-slate-200 transition-all cursor-pointer"
+          >
+            <i class="pi pi-sync text-[10px] mr-1"></i> Replace
+          </button>
+
+          <button
+            type="button"
+            (click)="removeFile()"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-all cursor-pointer"
+            pTooltip="Remove file"
+            tooltipPosition="top"
+          >
+            <i class="pi pi-trash text-sm"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Channel & Outreach Configuration Card -->
+    <div class="import-card p-6 sm:p-7">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-indigo-500/25">
+          2
+        </div>
+        <div>
+          <h2 class="text-base font-bold" style="color: var(--app-text)">Outreach Channel & Routing Configuration</h2>
+          <p class="text-xs" style="color: var(--app-text-muted)">
+            Select how these leads should be engaged across chat messaging and AI voice agent calls
+          </p>
+        </div>
+      </div>
+
+      <!-- Channel Selection Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <!-- Option 1: Chat (WhatsApp) -->
+        <div
+          (click)="channel = 'chat'"
+          class="channel-card"
+          [class.active]="channel === 'chat'"
+        >
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-xs">
+                <i class="pi pi-whatsapp text-lg"></i>
+              </div>
+              <div
+                class="w-5 h-5 rounded-full flex items-center justify-center text-xs transition-all"
+                [ngClass]="channel === 'chat' ? 'bg-indigo-600 text-white shadow-xs' : 'border border-slate-300 dark:border-slate-700'"
+              >
+                <i *ngIf="channel === 'chat'" class="pi pi-check text-[10px]"></i>
+              </div>
+            </div>
+            <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">WhatsApp Chat</h4>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Reach leads directly on WhatsApp using verified mobile phone numbers
+            </p>
+          </div>
+          <div class="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+            <i class="pi pi-bolt text-amber-500 text-[10px]"></i> Fast qualification
+          </div>
+        </div>
+
+        <!-- Option 2: Voice Calls -->
+        <div
+          (click)="channel = 'call'"
+          class="channel-card"
+          [class.active]="channel === 'call'"
+        >
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-xs">
+                <i class="pi pi-phone text-lg"></i>
+              </div>
+              <div
+                class="w-5 h-5 rounded-full flex items-center justify-center text-xs transition-all"
+                [ngClass]="channel === 'call' ? 'bg-indigo-600 text-white shadow-xs' : 'border border-slate-300 dark:border-slate-700'"
+              >
+                <i *ngIf="channel === 'call'" class="pi pi-check text-[10px]"></i>
+              </div>
+            </div>
+            <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">Voice Agent Calls</h4>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Direct AI phone outreach using assigned voice scripts and interactive dialogue
+            </p>
+          </div>
+          <div class="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+            <i class="pi pi-microphone text-blue-500 text-[10px]"></i> High-intent calling
+          </div>
+        </div>
+
+        <!-- Option 3: Both (Recommended) -->
+        <div
+          (click)="channel = 'both'"
+          class="channel-card relative"
+          [class.active]="channel === 'both'"
+        >
+          <!-- Recommended Badge Pill -->
+          <div class="absolute -top-2.5 right-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full shadow-sm">
+            Recommended
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shadow-xs">
+                <i class="pi pi-sparkles text-lg"></i>
+              </div>
+              <div
+                class="w-5 h-5 rounded-full flex items-center justify-center text-xs transition-all"
+                [ngClass]="channel === 'both' ? 'bg-indigo-600 text-white shadow-xs' : 'border border-slate-300 dark:border-slate-700'"
+              >
+                <i *ngIf="channel === 'both'" class="pi pi-check text-[10px]"></i>
+              </div>
+            </div>
+            <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">Multi-Channel (WhatsApp + Calls)</h4>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Coordinate WhatsApp outreach with automated voice call escalation upon consent
+            </p>
+          </div>
+          <div class="mt-4 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-1.5 text-[11px] text-purple-500 font-medium">
+            <i class="pi pi-star-fill text-[10px]"></i> Highest conversion rate
+          </div>
+        </div>
+      </div>
+
+      <!-- Cold Import Channel Limitations Notice -->
+      <div class="mb-5 p-3.5 rounded-xl border border-blue-200/80 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 flex items-start gap-3 text-xs text-slate-600 dark:text-slate-300">
+        <i class="pi pi-info-circle text-blue-500 mt-0.5 text-sm shrink-0"></i>
+        <div class="leading-relaxed">
+          <span class="font-semibold text-slate-800 dark:text-slate-100">Cold Import Channels:</span>
+          Import batches can call or WhatsApp a lead directly from their phone number. To reach a lead on Instagram or Facebook, message them yourself from your connected account — once they reply, they'll show up in your inbox like any other conversation.
+        </div>
+      </div>
+
+      <!-- Specific Channel Options Panel -->
+      <div class="space-y-5 pt-5 border-t border-slate-100 dark:border-slate-800">
+        <!-- When Chat or Both -->
+        <div *ngIf="channel === 'chat' || channel === 'both'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- Chat Channel Indicator -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+              Primary Chat Platform
+            </label>
+            <div class="px-3.5 py-2.5 rounded-xl border border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-2 text-xs">
+              <i class="pi pi-whatsapp text-sm text-emerald-500"></i>
+              <span>WhatsApp Direct Messaging</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1.5">
+              Dispatches outreach messages directly via WhatsApp to imported phone numbers.
+            </p>
+          </div>
+
+          <!-- Connected Account Dropdown -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+              Sender WhatsApp Account <span class="text-rose-500">*</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <i class="pi pi-whatsapp select-icon text-emerald-500"></i>
+              <select [(ngModel)]="chatChannelAccountId">
+                <option value="" disabled>-- Select Connected WhatsApp Account --</option>
+                <option *ngFor="let acc of accountsForChatChannel" [value]="acc.id">
+                  {{ acc.display_name || acc.name || acc.display_number || acc.external_id || acc.id }}
+                </option>
+              </select>
+              <i class="pi pi-chevron-down select-arrow"></i>
+            </div>
+            <p *ngIf="accountsForChatChannel.length === 0" class="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+              <i class="pi pi-exclamation-triangle text-xs"></i>
+              No active WhatsApp accounts connected. Connect one in Channel Settings.
+            </p>
+          </div>
+        </div>
+
+        <!-- When Call or Both -->
+        <div *ngIf="channel === 'call' || channel === 'both'" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+              Assigned Voice Agent Script <span class="text-slate-400 font-normal">(Optional)</span>
+            </label>
+            <div class="custom-select-wrapper">
+              <i class="pi pi-microphone select-icon"></i>
+              <select [(ngModel)]="voiceScriptId">
+                <option value="">-- Use Company Default Script --</option>
+                <option *ngFor="let s of scripts" [value]="s.id">
+                  {{ s.name }} (v{{ s.version }})
+                </option>
+              </select>
+              <i class="pi pi-chevron-down select-arrow"></i>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1.5">
+              Select a specialized script or let LeadAI use your workspace default script.
+            </p>
+          </div>
+        </div>
+
+        <!-- When Both: Call Escalation Feature Banner -->
+        <div *ngIf="channel === 'both'" class="p-5 rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-50/50 via-indigo-50/30 to-purple-50/10 dark:from-purple-950/30 dark:via-indigo-950/20 dark:to-purple-950/10 shadow-xs">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div class="flex items-start gap-3.5">
+              <div class="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-md shadow-purple-500/20">
+                <i class="pi pi-phone-plus text-base"></i>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h4 class="text-sm font-bold tracking-tight" style="color: var(--app-text)">
+                    Ask Before Calling (Smart Call Escalation)
+                  </h4>
+                  <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                    High Conversion
+                  </span>
+                </div>
+                <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed max-w-2xl">
+                  Sends an initial chat message requesting permission to place a voice call. An automated call will trigger only when the lead replies affirmatively (consent granted).
+                </p>
+
+                <!-- Workflow Step Indicator -->
+                <div class="flex flex-wrap items-center gap-2 mt-3 text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                  <span class="px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    1. Chat Outreach
+                  </span>
+                  <i class="pi pi-arrow-right text-[9px] text-purple-400"></i>
+                  <span class="px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    2. Lead Grants Consent
+                  </span>
+                  <i class="pi pi-arrow-right text-[9px] text-purple-400"></i>
+                  <span class="px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 font-bold border border-purple-500/20">
+                    3. AI Call Triggers
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Switch Control -->
+            <div class="flex items-center gap-3 shrink-0 self-end sm:self-center">
+              <p-inputSwitch
+                [(ngModel)]="callEscalation"
+                inputId="callEscalationSwitch"
+              ></p-inputSwitch>
+              <label for="callEscalationSwitch" class="text-xs font-bold cursor-pointer select-none" [ngClass]="callEscalation ? 'text-purple-600 dark:text-purple-400' : 'text-slate-400'">
+                {{ callEscalation ? 'Enabled' : 'Disabled' }}
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Footer -->
+      <div class="mt-8 pt-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+        <button
+          type="button"
+          (click)="goBackToLeads()"
+          class="btn-secondary-modern"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          (click)="submitImport()"
+          [disabled]="!canSubmit() || isImporting"
+          class="btn-primary-gradient"
+        >
+          <i *ngIf="!isImporting" class="pi pi-bolt"></i>
+          <i *ngIf="isImporting" class="pi pi-spin pi-spinner"></i>
+          <span>{{ isImporting ? 'Processing & Batching Leads...' : 'Import & Generate Batches' }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECEIPT VIEW (Shown after successful upload) -->
+  <div *ngIf="receipt" class="space-y-6">
+    <!-- Receipt Header Card -->
+    <div class="import-card p-6 sm:p-7 border-l-4 border-l-emerald-500">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-sm">
+            <i class="pi pi-check-circle text-2xl"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-xl font-bold tracking-tight" style="color: var(--app-text)">
+                Import & Batching Receipt
+              </h2>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                Completed
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              File successfully parsed and classified into targeted campaign batches.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            (click)="resetImport()"
+            class="btn-secondary-modern"
+          >
+            <i class="pi pi-refresh text-xs text-slate-500"></i>
+            <span>Import Another Sheet</span>
+          </button>
+
+          <button
+            type="button"
+            (click)="goToCampaignList()"
+            class="btn-primary-gradient"
+          >
+            <i class="pi pi-list"></i>
+            <span>{{ fromBatches ? 'View Lead Batches' : 'View All Batches' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Stat Tiles -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <!-- Total -->
+        <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Total Processed</span>
+            <i class="pi pi-file text-slate-400 text-xs"></i>
+          </div>
+          <p class="text-2xl font-extrabold mt-1.5" style="color: var(--app-text)">{{ receipt.total }}</p>
+          <span class="text-[11px] text-slate-400">Total sheet rows</span>
+        </div>
+
+        <!-- Valid -->
+        <div class="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-emerald-600 dark:text-emerald-400 font-semibold uppercase tracking-wider">Valid Leads</span>
+            <i class="pi pi-check text-emerald-500 text-xs"></i>
+          </div>
+          <p class="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1.5">{{ receipt.valid }}</p>
+          <span class="text-[11px] text-emerald-500 font-medium">Batched for outreach</span>
+        </div>
+
+        <!-- Invalid -->
+        <div class="p-4 rounded-xl border border-rose-500/30 bg-rose-500/5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-rose-600 dark:text-rose-400 font-semibold uppercase tracking-wider">Invalid Rows</span>
+            <i class="pi pi-times-circle text-rose-500 text-xs"></i>
+          </div>
+          <p class="text-2xl font-extrabold text-rose-600 dark:text-rose-400 mt-1.5">{{ receipt.invalid }}</p>
+          <span class="text-[11px] text-rose-500 font-medium">Missing contact info</span>
+        </div>
+
+        <!-- Duplicates -->
+        <div class="p-4 rounded-xl border border-purple-500/30 bg-purple-500/5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-purple-600 dark:text-purple-400 font-semibold uppercase tracking-wider">Duplicates</span>
+            <i class="pi pi-clone text-purple-500 text-xs"></i>
+          </div>
+          <p class="text-2xl font-extrabold text-purple-600 dark:text-purple-400 mt-1.5">{{ receipt.duplicates }}</p>
+          <span class="text-[11px] text-purple-500 font-medium">Deduplicated</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible Invalid Rows Section (If any) -->
+    <div *ngIf="receipt.invalid_rows && receipt.invalid_rows.length > 0" class="import-card p-6 border-rose-500/30">
+      <div class="flex justify-between items-center cursor-pointer" (click)="showInvalidRows = !showInvalidRows">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center">
+            <i class="pi pi-exclamation-triangle"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-rose-600 dark:text-rose-400">
+              Invalid Rows Detail ({{ receipt.invalid_rows.length }})
+            </h3>
+            <p class="text-xs text-slate-500">Rows omitted due to missing phone/channel identifiers</p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="p-2 rounded-lg text-slate-400 hover:text-slate-600"
+        >
+          <i [class]="showInvalidRows ? 'pi pi-chevron-up' : 'pi pi-chevron-down'"></i>
+        </button>
+      </div>
+
+      <div *ngIf="showInvalidRows" class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <p-table [value]="receipt.invalid_rows" [paginator]="true" [rows]="5" styleClass="p-datatable-sm">
+          <ng-template pTemplate="header">
+            <tr>
+              <th style="width: 100px">Row #</th>
+              <th>Reason for Invalidation</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-inv>
+            <tr>
+              <td class="font-mono text-xs font-bold text-rose-500">{{ inv.row_number }}</td>
+              <td class="text-xs text-slate-600 dark:text-slate-300">{{ inv.reason }}</td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    </div>
+
+    <!-- Created Campaign Batches -->
+    <div class="import-card p-6 sm:p-7">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-5">
+        <div>
+          <h3 class="text-base font-bold" style="color: var(--app-text)">
+            Created Campaign Batches ({{ receipt.batches.length }})
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Leads partitioned by product match. Review each batch before firing outreach.
+          </p>
+        </div>
+      </div>
+
+      <div *ngIf="receipt.batches.length === 0" class="text-center py-10 text-slate-400 text-sm">
+        No campaign batches were created.
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div
+          *ngFor="let batch of receipt.batches"
+          class="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 hover:border-indigo-500/50 hover:shadow-lg transition-all flex flex-col justify-between gap-4 group"
+        >
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                <i class="pi pi-box text-[11px]"></i>
+                {{ batch.product || 'General / Unknown' }}
+              </span>
+              <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                {{ batch.lead_count }} Leads
+              </span>
+            </div>
+
+            <h4 class="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2">
+              {{ batch.name }}
+            </h4>
+            <p class="text-xs text-slate-400 mt-1 font-mono text-[11px]">
+              ID: {{ batch.campaign_id | slice:0:8 }}...
+            </p>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+            <button
+              type="button"
+              (click)="goToCampaign(batch.campaign_id)"
+              class="btn-primary-gradient !py-1.5 !px-3.5 !text-xs"
+            >
+              <span>Review & Start</span>
+              <i class="pi pi-arrow-right text-[10px]"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

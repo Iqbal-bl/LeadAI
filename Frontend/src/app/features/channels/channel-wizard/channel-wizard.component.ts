@@ -34,7 +34,7 @@ export interface ChannelPlatformOption {
   isConnected?: boolean;
 }
 
-const ALL_PLATFORMS: readonly Omit<ChannelPlatformOption, 'loading'>[] = [
+export const ALL_PLATFORMS: readonly Omit<ChannelPlatformOption, 'loading'>[] = [
   {
     key: 'social.facebook',
     id: 'facebook',
@@ -97,6 +97,7 @@ const ALL_PLATFORMS: readonly Omit<ChannelPlatformOption, 'loading'>[] = [
   styleUrl: './channel-wizard.component.scss',
 })
 export class ChannelWizardComponent implements OnInit, OnDestroy {
+  @Input() inline = false;
   private _visible = false;
   @Input()
   get visible(): boolean {
@@ -224,7 +225,6 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     private authService: AuthService,
     private billingService: BillingService,
     private messageService: MessageService,
-    private scriptService: ScriptService,
   ) {}
 
   availablePlatforms: ChannelPlatformOption[] = [];
@@ -240,9 +240,9 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     // 1. Fetch current subscription plan to filter available channels by active bundle
     this.billingService.getCurrentPlan().subscribe({
       next: (summary) => {
-        const activeChannels = (summary?.active_recharge?.active_channels || []).map((c) =>
-          c.toLowerCase()
-        );
+        const activeChannels = (
+          summary?.active_recharge?.active_channels || []
+        ).map((c) => c.toLowerCase());
         this.applyPlatformFilters(hasPerm, isPlatformAdmin, activeChannels);
       },
       error: () => {
@@ -266,7 +266,7 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
   private applyPlatformFilters(
     hasPerm: (p: string) => boolean,
     isPlatformAdmin: boolean,
-    activeBundleChannels: string[] | null
+    activeBundleChannels: string[] | null,
   ): void {
     this.availablePlatforms = ALL_PLATFORMS.filter((p) => {
       // Must have user permission
@@ -291,9 +291,14 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     if (!this.existingChannels || this.existingChannels.length === 0) {
       return false;
     }
-    return this.existingChannels.some(
-      (c) => c.channel?.toLowerCase() === platformId.toLowerCase() && c.is_active !== false
-    );
+    const target = platformId.toLowerCase();
+    return this.existingChannels.some((c) => {
+      const ch = c.channel?.toLowerCase();
+      if (target === 'facebook') {
+        return (ch === 'facebook' || ch === 'messenger') && c.is_active !== false;
+      }
+      return ch === target && c.is_active !== false;
+    });
   }
 
   private updatePlatformStates(): void {
@@ -342,7 +347,6 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadAvailablePlatforms();
-    this.loadScripts();
     this.messageEventListener = (event: MessageEvent) =>
       this.handleOAuthMessage(event);
     window.addEventListener('message', this.messageEventListener);
@@ -396,17 +400,6 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
       `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`,
     );
     return this.activeOAuthPopup;
-  }
-
-  loadScripts(): void {
-    this.scriptService.getScripts(undefined, true).subscribe({
-      next: (res) => {
-        this.scripts = res;
-      },
-      error: () => {
-        this.scripts = [];
-      },
-    });
   }
 
   getExternalIdLabel(): string {

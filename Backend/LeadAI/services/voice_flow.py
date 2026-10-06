@@ -50,18 +50,13 @@ from .language import (  # noqa: F401  (re-exported)
     resolve_language,
     same_language,
 )
-from .conversation_flow import _event, apply_threshold
+from .conversation_flow import _event, get_or_create_lead, score_after_reply, score_turn
 
 logger = logging.getLogger(__name__)
 
-# Spoken when a turn hands off to a human. It replaces the model's reply: on a call the
-# customer must never hear a half-answer followed by silence.
-TRANSFER_LINE = "Let me bring in a specialist who can help with that — connecting you now."
-
-# Spoken on a LIVE call when the customer asks for a person. There is no live transfer to a
-# human yet, so promising "connecting you now" and then ending the call (as the first version
-# did) leaves the customer with a dropped call. Say what will really happen, and keep the call
-# going: staff are flagged to follow up.
+# Spoken when a turn hands off to a human, and then the call ends. There is no live transfer, so
+# never say "connecting you now" / "please hold": say a representative will contact them as soon
+# as possible, say goodbye, and hang up (staff are flagged to follow up).
 #
 # Localized like closing_line() below, and for the same reason: a live call caught this fixed
 # English line being spoken to a caller mid-Hindi-conversation. Both this and UNSURE_LINE
@@ -69,18 +64,18 @@ TRANSFER_LINE = "Let me bring in a specialist who can help with that — connect
 # answer, where the spoken language follows whatever the model actually wrote — these two must
 # always follow the CALLER's language explicitly; nothing here comes from the model to follow.
 _CALLBACK = {
-    "hi": "ज़रूर। मैं हमारी टीम से किसी विशेषज्ञ से आपको जल्द ही कॉल बैक करवाता हूँ। क्या आप कुछ बताना चाहेंगे जो मैं उन्हें बता दूँ?",
-    "pa": "ਜ਼ਰੂਰ। ਮੈਂ ਸਾਡੀ ਟੀਮ ਦੇ ਕਿਸੇ ਮਾਹਿਰ ਤੋਂ ਤੁਹਾਨੂੰ ਜਲਦੀ ਹੀ ਕਾਲ ਬੈਕ ਕਰਵਾਵਾਂਗਾ। ਕੀ ਤੁਸੀਂ ਕੁਝ ਦੱਸਣਾ ਚਾਹੋਗੇ ਜੋ ਮੈਂ ਉਹਨਾਂ ਨੂੰ ਦੱਸ ਦੇਵਾਂ?",
-    "en": ("Of course. I'll have a specialist from our team call you back shortly. "
-           "Is there anything you'd like me to pass on to them?"),
+    "hi": "ज़रूर। हमारी टीम का एक प्रतिनिधि जल्द से जल्द आपसे संपर्क करके इसका समाधान करेगा। आपके समय के लिए धन्यवाद। नमस्ते!",
+    "pa": "ਜ਼ਰੂਰ। ਸਾਡੀ ਟੀਮ ਦਾ ਇੱਕ ਪ੍ਰਤੀਨਿਧੀ ਜਲਦੀ ਤੋਂ ਜਲਦੀ ਤੁਹਾਡੇ ਨਾਲ ਸੰਪਰਕ ਕਰਕੇ ਇਸਦਾ ਹੱਲ ਕਰੇਗਾ। ਤੁਹਾਡੇ ਸਮੇਂ ਲਈ ਧੰਨਵਾਦ। ਸਤ ਸ੍ਰੀ ਅਕਾਲ!",
+    "en": ("Of course. A representative from our team will contact you as soon as possible to "
+           "resolve this. Thank you for your time. Goodbye!"),
 }
 # Spoken when the engine refuses a reply because it stated a figure the company's knowledge
 # does not contain: better an honest hand-off than a wrong price on the phone.
 _UNSURE = {
-    "hi": "मैं चाहता हूँ कि आपको सही जानकारी मिले, इसलिए एक विशेषज्ञ इसकी पुष्टि करके आपको कॉल करेंगे। क्या मैं किसी और चीज़ में मदद कर सकता हूँ?",
-    "pa": "ਮੈਂ ਚਾਹੁੰਦਾ ਹਾਂ ਕਿ ਤੁਹਾਨੂੰ ਸਹੀ ਜਾਣਕਾਰੀ ਮਿਲੇ, ਇਸ ਲਈ ਇੱਕ ਮਾਹਿਰ ਇਸਦੀ ਪੁਸ਼ਟੀ ਕਰਕੇ ਤੁਹਾਨੂੰ ਕਾਲ ਕਰਨਗੇ। ਕੀ ਮੈਂ ਕਿਸੇ ਹੋਰ ਚੀਜ਼ ਵਿੱਚ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?",
-    "en": ("I want to be sure I give you the right details, so I'll have a specialist confirm that "
-           "and call you back. Is there anything else I can help with?"),
+    "hi": "मैं चाहता हूँ कि आपको सही जानकारी मिले, इसलिए हमारी टीम का एक प्रतिनिधि इसकी पुष्टि करके जल्द से जल्द आपसे संपर्क करेगा। आपके समय के लिए धन्यवाद। नमस्ते!",
+    "pa": "ਮੈਂ ਚਾਹੁੰਦਾ ਹਾਂ ਕਿ ਤੁਹਾਨੂੰ ਸਹੀ ਜਾਣਕਾਰੀ ਮਿਲੇ, ਇਸ ਲਈ ਸਾਡੀ ਟੀਮ ਦਾ ਇੱਕ ਪ੍ਰਤੀਨਿਧੀ ਇਸਦੀ ਪੁਸ਼ਟੀ ਕਰਕੇ ਜਲਦੀ ਤੋਂ ਜਲਦੀ ਤੁਹਾਡੇ ਨਾਲ ਸੰਪਰਕ ਕਰੇਗਾ। ਤੁਹਾਡੇ ਸਮੇਂ ਲਈ ਧੰਨਵਾਦ। ਸਤ ਸ੍ਰੀ ਅਕਾਲ!",
+    "en": ("I want to be sure I give you the right details, so a representative will confirm that "
+           "and contact you as soon as possible. Thank you for your time. Goodbye!"),
 }
 
 
@@ -101,7 +96,7 @@ class VoiceTurnResult:
     reply_text: str                       # what is spoken ("" when the AI stays silent)
     result: dict                          # the answer: confidence, sources, needs_human, ...
     handed_off: bool
-    ends_call: bool = False               # hang up (or transfer) once the reply has been spoken
+    ends_call: bool = False               # hang up once the reply has been spoken
     skipped: bool = False                 # paused/terminated: nothing was answered
     superseded: bool = False              # the caller spoke again first: nothing was saved
     language: str | None = None           # the language this turn was answered in (e.g. "hi-IN")
@@ -202,15 +197,6 @@ def load_history(db: Session, conversation_id: str) -> list[LeadMessage]:
     )
 
 
-def _get_or_create_lead(db: Session, client_id: str, conversation_id: str, actor: str) -> Lead:
-    lead = db.query(Lead).filter(Lead.ConversationId == conversation_id).one_or_none()
-    if lead is None:
-        lead = Lead(ClientId=client_id, ConversationId=conversation_id, CreatedBy=actor)
-        db.add(lead)
-        db.flush()
-    return lead
-
-
 def score_conversation(
     db: Session,
     client: Client,
@@ -228,14 +214,9 @@ def score_conversation(
     later in a fresh session.
     """
     history = history if history is not None else load_history(db, conversation.Id)
-    lead = _get_or_create_lead(db, client.Id, conversation.Id, actor)
-    ai_engine.qualify(db, client.Id, lead, history, trace=trace)
-    conversation.Summary, conversation.NextStep = ai_engine.summarize(
-        db, client.Id, client.Name, lead, history, trace=trace
-    )
-    conversation.MessageCount = len(history)
+    lead = get_or_create_lead(db, client.Id, conversation.Id, actor)
+    score_turn(db, client, conversation, lead, history, trace=trace, request=request)
     conversation.LastMessageAt = utcnow()
-    apply_threshold(db, client, conversation, lead, request, trace=trace)
     return lead
 
 
@@ -258,11 +239,9 @@ def handle_voice_turn(
 ) -> VoiceTurnResult:
     """Process one thing the caller said. See the module docstring.
 
-    live_call=True is a real phone call. The difference is what a hand-off means. The
-    simulated endpoint keeps the original behaviour (a fixed "connecting you now" line and
-    the call marked transferred). On a real call nothing can actually transfer, so a hand-off
-    FLAGS the conversation for staff and the call carries on; only the model's own
-    end-of-conversation signal ends it.
+    live_call=True is a real phone call (the simulated endpoint passes False). Nothing can
+    transfer to a human on either, so a hand-off FLAGS the conversation for staff, tells the
+    caller a representative will contact them, and ends the call.
 
     `language` is the caller's language as reported by speech-to-text (e.g. "hi-IN").
 
@@ -395,43 +374,30 @@ def handle_voice_turn(
     language = result.get("language") or language
 
     handed_off = bool(result["needs_human"])
-    if handed_off and live_call:
-        # No live transfer exists, so do not pretend and do not hang up. Flag the
-        # conversation for staff; keep the call going with something true to say.
-        if result.get("wants_human"):
-            reply_text = callback_line(caller_language)
-            language = caller_language
-            why = "customer asked for a person: promise a callback"
-        elif (note or {}).get("unsupported_count"):
-            reply_text = unsure_line(caller_language)
-            language = caller_language
+    if handed_off:
+        # No live transfer exists, so do not pretend one is coming: flag the conversation for
+        # staff, say a representative will contact the caller, and end the call. The spoken
+        # line is fixed (the model's own words may promise a transfer), in the CALLER's language.
+        if (result.get("ends_conversation") and not result.get("wants_human")
+                and not (note or {}).get("unsupported_count") and (result["reply"] or "").strip()):
+            # A finished conversation also flags staff for follow-up (as in chat), but the model
+            # is already saying goodbye: speak that, not a "representative will contact you" line.
+            reply_text = result["reply"]
+            language = result.get("language") or caller_language
+            why = "conversation finished: the model's own goodbye"
+        elif (note or {}).get("unsupported_count") and not result.get("wants_human"):
+            reply_text, language = unsure_line(caller_language), caller_language
             why = "reply stated a figure not in company knowledge: withheld"
         else:
-            reply_text = (result["reply"] or "").strip()
-            if reply_text:
-                why = "not confident: speaking the model's honest answer"
-            else:
-                reply_text = callback_line(caller_language)
-                language = caller_language
-                why = "not confident and nothing to say: promise a callback"
-        trace_step(trace, "voice_handoff", f"flagged for a human follow-up; the call continues ({why})",
+            reply_text, language = callback_line(caller_language), caller_language
+            why = ("customer asked for a person" if result.get("wants_human")
+                   else "not confident in an answer")
+        trace_step(trace, "voice_handoff", f"flagged for a human follow-up; the call ends ({why})",
                    reason=result["handoff_reason"])
         call.HandedOff = True
         # An assignee already means a human owns this conversation (same invariant
         # inbox.set_status enforces) — a low-confidence turn on a live call must not
         # knock it back into the unclaimed needs_human queue out from under them.
-        if conversation.Status != "assigned":
-            conversation.Status = "needs_human"
-        conversation.HandoffReason = (result["handoff_reason"] or "")[:300]
-        _event(db, "handoff.requested", conversation, speaker="ai",
-               reason=conversation.HandoffReason, confidence=result["confidence"])
-    elif handed_off:
-        trace_step(trace, "voice_handoff",
-                   "transferring: the spoken reply is replaced by a fixed transfer line",
-                   reason=result["handoff_reason"])
-        reply_text = TRANSFER_LINE
-        call.HandedOff = True
-        call.Status = "transferred"
         if conversation.Status != "assigned":
             conversation.Status = "needs_human"
         conversation.HandoffReason = (result["handoff_reason"] or "")[:300]
@@ -486,8 +452,7 @@ def handle_voice_turn(
         language=language,
         handed_off=handed_off,
         # A live call ends only when the conversation is really over; a hand-off flags staff.
-        ends_call=(bool(result.get("ends_conversation")) if live_call
-                   else handed_off or bool(result.get("ends_conversation"))),
+        ends_call=handed_off or bool(result.get("ends_conversation")),
         outbound_id=outbound.Id,
         history=history,
         trace=trace,
@@ -500,23 +465,11 @@ def run_deferred_scoring(db: Session, client_id: str, conversation_id: str, mess
     Appends its steps to the AI message's trace, so "why did the AI say that" and "how was
     the lead scored" read as one record. Never raises: a scoring failure must not end a call.
     """
-    try:
-        client = db.get(Client, client_id)
-        conversation = db.get(LeadConversation, conversation_id)
-        if client is None or conversation is None:
-            return
-        trace = TurnTrace(conversation_id=conversation_id, client_id=client_id, channel="voice")
-        trace_step(trace, "post_turn", "scoring after the reply was spoken")
-        score_conversation(db, client, conversation, trace=trace)
-        message = db.get(LeadMessage, message_id) if message_id else None
-        if message is not None and message.TraceJson and trace.as_json():
-            merged = dict(message.TraceJson)
-            merged["steps"] = list(merged.get("steps", [])) + trace.as_json()["steps"]
-            message.TraceJson = merged
-        db.commit()
-    except Exception:  # noqa: BLE001
-        logger.warning("[LeadAI voice] deferred scoring failed for conv %s", conversation_id, exc_info=True)
-        db.rollback()
+    score_after_reply(
+        db, client_id, conversation_id, message_id,
+        channel="voice", history_fn=load_history,
+        note="scoring after the reply was spoken", touch_last_message=True,
+    )
 
 
 def _returning_opener(
@@ -554,29 +507,18 @@ def _returning_opener(
     return text, meta or {}
 
 
-def opening_line(
-    db: Session,
-    client: Client,
-    conversation: LeadConversation,
-    call: LeadCall,
-    *,
-    actor: str = "voice",
-    commit: bool = True,
-    language: str | None = None,
-) -> tuple[str, str | None]:
-    """What the AI says when the call connects. Returns (text, message_id).
+def _compose_opening_text(
+    db: Session, client: Client, conversation: LeadConversation, language: str | None, trace: TurnTrace
+) -> tuple[str, str | None, int, float, list]:
+    """The slow (LLM) part of composing an opening line — deliberately with NO
+    database write, so it can be run speculatively while the phone is still
+    ringing (see voice/warmup.py) without creating a transcript message for a
+    call that never gets answered. opening_line() below is what turns the
+    result into a real, persisted message, and only once the call actually
+    connects.
 
-    `language` is the language the returning customer has been using (see opening_language),
-    so someone who chats in Hindi is not greeted in English.
-
-    A brand-new customer gets the company's own greeting prompt (forced through the
-    greeting branch even if the conversation has system rows). A RETURNING customer gets a
-    follow-up line that uses what we know about them. Either way it is stored as an AI
-    message, so the transcript is complete.
+    Returns (text, model, latency_ms, confidence, sources).
     """
-    if engine_control.is_stopped(conversation):
-        return "", None
-    trace = TurnTrace(conversation_id=conversation.Id, client_id=client.Id, channel="voice")
     prior = [m for m in load_history(db, conversation.Id)
              if (m.Sender or "") in ("customer", "ai", "agent") and (m.Content or "").strip()]
     if prior:
@@ -593,6 +535,70 @@ def opening_line(
         )
         text, model, latency = result["reply"], result["model"], result["latency_ms"]
         confidence, sources = result["confidence"], result["sources"]
+    return text, model, latency, confidence, sources
+
+
+def precompute_opening(db: Session, client_id: str, conversation_id: str) -> dict | None:
+    """Best-effort: compose the opener's TEXT during ringing, before the call
+    is even answered. Twilio/Exotel ring for several seconds before pickup —
+    free time, the same way voice/warmup.py already uses it to open the LLM
+    connection and warm retrieval. The live call this was written for spent
+    2.4s on the opener's own LLM call AFTER connecting, which is exactly how
+    long the caller was left in silence before saying "hello?" themselves.
+
+    Returns None on anything unexpected (missing client/conversation, a
+    paused/terminated conversation) rather than raising — this is purely an
+    optimisation and must never be allowed to affect whether a call connects.
+    """
+    client = db.get(Client, client_id)
+    conversation = db.get(LeadConversation, conversation_id)
+    if client is None or conversation is None or engine_control.is_stopped(conversation):
+        return None
+    language = opening_language(db, conversation)
+    trace = TurnTrace(conversation_id=conversation.Id, client_id=client.Id, channel="voice")
+    text, model, latency, confidence, sources = _compose_opening_text(db, client, conversation, language, trace)
+    return {
+        "text": text, "model": model, "latency_ms": latency,
+        "confidence": confidence, "sources": sources, "language": language,
+    }
+
+
+def opening_line(
+    db: Session,
+    client: Client,
+    conversation: LeadConversation,
+    call: LeadCall,
+    *,
+    actor: str = "voice",
+    commit: bool = True,
+    language: str | None = None,
+    precomposed: dict | None = None,
+) -> tuple[str, str | None]:
+    """What the AI says when the call connects. Returns (text, message_id).
+
+    `language` is the language the returning customer has been using (see opening_language),
+    so someone who chats in Hindi is not greeted in English.
+
+    A brand-new customer gets the company's own greeting prompt (forced through the
+    greeting branch even if the conversation has system rows). A RETURNING customer gets a
+    follow-up line that uses what we know about them. Either way it is stored as an AI
+    message, so the transcript is complete.
+
+    `precomposed`, when given (see precompute_opening — the ringing-time warm-up
+    already ran the LLM call), skips straight to persisting it; this function
+    never does its own caching or staleness check, that is the caller's job.
+    """
+    if engine_control.is_stopped(conversation):
+        return "", None
+    trace = TurnTrace(conversation_id=conversation.Id, client_id=client.Id, channel="voice")
+    if precomposed is not None:
+        text, model, latency, confidence, sources = (
+            precomposed["text"], precomposed["model"], precomposed["latency_ms"],
+            precomposed["confidence"], precomposed["sources"],
+        )
+        trace_step(trace, "opening", "call connected: speaking the line composed while the phone was ringing")
+    else:
+        text, model, latency, confidence, sources = _compose_opening_text(db, client, conversation, language, trace)
     message = LeadMessage(
         ClientId=client.Id,
         ConversationId=conversation.Id,

@@ -144,6 +144,26 @@ def test_validate_data_point_value_by_type():
     assert ai_engine._validate_data_point_value("not-an-email", dp_email) is None
 
 
+def test_a_date_data_point_tells_the_model_what_today_actually_is():
+    # Production bug: a customer said "I'll visit the site today" and the date
+    # data point came back "2023" — the model has no inherent sense of "now",
+    # so "today"/"tomorrow" resolved against its training data instead of the
+    # real date, unless the prompt states it explicitly.
+    import datetime as _dt
+
+    dp_date = models.LeadCompanyDataPoint(ClientId="c", Key="visit_date", Label="Site Visit Date",
+                                          DataType="date")
+    instruction = ai_engine._data_points_instruction([dp_date])
+    today = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d")
+    assert f"Today's actual date is {today}" in instruction
+
+
+def test_no_date_note_when_no_data_point_is_a_date():
+    dp_text = models.LeadCompanyDataPoint(ClientId="c", Key="notes", Label="Notes", DataType="text")
+    instruction = ai_engine._data_points_instruction([dp_text])
+    assert "Today's actual date" not in instruction
+
+
 def test_qualify_extracts_data_points_and_never_blanks_out_what_it_already_knew():
     db = SessionLocalAdmin()
     client = _client(db)

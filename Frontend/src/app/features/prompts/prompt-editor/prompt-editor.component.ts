@@ -99,16 +99,12 @@ export class PromptEditorComponent implements OnInit {
     description: string;
     channel: 'all' | 'chat' | 'voice';
     language: string;
-    voice_gender: 'male' | 'female';
-    voice_speaker: string;
     multi_stt: boolean;
   } = {
     name: '',
     description: '',
     channel: 'all',
     language: 'en-IN',
-    voice_gender: 'female',
-    voice_speaker: 'Priya',
     multi_stt: false,
   };
 
@@ -117,21 +113,6 @@ export class PromptEditorComponent implements OnInit {
   importableFiles: string[] = [];
   selectedImportFile = '';
   importLoading = false;
-
-  // Speaker configuration dropdowns
-  voiceSpeakers: Record<'male' | 'female', { label: string; value: string }[]> =
-    {
-      male: [
-        { label: 'Prabhat (Hindi/English)', value: 'Prabhat' },
-        { label: 'Rohan (English - IN)', value: 'Rohan' },
-        { label: 'David (English - US)', value: 'David' },
-      ],
-      female: [
-        { label: 'Priya (Hindi/English - Recommended)', value: 'Priya' },
-        { label: 'Kavita (Hindi)', value: 'Kavita' },
-        { label: 'Emily (English - US)', value: 'Emily' },
-      ],
-    };
 
   languages = [
     { label: 'English (India) - en-IN', value: 'en-IN' },
@@ -275,8 +256,6 @@ export class PromptEditorComponent implements OnInit {
       description: '',
       channel: 'all',
       language: 'en-IN',
-      voice_gender: 'female',
-      voice_speaker: 'Priya',
       multi_stt: false,
     };
     this.showScriptModal = true;
@@ -291,8 +270,6 @@ export class PromptEditorComponent implements OnInit {
       description: script.description || '',
       channel: script.channel,
       language: script.language,
-      voice_gender: script.voice_gender || 'female',
-      voice_speaker: script.voice_speaker || 'Priya',
       multi_stt: script.multi_stt || false,
     };
     this.showScriptModal = true;
@@ -536,5 +513,24 @@ export class PromptEditorComponent implements OnInit {
         });
       },
     });
+  }
+
+  insertPromptToken(token: string): void {
+    const textarea = document.querySelector(
+      'textarea[placeholder*="prompt text instructions"]',
+    ) as HTMLTextAreaElement;
+    if (textarea && textarea.selectionStart !== undefined) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const current = this.promptEditContent || '';
+      this.promptEditContent =
+        current.substring(0, start) + token + current.substring(end);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + token.length, start + token.length);
+      }, 0);
+    } else {
+      this.promptEditContent = (this.promptEditContent || '') + token;
+    }
   }
 }

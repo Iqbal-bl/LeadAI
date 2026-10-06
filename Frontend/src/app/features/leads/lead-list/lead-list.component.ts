@@ -13,6 +13,7 @@ import { LeadService } from '../../../services/lead.service';
 import { CustomerService } from '../../../services/customer.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { CLIENT_PERMISSIONS } from '../../../modules/client/constants/permission.constants';
 
 @Component({
   selector: 'app-lead-list',
@@ -24,6 +25,7 @@ import { SharedModule } from '../../../shared/shared.module';
 export class LeadListComponent implements OnInit, OnDestroy {
   @ViewChild('dt') dt!: Table;
   @ViewChild('leadActionMenu') leadActionMenu!: Menu;
+  PERMISSIONS = CLIENT_PERMISSIONS;
 
   leads: any[] = [];
   selectedLeads: any[] = [];
@@ -36,8 +38,16 @@ export class LeadListComponent implements OnInit, OnDestroy {
   selectedChannel = '';
   selectedStatus = '';
   selectedPriority = '';
+  selectedLeadSource = '';
   showAllLeads = true;
   searchText = '';
+
+  leadSourceOptions = [
+    { label: 'All sources', value: '' },
+    { label: 'Inbound', value: 'inbound' },
+    { label: 'From import', value: 'import' },
+    { label: 'From broadcast', value: 'broadcast' },
+  ];
 
   private searchSubject = new Subject<string>();
 
@@ -83,7 +93,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
     private leadService: LeadService,
     private customerService: CustomerService,
     private toastService: ToastService,
-  ) { }
+  ) {}
 
   ngOnInit(): void {
     this.setupSearchDebounce();
@@ -170,6 +180,10 @@ export class LeadListComponent implements OnInit, OnDestroy {
       }
     }
 
+    if (this.selectedLeadSource) {
+      params.lead_source = this.selectedLeadSource;
+    }
+
     if (this.searchText && this.searchText.trim()) {
       params.search = this.searchText.trim();
     }
@@ -195,7 +209,11 @@ export class LeadListComponent implements OnInit, OnDestroy {
             tags: item.lead?.interest ? [item.lead.interest] : [],
             leadScore: score,
             priority: score > 75 ? 'High' : score > 45 ? 'Medium' : 'Low',
-            status: item.lead?.status ? item.lead.status.toUpperCase() : (item.status ? item.status.toUpperCase() : 'NEW'),
+            status: item.lead?.status
+              ? item.lead.status.toUpperCase()
+              : item.status
+                ? item.status.toUpperCase()
+                : 'NEW',
             source: item.channel || 'web',
             assignedTo: item.assigned_user_email || 'AI Assistant',
             createdAt: item.created_at || '',
@@ -228,6 +246,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
     this.selectedChannel = '';
     this.selectedStatus = '';
     this.selectedPriority = '';
+    this.selectedLeadSource = '';
     this.searchText = '';
     this.showAllLeads = true;
     this.currentPage = 1;
@@ -238,11 +257,18 @@ export class LeadListComponent implements OnInit, OnDestroy {
   }
 
   hasActiveFilters(): boolean {
-    return !!(this.selectedChannel || this.selectedStatus || this.selectedPriority || this.searchText);
+    return !!(
+      this.selectedChannel ||
+      this.selectedStatus ||
+      this.selectedPriority ||
+      this.selectedLeadSource ||
+      this.searchText
+    );
   }
 
   onLazyLoad(event: TableLazyLoadEvent): void {
-    const page = Math.floor((event.first || 0) / (event.rows || this.pageSize)) + 1;
+    const page =
+      Math.floor((event.first || 0) / (event.rows || this.pageSize)) + 1;
     this.currentPage = page;
     this.pageSize = event.rows || this.pageSize;
     this.loadLeads();
@@ -289,13 +315,13 @@ export class LeadListComponent implements OnInit, OnDestroy {
     notes: string;
     leadName?: string;
   } = {
-      conversation_id: '',
-      lead_id: '',
-      owner_email: '',
-      stage: 'customer',
-      value: null,
-      notes: '',
-    };
+    conversation_id: '',
+    lead_id: '',
+    owner_email: '',
+    stage: 'customer',
+    value: null,
+    notes: '',
+  };
 
   stageOptions = [
     { label: 'Customer', value: 'customer' },
@@ -363,8 +389,8 @@ export class LeadListComponent implements OnInit, OnDestroy {
         this.converting = false;
         this.toastService.error(
           err?.error?.detail ||
-          err?.message ||
-          'Failed to convert lead to customer.',
+            err?.message ||
+            'Failed to convert lead to customer.',
           'Conversion Failed',
         );
       },
@@ -478,5 +504,9 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
   exportCSV(): void {
     this.dt.exportCSV();
+  }
+
+  goToImport(): void {
+    this.router.navigate(['/client/leads/import']);
   }
 }

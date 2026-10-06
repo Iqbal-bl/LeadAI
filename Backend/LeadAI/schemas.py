@@ -122,12 +122,37 @@ class CompanySettingsIn(BaseModel):
     auto_call_on_hot_lead: bool | None = None
     widget_enabled: bool | None = None
     widget_greeting: str | None = Field(default=None, max_length=500)
+    # The persona's name — branding, not a voice parameter, so (unlike
+    # voice_gender/speed/speaker below) a company admin sets this directly.
+    # Usable as {agent} in any script or prompt; see script_engine.py.
+    agent_name: str | None = Field(default=None, max_length=80)
 
 
 class CompanySettingsOut(CompanySettingsIn):
     client_id: str
     effective_handoff_threshold: float
     effective_retrieval_top_k: int
+    # Read-only here on purpose: all three are set via PUT
+    # /companies/{id}/voice-settings, which only a super admin may call — see
+    # rbac.super_admin(). CompanySettingsIn (what a company admin can PUT
+    # through /companies/{id}/settings) deliberately does not carry them —
+    # a company admin used to be able to set voice_speaker per-script; that
+    # ability was removed, not just hidden, when this moved here.
+    # (Pitch was considered too — dropped: Sarvam's current TTS model,
+    # bulbul:v3, ignores it entirely; only the deprecated, API-rejected v2
+    # honours it, so a pitch knob would visibly do nothing on a real call.)
+    voice_gender: str | None = None
+    voice_speed: float | None = None
+    voice_speaker: str | None = None
+
+
+class VoiceSettingsIn(BaseModel):
+    """Super-admin-only AI call voice tuning for one company. Never reachable
+    by a company admin — see routers/companies.py's update_voice_settings."""
+
+    voice_gender: str | None = Field(default=None, pattern="^(male|female)$")
+    voice_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    voice_speaker: str | None = Field(default=None, min_length=1, max_length=60)
 
 
 class PermissionItemOut(BaseModel):
@@ -345,9 +370,14 @@ class ScriptCreate(BaseModel):
     language: str = "en-IN"
     script_xml: str = Field(min_length=10)
     is_default: bool = False
-    voice_gender: str | None = None
-    voice_speaker: str | None = None
-    multi_stt: bool = False
+    # Most Indian callers code-switch (Hinglish) rather than speaking one language
+    # throughout. With this off, Sarvam's STT is pinned to `language` for the
+    # whole call and never actually detects anything else — every utterance
+    # comes back tagged as that one language regardless of what was said, so
+    # the AI has no signal to ever reply in anything but that language. On by
+    # default so a newly created script auto-detects per utterance unless an
+    # admin deliberately wants a single pinned language.
+    multi_stt: bool = True
 
 
 class ScriptUpdate(BaseModel):
@@ -358,8 +388,6 @@ class ScriptUpdate(BaseModel):
     script_xml: str | None = None
     is_default: bool | None = None
     is_active: bool | None = None
-    voice_gender: str | None = None
-    voice_speaker: str | None = None
     multi_stt: bool | None = None
 
 
@@ -373,8 +401,6 @@ class ScriptOut(BaseModel):
     version: int
     is_default: bool
     is_active: bool
-    voice_gender: str | None = None
-    voice_speaker: str | None = None
     multi_stt: bool
     section_count: int = 0
     created_at: datetime | None = None
@@ -1277,7 +1303,7 @@ class ProductOut(BaseModel):
     id: str
     client_id: str
     product_name: str
-    product_type: str
+    product_description: str | None = None
     knowledge_base_file: str | None = None
     kb_document_id: str | None = None
     bound_kb_document_ids: list[str] = []
@@ -1304,7 +1330,7 @@ class ProductListOut(BaseModel):
 
 class ProductUpdate(BaseModel):
     product_name: str | None = None
-    product_type: str | None = None
+    product_description: str | None = None
 
 
 class BindExistingKbRequest(BaseModel):

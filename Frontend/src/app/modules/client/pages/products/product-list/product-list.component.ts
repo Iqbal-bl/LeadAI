@@ -25,7 +25,6 @@ export class ProductListComponent implements OnInit {
   isLoading = false;
   isSaving = false;
   searchQuery = '';
-  selectedTypeFilter = '';
 
   // Add / Edit Product Dialog state
   showProductDialog = false;
@@ -44,29 +43,18 @@ export class ProductListComponent implements OnInit {
 
   form: {
     product_name: string;
-    product_type: string;
+    product_description: string;
     file: File | null;
     existingFileName?: string | null;
   } = {
     product_name: '',
-    product_type: '',
+    product_description: '',
     file: null,
     existingFileName: null,
   };
 
   selectedProduct: Product | null = null;
   activeActionMenuItems: MenuItem[] = [];
-
-  productTypeOptions = [
-    { label: 'Physical Product', value: 'Physical Product' },
-    { label: 'Digital Service', value: 'Digital Service' },
-    { label: 'SaaS / Software', value: 'SaaS / Software' },
-    { label: 'Financial / Loan', value: 'Financial / Loan' },
-    { label: 'Real Estate / Property', value: 'Real Estate / Property' },
-    { label: 'Consulting / Advisory', value: 'Consulting / Advisory' },
-    { label: 'Subscription Plan', value: 'Subscription Plan' },
-    { label: 'Other', value: 'Other' },
-  ];
 
   constructor(
     private productService: ProductService,
@@ -81,7 +69,7 @@ export class ProductListComponent implements OnInit {
 
   loadProducts(): void {
     this.isLoading = true;
-    this.productService.getProducts(this.searchQuery, this.selectedTypeFilter).subscribe({
+    this.productService.getProducts(this.searchQuery).subscribe({
       next: (res) => {
         this.products = res.items || [];
         this.isLoading = false;
@@ -106,7 +94,7 @@ export class ProductListComponent implements OnInit {
     this.editingProductId = product.id;
     this.form = {
       product_name: product.product_name,
-      product_type: product.product_type,
+      product_description: product.product_description || '',
       file: null,
       existingFileName: product.knowledge_base_file,
     };
@@ -116,7 +104,7 @@ export class ProductListComponent implements OnInit {
   resetForm(): void {
     this.form = {
       product_name: '',
-      product_type: 'Physical Product',
+      product_description: '',
       file: null,
       existingFileName: null,
     };
@@ -142,15 +130,11 @@ export class ProductListComponent implements OnInit {
       this.toastService.warn('Please provide a product name.');
       return;
     }
-    if (!this.form.product_type.trim()) {
-      this.toastService.warn('Please specify a product type.');
-      return;
-    }
 
     this.isSaving = true;
     const formData = new FormData();
     formData.append('product_name', this.form.product_name.trim());
-    formData.append('product_type', this.form.product_type.trim());
+    formData.append('product_description', this.form.product_description.trim());
     if (this.form.file) {
       formData.append('file', this.form.file);
     }
@@ -356,19 +340,5 @@ export class ProductListComponent implements OnInit {
         });
       },
     );
-  }
-
-  getTypeSeverity(
-    type: string,
-  ): 'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast' | undefined {
-    const map: Record<string, 'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'> = {
-      'Physical Product': 'success',
-      'Digital Service': 'info',
-      'SaaS / Software': 'contrast',
-      'Financial / Loan': 'warn',
-      'Real Estate / Property': 'secondary',
-      'Subscription Plan': 'info',
-    };
-    return map[type] || 'secondary';
   }
 }

@@ -7,6 +7,7 @@ import { Subscription } from 'rxjs';
 import { BillingService } from '../../services/billing.service';
 import { AuthService } from '../../services/auth.service';
 import { ToastService } from '../../shared/services/toast.service';
+import { OnboardingService } from '../../services/onboarding.service';
 
 import {
   BillingSummary,
@@ -66,6 +67,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
   private router = inject(Router);
+  private onboardingService = inject(OnboardingService);
 
   private subscriptions = new Subscription();
 
@@ -953,16 +955,18 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
 
           // Re-fetch user session so has_active_subscription becomes true across the entire app
           this.authService.getAccessMe().subscribe({
-            next: () => {
+            next: (me) => {
+              this.onboardingService.initOnboarding(me?.client_id || this.authService.getSelectedCompanyId());
               setTimeout(() => {
                 this.isVerifyingPayment = false;
-                this.router.navigate(['/client/dashboard']);
+                this.router.navigate(['/onboarding']);
               }, 1200);
             },
             error: () => {
+              this.onboardingService.initOnboarding(this.authService.getSelectedCompanyId());
               setTimeout(() => {
                 this.isVerifyingPayment = false;
-                this.router.navigate(['/client/dashboard']);
+                this.router.navigate(['/onboarding']);
               }, 1200);
             },
           });

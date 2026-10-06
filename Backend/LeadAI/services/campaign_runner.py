@@ -58,8 +58,11 @@ from ..models import (
     CHANNEL_VOICE,
     Lead,
     LeadAccount,
+    LeadCall,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadChannelIdentity,
     LeadContactListItem,
@@ -67,12 +70,16 @@ from ..models import (
     LeadCustomer,
     utcnow,
 )
-from ..security import decrypt_pii, encrypt_pii, mask_phone, phone_fingerprint
+from ..security import decrypt_pii, encrypt_pii, mask_email, mask_phone, phone_fingerprint
 from . import audience, channels, crm, jobs
 
 logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = ("completed", "cancelled", "failed")
+
+# Mirrors the old VoiceAI outbound/batching.py restart modes exactly, so an
+# operator who already knows that system needs to learn nothing new here.
+RESTART_MODES = ("all", "failed_only", "pending_only")
 
 # A phone number is never a valid recipient id on these platforms — Meta rejects
 # it. A campaign on one of these channels must resolve and send to the IGSID/PSID
@@ -225,6 +232,7 @@ def build_audience(db: Session, campaign: LeadCampaign, actor: str = "system") -
                 Name=candidate.get("name"),
                 PhoneEnc=encrypt_pii(phone),
                 PhoneMasked=mask_phone(phone),
+                EmailMasked=mask_email(email),
                 ExternalUserId=external_user_id,
                 DedupeKey=key[:80],
                 FieldsJson=candidate.get("fields"),
@@ -261,6 +269,41 @@ def build_audience(db: Session, campaign: LeadCampaign, actor: str = "system") -
     return {"added": added, "skipped": skipped, "total": campaign.TotalCount}
 
 
+def _existing_open_conversation(db: Session, campaign: LeadCampaign, customer_id: str | None) -> str | None:
+    """Reuse the customer's open conversation on this campaign's channel
+    instead of forking a second one at send time.
+
+    A "list" audience (every lead-import batch is one) never carried a
+    ConversationId candidate, even when leads_import.py had already created
+    one for that exact customer at import time — _place_call would then see
+    no ConversationId on the recipient and create ANOTHER conversation from
+    scratch, orphaning the first one (and the Lead/data points collected on
+    it) with no CampaignId, Status/score, or link back to this campaign ever
+    appearing on it. Tags the conversation with this campaign while we're
+    here, which is what lets the inbox later tell "came from this batch"
+    apart from an organic inbound lead.
+    """
+    if not customer_id:
+        return None
+    conversation = (
+        db.query(LeadConversation)
+        .filter(
+            LeadConversation.ClientId == campaign.ClientId,
+            LeadConversation.CustomerId == customer_id,
+            LeadConversation.Channel == campaign.Channel,
+            LeadConversation.Status == "open",
+            LeadConversation.IsDeleted == False,  # noqa: E712
+        )
+        .order_by(LeadConversation.CreatedAt.desc())
+        .first()
+    )
+    if conversation is None:
+        return None
+    if not conversation.CampaignId:
+        conversation.CampaignId = campaign.Id
+    return conversation.Id
+
+
 def _iter_targets(db: Session, campaign: LeadCampaign):
     """Yield candidate dicts from whichever audience the campaign names."""
     if campaign.AudienceType == "list" and campaign.ListId:
@@ -278,6 +321,7 @@ def _iter_targets(db: Session, campaign: LeadCampaign):
                 "list_item_id": item.Id,
                 "customer_id": item.CustomerId,
                 "account_id": item.AccountId,
+                "conversation_id": _existing_open_conversation(db, campaign, item.CustomerId),
                 "name": item.Name,
                 "phone": decrypt_pii(item.PhoneEnc),
                 "email": decrypt_pii(item.EmailEnc),
@@ -346,6 +390,8 @@ def _iter_targets(db: Session, campaign: LeadCampaign):
         customer = db.get(LeadCustomer, conversation.CustomerId)
         if customer is None:
             continue
+        if not conversation.CampaignId:
+            conversation.CampaignId = campaign.Id
         yield {
             "customer_id": customer.Id,
             "conversation_id": conversation.Id,
@@ -361,6 +407,208 @@ def _iter_targets(db: Session, campaign: LeadCampaign):
                 "interest": lead.Interest,
             },
         }
+
+
+# =========================================================================== #
+# per-run history — Batch -> BatchExecution -> CallNumberExecution, mirrored
+# =========================================================================== #
+def _active_execution(db: Session, campaign: LeadCampaign) -> LeadCampaignExecution:
+    """The execution the current/next batch belongs to.
+
+    A job can be enqueued without ever going through `start_execution` (older
+    data, or a test calling `run_campaign_job` directly) — rather than fail,
+    that work is attributed to an implicitly-created "all" execution so no
+    send ever happens outside of some execution row.
+    """
+    execution = (
+        db.query(LeadCampaignExecution)
+        .filter(
+            LeadCampaignExecution.CampaignId == campaign.Id,
+            LeadCampaignExecution.Status == "running",
+        )
+        .order_by(LeadCampaignExecution.StartedAt.desc())
+        .first()
+    )
+    if execution is not None:
+        return execution
+
+    execution = LeadCampaignExecution(
+        ClientId=campaign.ClientId,
+        CampaignId=campaign.Id,
+        Status="running",
+        RestartMode="all",
+        TotalCount=campaign.TotalCount or 0,
+    )
+    db.add(execution)
+    db.flush()
+    return execution
+
+
+def start_execution(
+    db: Session, campaign: LeadCampaign, restart_mode: str = "all"
+) -> LeadCampaignExecution:
+    """Create the execution row for a Start/Restart and select which
+    recipients this run actually touches — the direct counterpart of the old
+    `_select_numbers_for_mode()`.
+
+        all           every non-deleted recipient runs again, win or lose.
+        failed_only    only rows currently Status == 'failed'.
+        pending_only   only rows never successfully attempted (queued/sending).
+    """
+    if restart_mode not in RESTART_MODES:
+        restart_mode = "all"
+
+    query = db.query(LeadCampaignRecipient).filter(
+        LeadCampaignRecipient.CampaignId == campaign.Id,
+        LeadCampaignRecipient.IsDeleted == False,  # noqa: E712
+    )
+    if restart_mode == "failed_only":
+        query = query.filter(LeadCampaignRecipient.Status == "failed")
+    elif restart_mode == "pending_only":
+        query = query.filter(LeadCampaignRecipient.Status.in_(("queued", "sending")))
+
+    selected_ids = [rid for (rid,) in query.with_entities(LeadCampaignRecipient.Id).all()]
+    if selected_ids:
+        db.query(LeadCampaignRecipient).filter(
+            LeadCampaignRecipient.Id.in_(selected_ids)
+        ).update(
+            {"Status": "queued", "Attempts": 0, "FailureReason": None},
+            synchronize_session=False,
+        )
+
+    execution = LeadCampaignExecution(
+        ClientId=campaign.ClientId,
+        CampaignId=campaign.Id,
+        Status="running",
+        RestartMode=restart_mode,
+        TotalCount=len(selected_ids),
+    )
+    db.add(execution)
+    db.flush()
+    return execution
+
+
+def _record_attempt(db: Session, execution: LeadCampaignExecution, recipient: LeadCampaignRecipient) -> None:
+    """Snapshot this recipient's outcome under THIS execution, immutably.
+
+    `recipient` itself keeps mutating across every future run — this row
+    freezes what actually happened here, so an export of an earlier run never
+    gets silently rewritten by a later one.
+    """
+    db.add(
+        LeadCampaignRecipientAttempt(
+            ClientId=recipient.ClientId,
+            CampaignExecutionId=execution.Id,
+            RecipientId=recipient.Id,
+            Status=recipient.Status,
+            ExternalMessageId=recipient.ExternalMessageId,
+            SentAt=recipient.SentAt,
+            FailureReason=recipient.FailureReason,
+        )
+    )
+
+
+# Mirrors the terminal set used by the live voice pipeline (LeadAI/voice/
+# pipeline.py, session.py) — a call in none of these is still ringing or
+# in-progress and counts against the concurrency cap below.
+_TERMINAL_CALL_STATUSES = frozenset({"completed", "failed", "busy", "no-answer", "canceled"})
+
+
+def _active_call_count(db: Session, campaign: LeadCampaign) -> int:
+    """How many calls THIS campaign currently has ringing/in-progress right
+    now — the real "N calls in parallel" bound that `Concurrency` promises.
+
+    This is deliberately a live DB count, not an in-memory counter: the old
+    VoiceAI batching system tracked `running_calls` in a process-local
+    asyncio Set, which only works for a single long-lived worker process.
+    This job handler can run on any worker and be re-enqueued after a
+    restart, so the count has to come from durable state every time.
+    `RatePerMinute` is a different, already-existing knob — it paces how
+    FAST new calls get placed; this paces how MANY are live at once.
+    """
+    return (
+        db.query(func.count(LeadCall.Id))
+        .join(LeadCampaignRecipient, LeadCampaignRecipient.CallId == LeadCall.Id)
+        .filter(
+            LeadCampaignRecipient.CampaignId == campaign.Id,
+            LeadCall.Status.notin_(_TERMINAL_CALL_STATUSES),
+        )
+        .scalar()
+        or 0
+    )
+
+
+# =========================================================================== #
+# SCHEDULE
+# =========================================================================== #
+@jobs.register("campaign.scheduled_start")
+def fire_scheduled_campaign(db: Session, payload: dict) -> dict:
+    """Job handler: the automatic counterpart of an operator clicking Start.
+
+    Enqueued with `run_at=ScheduledAt` the moment a campaign is created or
+    edited with a future `scheduled_at` (see routers/campaigns.py). Building
+    the audience HERE rather than at schedule-time mirrors /start exactly —
+    a list someone keeps adding contacts to should resolve as of send time,
+    not as of whenever it was scheduled, possibly days earlier.
+
+    Must re-check Status is still "scheduled" on arrival: a pause, a manual
+    Start, or a cancel between scheduling and now all move the campaign off
+    "scheduled", and this stale job firing anyway would double-start it.
+    """
+    campaign_id = payload.get("campaign_id")
+    campaign = db.get(LeadCampaign, campaign_id)
+    if campaign is None or campaign.IsDeleted:
+        return {"stopped": "campaign missing"}
+    if campaign.Status != "scheduled":
+        return {"stopped": campaign.Status}
+
+    from . import billing as billing_svc
+
+    allowed, reason = billing_svc.check_channel_access(db, campaign.ClientId, campaign.Channel)
+    if not allowed:
+        campaign.Status = "draft"
+        campaign.StatusMessage = f"Scheduled start skipped: {reason}"
+        activity.log(
+            db, action=A.CAMPAIGN_DEFERRED, client_id=campaign.ClientId, actor_email="system",
+            entity_type="campaign", entity_id=campaign.Id,
+            message=f"Scheduled start of '{campaign.Name}' skipped: {reason}",
+        )
+        db.commit()
+        return {"stopped": "billing", "reason": reason}
+
+    built = (
+        db.query(func.count(LeadCampaignRecipient.Id))
+        .filter(LeadCampaignRecipient.CampaignId == campaign.Id)
+        .scalar()
+        or 0
+    )
+    if built == 0:
+        build_audience(db, campaign, "system")
+        built = campaign.TotalCount or 0
+    if built == 0:
+        campaign.Status = "draft"
+        campaign.StatusMessage = "Scheduled start skipped: no recipients to send to"
+        activity.log(
+            db, action=A.CAMPAIGN_DEFERRED, client_id=campaign.ClientId, actor_email="system",
+            entity_type="campaign", entity_id=campaign.Id,
+            message=f"Scheduled start of '{campaign.Name}' skipped: no recipients",
+        )
+        db.commit()
+        return {"stopped": "no_recipients"}
+
+    execution = start_execution(db, campaign, "all")
+    campaign.Status = "queued"
+    campaign.StatusMessage = "Queued — starting shortly"
+    campaign.CompletedAt = None
+    jobs.enqueue(db, "campaign.run", {"campaign_id": campaign.Id}, client_id=campaign.ClientId, run_at=None, priority=3)
+    activity.log(
+        db, action=A.CAMPAIGN_STARTED, client_id=campaign.ClientId, actor_email="system",
+        entity_type="campaign", entity_id=campaign.Id,
+        message=f"Started scheduled campaign '{campaign.Name}' to {execution.TotalCount} recipients",
+        meta={"recipients": execution.TotalCount, "channel": campaign.Channel, "kind": campaign.Kind, "execution_id": execution.Id},
+    )
+    db.commit()
+    return {"started": execution.TotalCount}
 
 
 # =========================================================================== #
@@ -398,16 +646,6 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
             db, "campaign.run", {"campaign_id": campaign.Id},
             client_id=campaign.ClientId, run_at=resume_at,
         )
-        activity.log(
-            db,
-            action=A.CAMPAIGN_DEFERRED,
-            client_id=campaign.ClientId,
-            actor_email="system",
-            entity_type="campaign",
-            entity_id=campaign.Id,
-            message=f"Campaign deferred: quiet hours active until {resume_at:%H:%M} (resumes automatically)",
-            meta={"resume_at": str(resume_at), "reason": "quiet_hours"},
-        )
         db.commit()
         return {"deferred_until": str(resume_at)}
 
@@ -416,6 +654,7 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         campaign.StartedAt = campaign.StartedAt or utcnow()
         db.commit()
 
+    execution = _active_execution(db, campaign)
     client = db.get(Client, campaign.ClientId)
     batch = (
         db.query(LeadCampaignRecipient)
@@ -430,19 +669,28 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
     )
 
     if not batch:
-        return _finish(db, campaign)
+        return _finish(db, campaign, execution=execution)
 
     # Rate limiting: a fixed inter-send delay is simpler and gentler on the
     # carrier than a token bucket that fires in bursts.
     rate = max(1, campaign.RatePerMinute or settings.campaign_default_rate_per_minute)
     delay = 60.0 / rate
 
+    concurrency_limit = campaign.Concurrency or settings.campaign_default_concurrency
     sent = failed = skipped = 0
+    waiting_for_slot = False
     for recipient in batch:
         fresh = db.get(LeadCampaign, campaign.Id)
         if fresh is None or fresh.Status in TERMINAL_STATUSES or fresh.Status == "paused":
             db.commit()
             return {"stopped": fresh.Status if fresh else "missing", "sent": sent}
+
+        if campaign.Kind == "call" and _active_call_count(db, campaign) >= concurrency_limit:
+            # At the cap already — stop placing MORE calls this pass rather
+            # than block the worker on a sleep. The short re-check on the way
+            # out picks the rest of the batch back up once a call ends.
+            waiting_for_slot = True
+            break
 
         outcome = _send_one(db, campaign, recipient, client)
         if outcome == "sent":
@@ -451,10 +699,14 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
             skipped += 1
         else:
             failed += 1
+        _record_attempt(db, execution, recipient)
         db.commit()
         if delay > 0.01:
             time.sleep(delay)
 
+    execution.CompletedCount = (execution.CompletedCount or 0) + sent
+    execution.FailedCount = (execution.FailedCount or 0) + failed
+    execution.SkippedCount = (execution.SkippedCount or 0) + skipped
     _refresh_counters(db, campaign)
 
     remaining = (
@@ -473,9 +725,22 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         actor_email="system",
         entity_type="campaign",
         entity_id=campaign.Id,
-        message=f"Batch processed: {sent} sent, {failed} failed, {skipped} skipped — {remaining} remaining",
-        meta={"sent": sent, "failed": failed, "skipped": skipped, "remaining": remaining},
+        message=f"Batch processed: {sent} sent, {failed} failed, {skipped} skipped — {remaining} remaining"
+                + (" (at call concurrency cap)" if waiting_for_slot else ""),
+        meta={"sent": sent, "failed": failed, "skipped": skipped, "remaining": remaining,
+              "execution_id": execution.Id},
     )
+    if waiting_for_slot:
+        # Re-checking immediately would just hit the same cap again and spin
+        # the worker — a short wait gives at least one in-flight call a
+        # realistic chance to reach a terminal status first.
+        jobs.enqueue(
+            db, "campaign.run", {"campaign_id": campaign.Id},
+            client_id=campaign.ClientId, run_at=utcnow() + timedelta(seconds=15),
+        )
+        db.commit()
+        return {"sent": sent, "failed": failed, "skipped": skipped, "remaining": remaining,
+                "waiting_for_concurrency_slot": True}
     if remaining:
         jobs.enqueue(
             db, "campaign.run", {"campaign_id": campaign.Id}, client_id=campaign.ClientId
@@ -483,7 +748,7 @@ def run_campaign_job(db: Session, payload: dict) -> dict:
         db.commit()
         return {"sent": sent, "failed": failed, "skipped": skipped, "remaining": remaining}
 
-    return _finish(db, campaign, {"sent": sent, "failed": failed, "skipped": skipped})
+    return _finish(db, campaign, {"sent": sent, "failed": failed, "skipped": skipped}, execution=execution)
 
 
 def _send_one(
@@ -733,7 +998,10 @@ def _refresh_counters(db: Session, campaign: LeadCampaign) -> None:
     campaign.SkippedCount = rows.get("skipped", 0) + rows.get("opted_out", 0)
 
 
-def _finish(db: Session, campaign: LeadCampaign, extra: dict | None = None) -> dict:
+def _finish(
+    db: Session, campaign: LeadCampaign, extra: dict | None = None,
+    execution: LeadCampaignExecution | None = None,
+) -> dict:
     _refresh_counters(db, campaign)
     campaign.Status = "completed"
     campaign.CompletedAt = utcnow()
@@ -741,6 +1009,10 @@ def _finish(db: Session, campaign: LeadCampaign, extra: dict | None = None) -> d
         f"Completed — {campaign.SentCount} sent, "
         f"{campaign.FailedCount} failed, {campaign.SkippedCount} skipped"
     )
+    if execution is None:
+        execution = _active_execution(db, campaign)
+    execution.Status = "completed"
+    execution.CompletedAt = utcnow()
     activity.log(
         db,
         action=A.CAMPAIGN_COMPLETED,
@@ -748,11 +1020,12 @@ def _finish(db: Session, campaign: LeadCampaign, extra: dict | None = None) -> d
         actor_email="system",
         entity_type="campaign",
         entity_id=campaign.Id,
-        message=campaign.StatusMessage,
+        message=f"'{campaign.Name}' (run {execution.Id[:8]}) {campaign.StatusMessage}",
         meta={
             "sent": campaign.SentCount,
             "failed": campaign.FailedCount,
             "skipped": campaign.SkippedCount,
+            "execution_id": execution.Id,
         },
     )
     db.commit()
@@ -778,9 +1051,11 @@ def apply_status_update(db: Session, external_message_id: str, status: str, erro
         return False
 
     rank = {"queued": 0, "sending": 1, "sent": 2, "delivered": 3, "read": 4, "replied": 5}
+    changed = False
     if status == "failed":
         recipient.Status = "failed"
         recipient.FailureReason = (error or "Provider reported a failure")[:400]
+        changed = True
     elif rank.get(status, -1) > rank.get(recipient.Status, 0):
         recipient.Status = status
         if status == "delivered":
@@ -789,11 +1064,34 @@ def apply_status_update(db: Session, external_message_id: str, status: str, erro
             recipient.ReadAt = utcnow()
         elif status == "replied":
             recipient.RepliedAt = utcnow()
+        changed = True
+
+    if changed:
+        _update_latest_attempt(db, recipient)
 
     campaign = db.get(LeadCampaign, recipient.CampaignId)
     if campaign is not None:
         _refresh_counters(db, campaign)
     return True
+
+
+def _update_latest_attempt(db: Session, recipient: LeadCampaignRecipient) -> None:
+    """Fold a delivery receipt into the SAME attempt row the original send
+    created, not a new one — a receipt is an update to that run's outcome,
+    never a run of its own."""
+    attempt = (
+        db.query(LeadCampaignRecipientAttempt)
+        .filter(LeadCampaignRecipientAttempt.RecipientId == recipient.Id)
+        .order_by(LeadCampaignRecipientAttempt.CreatedAt.desc())
+        .first()
+    )
+    if attempt is None:
+        return
+    attempt.Status = recipient.Status
+    attempt.DeliveredAt = recipient.DeliveredAt
+    attempt.ReadAt = recipient.ReadAt
+    attempt.RepliedAt = recipient.RepliedAt
+    attempt.FailureReason = recipient.FailureReason
 
 
 def note_reply(db: Session, conversation: LeadConversation) -> None:
@@ -812,6 +1110,7 @@ def note_reply(db: Session, conversation: LeadConversation) -> None:
         return
     recipient.Status = "replied"
     recipient.RepliedAt = utcnow()
+    _update_latest_attempt(db, recipient)
     campaign = db.get(LeadCampaign, conversation.CampaignId)
     if campaign is not None:
         _refresh_counters(db, campaign)

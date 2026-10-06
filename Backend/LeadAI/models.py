@@ -40,6 +40,8 @@ from sqlalchemy.orm import relationship
 try:
     from core.base import Base
 except ImportError:
+    from core.base import Base
+    # pyrefly: ignore [missing-import]
     from base import Base
 
 
@@ -228,12 +230,11 @@ class LeadProduct(LeadAIBase):
     __tablename__ = "leadai_products"
     __table_args__ = (
         Index("ix_leadai_product_client", "ClientId"),
-        Index("ix_leadai_product_type", "ProductType"),
     )
 
     ClientId = Column(String(36), nullable=False)
     ProductName = Column(String(200), nullable=False)
-    ProductType = Column(String(100), nullable=False)
+    ProductDescription = Column(Text, nullable=True)
     KnowledgeBaseFile = Column(String(500), nullable=True)
     KbDocumentId = Column(String(36), nullable=True)
     BoundKbDocumentIds = Column(JSON, default=list, nullable=True)
@@ -272,10 +273,16 @@ class LeadCompanyScript(LeadAIBase):
     IsActive = Column(Boolean, default=True)
     ScriptXml = Column(Text, nullable=True)
     SectionsJson = Column(JSON, nullable=True)
-    # Voice knobs handed to the existing call pipeline verbatim.
+    # VoiceGender/VoiceSpeaker: UNUSED. Both moved to LeadCompanySettings
+    # (super-admin only, see routers/companies.py's /voice-settings) — kept
+    # here only because additive-only migrations never drop a column.
     VoiceGender = Column(String(20), nullable=True)
     VoiceSpeaker = Column(String(60), nullable=True)
-    MultiStt = Column(Boolean, default=False)
+    # Column-level default only matters for a raw insert that skips the API
+    # layer; routers/scripts.py always passes MultiStt explicitly, so the
+    # real default a company admin gets is ScriptCreate.multi_stt in
+    # schemas.py (True) — kept in sync here so the two don't drift apart.
+    MultiStt = Column(Boolean, default=True)
 
 
 # Valid LeadCompanyDataPoint.DataType values.
@@ -342,6 +349,13 @@ class LeadCompanySettings(LeadAIBase):
     AutoCallOnHotLead = Column(Boolean, default=False)
     WidgetEnabled = Column(Boolean, default=True)
     WidgetGreeting = Column(String(500), nullable=True)
+    # The persona's name (e.g. "Ritu"), usable as the {agent} token in any
+    # script or prompt — see script_engine's placeholder substitution. A
+    # company admin's choice, unlike VoiceGender/VoiceSpeed/VoiceSpeaker
+    # below: picking a name is branding, not a technical voice parameter.
+    # Changing it here updates every script/prompt that uses {agent} at
+    # once, instead of hand-editing the literal name into each one.
+    AgentName = Column(String(80), nullable=True)
 
     # ---- Lead threshold -----------------------------------------------------
     # The score at or above which a lead is considered worth a human's attention
@@ -356,6 +370,20 @@ class LeadCompanySettings(LeadAIBase):
     # When true, the inbox list hides sub-threshold leads unless explicitly asked
     # for with ?include_below_threshold=true.
     HideBelowThreshold = Column(Boolean, default=False)
+
+    # ---- AI call voice tuning ------------------------------------------------
+    # Deliberately platform-level, not a per-script field. LeadCompanyScript
+    # still HAS a VoiceSpeaker column (additive-only migrations never drop
+    # one), but nothing reads it any more — all three voice knobs moved here
+    # so only a super admin may set any of them, never a company admin; they
+    # live on the settings row the companies router already gates by role,
+    # not on anything script.manage can reach. None means "use the platform
+    # default". Pitch was deliberately left out entirely: the live TTS model
+    # (Sarvam bulbul:v3) ignores it; only the deprecated, API-rejected v2
+    # honours it.
+    VoiceGender = Column(String(20), nullable=True)    # male|female
+    VoiceSpeed = Column(Float, nullable=True)           # Sarvam "pace", 0.5-2.0; None = platform default (1.1)
+    VoiceSpeaker = Column(String(60), nullable=True)    # Sarvam bulbul:v3 voice id, e.g. "ritu"/"priya"; None = platform default
 
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)
@@ -391,6 +419,9 @@ class LeadCustomer(LeadAIBase):
     EmailEnc = Column(Text, nullable=True)
     WhatsAppEnc = Column(Text, nullable=True)
     InstagramEnc = Column(Text, nullable=True)
+    # LinkedIn profile URL — stored plain (not PII-encrypted) because it is a
+    # public URL the commenter published on LinkedIn, not a private identifier.
+    LinkedinProfileUrl = Column(String(500), nullable=True)
     # Non-reversible lookup key so a returning customer is recognised without
     # decrypting anything.
     PhoneHash = Column(String(64), nullable=True, index=True)
@@ -441,6 +472,12 @@ class LeadConversation(LeadAIBase):
     # short fixed reply instead of restarting the qualification questions. Cleared
     # if the customer comes back with a real question.
     AiCompletedAt = Column(DateTime, nullable=True)
+    # Set when a campaign with CallEscalationEnabled asks "would you like us to
+    # call you?" — null|asked|accepted|declined. Only "accepted" ever triggers
+    # an actual call; the AI never dials without this being explicitly set here
+    # first by the customer's own reply (see conversation_flow.py).
+    CallConsentStatus = Column(String(20), nullable=True)
+    CallConsentAskedAt = Column(DateTime, nullable=True)
 
     # ---- control plane ------------------------------------------------------
     # Set from OUTSIDE the conversation, by staff or the monitor agent, and checked
@@ -691,7 +728,9 @@ from .models_ext import (  # noqa: E402
     LeadAccount,
     LeadAccountNote,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadChannelEvent,
     LeadChannelIdentity,
@@ -700,6 +739,26 @@ from .models_ext import (  # noqa: E402
     LeadFile,
     LeadJob,
 )
+
+
+class LeadCompanyOnboarding(LeadAIBase):
+    """Tracks multi-step onboarding lifecycle for tenant companies."""
+
+    __tablename__ = "leadai_company_onboarding"
+    __table_args__ = (
+        UniqueConstraint("ClientId", name="uq_leadai_onboarding_client"),
+    )
+
+    ClientId = Column(String(36), nullable=False, index=True)
+    Status = Column(String(50), default="channel_pending", nullable=False)
+    CurrentStep = Column(String(50), default="channels", nullable=False)
+    IsCompleted = Column(Boolean, default=False, nullable=False)
+    ChannelConnected = Column(Boolean, default=False, nullable=False)
+    ChannelSkipped = Column(Boolean, default=False, nullable=False)
+    KnowledgeBaseAdded = Column(Boolean, default=False, nullable=False)
+    KnowledgeBaseSkipped = Column(Boolean, default=False, nullable=False)
+    CompletedAt = Column(DateTime, nullable=True)
+
 
 ALL_LEADAI_TABLES = (
     LeadUserRole,
@@ -712,6 +771,7 @@ ALL_LEADAI_TABLES = (
     LeadCompanyDataPoint,
     LeadCompanyPrompt,
     LeadCompanySettings,
+    LeadCompanyOnboarding,
     LeadCustomer,
     LeadConversation,
     LeadMessage,

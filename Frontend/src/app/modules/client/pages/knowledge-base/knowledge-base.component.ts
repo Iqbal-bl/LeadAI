@@ -40,6 +40,7 @@ export class KnowledgeBaseComponent implements OnInit {
   newFaq = { question: '', answer: '', category: 'Product' };
 
   showUploadDialog = false;
+  isUploading = false;
 
   // View Document dialog state
   showViewDocDialog = false;
@@ -338,14 +339,30 @@ export class KnowledgeBaseComponent implements OnInit {
   onUpload(event: any): void {
     const files: File[] = event.files;
     if (files && files.length > 0) {
-      this.kbService.uploadDocument(files[0]).subscribe({
-        next: () => {
-          this.loadDocuments();
-          this.showUploadDialog = false;
-        },
-        error: (err) => {
-          console.error('File upload failed', err);
-        },
+      this.isUploading = true;
+      let completedCount = 0;
+      const total = files.length;
+
+      files.forEach((file) => {
+        this.kbService.uploadDocument(file).subscribe({
+          next: () => {
+            completedCount++;
+            if (completedCount === total) {
+              this.isUploading = false;
+              this.loadDocuments();
+              this.showUploadDialog = false;
+              this.toastService.success(`Uploaded and indexed ${total} document(s)!`);
+            }
+          },
+          error: (err) => {
+            completedCount++;
+            if (completedCount === total) {
+              this.isUploading = false;
+              this.loadDocuments();
+            }
+            this.toastService.error(err?.error?.detail || `Failed to upload "${file.name}".`);
+          },
+        });
       });
     }
   }

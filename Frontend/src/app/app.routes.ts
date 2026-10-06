@@ -10,6 +10,14 @@ export const routes: Routes = [
       import('./features/auth/auth.routes').then((m) => m.AUTH_ROUTES),
   },
   {
+    path: 'onboarding',
+    canActivate: [AuthGuard, SubscriptionGuard],
+    loadComponent: () =>
+      import('./modules/client/pages/onboarding/onboarding.component').then(
+        (m) => m.OnboardingComponent,
+      ),
+  },
+  {
     path: 'client',
     canActivate: [AuthGuard, SubscriptionGuard],
     loadChildren: () =>

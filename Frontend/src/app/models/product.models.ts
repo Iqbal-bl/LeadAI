@@ -13,7 +13,7 @@ export interface Product {
   id: string;
   client_id: string;
   product_name: string;
-  product_type: string;
+  product_description?: string | null;
   knowledge_base_file?: string | null;
   kb_document_id?: string | null;
   bound_kb_document_ids?: string[];

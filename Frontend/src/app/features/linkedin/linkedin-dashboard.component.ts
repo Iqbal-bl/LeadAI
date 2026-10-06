@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { SharedModule } from '../../shared/shared.module';
 import { LinkedinService } from '../../services/linkedin.service';
 import {
@@ -32,6 +33,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   private pollingInterval: any = null;
   private messageListener: any = null;
   private chatPollingInterval: any = null;
+  private activeMessageSub?: Subscription;
 
   // Bot Session Credentials (Cookie or Email & Password)
   authMode: 'cookie' | 'credentials' = 'cookie';
@@ -45,6 +47,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   // Auto-Accept & Automation Settings
   autoAcceptEnabled = false;
+  autoDmLeadsEnabled = true;
   welcomeMessage =
     'Hi {name},\n\nThanks for connecting! Looking forward to staying in touch and exploring potential collaborations.';
   savingSettings = false;
@@ -135,6 +138,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.clearPolling();
     this.stopChatPolling();
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     if (this.messageListener) {
       window.removeEventListener('message', this.messageListener);
     }
@@ -144,12 +151,22 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     this.activeTab = tab;
     if (tab !== 'messages') {
       this.stopChatPolling();
+      if (this.activeMessageSub) {
+        this.activeMessageSub.unsubscribe();
+        this.activeMessageSub = undefined;
+        this.loadingMessages = false;
+        this.syncingThreadMessages = false;
+      }
     } else {
       if (this.conversations.length === 0) {
         this.loadConversations();
       } else if (this.selectedConversation) {
-        this.selectConversation(this.selectedConversation);
+        const hasLoadedMessages = this.messages && this.messages.length > 0;
+        this.selectConversation(this.selectedConversation, hasLoadedMessages);
       }
+    }
+    if (tab === 'comments' && this.comments.length === 0 && !this.loadingComments) {
+      this.loadComments();
     }
   }
 
@@ -162,6 +179,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.statusLoading = false;
         if (res) {
           this.autoAcceptEnabled = !!res['auto_accept'];
+          this.autoDmLeadsEnabled = res['auto_dm_leads'] !== false;
           if (res['welcome_message']) {
             this.welcomeMessage = res['welcome_message'];
           }
@@ -324,6 +342,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       next: () => {
         this.savingCredentials = false;
         this.showCredentialsSuccess = true;
+        this.credentialsForm.password = '';
         this.messageService.add({
           severity: 'success',
           summary: 'Credentials Saved',
@@ -394,6 +413,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       .saveSettings({
         auto_accept: this.autoAcceptEnabled,
         welcome_message: this.welcomeMessage.trim() || null,
+        auto_dm_leads: this.autoDmLeadsEnabled,
       })
       .subscribe({
         next: () => {
@@ -401,7 +421,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Settings Saved',
-            detail: 'LinkedIn auto-accept and welcome messaging rules updated.',
+            detail: 'LinkedIn automation rules and CRM lead settings updated.',
           });
           this.loadStatus();
         },
@@ -795,9 +815,14 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     } else {
       this.syncingThreadMessages = true;
     }
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     const convId = conv.conversation_id || conv.conversation_urn;
-    this.linkedinService.getConversationMessages(convId).subscribe({
+    this.activeMessageSub = this.linkedinService.getConversationMessages(convId).subscribe({
       next: (res) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
         this.syncingThreadMessages = false;
         if (this.activeTab !== 'messages') {
@@ -826,6 +851,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         }
       },
       error: (err) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
         this.syncingThreadMessages = false;
         if (!isBackgroundRefresh && this.activeTab === 'messages') {
@@ -966,6 +992,14 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   getUnreadConversationsCount(): number {
     return this.unreadConversationsCount;
+  }
+
+  getLeadIntentLabel(intent?: string): string {
+    if (!intent) return 'CRM Lead';
+    if (intent === 'demo_request') return 'Demo Inquiry';
+    if (intent === 'pricing_inquiry') return 'Pricing Inquiry';
+    if (intent === 'consultation_request') return 'Consultation Request';
+    return 'CRM Lead';
   }
 
   loadPreviousMessages(): void {

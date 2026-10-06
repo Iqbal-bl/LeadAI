@@ -59,9 +59,15 @@ def complete(
     )
 
 
-def complete_json(system: str, messages: list[dict]) -> tuple[dict | None, dict]:
+def complete_json(
+    system: str,
+    messages: list[dict],
+    temperature: float = 0.0,
+    max_tokens: int = 500,
+    **kwargs,
+) -> tuple[dict | None, dict]:
     """JSON-mode completion, used for structured lead extraction."""
-    raw, meta = complete(system, messages, temperature=0.0, json_mode=True, max_tokens=500)
+    raw, meta = complete(system, messages, temperature=temperature, json_mode=True, max_tokens=max_tokens)
     if not raw:
         return None, meta
     try:
