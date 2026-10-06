@@ -1,7 +1,7 @@
 export const environment = {
   production: true,
   apiPrefix: 'https://leadai.bharatlogicllp.com/api/api/leadai',
-  wsUrl: 'wss://leadai.bharatlogicllp.com/api/api',
+  wsUrl: 'wss://leadai.bharatlogicllp.com/api',
   authConfig: {
     issuer: 'https://identity.bharatlogicllp.com',
     clientId: 'angular-client',
