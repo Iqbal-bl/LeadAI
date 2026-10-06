@@ -39,6 +39,7 @@ LOCKED = [
     ("GET", f"/companies/{CID}"), ("PATCH", f"/companies/{CID}"), ("DELETE", f"/companies/{CID}"),
     ("GET", f"/companies/{CID}/users"),
     ("GET", f"/companies/{CID}/permissions"), ("PATCH", f"/companies/{CID}/permissions"),
+    ("PUT", f"/companies/{CID}/voice-settings"),
     ("GET", "/access/permissions"),
     ("GET", "/access/roles"), ("POST", "/access/roles"), ("PATCH", "/access/roles/x"),
     ("GET", "/access/role-permissions/all"), ("GET", "/access/role-permissions/manager"),

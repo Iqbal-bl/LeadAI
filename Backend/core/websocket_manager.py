@@ -311,5 +311,13 @@ class ConnectionManager:
         for ws in receivers:
             await self._enqueue_json(ws, data)
 
+    # LEADAI: per-campaign channel (status/progress while scheduled/running)
+    async def broadcast_to_leadai_campaign(self, campaign_id: str, data: dict):
+        receivers = await self._snapshot_connections("leadai_campaign", campaign_id)
+        logger.info("[WS] broadcast_to_leadai_campaign campaign=%s receivers=%d type=%s",
+                     campaign_id, len(receivers), data.get("type"))
+        for ws in receivers:
+            await self._enqueue_json(ws, data)
+
 
 manager = ConnectionManager()

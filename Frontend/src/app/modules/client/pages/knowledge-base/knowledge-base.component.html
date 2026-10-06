@@ -91,10 +91,11 @@
                   <i
                     class="pi"
                     [ngClass]="{
-                      'pi-file-pdf text-danger-500': doc.fileType === 'PDF',
-                      'pi-file-word text-info-500': doc.fileType === 'DOCX',
-                      'pi-file-excel text-success-500': doc.fileType === 'CSV',
-                      'pi-file text-brand-500': doc.fileType === 'TXT',
+                      'pi-file-pdf text-danger-500': doc.fileType === 'PDF' || doc.fileName?.toLowerCase()?.endsWith('.pdf'),
+                      'pi-file-word text-info-500': doc.fileType === 'DOCX' || doc.fileName?.toLowerCase()?.endsWith('.docx'),
+                      'pi-file-excel text-success-500': doc.fileType === 'CSV' || doc.fileName?.toLowerCase()?.endsWith('.csv'),
+                      'pi-file-edit text-purple-500': doc.fileType === 'MD' || doc.fileName?.toLowerCase()?.endsWith('.md'),
+                      'pi-file text-brand-500': doc.fileType === 'TXT' || (!doc.fileName?.toLowerCase()?.endsWith('.pdf') && !doc.fileName?.toLowerCase()?.endsWith('.docx') && !doc.fileName?.toLowerCase()?.endsWith('.csv') && !doc.fileName?.toLowerCase()?.endsWith('.md')),
                     }"
                   ></i>
                   {{ doc.fileName }}
@@ -390,34 +391,129 @@
 
 <!-- Upload Dialog -->
 <p-dialog
-  header="Upload Document to Knowledge Base"
+  header="Add Knowledge Document"
   [(visible)]="showUploadDialog"
   [modal]="true"
-  [style]="{ width: '500px' }"
+  [style]="{ width: '540px' }"
+  [closable]="!isUploading && !isImportingCloud"
 >
-  <div class="py-3 space-y-4">
-    <p-fileUpload
-      name="demo[]"
-      [customUpload]="true"
-      [multiple]="true"
-      accept=".pdf,.docx,.txt,.csv"
-      maxFileSize="10000000"
-      (uploadHandler)="onUpload($event)"
+  <div class="py-2 space-y-4 relative min-h-[180px]">
+    <!-- Method Selector Tabs -->
+    <div class="flex rounded-xl p-1 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+      <button
+        type="button"
+        class="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+        [ngClass]="uploadMethod === 'file' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-2xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+        (click)="uploadMethod = 'file'"
+      >
+        <i class="pi pi-upload text-xs"></i>
+        Upload File
+      </button>
+      <button
+        type="button"
+        class="flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+        [ngClass]="uploadMethod === 'cloud' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+        (click)="uploadMethod = 'cloud'"
+      >
+        <i class="pi pi-cloud text-xs"></i>
+        Google Drive / Dropbox Link
+      </button>
+    </div>
+
+    <!-- Loading Overlay while uploading or fetching -->
+    <div
+      *ngIf="isUploading || isImportingCloud"
+      class="absolute inset-0 z-30 flex flex-col items-center justify-center rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs gap-3 p-6 text-center animate-fade-in"
     >
-      <ng-template pTemplate="content">
-        <div class="py-8 text-center" style="color: var(--app-text-muted)">
-          <i class="pi pi-cloud-upload text-4xl mb-2 text-brand-500"></i>
-          <p class="text-sm font-medium">Drag and drop files here to upload</p>
-          <p class="text-xs mt-1">Supports PDF, DOCX, TXT, CSV up to 10MB</p>
-        </div>
-      </ng-template>
-    </p-fileUpload>
+      <i class="pi pi-spin pi-spinner text-3xl text-indigo-600 dark:text-indigo-400"></i>
+      <div class="space-y-1">
+        <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100">
+          {{ isImportingCloud ? 'Downloading & Indexing Cloud Document...' : 'Uploading & Indexing Document...' }}
+        </h4>
+        <p class="text-xs text-slate-500 dark:text-slate-400">
+          {{ isImportingCloud ? 'Fetching file from cloud link, extracting content, and generating AI vector embeddings.' : 'Extracting text and generating AI vector embeddings.' }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Local File Upload Tab -->
+    <div *ngIf="uploadMethod === 'file'">
+      <p-fileUpload
+        name="demo[]"
+        [customUpload]="true"
+        [multiple]="true"
+        accept=".pdf,.docx,.txt,.csv,.md"
+        maxFileSize="10000000"
+        (uploadHandler)="onUpload($event)"
+        [disabled]="isUploading || isImportingCloud"
+      >
+        <ng-template pTemplate="content">
+          <div class="py-8 text-center" style="color: var(--app-text-muted)">
+            <i class="pi pi-cloud-upload text-4xl mb-2 text-brand-500"></i>
+            <p class="text-sm font-medium">Drag and drop files here to upload</p>
+            <p class="text-xs mt-1">Supports PDF, DOCX, TXT, CSV, MD up to 10MB</p>
+          </div>
+        </ng-template>
+      </p-fileUpload>
+    </div>
+
+    <!-- Cloud Link Tab (Google Drive / Dropbox) -->
+    <div *ngIf="uploadMethod === 'cloud'" class="space-y-3.5">
+      <div>
+        <label class="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Document Title *</label>
+        <input
+          pInputText
+          type="text"
+          [(ngModel)]="cloudLinkTitle"
+          placeholder="e.g. Company Knowledge Base 2026"
+          class="w-full text-sm"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Google Drive or Dropbox Link *</label>
+        <input
+          pInputText
+          type="url"
+          [(ngModel)]="cloudLinkUrl"
+          placeholder="https://drive.google.com/file/d/... or https://www.dropbox.com/scl/fi/..."
+          class="w-full text-sm font-mono"
+        />
+        <p class="text-[11px] text-slate-400 mt-1">
+          Make sure the file sharing is set to <strong class="text-slate-600 dark:text-slate-300">"Anyone with the link can view"</strong> (or public for Dropbox).
+        </p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Notes / Summary (Optional)</label>
+        <textarea
+          [(ngModel)]="cloudLinkNotes"
+          rows="2"
+          placeholder="Brief context about this resource..."
+          class="w-full text-sm p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+        ></textarea>
+      </div>
+
+      <div class="flex justify-end pt-1">
+        <p-button
+          label="Download & Index File"
+          icon="pi pi-download"
+          [loading]="isImportingCloud"
+          [disabled]="!cloudLinkTitle.trim() || !cloudLinkUrl.trim()"
+          (onClick)="importCloudDoc()"
+          [rounded]="true"
+          size="small"
+        ></p-button>
+      </div>
+    </div>
   </div>
+
   <ng-template pTemplate="footer">
     <p-button
       label="Close"
       icon="pi pi-times"
       [text]="true"
+      [disabled]="isUploading || isImportingCloud"
       (click)="showUploadDialog = false"
     ></p-button>
   </ng-template>
@@ -554,6 +650,17 @@
             <span>Uploaded: {{ selectedDoc?.uploadDate }}</span>
             <span>•</span>
             <span>By: {{ selectedDoc?.uploadedBy }}</span>
+            <span *ngIf="selectedDocDetail?.source_url">•</span>
+            <a
+              *ngIf="selectedDocDetail?.source_url"
+              [href]="selectedDocDetail?.source_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+            >
+              <i class="pi pi-external-link text-[10px]"></i>
+              Source Link
+            </a>
           </div>
         </div>
       </div>
@@ -742,17 +849,30 @@
         (click)="showViewDocDialog = false"
       ></p-button>
 
-      <p-button
-        *ngIf="selectedDoc"
-        label="Download Document"
-        icon="pi pi-download"
-        [loading]="isDownloadingDoc"
-        (click)="downloadDoc(selectedDoc)"
-        [style]="{
-          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-          border: 'none',
-        }"
-      ></p-button>
+      <div class="flex items-center gap-2">
+        <p-button
+          *ngIf="selectedDoc"
+          label="Re-index Document"
+          icon="pi pi-refresh"
+          severity="secondary"
+          [outlined]="true"
+          [loading]="isReindexing"
+          [pTooltip]="'Re-fetch file from source and regenerate AI vector embeddings'"
+          (click)="reindexDoc(selectedDoc)"
+        ></p-button>
+
+        <p-button
+          *ngIf="selectedDoc"
+          label="Download Document"
+          icon="pi pi-download"
+          [loading]="isDownloadingDoc"
+          (click)="downloadDoc(selectedDoc)"
+          [style]="{
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            border: 'none',
+          }"
+        ></p-button>
+      </div>
     </div>
   </ng-template>
 </p-dialog>

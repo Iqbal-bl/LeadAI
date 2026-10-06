@@ -1,38 +1,23 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CompanyService } from '../../../../../services/company.service';
-import { ChannelService } from '../../../../../services/channel.service';
-import { VoiceService } from '../../../../../services/voice.service';
 import { AuthService } from '../../../../../services/auth.service';
 import { Company, CompanySettings } from '../../../../../models/company.models';
 import { Channel, LinkedInStatus } from '../../../../../models/channel.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../../../../shared/services/confirmation.service';
 import { SharedModule } from '../../../../../shared/shared.module';
+import {
+  DEFAULT_COMPANY_SETTINGS,
+  SARVAM_VOICE_ROSTER,
+  SERVICES_STATIC_CONFIG,
+  ServiceAccessItem,
+  VoiceSpeakerOption,
+  WIDGET_EMBED_CONFIG,
+} from './client-detail.constants';
+import { CompanyVoiceSettingsUpdate } from '../../../../../models/company.models';
 
-export interface ServiceAccessItem {
-  id: string;
-  key?: string;
-  isEnabled?: boolean;
-  name: string;
-  category: 'Voice' | 'Social' | 'Web' | 'Messaging';
-  description: string;
-  icon: string;
-  brandColor: string;
-  bgGradient: string;
-  status: 'active' | 'configured' | 'available' | 'disabled';
-  statusLabel: string;
-  badgeSeverity: 'success' | 'info' | 'warn' | 'secondary';
-  features: string[];
-  configDetails?: {
-    accountName?: string;
-    accountHandle?: string;
-    displayNumber?: string;
-    autoReply?: boolean;
-    lastActive?: string;
-    extraNote?: string;
-  };
-}
+export type { ServiceAccessItem };
 
 @Component({
   selector: 'admin-client-detail',
@@ -46,8 +31,6 @@ export class ClientDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private companyService = inject(CompanyService);
-  private channelService = inject(ChannelService);
-  private voiceService = inject(VoiceService);
   private authService = inject(AuthService);
   private messageService = inject(MessageService);
   private confirmationService = inject(ConfirmationService);
@@ -68,15 +51,31 @@ export class ClientDetailComponent implements OnInit {
 
   isPermissionsLoaded = false;
 
+  get isSuperAdmin(): boolean {
+    return this.authService.isSuperAdmin() || this.authService.isPlatformAdmin();
+  }
+
+  // Superadmin Voice Settings Control
+  voiceRoster: VoiceSpeakerOption[] = SARVAM_VOICE_ROSTER;
+  voiceGender: 'male' | 'female' = 'female';
+  voiceSpeed: number = 1.1;
+  voiceSpeaker: string = 'anushka';
+  sttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
+  savingVoiceSettings = false;
+
+  // Baseline state for partial update dirty-tracking
+  savedVoiceGender: 'male' | 'female' = 'female';
+  savedVoiceSpeed: number = 1.1;
+  savedVoiceSpeaker: string = 'anushka';
+  savedSttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
 
   ngOnInit(): void {
     this.route.params.subscribe((params) => {
-      this.companyId = params['id'] || params['company_id'] || params['clientId'] || '';
+      this.companyId =
+        params['id'] || params['company_id'] || params['clientId'] || '';
       if (this.companyId) {
         this.loadCompanyDetails();
         this.loadSettings();
-        this.loadChannels();
-        this.loadLinkedInStatus();
         this.loadCompanyServices();
       }
     });
@@ -87,26 +86,27 @@ export class ClientDetailComponent implements OnInit {
     if (this.authService.isPlatformAdmin()) {
       options.params = { client_id: this.companyId };
     }
-    this.companyService.getCompanyPermissions(this.companyId, options).subscribe({
-      next: (res) => {
-        this.isPermissionsLoaded = true;
-        const items = res?.permissions || (res as any)?.services || [];
-        if (items.length > 0) {
-          const map: Record<string, boolean> = {};
-          items.forEach((s: any) => {
-            map[s.key.toLowerCase()] = s.is_enabled;
-          });
-          this.companyServicesMap = { ...this.companyServicesMap, ...map };
-        }
-        this.buildServicesList();
-      },
-      error: () => {
-        this.isPermissionsLoaded = true;
-        this.buildServicesList();
-      },
-    });
+    this.companyService
+      .getCompanyPermissions(this.companyId, options)
+      .subscribe({
+        next: (res) => {
+          this.isPermissionsLoaded = true;
+          const items = res?.permissions || (res as any)?.services || [];
+          if (items.length > 0) {
+            const map: Record<string, boolean> = {};
+            items.forEach((s: any) => {
+              map[s.key.toLowerCase()] = s.is_enabled;
+            });
+            this.companyServicesMap = { ...this.companyServicesMap, ...map };
+          }
+          this.buildServicesList();
+        },
+        error: () => {
+          this.isPermissionsLoaded = true;
+          this.buildServicesList();
+        },
+      });
   }
-
 
   toggleServiceEnabled(serviceKey: string, currentVal: boolean): void {
     const newStatus = !currentVal;
@@ -115,28 +115,30 @@ export class ClientDetailComponent implements OnInit {
       options.params = { client_id: this.companyId };
     }
 
-    this.companyService.patchCompanyPermissions(
-      this.companyId,
-      { permissions: [{ key: serviceKey, is_enabled: newStatus }] },
-      options
-    ).subscribe({
-      next: () => {
-        this.companyServicesMap[serviceKey.toLowerCase()] = newStatus;
-        this.buildServicesList();
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Service Updated',
-          detail: `Service "${serviceKey}" is now ${newStatus ? 'Enabled' : 'Disabled'}.`,
-        });
-      },
-      error: (err) => {
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Update Failed',
-          detail: err?.message || 'Failed to update service status',
-        });
-      },
-    });
+    this.companyService
+      .patchCompanyPermissions(
+        this.companyId,
+        { permissions: [{ key: serviceKey, is_enabled: newStatus }] },
+        options,
+      )
+      .subscribe({
+        next: () => {
+          this.companyServicesMap[serviceKey.toLowerCase()] = newStatus;
+          this.buildServicesList();
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Service Updated',
+            detail: `Service "${serviceKey}" is now ${newStatus ? 'Enabled' : 'Disabled'}.`,
+          });
+        },
+        error: (err) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Update Failed',
+            detail: err?.message || 'Failed to update service status',
+          });
+        },
+      });
   }
 
   loadCompanyDetails(): void {
@@ -153,341 +155,375 @@ export class ClientDetailComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
-        // Mock fallback for local preview
-        this.company = {
-          id: this.companyId,
-          name: 'TechCorp Solutions',
-          email: 'billing@techcorp.com',
-          phone_number: '+1 (555) 234-5678',
-          description:
-            'Enterprise SaaS provider specializing in sales automation, real-time AI dialling, and omnichannel customer communication.',
-          is_active: true,
-          created_at: '2024-01-15T08:30:00Z',
-          user_count: 142,
-          document_count: 24,
-          chunk_count: 1240,
-          script_count: 5,
-          conversation_count: 1845,
-        };
-        this.buildServicesList();
         this.loading = false;
       },
     });
+  }
+
+  get filteredVoiceSpeakers(): VoiceSpeakerOption[] {
+    if (!this.voiceGender) return this.voiceRoster;
+    return this.voiceRoster.filter((v) => v.gender === this.voiceGender);
+  }
+
+  onVoiceGenderChange(): void {
+    const matching = this.filteredVoiceSpeakers;
+    if (!matching.some((s) => s.value === this.voiceSpeaker)) {
+      this.voiceSpeaker =
+        matching[0]?.value ||
+        (this.voiceGender === 'male' ? 'shubh' : 'anushka');
+    }
+  }
+
+  get hasVoiceSettingsChanges(): boolean {
+    return (
+      this.voiceGender !== this.savedVoiceGender ||
+      this.voiceSpeed !== this.savedVoiceSpeed ||
+      this.voiceSpeaker !== this.savedVoiceSpeaker ||
+      this.sttTtsProvider !== this.savedSttTtsProvider
+    );
   }
 
   loadSettings(): void {
     this.companyService.getCompanySettings(this.companyId).subscribe({
       next: (settings) => {
         this.companySettings = settings;
+        this.voiceGender = settings.voice_gender || 'female';
+        this.voiceSpeed =
+          settings.voice_speed !== null && settings.voice_speed !== undefined
+            ? Math.min(2.0, Math.max(0.5, Number(settings.voice_speed)))
+            : 1.1;
+        this.voiceSpeaker =
+          settings.voice_speaker ||
+          (this.voiceGender === 'male' ? 'shubh' : 'anushka');
+        this.sttTtsProvider = settings.stt_tts_provider || 'sarvam';
+
+        this.savedVoiceGender = this.voiceGender;
+        this.savedVoiceSpeed = this.voiceSpeed;
+        this.savedVoiceSpeaker = this.voiceSpeaker;
+        this.savedSttTtsProvider = this.sttTtsProvider;
         this.buildServicesList();
       },
       error: () => {
-        this.companySettings = {
-          handoff_threshold: 65,
-          retrieval_top_k: 5,
-          default_language: 'en',
-          auto_assign_enabled: true,
-          auto_call_on_hot_lead: true,
-          widget_enabled: true,
-          widget_greeting: 'Hello! How can our AI assistant help you today?',
-        };
+        this.companySettings = { ...DEFAULT_COMPANY_SETTINGS };
+        this.voiceGender = DEFAULT_COMPANY_SETTINGS.voice_gender || 'female';
+        this.voiceSpeed = DEFAULT_COMPANY_SETTINGS.voice_speed || 1.1;
+        this.voiceSpeaker =
+          DEFAULT_COMPANY_SETTINGS.voice_speaker || 'anushka';
+        this.sttTtsProvider =
+          DEFAULT_COMPANY_SETTINGS.stt_tts_provider || 'sarvam';
+
+        this.savedVoiceGender = this.voiceGender;
+        this.savedVoiceSpeed = this.voiceSpeed;
+        this.savedVoiceSpeaker = this.voiceSpeaker;
+        this.savedSttTtsProvider = this.sttTtsProvider;
         this.buildServicesList();
       },
     });
   }
 
-  loadChannels(): void {
-    this.loadingChannels = true;
-    this.channelService.getChannels().subscribe({
-      next: (res: any) => {
-        this.channels = Array.isArray(res) ? res : (res?.items || []);
-        this.loadingChannels = false;
-        this.buildServicesList();
-      },
-      error: () => {
-        this.channels = [];
-        this.loadingChannels = false;
-        this.buildServicesList();
-      },
-    });
-  }
+  saveVoiceSettings(): void {
+    if (!this.companyId) return;
 
-  loadLinkedInStatus(): void {
-    this.channelService.getLinkedInStatus().subscribe({
-      next: (status) => {
-        this.linkedinStatus = status;
-        this.buildServicesList();
-      },
-      error: () => {
-        this.linkedinStatus = null;
-        this.buildServicesList();
-      },
-    });
+    // Partial update: only send fields that actually changed
+    const payload: CompanyVoiceSettingsUpdate = {};
+    let hasChanges = false;
+
+    if (this.sttTtsProvider !== this.savedSttTtsProvider) {
+      payload.stt_tts_provider = this.sttTtsProvider;
+      hasChanges = true;
+    }
+
+    // Only send Sarvam voice persona attributes if they actually changed
+    if (this.voiceGender !== this.savedVoiceGender) {
+      payload.voice_gender = this.voiceGender;
+      hasChanges = true;
+    }
+
+    if (this.voiceSpeed !== this.savedVoiceSpeed) {
+      payload.voice_speed = Math.min(
+        2.0,
+        Math.max(0.5, Number(this.voiceSpeed)),
+      );
+      hasChanges = true;
+    }
+
+    if (this.voiceSpeaker !== this.savedVoiceSpeaker) {
+      payload.voice_speaker = this.voiceSpeaker;
+      hasChanges = true;
+    }
+
+    if (!hasChanges) {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'No Changes',
+        detail: 'No voice settings were modified.',
+      });
+      return;
+    }
+
+    this.savingVoiceSettings = true;
+    this.companyService
+      .updateCompanyVoiceSettings(this.companyId, payload)
+      .subscribe({
+        next: (updatedSettings) => {
+          this.savingVoiceSettings = false;
+          this.companySettings = updatedSettings;
+
+          this.savedVoiceGender =
+            updatedSettings.voice_gender || this.voiceGender;
+          this.savedVoiceSpeed =
+            updatedSettings.voice_speed !== null &&
+            updatedSettings.voice_speed !== undefined
+              ? updatedSettings.voice_speed
+              : this.voiceSpeed;
+          this.savedVoiceSpeaker =
+            updatedSettings.voice_speaker || this.voiceSpeaker;
+          this.savedSttTtsProvider =
+            updatedSettings.stt_tts_provider || this.sttTtsProvider;
+
+          this.voiceGender = this.savedVoiceGender;
+          this.voiceSpeed = this.savedVoiceSpeed;
+          this.voiceSpeaker = this.savedVoiceSpeaker;
+          this.sttTtsProvider = this.savedSttTtsProvider;
+
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Voice Settings Saved',
+            detail: `Provider: ${this.sttTtsProvider.toUpperCase()}, Voice: ${this.voiceSpeaker} (${this.voiceGender}), Speed: ${this.voiceSpeed}x`,
+          });
+          this.buildServicesList();
+        },
+        error: (err) => {
+          this.savingVoiceSettings = false;
+          const errorDetail =
+            err?.error?.detail ||
+            err?.message ||
+            'Failed to update platform voice settings. Superadmin rights required.';
+          this.messageService.add({
+            severity: 'error',
+            summary:
+              err?.status === 403 ? 'Permission Denied' : 'Update Failed',
+            detail: errorDetail,
+          });
+        },
+      });
   }
 
   isServiceEnabled(key: string, legacyKey?: string): boolean {
     if (!this.isPermissionsLoaded) return true;
     const keys = Object.keys(this.companyServicesMap);
     if (keys.length === 0) return true; // Legacy fallback
-    const val = this.companyServicesMap[key] ?? (legacyKey ? this.companyServicesMap[legacyKey] : undefined);
+    const val =
+      this.companyServicesMap[key] ??
+      (legacyKey ? this.companyServicesMap[legacyKey] : undefined);
     return val === true;
   }
 
-
   buildServicesList(): void {
     const whatsappCh = this.channels.find(
-      (c) => c.channel?.toLowerCase() === 'whatsapp'
+      (c) => c.channel?.toLowerCase() === 'whatsapp',
     );
     const messengerCh = this.channels.find(
-      (c) => c.channel?.toLowerCase() === 'messenger' || c.channel?.toLowerCase() === 'facebook'
+      (c) =>
+        c.channel?.toLowerCase() === 'messenger' ||
+        c.channel?.toLowerCase() === 'facebook',
     );
     const instagramCh = this.channels.find(
-      (c) => c.channel?.toLowerCase() === 'instagram'
+      (c) => c.channel?.toLowerCase() === 'instagram',
     );
-    const isLinkedInConnected = !!(this.linkedinStatus && this.linkedinStatus.connected);
+    const isLinkedInConnected = !!(
+      this.linkedinStatus && this.linkedinStatus.connected
+    );
 
-    const isVoiceEnabled = this.isServiceEnabled('voice_agent');
-    const isWhatsappEnabled = this.isServiceEnabled('social.whatsapp', 'whatsapp');
-    const isMessengerEnabled = this.isServiceEnabled('social.facebook', 'facebook');
-    const isInstagramEnabled = this.isServiceEnabled('social.instagram', 'instagram');
-    const isLinkedInEnabled = this.isServiceEnabled('social.linkedin', 'linkedin');
-    const isEmailEnabled = this.isServiceEnabled('email_marketing', 'email');
+    this.services = SERVICES_STATIC_CONFIG.map((item) => {
+      const isEnabled = this.isServiceEnabled(item.key, item.legacyKey);
 
-
-    this.services = [
-      {
-        id: 'voice-calling',
-        key: 'voice_agent',
-        isEnabled: isVoiceEnabled,
-        name: 'AI Voice & Dialler',
-        category: 'Voice',
-        description:
-          'Inbound & outbound synthetic voice dialler with automated calling for hot leads, speech-to-text live transcription, and audio recordings.',
-        icon: 'pi pi-phone',
-        brandColor: '#f59e0b',
-        bgGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-        status: !isVoiceEnabled ? 'disabled' : this.companySettings?.auto_call_on_hot_lead ? 'active' : 'configured',
-        statusLabel: !isVoiceEnabled
-          ? 'Disabled'
-          : this.companySettings?.auto_call_on_hot_lead
-          ? 'Active (Auto-Dial On)'
-          : 'Configured',
-        badgeSeverity: !isVoiceEnabled ? 'secondary' : 'success',
-        features: [
-          'Outbound AI Lead Calling',
-          'Live Call Transcripts',
-          'Call Audio Recording & Playback',
-          'Human Agent Handoff Routing',
-        ],
-        configDetails: {
-          displayNumber: '+1 (800) 555-0199',
-          autoReply: this.companySettings?.auto_call_on_hot_lead ?? true,
-          extraNote: 'Twilio Voice Integration Active',
-        },
-      },
-      {
-        id: 'whatsapp',
-        key: 'social.whatsapp',
-        isEnabled: isWhatsappEnabled,
-        name: 'WhatsApp Business API',
-        category: 'Social',
-        description:
-          'Official Meta Cloud API integration for WhatsApp messaging, verified template notifications, and automated 24/7 AI chat replies.',
-        icon: 'pi pi-whatsapp',
-        brandColor: '#25D366',
-        bgGradient: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
-        status: !isWhatsappEnabled ? 'disabled' : whatsappCh?.is_active ? 'active' : whatsappCh ? 'configured' : 'available',
-        statusLabel: !isWhatsappEnabled
-          ? 'Disabled'
-          : whatsappCh?.is_active
-          ? 'Active'
-          : whatsappCh
-          ? 'Connected (Inactive)'
-          : 'Ready to Connect',
-        badgeSeverity: !isWhatsappEnabled
-          ? 'secondary'
-          : whatsappCh?.is_active
-          ? 'success'
-          : whatsappCh
-          ? 'warn'
-          : 'secondary',
-        features: [
-          'Meta Cloud API v21.0',
-          'Automated AI Inbound Replies',
-          'Rich Media & Document Delivery',
-          'Verified Business Number',
-        ],
-        configDetails: {
-          accountName: whatsappCh?.name || 'Main WhatsApp Line',
-          displayNumber: whatsappCh?.display_number || '+1 (555) 019-2834',
-          autoReply: whatsappCh?.auto_reply ?? true,
-          lastActive: whatsappCh?.last_inbound_at || 'Recently active',
-        },
-      },
-      {
-        id: 'messenger',
-        key: 'social.facebook',
-        isEnabled: isMessengerEnabled,
-        name: 'Facebook Messenger',
-        category: 'Social',
-        description:
-          'Meta Page Messenger webhook routing. Engages prospects directly from Facebook ads, post comments, and company page inbox.',
-        icon: 'pi pi-facebook',
-        brandColor: '#0084FF',
-        bgGradient: 'linear-gradient(135deg, #0084FF 0%, #0063E6 100%)',
-        status: !isMessengerEnabled ? 'disabled' : messengerCh?.is_active ? 'active' : messengerCh ? 'configured' : 'available',
-        statusLabel: !isMessengerEnabled
-          ? 'Disabled'
-          : messengerCh?.is_active
-          ? 'Active'
-          : messengerCh
-          ? 'Configured'
-          : 'Ready to Connect',
-        badgeSeverity: !isMessengerEnabled
-          ? 'secondary'
-          : messengerCh?.is_active
-          ? 'success'
-          : messengerCh
-          ? 'warn'
-          : 'secondary',
-        features: [
-          'Page Messaging Webhooks',
-          'Facebook Ads Click-to-Chat Capture',
-          'Instant AI Qualification',
-          'Seamless Human Takeover',
-        ],
-        configDetails: {
-          accountName: messengerCh?.name || 'Facebook Page Inbox',
-          autoReply: messengerCh?.auto_reply ?? true,
-          lastActive: messengerCh?.last_inbound_at || 'Recently active',
-        },
-      },
-      {
-        id: 'instagram',
-        key: 'social.instagram',
-        isEnabled: isInstagramEnabled,
-        name: 'Instagram Direct (DM)',
-        category: 'Social',
-        description:
-          'Automated Instagram Direct message responses, story mention replies, and comment-to-DM conversion funnels.',
-        icon: 'pi pi-instagram',
-        brandColor: '#E4405F',
-        bgGradient: 'linear-gradient(135deg, #E4405F 0%, #833AB4 100%)',
-        status: !isInstagramEnabled ? 'disabled' : instagramCh?.is_active ? 'active' : instagramCh ? 'configured' : 'available',
-        statusLabel: !isInstagramEnabled
-          ? 'Disabled'
-          : instagramCh?.is_active
-          ? 'Active'
-          : instagramCh
-          ? 'Configured'
-          : 'Ready to Connect',
-        badgeSeverity: !isInstagramEnabled
-          ? 'secondary'
-          : instagramCh?.is_active
-          ? 'success'
-          : instagramCh
-          ? 'warn'
-          : 'secondary',
-        features: [
-          'Instagram Business Graph API',
-          'Story Reply Lead Generation',
-          'DM Instant AI Response',
-          'Comment Automation',
-        ],
-        configDetails: {
-          accountHandle: instagramCh?.name || '@techcorp_solutions',
-          autoReply: instagramCh?.auto_reply ?? true,
-          lastActive: instagramCh?.last_inbound_at || 'Active today',
-        },
-      },
-      {
-        id: 'linkedin',
-        key: 'social.linkedin',
-        isEnabled: isLinkedInEnabled,
-        name: 'LinkedIn Automation',
-        category: 'Social',
-        description:
-          'B2B Social outreach and company profile integration with automated connection requests, message sync, and lead discovery.',
-        icon: 'pi pi-linkedin',
-        brandColor: '#0A66C2',
-        bgGradient: 'linear-gradient(135deg, #0A66C2 0%, #004182 100%)',
-        status: !isLinkedInEnabled ? 'disabled' : isLinkedInConnected ? 'active' : 'available',
-        statusLabel: !isLinkedInEnabled
-          ? 'Disabled'
-          : isLinkedInConnected
-          ? 'Connected'
-          : 'Available',
-        badgeSeverity: !isLinkedInEnabled
-          ? 'secondary'
-          : isLinkedInConnected
-          ? 'success'
-          : 'secondary',
-        features: [
-          'LinkedIn OAuth Authorization',
-          'Profile & Company Sync',
-          'Automated Social Outreach',
-          'B2B Lead Qualification',
-        ],
-        configDetails: {
-          accountName: isLinkedInConnected
-            ? `URN: ${this.linkedinStatus?.person_urn || 'Connected'}`
-            : 'Not Connected',
-          extraNote: isLinkedInConnected
-            ? 'Token Valid & Synchronized'
-            : 'Click Connect to authorize OAuth',
-        },
-      },
-      {
-        id: 'sms-email',
-        key: 'email_marketing',
-        isEnabled: isEmailEnabled,
-        name: 'Email Marketing & Outreach',
-        category: 'Messaging',
-        description:
-          'Two-way messaging, transactional email drip campaigns, and automated follow-up triggers.',
-        icon: 'pi pi-envelope',
-        brandColor: '#8b5cf6',
-        bgGradient: 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)',
-        status: !isEmailEnabled ? 'disabled' : 'active',
-        statusLabel: !isEmailEnabled ? 'Disabled' : 'Active',
-        badgeSeverity: !isEmailEnabled ? 'secondary' : 'success',
-        features: [
-          'Automated SMS Follow-ups',
-          'Transactional Email Delivery',
-          'Opt-In / Opt-Out Consent Tracking',
-          'Delivery Status Webhooks',
-        ],
-        configDetails: {
-          displayNumber: '+1 (555) 018-9922',
-          extraNote: 'AWS SES Active',
-        },
-      },
-      {
-        id: 'webchat',
-        key: 'web',
-        isEnabled: true,
-        name: 'Web Chat Widget',
-        category: 'Web',
-        description:
-          'Lightweight embeddable chat widget for client websites with custom brand colors, greeting scripts, and lead capture forms.',
-        icon: 'pi pi-desktop',
-        brandColor: '#6366f1',
-        bgGradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-        status: this.companySettings?.widget_enabled ? 'active' : 'available',
-        statusLabel: this.companySettings?.widget_enabled ? 'Enabled' : 'Disabled',
-        badgeSeverity: this.companySettings?.widget_enabled ? 'success' : 'warn',
-        features: [
-          '1-Line Script Embed Snippet',
-          'Customizable AI Greeting',
-          'RAG Knowledge Base Answering',
-          'Automated Lead Intake Form',
-        ],
-        configDetails: {
-          extraNote: `Greeting: "${this.companySettings?.widget_greeting || 'Hello!'}"`,
-          autoReply: true,
-        },
-      },
-    ];
+      switch (item.id) {
+        case 'voice-calling': {
+          const autoCall = this.companySettings?.auto_call_on_hot_lead;
+          return {
+            ...item,
+            isEnabled,
+            status: !isEnabled ? 'disabled' : autoCall ? 'active' : 'configured',
+            statusLabel: !isEnabled
+              ? 'Disabled'
+              : autoCall
+                ? 'Active (Auto-Dial On)'
+                : 'Configured',
+            badgeSeverity: !isEnabled ? 'secondary' : 'success',
+            configDetails: {
+              ...item.defaultConfig,
+              autoReply: autoCall ?? true,
+            },
+          };
+        }
+        case 'whatsapp': {
+          const isActive = whatsappCh?.is_active;
+          return {
+            ...item,
+            isEnabled,
+            status: !isEnabled
+              ? 'disabled'
+              : isActive
+                ? 'active'
+                : whatsappCh
+                  ? 'configured'
+                  : 'available',
+            statusLabel: !isEnabled
+              ? 'Disabled'
+              : isActive
+                ? 'Active'
+                : whatsappCh
+                  ? 'Connected (Inactive)'
+                  : 'Ready to Connect',
+            badgeSeverity: !isEnabled
+              ? 'secondary'
+              : isActive
+                ? 'success'
+                : whatsappCh
+                  ? 'warn'
+                  : 'secondary',
+            configDetails: {
+              accountName: whatsappCh?.name || item.defaultConfig?.accountName,
+              displayNumber:
+                whatsappCh?.display_number || item.defaultConfig?.displayNumber,
+              autoReply: whatsappCh?.auto_reply ?? true,
+              lastActive: whatsappCh?.last_inbound_at || 'Recently active',
+            },
+          };
+        }
+        case 'messenger': {
+          const isActive = messengerCh?.is_active;
+          return {
+            ...item,
+            isEnabled,
+            status: !isEnabled
+              ? 'disabled'
+              : isActive
+                ? 'active'
+                : messengerCh
+                  ? 'configured'
+                  : 'available',
+            statusLabel: !isEnabled
+              ? 'Disabled'
+              : isActive
+                ? 'Active'
+                : messengerCh
+                  ? 'Configured'
+                  : 'Ready to Connect',
+            badgeSeverity: !isEnabled
+              ? 'secondary'
+              : isActive
+                ? 'success'
+                : messengerCh
+                  ? 'warn'
+                  : 'secondary',
+            configDetails: {
+              accountName: messengerCh?.name || item.defaultConfig?.accountName,
+              autoReply: messengerCh?.auto_reply ?? true,
+              lastActive: messengerCh?.last_inbound_at || 'Recently active',
+            },
+          };
+        }
+        case 'instagram': {
+          const isActive = instagramCh?.is_active;
+          return {
+            ...item,
+            isEnabled,
+            status: !isEnabled
+              ? 'disabled'
+              : isActive
+                ? 'active'
+                : instagramCh
+                  ? 'configured'
+                  : 'available',
+            statusLabel: !isEnabled
+              ? 'Disabled'
+              : isActive
+                ? 'Active'
+                : instagramCh
+                  ? 'Configured'
+                  : 'Ready to Connect',
+            badgeSeverity: !isEnabled
+              ? 'secondary'
+              : isActive
+                ? 'success'
+                : instagramCh
+                  ? 'warn'
+                  : 'secondary',
+            configDetails: {
+              accountHandle:
+                instagramCh?.name || item.defaultConfig?.accountHandle,
+              autoReply: instagramCh?.auto_reply ?? true,
+              lastActive: instagramCh?.last_inbound_at || 'Active today',
+            },
+          };
+        }
+        case 'linkedin': {
+          return {
+            ...item,
+            isEnabled,
+            status: !isEnabled
+              ? 'disabled'
+              : isLinkedInConnected
+                ? 'active'
+                : 'available',
+            statusLabel: !isEnabled
+              ? 'Disabled'
+              : isLinkedInConnected
+                ? 'Connected'
+                : 'Available',
+            badgeSeverity: !isEnabled
+              ? 'secondary'
+              : isLinkedInConnected
+                ? 'success'
+                : 'secondary',
+            configDetails: {
+              accountName: isLinkedInConnected
+                ? `URN: ${this.linkedinStatus?.person_urn || 'Connected'}`
+                : 'Not Connected',
+              extraNote: isLinkedInConnected
+                ? 'Token Valid & Synchronized'
+                : 'Click Connect to authorize OAuth',
+            },
+          };
+        }
+        case 'sms-email': {
+          return {
+            ...item,
+            isEnabled,
+            status: !isEnabled ? 'disabled' : 'active',
+            statusLabel: !isEnabled ? 'Disabled' : 'Active',
+            badgeSeverity: !isEnabled ? 'secondary' : 'success',
+            configDetails: {
+              ...item.defaultConfig,
+            },
+          };
+        }
+        case 'webchat': {
+          const isWidgetActive = !!this.companySettings?.widget_enabled;
+          return {
+            ...item,
+            isEnabled: true,
+            status: isWidgetActive ? 'active' : 'available',
+            statusLabel: isWidgetActive ? 'Enabled' : 'Disabled',
+            badgeSeverity: isWidgetActive ? 'success' : 'warn',
+            configDetails: {
+              extraNote: `Greeting: "${this.companySettings?.widget_greeting || 'Hello!'}"`,
+              autoReply: true,
+            },
+          };
+        }
+        default:
+          return {
+            ...item,
+            isEnabled,
+            status: 'available',
+            statusLabel: 'Available',
+            badgeSeverity: 'secondary',
+          };
+      }
+    });
   }
 
   toggleActiveStatus(): void {
@@ -534,23 +570,25 @@ export class ClientDetailComponent implements OnInit {
       icon: 'pi pi-exclamation-triangle',
       acceptButtonStyleClass: 'p-button-danger',
       accept: () => {
-        this.companyService.deleteCompany(this.company!.id, this.company!.id).subscribe({
-          next: () => {
-            this.messageService.add({
-              severity: 'success',
-              summary: 'Deleted',
-              detail: 'Company workspace deleted successfully',
-            });
-            this.router.navigate(['/admin/clients/list']);
-          },
-          error: (err) => {
-            this.messageService.add({
-              severity: 'error',
-              summary: 'Delete Failed',
-              detail: err?.error?.message || 'Failed to delete workspace',
-            });
-          },
-        });
+        this.companyService
+          .deleteCompany(this.company!.id, this.company!.id)
+          .subscribe({
+            next: () => {
+              this.messageService.add({
+                severity: 'success',
+                summary: 'Deleted',
+                detail: 'Company workspace deleted successfully',
+              });
+              this.router.navigate(['/admin/clients/list']);
+            },
+            error: (err) => {
+              this.messageService.add({
+                severity: 'error',
+                summary: 'Delete Failed',
+                detail: err?.error?.message || 'Failed to delete workspace',
+              });
+            },
+          });
       },
     });
   }
@@ -571,6 +609,6 @@ export class ClientDetailComponent implements OnInit {
   }
 
   getWidgetEmbedSnippet(): string {
-    return `<script src="https://cdn.leadai.com/widget.js" data-company-id="${this.companyId}" async></script>`;
+    return `<script src="${WIDGET_EMBED_CONFIG.scriptSrc}" data-company-id="${this.companyId}" async></script>`;
   }
 }

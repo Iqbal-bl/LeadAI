@@ -1,5 +1,5 @@
 <p-dialog
-  header="Create Campaign"
+  [header]="isEditMode ? 'Edit Campaign' : 'Create Campaign'"
   [(visible)]="visible"
   [modal]="true"
   [style]="{ width: '720px', maxHeight: '90vh' }"
@@ -34,6 +34,8 @@
         <p-dropdown
           [options]="kindOptions"
           [(ngModel)]="kind"
+          (ngModelChange)="onKindChange()"
+          [disabled]="isEditMode"
           optionLabel="label"
           optionValue="value"
           class="w-full"
@@ -50,6 +52,7 @@
           [options]="channelOptions"
           [(ngModel)]="channel"
           (ngModelChange)="onChannelChange()"
+          [disabled]="isEditMode"
           optionLabel="label"
           optionValue="value"
           class="w-full"
@@ -68,6 +71,7 @@
       <p-dropdown
         [options]="accountsForChannel"
         [(ngModel)]="channelAccountId"
+        [disabled]="isEditMode"
         optionLabel="name"
         optionValue="id"
         placeholder="Select a connected account"
@@ -85,7 +89,7 @@
     </div>
 
     <!-- Purpose -->
-    <div>
+    <div *ngIf="!isEditMode">
       <label
         class="block text-sm font-medium mb-1"
         style="color: var(--app-text)"
@@ -118,8 +122,8 @@
       </small>
     </div>
 
-    <!-- Audience -->
-    <div>
+    <!-- Audience (Only when creating) -->
+    <div *ngIf="!isEditMode">
       <label
         class="block text-sm font-medium mb-1"
         style="color: var(--app-text)"
@@ -152,6 +156,12 @@
       ></p-dropdown>
     </div>
 
+    <!-- Notice in Edit Mode -->
+    <div *ngIf="isEditMode" class="text-xs text-slate-400 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex items-center gap-2">
+      <i class="pi pi-info-circle text-indigo-500"></i>
+      <span>Kind, channel, and audience recipients are fixed once a campaign has been created.</span>
+    </div>
+
     <!-- Body / Template -->
     <div>
       <label
@@ -167,8 +177,7 @@
         placeholder="Hi {{ name }}, we have an exclusive offer for you..."
       ></textarea>
       <div
-        class="flex flex-wrap gap-1 mt-2"
-        *ngIf="availableVariables.length > 0"
+        class="flex flex-wrap items-center gap-1 mt-2"
       >
         <span class="text-xs mr-1" style="color: var(--app-text-muted)"
           >Variables:</span
@@ -185,51 +194,156 @@
         >
           {{ '{{' + v + '}}' }}
         </span>
+        <button
+          type="button"
+          (click)="insertToken('{agent}')"
+          class="px-2 py-0.5 rounded text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors"
+          title="Insert {agent} token"
+        >
+          &#123;agent&#125;
+        </button>
+        <button
+          type="button"
+          (click)="insertToken('{company}')"
+          class="px-2 py-0.5 rounded text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors"
+          title="Insert {company} token"
+        >
+          &#123;company&#125;
+        </button>
+      </div>
+      <p class="text-xs mt-1 text-slate-500 dark:text-slate-400">
+        <code>&#123;agent&#125;</code> and <code>&#123;company&#125;</code> are replaced automatically.
+      </p>
+    </div>
+
+    <!-- Execution Timing (Start now vs Schedule for later) -->
+    <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 space-y-3">
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+          Execution Timing
+        </label>
+        <div class="flex items-center gap-6">
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            <input
+              type="radio"
+              name="scheduleMode"
+              value="now"
+              [(ngModel)]="scheduleMode"
+              class="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+            />
+            Start now (or manual trigger)
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            <input
+              type="radio"
+              name="scheduleMode"
+              value="later"
+              [(ngModel)]="scheduleMode"
+              class="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+            />
+            Schedule for later
+          </label>
+        </div>
+      </div>
+
+      <div *ngIf="scheduleMode === 'later'" class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+            Scheduled Date & Time *
+          </label>
+          <input
+            pInputText
+            type="datetime-local"
+            [(ngModel)]="scheduledAt"
+            class="w-full text-sm"
+          />
+          <small class="text-xs text-slate-400 block mt-1">
+            Plain local date-time (no UTC conversion)
+          </small>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+            Timezone
+          </label>
+          <p-dropdown
+            [(ngModel)]="timezone"
+            [options]="timezoneOptions"
+            optionLabel="label"
+            optionValue="value"
+            styleClass="w-full text-sm"
+            placeholder="Select Timezone"
+          ></p-dropdown>
+          <small class="text-xs text-slate-400 block mt-1">
+            Platform default: Asia/Kolkata
+          </small>
+        </div>
       </div>
     </div>
 
-    <!-- Optional: Schedule, Concurrency, Rate Limit -->
-    <div class="grid grid-cols-3 gap-3">
-      <div>
-        <label
-          class="block text-xs font-medium mb-1"
-          style="color: var(--app-text-muted)"
-          >Schedule (optional)</label
-        >
-        <input
-          pInputText
-          type="datetime-local"
-          [(ngModel)]="scheduledAt"
-          class="w-full"
-        />
-      </div>
-      <div>
-        <label
-          class="block text-xs font-medium mb-1"
-          style="color: var(--app-text-muted)"
-          >Concurrency</label
-        >
-        <input
-          pInputText
-          type="number"
+    <!-- Optional: Concurrency (call), Rate Limit (message) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- Max simultaneous calls (Only for call campaigns) -->
+      <div *ngIf="kind === 'call'">
+        <div class="flex items-center justify-between mb-1">
+          <label
+            class="block text-sm font-medium"
+            style="color: var(--app-text)"
+            >Max simultaneous calls</label
+          >
+          <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+            1–50 (default 5)
+          </span>
+        </div>
+        <p-inputNumber
           [(ngModel)]="concurrency"
-          placeholder="Auto"
+          [min]="1"
+          [max]="50"
+          [step]="1"
+          [showButtons]="true"
+          buttonLayout="horizontal"
+          spinnerMode="horizontal"
+          incrementButtonIcon="pi pi-plus"
+          decrementButtonIcon="pi pi-minus"
+          placeholder="5"
           class="w-full"
-        />
-      </div>
-      <div>
-        <label
-          class="block text-xs font-medium mb-1"
+          styleClass="w-full"
+          inputStyleClass="w-full text-center font-semibold"
+        ></p-inputNumber>
+        <small
+          class="text-xs mt-1 block"
           style="color: var(--app-text-muted)"
-          >Rate Limit / sec</label
+        >
+          How many calls can be ringing/in-progress at once for this campaign.
+        </small>
+        <small
+          *ngIf="concurrency !== null && !isConcurrencyValid"
+          class="text-xs text-rose-500 mt-1 block font-medium"
+        >
+          Please enter an integer between 1 and 50.
+        </small>
+      </div>
+
+      <!-- Rate Limit / sec (Only for message campaigns) -->
+      <div *ngIf="kind === 'message'">
+        <label
+          class="block text-sm font-medium mb-1"
+          style="color: var(--app-text)"
+          >Rate Limit / sec (optional)</label
         >
         <input
           pInputText
           type="number"
+          min="1"
           [(ngModel)]="rateLimit"
           placeholder="Auto"
           class="w-full"
         />
+        <small
+          class="text-xs mt-1 block"
+          style="color: var(--app-text-muted)"
+        >
+          Throughput is governed by rate limit for messaging.
+        </small>
       </div>
     </div>
 
@@ -241,7 +355,7 @@
         (onClick)="onClose()"
       ></p-button>
       <p-button
-        label="Create Draft"
+        [label]="isEditMode ? 'Save Changes' : 'Create Draft'"
         icon="pi pi-check"
         [disabled]="!canSave"
         [loading]="saving"

@@ -1,4 +1,5 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { SharedModule } from '../../shared/shared.module';
 import { LinkedinService } from '../../services/linkedin.service';
 import {
@@ -10,6 +11,7 @@ import {
   LinkedInMessage,
   LinkedInSocialComment,
   LinkedInCommentSettings,
+  LinkedInAutoConnectSettings,
 } from '../../models/linkedin.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../shared/services/confirmation.service';
@@ -31,6 +33,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   oauthLoading = false;
   private pollingInterval: any = null;
   private messageListener: any = null;
+  private chatPollingInterval: any = null;
+  private activeMessageSub?: Subscription;
 
   // Bot Session Credentials (Cookie or Email & Password)
   authMode: 'cookie' | 'credentials' = 'cookie';
@@ -44,6 +48,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   // Auto-Accept & Automation Settings
   autoAcceptEnabled = false;
+  autoDmLeadsEnabled = true;
   welcomeMessage =
     'Hi {name},\n\nThanks for connecting! Looking forward to staying in touch and exploring potential collaborations.';
   savingSettings = false;
@@ -53,6 +58,28 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   invitations: LinkedInInvitationItem[] = [];
   loadingInvitations = false;
   acceptingAll = false;
+
+  // Auto-Pilot Outreach & Randomized Connection Scheduler
+  autoConnectSettings: LinkedInAutoConnectSettings = {
+    enabled: false,
+    runs_per_day: 3,
+    profiles_per_run: 5,
+    target_prompt: 'Senior React & Node.js Developers in Bengaluru',
+    target_keywords: '',
+    custom_message: 'Hi {firstName}, I came across your profile and was really impressed by your background. Would love to connect!',
+    active_hours_start: 9,
+    active_hours_end: 19,
+    last_run_at: null,
+    next_run_at: null,
+    total_sent_today: 0,
+    total_sent_all_time: 0,
+    last_run_status: null,
+    last_run_detail: null,
+  };
+  loadingAutoConnect = false;
+  savingAutoConnect = false;
+  triggeringAutoConnect = false;
+  isGeneratingAutoKeywords = false;
 
   // AI Boolean Keyword Search
   aiPrompt = 'Senior React & Node.js Developers in Bengaluru';
@@ -79,6 +106,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   messages: LinkedInMessage[] = [];
   loadingConversations = false;
   loadingMessages = false;
+  syncingThreadMessages = false;
+  loadingPreviousMessages = false;
+  hasNoEarlierMessages = false;
   sendingMessage = false;
   replyMessageText = '';
   syncingMessages = false;
@@ -130,8 +160,39 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearPolling();
+    this.stopChatPolling();
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     if (this.messageListener) {
       window.removeEventListener('message', this.messageListener);
+    }
+  }
+
+  onTabChange(tab: any): void {
+    this.activeTab = tab;
+    if (tab !== 'messages') {
+      this.stopChatPolling();
+      if (this.activeMessageSub) {
+        this.activeMessageSub.unsubscribe();
+        this.activeMessageSub = undefined;
+        this.loadingMessages = false;
+        this.syncingThreadMessages = false;
+      }
+    } else {
+      if (this.conversations.length === 0) {
+        this.loadConversations();
+      } else if (this.selectedConversation) {
+        const hasLoadedMessages = this.messages && this.messages.length > 0;
+        this.selectConversation(this.selectedConversation, hasLoadedMessages);
+      }
+    }
+    if (tab === 'comments' && this.comments.length === 0 && !this.loadingComments) {
+      this.loadComments();
+    }
+    if (tab === 'search') {
+      this.loadAutoConnectSettings();
     }
   }
 
@@ -144,6 +205,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.statusLoading = false;
         if (res) {
           this.autoAcceptEnabled = !!res['auto_accept'];
+          this.autoDmLeadsEnabled = res['auto_dm_leads'] !== false;
           if (res['welcome_message']) {
             this.welcomeMessage = res['welcome_message'];
           }
@@ -152,6 +214,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.loadConversations();
             this.loadCommentSettings();
             this.loadComments();
+            this.loadAutoConnectSettings();
           }
         }
       },
@@ -306,6 +369,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       next: () => {
         this.savingCredentials = false;
         this.showCredentialsSuccess = true;
+        this.credentialsForm.password = '';
         this.messageService.add({
           severity: 'success',
           summary: 'Credentials Saved',
@@ -376,6 +440,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       .saveSettings({
         auto_accept: this.autoAcceptEnabled,
         welcome_message: this.welcomeMessage.trim() || null,
+        auto_dm_leads: this.autoDmLeadsEnabled,
       })
       .subscribe({
         next: () => {
@@ -383,7 +448,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Settings Saved',
-            detail: 'LinkedIn auto-accept and welcome messaging rules updated.',
+            detail: 'LinkedIn automation rules and CRM lead settings updated.',
           });
           this.loadStatus();
         },
@@ -580,6 +645,163 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  // --- Auto-Pilot Scheduler ---
+  loadAutoConnectSettings(): void {
+    this.loadingAutoConnect = true;
+    this.linkedinService.getAutoConnectSettings().subscribe({
+      next: (res) => {
+        this.loadingAutoConnect = false;
+        if (res?.settings) {
+          this.autoConnectSettings = {
+            ...this.autoConnectSettings,
+            ...res.settings,
+          };
+          if (!this.autoConnectSettings.custom_message && this.autoConnectSettings.custom_message !== '') {
+            this.autoConnectSettings.custom_message =
+              'Hi {firstName}, I came across your profile and was really impressed by your background. Would love to connect!';
+          }
+        }
+      },
+      error: (err) => {
+        this.loadingAutoConnect = false;
+        console.error('Failed to load auto-connect settings:', err);
+      },
+    });
+  }
+
+  saveAutoConnectSettings(): void {
+    if (
+      this.autoConnectSettings.enabled &&
+      !this.autoConnectSettings.target_keywords?.trim() &&
+      !this.autoConnectSettings.target_prompt?.trim()
+    ) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Target Criteria Required',
+        detail:
+          'Please specify a target candidate description or boolean search keywords before enabling Auto-Pilot.',
+      });
+      return;
+    }
+
+    this.savingAutoConnect = true;
+    this.linkedinService
+      .saveAutoConnectSettings(this.autoConnectSettings)
+      .subscribe({
+        next: (res) => {
+          this.savingAutoConnect = false;
+          if (res?.settings) {
+            this.autoConnectSettings = {
+              ...this.autoConnectSettings,
+              ...res.settings,
+            };
+          }
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Auto-Pilot Schedule Saved',
+            detail: this.autoConnectSettings.enabled
+              ? `Auto-Pilot is ACTIVE: ${this.autoConnectSettings.runs_per_day} randomized runs/day scheduled.`
+              : 'Auto-Pilot schedule settings saved (Paused).',
+          });
+        },
+        error: (err) => {
+          this.savingAutoConnect = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Save Failed',
+            detail:
+              err?.error?.detail ||
+              'Could not save Auto-Pilot schedule settings.',
+          });
+        },
+      });
+  }
+
+  triggerAutoConnectNow(): void {
+    if (
+      !this.autoConnectSettings.target_keywords?.trim() &&
+      !this.autoConnectSettings.target_prompt?.trim()
+    ) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Target Criteria Missing',
+        detail:
+          'Please provide target keywords or a prompt before triggering a run.',
+      });
+      return;
+    }
+
+    this.triggeringAutoConnect = true;
+    this.linkedinService.triggerAutoConnectNow().subscribe({
+      next: (res) => {
+        this.triggeringAutoConnect = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Auto-Pilot Run Dispatched',
+          detail:
+            'Candidate search and connection dispatch started in background.',
+        });
+        setTimeout(() => this.loadAutoConnectSettings(), 4000);
+      },
+      error: (err) => {
+        this.triggeringAutoConnect = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Dispatch Failed',
+          detail:
+            err?.error?.detail ||
+            'Could not trigger immediate auto-connect run.',
+        });
+      },
+    });
+  }
+
+  generateAutoKeywords(): void {
+    if (!this.autoConnectSettings.target_prompt?.trim()) return;
+
+    this.isGeneratingAutoKeywords = true;
+    this.linkedinService
+      .generateKeywords(this.autoConnectSettings.target_prompt.trim())
+      .subscribe({
+        next: (res) => {
+          this.isGeneratingAutoKeywords = false;
+          this.autoConnectSettings.target_keywords = res.keywords || '';
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Keywords Generated',
+            detail: 'Auto-Pilot boolean search keywords updated.',
+          });
+        },
+        error: (err) => {
+          this.isGeneratingAutoKeywords = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Keyword Generation Failed',
+            detail:
+              err?.error?.detail || 'Could not generate boolean search keywords.',
+          });
+        },
+      });
+  }
+
+  applyAutoConnectPreset(templateText: string): void {
+    this.autoConnectSettings.custom_message = templateText;
+  }
+
+  copyAutoKeywordsToSearch(): void {
+    if (this.autoConnectSettings.target_keywords) {
+      this.generatedKeywords = this.autoConnectSettings.target_keywords;
+    }
+    if (this.autoConnectSettings.target_prompt) {
+      this.aiPrompt = this.autoConnectSettings.target_prompt;
+    }
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Copied to Search Bar',
+      detail: 'Target keywords copied to manual search controls above.',
+    });
+  }
+
   // --- Candidate Search ---
   searchCandidates(): void {
     const query = this.generatedKeywords.trim() || this.aiPrompt.trim();
@@ -727,7 +949,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.applyConversationFilter();
         if (this.conversations.length > 0) {
           if (!this.selectedConversation) {
-            this.selectConversation(this.conversations[0]);
+            this.selectedConversation = this.conversations[0];
+            if (this.activeTab === 'messages') {
+              this.selectConversation(this.conversations[0]);
+            }
           } else {
             const found = this.conversations.find(
               (c) =>
@@ -755,33 +980,102 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  selectConversation(conv: LinkedInConversation): void {
+  selectConversation(conv: LinkedInConversation, isBackgroundRefresh = false): void {
+    if (this.activeTab !== 'messages') {
+      this.stopChatPolling();
+      return;
+    }
     this.selectedConversation = conv;
     if (!conv.is_read || (conv.unread_count && conv.unread_count > 0)) {
       conv.is_read = true;
       conv.unread_count = 0;
       this.updateUnreadCount();
     }
-    this.messages = [];
-    this.loadingMessages = true;
+    if (!isBackgroundRefresh) {
+      this.messages = [];
+      this.loadingMessages = true;
+      this.syncingThreadMessages = false;
+      this.hasNoEarlierMessages = false;
+    } else {
+      this.syncingThreadMessages = true;
+    }
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     const convId = conv.conversation_id || conv.conversation_urn;
-    this.linkedinService.getConversationMessages(convId).subscribe({
+    this.activeMessageSub = this.linkedinService.getConversationMessages(convId).subscribe({
       next: (res) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
-        this.messages = res.messages || [];
-        this.scrollToBottom();
+        this.syncingThreadMessages = false;
+        if (this.activeTab !== 'messages') {
+          this.stopChatPolling();
+          return;
+        }
+        const incoming = res.messages || [];
+        if (!isBackgroundRefresh || incoming.length !== this.messages.length) {
+          const hadMessages = this.messages.length > 0;
+          this.messages = incoming;
+          if (!hadMessages || incoming.length > this.messages.length) {
+            this.scrollToBottom();
+          }
+          if (incoming.length > 0) {
+            conv.last_message = incoming[incoming.length - 1].text;
+          }
+        }
+        if (!isBackgroundRefresh && this.activeTab === 'messages') {
+          this.startChatPolling();
+          // Quick follow-up sync after 2.5s to capture remaining streamed messages without waiting 15s
+          setTimeout(() => {
+            if (this.activeTab === 'messages' && this.selectedConversation === conv) {
+              this.selectConversation(conv, true);
+            }
+          }, 2500);
+        }
       },
       error: (err) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Message Fetch Failed',
-          detail:
-            err?.error?.detail ||
-            'Could not load conversation thread messages.',
-        });
+        this.syncingThreadMessages = false;
+        if (!isBackgroundRefresh && this.activeTab === 'messages') {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Message Fetch Failed',
+            detail:
+              err?.error?.detail ||
+              'Could not load conversation thread messages.',
+          });
+        }
       },
     });
+  }
+
+  private startChatPolling(): void {
+    this.stopChatPolling();
+    if (this.activeTab !== 'messages') return;
+    this.chatPollingInterval = setInterval(() => {
+      // Pause polling if tab is not messages or browser window is hidden/minimized
+      if (this.activeTab !== 'messages' || typeof document !== 'undefined' && document.hidden) {
+        if (this.activeTab !== 'messages') this.stopChatPolling();
+        return;
+      }
+      if (
+        this.selectedConversation &&
+        !this.loadingMessages &&
+        !this.syncingThreadMessages &&
+        !this.sendingMessage
+      ) {
+        this.selectConversation(this.selectedConversation, true);
+      }
+    }, 20000);
+  }
+
+  private stopChatPolling(): void {
+    if (this.chatPollingInterval) {
+      clearInterval(this.chatPollingInterval);
+      this.chatPollingInterval = null;
+    }
   }
 
   sendDirectReply(): void {
@@ -884,15 +1178,69 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     return this.unreadConversationsCount;
   }
 
+  getLeadIntentLabel(intent?: string): string {
+    if (!intent) return 'CRM Lead';
+    if (intent === 'demo_request') return 'Demo Inquiry';
+    if (intent === 'pricing_inquiry') return 'Pricing Inquiry';
+    if (intent === 'consultation_request') return 'Consultation Request';
+    return 'CRM Lead';
+  }
+
+  loadPreviousMessages(): void {
+    if (
+      !this.selectedConversation ||
+      this.loadingPreviousMessages ||
+      this.loadingMessages ||
+      this.hasNoEarlierMessages
+    ) {
+      return;
+    }
+    this.loadingPreviousMessages = true;
+    const conv = this.selectedConversation;
+    const convId = conv.conversation_id || conv.conversation_urn;
+    this.linkedinService.getConversationMessages(convId, true).subscribe({
+      next: (res) => {
+        this.loadingPreviousMessages = false;
+        const incoming = res.messages || [];
+        if (incoming.length > this.messages.length) {
+          const chatContainer = document.getElementById(
+            'linkedin-chat-messages-container',
+          );
+          const oldScrollHeight = chatContainer ? chatContainer.scrollHeight : 0;
+          this.messages = incoming;
+          setTimeout(() => {
+            if (chatContainer) {
+              chatContainer.scrollTop =
+                chatContainer.scrollHeight - oldScrollHeight;
+            }
+          }, 60);
+        } else {
+          // All earlier messages are already loaded
+          this.hasNoEarlierMessages = true;
+        }
+      },
+      error: () => {
+        this.loadingPreviousMessages = false;
+      },
+    });
+  }
+
   private scrollToBottom(): void {
-    setTimeout(() => {
+    const doScroll = () => {
+      const anchor = document.getElementById('chat-bottom-anchor');
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: 'auto', block: 'end' });
+      }
       const chatContainer = document.getElementById(
         'linkedin-chat-messages-container',
       );
       if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
-    }, 60);
+    };
+    setTimeout(doScroll, 50);
+    setTimeout(doScroll, 180);
+    setTimeout(doScroll, 400);
   }
 
   // =========================================================================

@@ -93,6 +93,7 @@ class LeadAISettings:
     voice_pipecat_numbers: str = os.getenv("VOICE_PIPECAT_NUMBERS", "")
     conversation_lock: bool = _b("LEADAI_CONVERSATION_LOCK", "false")
     conversation_lock_timeout: int = _i("LEADAI_CONVERSATION_LOCK_TIMEOUT", 30)
+    scoring_workers: int = _i("LEADAI_SCORING_WORKERS", 4)
     handoff_confidence_threshold: float = _f("LEADAI_HANDOFF_THRESHOLD", 0.40)
     chunk_max_chars: int = _i("LEADAI_CHUNK_MAX_CHARS", 900)
     chunk_overlap: int = _i("LEADAI_CHUNK_OVERLAP", 150)
@@ -284,6 +285,8 @@ class LeadAISettings:
     razorpay_key_secret: str | None = os.getenv("RAZORPAY_KEY_SECRET") or None
     razorpay_webhook_secret: str | None = os.getenv("RAZORPAY_WEBHOOK_SECRET") or None
     razorpay_mandate_max_amount: float = _f("RAZORPAY_MANDATE_MAX_AMOUNT", 15000.0)
+    enable_gst: bool = _b("ENABLE_GST", "false")
+    gst_rate: float = _f("GST_RATE", 0.18)
 
     @property
     def minio_enabled(self) -> bool:

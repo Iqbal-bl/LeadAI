@@ -1,23 +1,66 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
+import { AuthService } from './auth.service';
 import {
   Campaign,
   CampaignCreateRequest,
+  CampaignUpdateRequest,
   CampaignHistoryResponse,
   CampaignPreview,
   CampaignRecipient,
+  CampaignExecution,
+  CampaignExecutionListResponse,
+  CampaignExecutionAttemptsResponse,
+  RestartMode,
 } from '../models/campaign.models';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root',
 })
 export class CampaignService {
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private authService: AuthService,
+  ) {}
 
-  /** GET /campaigns — list all campaigns */
-  public getCampaigns(): Observable<Campaign[]> {
+  /** GET /campaigns/{id}/export — URL for direct browser CSV report download */
+  public getExportUrl(id: string, executionId?: string): string {
+    const isPlatformAdmin = this.authService.isPlatformAdmin();
+    const currentCompanyId = this.authService.getSelectedCompanyId();
+    const token = this.authService.getStaffToken();
+    const params = new URLSearchParams();
+    if (token) {
+      params.append('token', token);
+    }
+    if (isPlatformAdmin && currentCompanyId) {
+      params.append('client_id', currentCompanyId);
+    }
+    if (executionId) {
+      params.append('execution_id', executionId);
+    }
+    const query = params.toString();
+    const base = `${environment.apiPrefix}/campaigns/${id}/export`;
+    return query ? `${base}?${query}` : base;
+  }
+
+  /** Trigger CSV export download in new browser tab / prompt */
+  public downloadExport(id: string, executionId?: string): void {
+    const url = this.getExportUrl(id, executionId);
+    window.open(url, '_blank');
+  }
+
+  /** GET /campaigns — list all campaigns with optional filters (campaign_type, status, kind, page, page_size) */
+  public getCampaigns(params?: {
+    campaign_type?: 'broadcast' | 'lead_campaign' | string;
+    status?: string;
+    kind?: string;
+    page?: number;
+    page_size?: number;
+  }): Observable<Campaign[]> {
     return this.apiService.get<Campaign[]>('campaigns', {
+      params: params as any,
       companyScoped: true,
     });
   }
@@ -36,6 +79,16 @@ export class CampaignService {
     });
   }
 
+  /** PATCH /campaigns/{id} — update campaign fields */
+  public updateCampaign(
+    id: string,
+    req: CampaignUpdateRequest | Partial<CampaignCreateRequest>,
+  ): Observable<Campaign> {
+    return this.apiService.patch<Campaign>(`campaigns/${id}`, req, {
+      companyScoped: true,
+    });
+  }
+
   /** POST /campaigns/{id}/build — materialise recipient rows */
   public buildCampaign(id: string): Observable<any> {
     return this.apiService.post<any>(`campaigns/${id}/build`, null, {
@@ -50,9 +103,12 @@ export class CampaignService {
     });
   }
 
-  /** POST /campaigns/{id}/start — queue the campaign (requires campaign.send) */
-  public startCampaign(id: string): Observable<any> {
-    return this.apiService.post<any>(`campaigns/${id}/start`, null, {
+  /** POST /campaigns/{id}/start — queue or restart campaign with optional restart_mode */
+  public startCampaign(id: string, restartMode?: RestartMode): Observable<any> {
+    const path = restartMode
+      ? `campaigns/${id}/start?restart_mode=${restartMode}`
+      : `campaigns/${id}/start`;
+    return this.apiService.post<any>(path, null, {
       companyScoped: true,
     });
   }
@@ -120,4 +176,42 @@ export class CampaignService {
       },
     );
   }
+
+  /** GET /campaigns/{id}/executions — paginated, newest-first list of runs */
+  public getExecutions(
+    id: string,
+    page: number = 1,
+    pageSize: number = 50,
+  ): Observable<CampaignExecutionListResponse> {
+    return this.apiService.get<CampaignExecutionListResponse>(
+      `campaigns/${id}/executions`,
+      {
+        params: {
+          page: page.toString(),
+          page_size: pageSize.toString(),
+        },
+        companyScoped: true,
+      },
+    );
+  }
+
+  /** GET /campaigns/{campaign_id}/executions/{execution_id}/attempts — paginated call execution attempts */
+  public getExecutionAttempts(
+    campaignId: string,
+    executionId: string,
+    page: number = 1,
+    pageSize: number = 50,
+  ): Observable<CampaignExecutionAttemptsResponse> {
+    return this.apiService.get<CampaignExecutionAttemptsResponse>(
+      `campaigns/${campaignId}/executions/${executionId}/attempts`,
+      {
+        params: {
+          page: page.toString(),
+          page_size: pageSize.toString(),
+        },
+        companyScoped: true,
+      },
+    );
+  }
 }
+

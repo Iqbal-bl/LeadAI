@@ -131,6 +131,26 @@
         *ngIf="activeTab === 'ai'"
         class="card-base p-6 mt-4 max-w-2xl space-y-6"
       >
+        <!-- Agent Name Field -->
+        <div>
+          <label
+            class="text-xs font-semibold uppercase tracking-wider block mb-1"
+            style="color: var(--app-text)"
+            >Agent Name</label
+          >
+          <input
+            pInputText
+            type="text"
+            [(ngModel)]="agentName"
+            maxlength="80"
+            placeholder="e.g. Ritu"
+            class="w-full text-sm"
+          />
+          <p class="text-xs mt-1" style="color: var(--app-text-muted)">
+            Used wherever a script or prompt writes <code>&#123;agent&#125;</code> — change it once here instead of editing every script.
+          </p>
+        </div>
+
         <div>
           <label
             class="text-xs font-semibold uppercase tracking-wider block mb-2"
@@ -205,10 +225,52 @@
           <p-inputSwitch [(ngModel)]="aiConfig.enableSentiment"></p-inputSwitch>
         </div>
 
+        <!-- Read-only Voice Settings (Managed by Super Admin) -->
+        <div
+          class="p-4 rounded-xl border border-solid space-y-2.5"
+          style="background: var(--app-surface-alt, #f8fafc); border-color: var(--card-border)"
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="pi pi-lock text-slate-400 text-xs"></i>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Platform Voice Profile
+              </span>
+            </div>
+            <p-tag
+              value="Read-Only"
+              severity="secondary"
+              [rounded]="true"
+            ></p-tag>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Voice Gender</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 capitalize">{{ companySettings?.voice_gender || 'female' }}</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Speed</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200">{{ companySettings?.voice_speed ?? 1.1 }}x</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">Voice Speaker</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 capitalize">{{ companySettings?.voice_speaker || 'anushka' }}</span>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-semibold">STT/TTS Provider</span>
+              <span class="font-semibold text-slate-700 dark:text-slate-200 uppercase">{{ companySettings?.stt_tts_provider || 'sarvam' }}</span>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+            Company-wide voice persona and STT/TTS engine are managed exclusively through the super-admin console.
+          </p>
+        </div>
+
         <div class="pt-4 flex justify-end">
           <p-button
-            label="Update AI Config"
+            label="Save Settings"
             icon="pi pi-check"
+            [loading]="savingAiConfig"
             (click)="saveAiConfig()"
             [style]="{
               background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
@@ -299,7 +361,10 @@
             </span>
           </div>
           <p class="text-xs" style="color: var(--app-text-muted)">
-            Control which roles in your company can reveal unmasked customer contact details (phone, email, WhatsApp, Instagram) in the conversation view. Every reveal action is recorded in the activity audit log.
+            Control which roles in your company can reveal unmasked customer
+            contact details (phone, email, WhatsApp, Instagram) in the
+            conversation view. Every reveal action is recorded in the activity
+            audit log.
           </p>
         </div>
 
@@ -313,7 +378,8 @@
               Managers can reveal customer contact details
             </div>
             <div class="text-xs" style="color: var(--app-text-muted)">
-              Allows team members with the Manager role to view real customer phone and email.
+              Allows team members with the Manager role to view real customer
+              phone and email.
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -323,7 +389,11 @@
             ></i>
             <p-inputSwitch
               [ngModel]="managerCanReveal"
-              [disabled]="savingManager || loadingPermissions || managerCanReveal === undefined"
+              [disabled]="
+                savingManager ||
+                loadingPermissions ||
+                managerCanReveal === undefined
+              "
               (onChange)="setRolePermission('manager', $event.checked)"
             ></p-inputSwitch>
           </div>
@@ -339,7 +409,8 @@
               Employees can reveal customer contact details
             </div>
             <div class="text-xs" style="color: var(--app-text-muted)">
-              Allows agents and staff with the Employee role to decrypt and reveal customer contacts.
+              Allows agents and staff with the Employee role to decrypt and
+              reveal customer contacts.
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -349,7 +420,11 @@
             ></i>
             <p-inputSwitch
               [ngModel]="employeeCanReveal"
-              [disabled]="savingEmployee || loadingPermissions || employeeCanReveal === undefined"
+              [disabled]="
+                savingEmployee ||
+                loadingPermissions ||
+                employeeCanReveal === undefined
+              "
               (onChange)="setRolePermission('employee', $event.checked)"
             ></p-inputSwitch>
           </div>
@@ -366,11 +441,16 @@
         >
           <i class="pi pi-info-circle text-indigo-500 mt-0.5 flex-shrink-0"></i>
           <div>
-            <span class="font-semibold block mb-0.5" style="color: var(--app-text)">
+            <span
+              class="font-semibold block mb-0.5"
+              style="color: var(--app-text)"
+            >
               Company Admin Access
             </span>
             <span style="color: var(--app-text-muted)">
-              Company Admins always hold contact reveal privileges by default. Toggles apply strictly to your company's team members and take effect immediately.
+              Company Admins always hold contact reveal privileges by default.
+              Toggles apply strictly to your company's team members and take
+              effect immediately.
             </span>
           </div>
         </div>
@@ -378,4 +458,3 @@
     </p-tabpanel>
   </p-tabpanels>
 </p-tabs>
-

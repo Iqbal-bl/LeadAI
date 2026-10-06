@@ -45,6 +45,23 @@
     ></p-dropdown>
   </div>
 
+  <div class="flex flex-col gap-1.5">
+    <label
+      class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+      style="color: var(--app-text-muted)"
+      >Source</label
+    >
+    <p-dropdown
+      [options]="leadSourceOptions"
+      [(ngModel)]="selectedLeadSource"
+      optionLabel="label"
+      optionValue="value"
+      (onChange)="loadConversations()"
+      [style]="{ width: '170px' }"
+      appendTo="body"
+    ></p-dropdown>
+  </div>
+
   <div class="flex items-center gap-2 self-end pb-2">
     <p-inputSwitch
       [(ngModel)]="showAllLeads"

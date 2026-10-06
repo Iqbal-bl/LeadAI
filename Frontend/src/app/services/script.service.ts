@@ -115,10 +115,10 @@ export class ScriptService {
   }
 
   // PUT /prompts/{key}
-  public updatePrompt(key: string, value: string): Observable<PromptTemplate> {
+  public updatePrompt(key: string, content: string): Observable<PromptTemplate> {
     return this.apiService.put<PromptTemplate>(
       `prompts/${key}`,
-      { value },
+      { content },
       {
         companyScoped: true,
       },

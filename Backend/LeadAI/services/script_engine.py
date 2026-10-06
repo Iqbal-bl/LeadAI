@@ -36,7 +36,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from ..models import LeadCompanyPrompt, LeadCompanyScript
+from ..models import LeadCompanyPrompt, LeadCompanyScript, LeadCompanySettings
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +56,9 @@ DEFAULT_PROMPTS: dict[str, str] = {
         "Rules you must follow:\n"
         "1. Answer ONLY from the company knowledge provided below. Never invent "
         "prices, eligibility rules, timelines or product names.\n"
-        "2. If the knowledge does not cover the question, say so plainly and offer "
-        "to connect a human specialist.\n"
+        "2. If the knowledge does not cover the question, say so plainly and say a "
+        "representative will join them shortly to resolve it, and that they are welcome "
+        "to ask any other doubts meanwhile. Never ask the customer to hold.\n"
         "3. Be concise — two or three sentences unless the customer asks for detail.\n"
         "4. Where it is natural, ask one qualifying question (budget, timeline, or "
         "which product they want) so the sales team knows how to follow up.\n"
@@ -69,20 +70,52 @@ DEFAULT_PROMPTS: dict[str, str] = {
         "convert. Respond with JSON only."
     ),
     "escalation": (
-        "The customer needs a human. Acknowledge politely, tell them a specialist "
-        "from {company} will take over this same conversation so they will not have "
-        "to repeat themselves, and do not invent any further details."
+        "The customer needs a human. Acknowledge politely and tell them a representative "
+        "from {company} will join the conversation shortly to resolve this, with the "
+        "context of what has been said so they will not have to repeat themselves. "
+        "Invite them to ask any other doubts in the meantime. Do not ask them to hold, "
+        "and do not invent any further details."
     ),
     "voice": (
         "You are {company}'s voice agent on a live phone call.\n"
         "Speak in short, natural spoken sentences — one idea per turn, under 30 words.\n"
         "Never read out URLs, long numbers or bullet lists; offer to send them instead.\n"
-        "If you do not know something from the company knowledge, say you will have a "
-        "specialist call back rather than guessing."
+        "If you do not know something from the company knowledge, say a representative "
+        "will contact them as soon as possible rather than guessing. Never ask the "
+        "caller to hold, and never say someone is joining the call."
     ),
 }
 
 VALID_PROMPT_KEYS = tuple(DEFAULT_PROMPTS)
+
+
+def agent_name(db: Session, client_id: str) -> str | None:
+    """The persona name a company admin set (see LeadCompanySettings.AgentName),
+    for the {agent} token — None if they never set one."""
+    row = (
+        db.query(LeadCompanySettings)
+        .filter(LeadCompanySettings.ClientId == client_id, LeadCompanySettings.IsDeleted == False)  # noqa: E712
+        .one_or_none()
+    )
+    return row.AgentName if row else None
+
+
+def apply_dynamic_variables(text: str, company_name: str | None, agent: str | None) -> str:
+    """{company} and {agent} are the two tokens a script or prompt can use
+    instead of hard-coding a literal name — change the company's name or
+    the AgentName setting once and every script/prompt using the token
+    updates, rather than hand-editing the name into each one individually.
+
+    Real example this fixes: a script literally said "I'm Kabir from
+    Kestrel Homes" in its Identity section — renaming the persona meant
+    hunting down every script/prompt that spelled the old name out, with no
+    way to change it in one place.
+    """
+    if not text:
+        return text
+    text = text.replace("{company}", company_name or "our company")
+    text = text.replace("{agent}", agent or "our assistant")
+    return text
 
 
 def get_prompt(db: Session, client_id: str, company_name: str, key: str) -> str:
@@ -97,7 +130,7 @@ def get_prompt(db: Session, client_id: str, company_name: str, key: str) -> str:
         .one_or_none()
     )
     template = row.Content if row else DEFAULT_PROMPTS.get(key, DEFAULT_PROMPTS["sales"])
-    return template.replace("{company}", company_name or "our company")
+    return apply_dynamic_variables(template, company_name, agent_name(db, client_id))
 
 
 def seed_prompts(db: Session, client_id: str, created_by: str = "system") -> int:
@@ -234,7 +267,8 @@ def build_system_prompt(
 
     script = script or resolve_script(db, client_id, channel=channel)
     script_prompt = sections_to_system_prompt(sections_of(script))
-    base_prompt += _gender_note(channel, script)
+    script_prompt = apply_dynamic_variables(script_prompt, company_name, agent_name(db, client_id))
+    base_prompt += _gender_note(db, client_id, channel)
 
     if script_prompt:
         combined = (
@@ -247,20 +281,40 @@ def build_system_prompt(
     return base_prompt, script
 
 
-def _gender_note(channel: str, script: LeadCompanyScript | None) -> str:
+def company_voice_settings(db: Session, client_id: str) -> dict:
+    """The AI-call voice tuning only a super admin may set (see
+    rbac.super_admin() and routers/companies.py's voice-settings endpoint) —
+    platform-level, never per-script, and never reachable by a company admin.
+    None values fall back to the platform default, not "silent"/"male".
+    """
+    row = (
+        db.query(LeadCompanySettings)
+        .filter(LeadCompanySettings.ClientId == client_id, LeadCompanySettings.IsDeleted == False)  # noqa: E712
+        .one_or_none()
+    )
+    gender = (row.VoiceGender if row else None) or "female"
+    speed = (row.VoiceSpeed if row and row.VoiceSpeed is not None else None) or 1.1
+    # "anushka" was the old bulbul:v2 default and isn't in bulbul:v3's speaker
+    # roster at all — every call that never had VoiceSpeaker set got a 400 from
+    # Sarvam on every TTS attempt (3 quick-reconnect failures, then silence for
+    # the rest of the call). "ritu" is valid on v3.
+    speaker = (row.VoiceSpeaker if row else None) or "ritu"
+    provider = (row.SttTtsProvider if row else None) or "sarvam"
+    return {"gender": gender, "speed": speed, "speaker": speaker, "provider": provider}
+
+
+def _gender_note(db: Session, client_id: str, channel: str) -> str:
     """Gendered languages (Hindi, Punjabi, ...) inflect first-person verbs by the
     speaker's gender. The model only ever saw the persona's NAME (in the script
     header below) and had to guess from that alone — a script literally named
     "Ritu" still came back "main chahta hoon" (masculine) instead of "chahti
-    hoon" (feminine) on a real call. VoiceGender already exists on the script
-    for picking the TTS voice; it just never reached the prompt that generates
-    the words being spoken.
+    hoon" (feminine) on a real call. The company's own voice gender setting
+    (super-admin only) already exists for picking the TTS voice; it just
+    never reached the prompt that generates the words being spoken.
     """
-    if channel != "voice" or script is None:
+    if channel != "voice":
         return ""
-    gender = (getattr(script, "VoiceGender", None) or "female").strip().lower()
-    if gender not in ("female", "male"):
-        return ""
+    gender = company_voice_settings(db, client_id)["gender"]
     example = "chahti hoon, kar rahi hoon" if gender == "female" else "chahta hoon, kar raha hoon"
     return (
         f"\n\nYou are voiced as a {gender} assistant. In Hindi, Punjabi and any other "

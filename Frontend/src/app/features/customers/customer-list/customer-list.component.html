@@ -7,61 +7,38 @@
       Manage your customer relationships, lifecycle stages, and outreach
     </p>
   </div>
-  <p-button
-    label="Add Customer"
-    icon="pi pi-plus"
-    size="small"
-    [style]="{
+  <p-button label="Add Customer" icon="pi pi-plus" size="small" [style]="{
       background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
       border: 'none'
-    }"
-    (onClick)="openCreateCustomerDialog()"
-  ></p-button>
+    }" (onClick)="openCreateCustomerDialog()"></p-button>
 </div>
 
 <!-- Upcoming Greetings Widget -->
 <div *ngIf="greetings.length > 0" class="card-base p-4 mb-6">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <div
-        class="w-8 h-8 rounded-lg flex items-center justify-center"
-        style="background: linear-gradient(135deg, #f59e0b, #d97706)"
-      >
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+        style="background: linear-gradient(135deg, #f59e0b, #d97706)">
         <i class="pi pi-gift text-white"></i>
       </div>
       <h2 class="text-base font-semibold" style="color: var(--app-text)">
         Upcoming Occasions
       </h2>
     </div>
-    <p-button
-      label="Create Festive Campaign"
-      icon="pi pi-megaphone"
-      [text]="true"
-      severity="warn"
-      (onClick)="createFestiveCampaign()"
-    ></p-button>
+    <p-button label="Create Festive Campaign" icon="pi pi-megaphone" [text]="true" severity="warn"
+      (onClick)="createFestiveCampaign()"></p-button>
   </div>
   <div class="flex flex-wrap gap-2">
-    <div
-      *ngFor="let g of greetings"
-      class="px-3 py-2 rounded-lg flex items-center gap-2"
-      style="
+    <div *ngFor="let g of greetings" class="px-3 py-2 rounded-lg flex items-center gap-2" style="
         background: var(--app-surface-alt);
         border: 1px solid var(--app-border);
-      "
-    >
-      <i
-        [class]="g.event_type === 'birthday' ? 'pi pi-star' : 'pi pi-heart'"
-        class="text-sm"
-        [style.color]="g.event_type === 'birthday' ? '#f59e0b' : '#ec4899'"
-      ></i>
+      ">
+      <i [class]="g.event_type === 'birthday' ? 'pi pi-star' : 'pi pi-heart'" class="text-sm"
+        [style.color]="g.event_type === 'birthday' ? '#f59e0b' : '#ec4899'"></i>
       <span class="text-sm" style="color: var(--app-text)">{{
         g.customer_name
-      }}</span>
-      <span
-        class="text-xs px-1.5 py-0.5 rounded"
-        style="background: rgba(99, 102, 241, 0.1); color: #6366f1"
-      >
+        }}</span>
+      <span class="text-xs px-1.5 py-0.5 rounded" style="background: rgba(99, 102, 241, 0.1); color: #6366f1">
         {{ g.days_until === 0 ? "Today!" : g.days_until + "d" }}
       </span>
     </div>
@@ -71,58 +48,24 @@
 <!-- Filters -->
 <div class="flex flex-wrap gap-3 mb-4 items-center">
   <div class="flex-1 min-w-[240px]">
-    <span class="p-input-icon-left w-full">
-      <i class="pi pi-search"></i>
-      <input
-        pInputText
-        type="text"
-        [(ngModel)]="searchText"
-        placeholder="Search customers by name, phone, or email..."
-        class="w-full"
-        (keyup.enter)="onSearch()"
-      />
-    </span>
+    <p-iconfield class="w-full">
+      <p-inputicon styleClass="pi pi-search" />
+      <input pInputText type="text" [(ngModel)]="searchText" placeholder="Search customers by name, phone, or email..."
+        class="w-full" (keyup.enter)="onSearch()" />
+    </p-iconfield>
   </div>
-  <p-dropdown
-    [options]="stageOptions"
-    [(ngModel)]="stageFilter"
-    optionLabel="label"
-    optionValue="value"
-    (onChange)="onSearch()"
-    [style]="{ width: '160px' }"
-    appendTo="body"
-  ></p-dropdown>
-  <p-dropdown
-    [options]="statusOptions"
-    [(ngModel)]="statusFilter"
-    optionLabel="label"
-    optionValue="value"
-    (onChange)="onSearch()"
-    [style]="{ width: '150px' }"
-    appendTo="body"
-  ></p-dropdown>
-  <p-button
-    *ngIf="hasActiveFilters()"
-    icon="pi pi-filter-slash"
-    label="Clear"
-    [text]="true"
-    severity="secondary"
-    (onClick)="clearFilters()"
-    pTooltip="Reset filters"
-  ></p-button>
+  <p-dropdown [options]="stageOptions" [(ngModel)]="stageFilter" optionLabel="label" optionValue="value"
+    (onChange)="onSearch()" [style]="{ width: '160px' }" appendTo="body"></p-dropdown>
+  <p-dropdown [options]="statusOptions" [(ngModel)]="statusFilter" optionLabel="label" optionValue="value"
+    (onChange)="onSearch()" [style]="{ width: '150px' }" appendTo="body"></p-dropdown>
+  <p-button *ngIf="hasActiveFilters()" icon="pi pi-filter-slash" label="Clear" [text]="true" severity="secondary"
+    (onClick)="clearFilters()" pTooltip="Reset filters"></p-button>
 </div>
 
 <!-- Customer Table -->
 <div class="card-base overflow-hidden">
-  <p-table
-    [value]="customers"
-    [loading]="loading"
-    [paginator]="true"
-    [rows]="10"
-    [rowHover]="true"
-    dataKey="id"
-    [tableStyle]="{ 'min-width': '55rem' }"
-  >
+  <p-table [value]="customers" [loading]="loading" [paginator]="true" [rows]="10" [rowHover]="true" dataKey="id"
+    [tableStyle]="{ 'min-width': '55rem' }">
     <ng-template pTemplate="header">
       <tr>
         <th style="width: 26%">Customer</th>
@@ -140,10 +83,8 @@
         <!-- Customer Info -->
         <td>
           <div class="flex items-center gap-3">
-            <div
-              class="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm shrink-0"
-              style="background: var(--app-surface-alt); color: var(--app-primary); border: 1px solid var(--app-border)"
-            >
+            <div class="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm shrink-0"
+              style="background: var(--app-surface-alt); color: var(--app-primary); border: 1px solid var(--app-border)">
               {{ (customer.name || customer.display_name || 'C')[0] | uppercase }}
             </div>
             <div class="min-w-0">
@@ -153,38 +94,62 @@
               <div *ngIf="customer.company_name" class="text-xs truncate" style="color: var(--app-text-muted)">
                 {{ customer.company_name }}
               </div>
-              <div class="text-xs truncate font-mono" style="color: var(--app-text-muted)">
-                {{ customer.phone_masked || customer.email_masked || '—' }}
+              <!-- Phone / email if available -->
+              <div
+                *ngIf="customer.phone_masked || customer.email_masked"
+                class="text-xs truncate font-mono"
+                style="color: var(--app-text-muted)"
+              >
+                {{ customer.phone_masked || customer.email_masked }}
               </div>
+              <!-- LinkedIn badge when there is no phone/email but a profile URL exists -->
+              <div
+                *ngIf="!customer.phone_masked && !customer.email_masked && customer.linkedin_profile_url"
+                (click)="$event.stopPropagation()"
+              >
+                <a
+                  [href]="customer.linkedin_profile_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
+                  style="background: rgba(10,102,194,0.12); color: #0A66C2; border: 1px solid rgba(10,102,194,0.25);"
+                  onmouseover="this.style.background='rgba(10,102,194,0.22)'"
+                  onmouseout="this.style.background='rgba(10,102,194,0.12)'"
+                  pTooltip="Open LinkedIn Profile"
+                  tooltipPosition="top"
+                >
+                  <i class="pi pi-linkedin text-xs"></i>
+                  <span>LinkedIn Profile</span>
+                  <i class="pi pi-external-link" style="font-size:9px"></i>
+                </a>
+              </div>
+              <!-- No contact at all -->
+              <div
+                *ngIf="!customer.phone_masked && !customer.email_masked && !customer.linkedin_profile_url"
+                class="text-xs font-mono"
+                style="color: var(--app-text-muted)"
+              >—</div>
             </div>
           </div>
         </td>
 
+
         <!-- Stage -->
         <td>
-          <p-tag
-            [value]="customer.stage || '—'"
-            [severity]="getStageSeverity(customer.stage)"
-            [rounded]="true"
-          ></p-tag>
+          <p-tag [value]="customer.stage || '—'" [severity]="getStageSeverity(customer.stage)" [rounded]="true"></p-tag>
         </td>
 
         <!-- Status -->
         <td>
-          <span
-            class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize"
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize"
             [ngClass]="{
               'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20': customer.status === 'active',
               'bg-slate-500/10 text-slate-400 border border-slate-500/20': customer.status !== 'active'
-            }"
-          >
-            <span
-              class="w-1.5 h-1.5 rounded-full"
-              [ngClass]="{
+            }">
+            <span class="w-1.5 h-1.5 rounded-full" [ngClass]="{
                 'bg-emerald-400': customer.status === 'active',
                 'bg-slate-400': customer.status !== 'active'
-              }"
-            ></span>
+              }"></span>
             {{ customer.status || '—' }}
           </span>
         </td>
@@ -211,24 +176,17 @@
 
         <!-- Owner -->
         <td>
-          <span class="text-xs truncate block max-w-[140px]" style="color: var(--app-text-secondary)" [pTooltip]="customer.owner_email || customer.owner_name">
+          <span class="text-xs truncate block max-w-[140px]" style="color: var(--app-text-secondary)"
+            [pTooltip]="customer.owner_email || customer.owner_name">
             {{ customer.owner_name || customer.owner_email || '—' }}
           </span>
         </td>
 
         <!-- Menu Action -->
         <td style="text-align: center" (click)="$event.stopPropagation()">
-          <button
-            pButton
-            icon="pi pi-ellipsis-v"
-            [rounded]="true"
-            [text]="true"
-            severity="secondary"
-            class="p-button-sm"
-            (click)="openCustomerMenu($event, customer)"
-            pTooltip="Actions"
-            tooltipPosition="left"
-          ></button>
+          <button pButton icon="pi pi-ellipsis-v" [rounded]="true" [text]="true" severity="secondary"
+            class="p-button-sm" (click)="openCustomerMenu($event, customer)" pTooltip="Actions"
+            tooltipPosition="left"></button>
         </td>
       </tr>
     </ng-template>
@@ -237,10 +195,7 @@
       <tr>
         <td colspan="7">
           <div class="flex flex-col items-center justify-center py-12 gap-3">
-            <i
-              class="pi pi-users text-4xl"
-              style="color: var(--app-text-muted)"
-            ></i>
+            <i class="pi pi-users text-4xl" style="color: var(--app-text-muted)"></i>
             <p class="text-lg font-medium" style="color: var(--app-text)">
               No customers found
             </p>
@@ -258,15 +213,8 @@
 <p-menu #customerActionMenu [popup]="true" appendTo="body" [model]="activeCustomerMenuItems"></p-menu>
 
 <!-- Quick Message Dialog from Action Menu -->
-<p-dialog
-  header="Send Outreach Message"
-  [(visible)]="showMessageDialog"
-  [modal]="true"
-  [style]="{ width: '450px' }"
-  [draggable]="false"
-  [resizable]="false"
-  appendTo="body"
->
+<p-dialog header="Send Outreach Message" [(visible)]="showMessageDialog" [modal]="true" [style]="{ width: '450px' }"
+  [draggable]="false" [resizable]="false" appendTo="body">
   <div class="space-y-4 pt-2" *ngIf="selectedCustomer">
     <div>
       <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted)">Recipient</label>
@@ -281,56 +229,38 @@
     <div>
       <label class="block text-xs font-semibold mb-1.5" style="color: var(--app-text-muted)">Channel</label>
       <div class="grid grid-cols-2 gap-2">
-        <button
-          type="button"
+        <button type="button"
           class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
-          [disabled]="!selectedCustomer.opt_in_whatsapp"
-          [style.opacity]="selectedCustomer.opt_in_whatsapp ? 1 : 0.4"
+          [disabled]="!selectedCustomer.opt_in_whatsapp" [style.opacity]="selectedCustomer.opt_in_whatsapp ? 1 : 0.4"
           [ngClass]="{
             'border-emerald-500 bg-emerald-500/10 text-emerald-400 font-semibold': messageChannel === 'whatsapp',
             'border-white/10 text-slate-300': messageChannel !== 'whatsapp'
-          }"
-          (click)="messageChannel = 'whatsapp'"
-        >
+          }" (click)="messageChannel = 'whatsapp'">
           <i class="pi pi-whatsapp"></i> WhatsApp
         </button>
-        <button
-          type="button"
+        <button type="button"
           class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
-          [disabled]="!selectedCustomer.opt_in_sms"
-          [style.opacity]="selectedCustomer.opt_in_sms ? 1 : 0.4"
-          [ngClass]="{
+          [disabled]="!selectedCustomer.opt_in_sms" [style.opacity]="selectedCustomer.opt_in_sms ? 1 : 0.4" [ngClass]="{
             'border-indigo-500 bg-indigo-500/10 text-indigo-400 font-semibold': messageChannel === 'sms',
             'border-white/10 text-slate-300': messageChannel !== 'sms'
-          }"
-          (click)="messageChannel = 'sms'"
-        >
+          }" (click)="messageChannel = 'sms'">
           <i class="pi pi-mobile"></i> SMS
         </button>
-        <button
-          type="button"
+        <button type="button"
           class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
-          [disabled]="!selectedCustomer.opt_in_email"
-          [style.opacity]="selectedCustomer.opt_in_email ? 1 : 0.4"
+          [disabled]="!selectedCustomer.opt_in_email" [style.opacity]="selectedCustomer.opt_in_email ? 1 : 0.4"
           [ngClass]="{
             'border-sky-500 bg-sky-500/10 text-sky-400 font-semibold': messageChannel === 'email',
             'border-white/10 text-slate-300': messageChannel !== 'email'
-          }"
-          (click)="messageChannel = 'email'"
-        >
+          }" (click)="messageChannel = 'email'">
           <i class="pi pi-envelope"></i> Email
         </button>
-        <button
-          type="button"
+        <button type="button"
           class="p-2 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors"
-          [disabled]="!selectedCustomer.opt_in_call"
-          [style.opacity]="selectedCustomer.opt_in_call ? 1 : 0.4"
-          [ngClass]="{
+          [disabled]="!selectedCustomer.opt_in_call" [style.opacity]="selectedCustomer.opt_in_call ? 1 : 0.4" [ngClass]="{
             'border-amber-500 bg-amber-500/10 text-amber-400 font-semibold': messageChannel === 'voice',
             'border-white/10 text-slate-300': messageChannel !== 'voice'
-          }"
-          (click)="messageChannel = 'voice'"
-        >
+          }" (click)="messageChannel = 'voice'">
           <i class="pi pi-phone"></i> Voice
         </button>
       </div>
@@ -338,38 +268,20 @@
 
     <div>
       <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted)">Message</label>
-      <textarea
-        pInputText
-        [(ngModel)]="messageText"
-        rows="4"
-        class="w-full text-sm"
-        placeholder="Type outreach message..."
-      ></textarea>
+      <textarea pInputText [(ngModel)]="messageText" rows="4" class="w-full text-sm"
+        placeholder="Type outreach message..."></textarea>
     </div>
   </div>
 
   <ng-template pTemplate="footer">
     <div class="flex justify-end gap-2">
-      <p-button
-        label="Cancel"
-        [text]="true"
-        severity="secondary"
-        (onClick)="showMessageDialog = false"
-      ></p-button>
-      <p-button
-        label="Send Message"
-        icon="pi pi-send"
-        [loading]="sendingMessage"
-        [disabled]="!messageText.trim() || sendingMessage"
-        (onClick)="sendMessage()"
-      ></p-button>
+      <p-button label="Cancel" [text]="true" severity="secondary" (onClick)="showMessageDialog = false"></p-button>
+      <p-button label="Send Message" icon="pi pi-send" [loading]="sendingMessage"
+        [disabled]="!messageText.trim() || sendingMessage" (onClick)="sendMessage()"></p-button>
     </div>
   </ng-template>
 </p-dialog>
 
 <!-- Create Customer Dialog -->
-<app-create-customer
-  [visible]="showCreateDialog"
-  (close)="showCreateDialog = false"
-  (complete)="onCustomerCreated()"
-></app-create-customer>
+<app-create-customer [visible]="showCreateDialog" (close)="showCreateDialog = false"
+  (complete)="onCustomerCreated()"></app-create-customer>

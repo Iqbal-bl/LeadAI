@@ -49,6 +49,10 @@ export class CustomerInfoComponent implements OnInit, OnChanges {
     }
   }
 
+  get leadScore(): number {
+    return this.lead?.leadScore ?? this.lead?.lead_score ?? this.lead?.score ?? 0;
+  }
+
   private computeLeadInitials(): void {
     const name = this.lead?.name || '';
     if (name) {

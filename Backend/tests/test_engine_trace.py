@@ -14,7 +14,7 @@ from LeadAI import models  # noqa: E402
 from LeadAI.config import settings as real_settings  # noqa: E402
 from LeadAI.engine import trace as trace_mod  # noqa: E402
 from LeadAI.engine.trace import TurnTrace  # noqa: E402
-from LeadAI.services import ai_engine, conversation_flow  # noqa: E402
+from LeadAI.services import ai_engine, conversation_flow, scoring_queue  # noqa: E402
 
 for _table in Base.metadata.sorted_tables:
     try:
@@ -171,6 +171,8 @@ def turn(text, **wire_kw):
     wire(**wire_kw)
     db, client, conv = setup()
     conversation_flow.handle_customer_turn(db, client, conv, text)
+    scoring_queue.wait_idle()   # scoring runs after the reply, in the background
+    db.expire_all()
     db.refresh(conv)
     ai = db.query(models.LeadMessage).filter_by(ConversationId=conv.Id, Sender="ai").one()
     return db, conv, ai, {s["step"]: s for s in ai.TraceJson["steps"]}
@@ -185,7 +187,7 @@ def test_a_normal_turn_records_every_decision_in_order():
     order = names(ai)
     expected = ["receive", "memory", "phone_capture", "state_note", "thresholds", "human_request",
                 "retrieve", "confidence", "prompt", "generate", "answer_decision", "engine",
-                "handoff", "qualify", "summarize", "threshold", "commit"]
+                "handoff", "commit", "post_turn", "qualify", "summarize", "threshold"]   # scoring runs after the commit
     positions = [order.index(n) for n in expected]
     assert positions == sorted(positions), order
     assert steps["retrieve"]["detail"]["chunk_ids"] == ["k1"]

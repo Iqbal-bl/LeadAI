@@ -6,30 +6,24 @@
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div class="flex items-center gap-3">
-      <p-button icon="pi pi-arrow-left" [rounded]="true" [text]="true" severity="secondary" (onClick)="goBack()"></p-button>
+      <p-button icon="pi pi-arrow-left" [rounded]="true" [text]="true" severity="secondary"
+        (onClick)="goBack()"></p-button>
       <div>
         <div class="flex items-center gap-2 flex-wrap">
           <h1 class="text-2xl font-bold tracking-tight text-slate-800 dark:text-slate-100">
             {{ customer.display_name || customer.name || 'Unnamed Customer' }}
           </h1>
-          <p-tag [value]="(customer.stage || 'opportunity') | uppercase"
-                 [severity]="getStageSeverity(customer.stage)"
-                 [rounded]="true" class="text-xs"></p-tag>
+          <p-tag [value]="(customer.stage || 'opportunity') | uppercase" [severity]="getStageSeverity(customer.stage)"
+            [rounded]="true" class="text-xs"></p-tag>
           <p-tag [value]="(customer.status || 'active') | uppercase"
-                 [severity]="customer.status === 'active' ? 'success' : 'secondary'"
-                 [rounded]="true" class="text-xs"></p-tag>
+            [severity]="customer.status === 'active' ? 'success' : 'secondary'" [rounded]="true"
+            class="text-xs"></p-tag>
         </div>
         <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
           {{ customer.company_name || 'No company specified' }}
           <span *ngIf="customer.created_at"> · Created {{ customer.created_at | date: 'd MMM y' }}</span>
         </p>
       </div>
-    </div>
-    <div class="flex items-center gap-2">
-      <p-button label="Send Message" icon="pi pi-send" size="small"
-                [disabled]="customer.do_not_disturb"
-                [pTooltip]="customer.do_not_disturb ? 'Cannot send messages: Do Not Disturb is active' : ''"
-                (onClick)="showMessageForm = true"></p-button>
     </div>
   </div>
 
@@ -38,7 +32,8 @@
     <div class="lg:col-span-2 flex flex-col gap-5">
       <!-- 1. Commercial & Account Info Card -->
       <div class="card-base p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-        <h2 class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+        <h2
+          class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
           <i class="pi pi-id-card text-indigo-500"></i>
           Customer Information
         </h2>
@@ -62,7 +57,8 @@
             </p>
           </div>
           <div>
-            <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Product / Interest</label>
+            <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Product /
+              Interest</label>
             <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-1">
               {{ customer.product || '—' }}
             </p>
@@ -85,13 +81,16 @@
           <div>
             <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Stage</label>
             <div class="mt-1">
-              <p-tag [value]="(customer.stage || '—') | titlecase" [severity]="getStageSeverity(customer.stage)" [rounded]="true" class="text-xs"></p-tag>
+              <p-tag [value]="(customer.stage || '—') | titlecase" [severity]="getStageSeverity(customer.stage)"
+                [rounded]="true" class="text-xs"></p-tag>
             </div>
           </div>
           <div>
             <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Status</label>
             <div class="mt-1">
-              <p-tag [value]="(customer.status || '—') | uppercase" [severity]="customer.status === 'active' ? 'success' : 'secondary'" [rounded]="true" class="text-xs"></p-tag>
+              <p-tag [value]="(customer.status || '—') | uppercase"
+                [severity]="customer.status === 'active' ? 'success' : 'secondary'" [rounded]="true"
+                class="text-xs"></p-tag>
             </div>
           </div>
           <div>
@@ -100,47 +99,82 @@
               {{ customer.currency || 'INR' }}
             </p>
           </div>
+          <div *ngIf="customer.tags" class="sm:col-span-2 md:col-span-3 pt-2">
+            <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-1">Tags</label>
+            <div class="flex flex-wrap gap-1.5">
+              <span *ngFor="let tag of (customer.tags || '').split(',')" class="px-2 py-0.5 rounded text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-medium">
+                {{ tag.trim() }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- 2. Contact Information Card -->
       <div class="card-base p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <i class="pi pi-phone text-purple-500"></i>
-            Contact Information
-          </h2>
-          <p-button *ngIf="!revealedPhone && !revealedEmail" label="Reveal Contact" icon="pi pi-eye"
-                    severity="warn" [outlined]="true" size="small" [loading]="revealLoading"
-                    (onClick)="revealContact()"></p-button>
+          <div class="flex items-center gap-2">
+            <h2 class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <i class="pi pi-phone text-purple-500"></i>
+              Contact Information
+            </h2>
+            <p-tag *ngIf="isRevealed" value="Revealed" severity="success" [rounded]="true" class="text-xs"></p-tag>
+          </div>
+          <p-button *ngIf="!isRevealed" label="Reveal Contact" icon="pi pi-eye" severity="warn"
+            [outlined]="true" size="small" [loading]="revealLoading" (onClick)="revealContact()"></p-button>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div class="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <div
+            class="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
             <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Phone Number</label>
             <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-1">
               {{ revealedPhone || customer.phone_masked || '—' }}
             </p>
           </div>
-          <div class="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+          <div
+            class="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
             <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Email Address</label>
             <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-1">
               {{ revealedEmail || customer.email_masked || '—' }}
             </p>
           </div>
+          <div
+            class="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+            <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">WhatsApp</label>
+            <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-1">
+              {{ revealedWhatsApp || (customer.opt_in_whatsapp ? (revealedPhone || customer.phone_masked || '—') : '—') }}
+            </p>
+          </div>
         </div>
-        <p *ngIf="!revealedPhone && !revealedEmail" class="text-xs text-slate-400 dark:text-slate-500 mt-3 flex items-center gap-1.5">
+
+        <!-- Social Identities (if revealed) -->
+        <div *ngIf="revealedSocials.length > 0" class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block mb-2">Connected Social Channels</label>
+          <div class="flex flex-wrap gap-2">
+            <a *ngFor="let s of revealedSocials" [href]="s.profile_url || '#'" target="_blank"
+               class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-indigo-600 transition-colors">
+              <i [class]="getSourceIcon(s.channel)"></i>
+              <span>{{ s.handle ? '@' + s.handle : s.profile_name || s.channel }}</span>
+            </a>
+          </div>
+        </div>
+
+        <p *ngIf="!isRevealed"
+          class="text-xs text-slate-400 dark:text-slate-500 mt-3 flex items-center gap-1.5">
           <i class="pi pi-lock text-[11px]"></i>
-          <span>Customer contact details are masked for data privacy. Revealing contact details is audited and logged.</span>
+          <span>Customer contact details are masked for data privacy. Revealing contact details is audited and
+            logged.</span>
         </p>
       </div>
 
       <!-- 3. Timeline & Activity Details Card -->
       <div class="card-base p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-        <h2 class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+        <h2
+          class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
           <i class="pi pi-clock text-amber-500"></i>
           Activity & Milestones
         </h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Converted At</label>
             <p class="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">
@@ -161,8 +195,21 @@
           </div>
           <div>
             <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Next Follow-Up</label>
-            <p class="text-xs font-medium mt-1" [ngClass]="customer.next_follow_up_at ? 'text-amber-500 font-semibold' : 'text-slate-700 dark:text-slate-300'">
+            <p class="text-xs font-medium mt-1"
+              [ngClass]="customer.next_follow_up_at ? 'text-amber-500 font-semibold' : 'text-slate-700 dark:text-slate-300'">
               {{ customer.next_follow_up_at ? (customer.next_follow_up_at | date: 'd MMM y, h:mm a') : '—' }}
+            </p>
+          </div>
+          <div>
+            <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Birthday</label>
+            <p class="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">
+              {{ customer.birthday ? (customer.birthday | date: 'd MMM y') : '—' }}
+            </p>
+          </div>
+          <div>
+            <label class="text-[11px] font-medium text-slate-400 uppercase tracking-wider block">Anniversary</label>
+            <p class="text-xs font-medium text-slate-700 dark:text-slate-300 mt-1">
+              {{ customer.anniversary ? (customer.anniversary | date: 'd MMM y') : '—' }}
             </p>
           </div>
         </div>
@@ -177,7 +224,8 @@
     <div class="flex flex-col gap-5">
       <!-- Consent & Communication Preferences Card -->
       <div class="card-base p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-        <h2 class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-2">
+        <h2
+          class="text-sm font-semibold tracking-tight text-slate-800 dark:text-slate-100 mb-1 flex items-center gap-2">
           <i class="pi pi-shield text-emerald-500"></i>
           Customer Preferences / Permissions
         </h2>
@@ -187,133 +235,101 @@
 
         <div class="flex flex-col gap-3">
           <!-- WhatsApp -->
-          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+          <div
+            class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
             <div class="flex items-center gap-2.5">
-              <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <div
+                class="w-7 h-7 rounded-lg flex items-center justify-center bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                 <i class="pi pi-whatsapp text-sm"></i>
               </div>
               <div>
                 <span class="text-xs font-medium text-slate-800 dark:text-slate-100 block">WhatsApp</span>
-                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_whatsapp ? 'Opted in for messaging' : 'Not opted in' }}</span>
+                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_whatsapp ? 'Opted in for messaging' :
+                  'Not opted in' }}</span>
               </div>
             </div>
             <p-tag [value]="customer.opt_in_whatsapp ? 'Opted In' : 'Not Opted'"
-                   [severity]="customer.opt_in_whatsapp ? 'success' : 'secondary'"
-                   [rounded]="true" class="text-xs"></p-tag>
+              [severity]="customer.opt_in_whatsapp ? 'success' : 'secondary'" [rounded]="true" class="text-xs"></p-tag>
           </div>
 
           <!-- SMS -->
-          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+          <div
+            class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
             <div class="flex items-center gap-2.5">
-              <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-purple-500/10 text-purple-600 dark:text-purple-400">
+              <div
+                class="w-7 h-7 rounded-lg flex items-center justify-center bg-purple-500/10 text-purple-600 dark:text-purple-400">
                 <i class="pi pi-mobile text-sm"></i>
               </div>
               <div>
                 <span class="text-xs font-medium text-slate-800 dark:text-slate-100 block">SMS</span>
-                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_sms ? 'Opted in for SMS alerts' : 'Not opted in' }}</span>
+                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_sms ? 'Opted in for SMS alerts' : 'Not
+                  opted in' }}</span>
               </div>
             </div>
             <p-tag [value]="customer.opt_in_sms ? 'Opted In' : 'Not Opted'"
-                   [severity]="customer.opt_in_sms ? 'success' : 'secondary'"
-                   [rounded]="true" class="text-xs"></p-tag>
+              [severity]="customer.opt_in_sms ? 'success' : 'secondary'" [rounded]="true" class="text-xs"></p-tag>
           </div>
 
           <!-- Email -->
-          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+          <div
+            class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
             <div class="flex items-center gap-2.5">
-              <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <div
+                class="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-500/10 text-blue-600 dark:text-blue-400">
                 <i class="pi pi-envelope text-sm"></i>
               </div>
               <div>
                 <span class="text-xs font-medium text-slate-800 dark:text-slate-100 block">Email</span>
-                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_email ? 'Opted in for emails' : 'Not opted in' }}</span>
+                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_email ? 'Opted in for emails' : 'Not
+                  opted in' }}</span>
               </div>
             </div>
             <p-tag [value]="customer.opt_in_email ? 'Opted In' : 'Not Opted'"
-                   [severity]="customer.opt_in_email ? 'success' : 'secondary'"
-                   [rounded]="true" class="text-xs"></p-tag>
+              [severity]="customer.opt_in_email ? 'success' : 'secondary'" [rounded]="true" class="text-xs"></p-tag>
           </div>
 
           <!-- Voice / Call -->
-          <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+          <div
+            class="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
             <div class="flex items-center gap-2.5">
-              <div class="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <div
+                class="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-500/10 text-amber-600 dark:text-amber-400">
                 <i class="pi pi-phone text-sm"></i>
               </div>
               <div>
                 <span class="text-xs font-medium text-slate-800 dark:text-slate-100 block">Call</span>
-                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_call ? 'Opted in for phone calls' : 'Not opted in' }}</span>
+                <span class="text-[10px] text-slate-400 block">{{ customer.opt_in_call ? 'Opted in for phone calls' :
+                  'Not opted in' }}</span>
               </div>
             </div>
             <p-tag [value]="customer.opt_in_call ? 'Opted In' : 'Not Opted'"
-                   [severity]="customer.opt_in_call ? 'success' : 'secondary'"
-                   [rounded]="true" class="text-xs"></p-tag>
+              [severity]="customer.opt_in_call ? 'success' : 'secondary'" [rounded]="true" class="text-xs"></p-tag>
           </div>
 
           <!-- Do Not Disturb (DND) -->
           <div class="flex items-center justify-between p-3 rounded-xl border"
-               [ngClass]="customer.do_not_disturb ? 'bg-rose-500/10 border-rose-500/30' : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800'">
+            [ngClass]="customer.do_not_disturb ? 'bg-rose-500/10 border-rose-500/30' : 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800'">
             <div class="flex items-center gap-2.5">
               <div class="w-7 h-7 rounded-lg flex items-center justify-center"
-                   [ngClass]="customer.do_not_disturb ? 'bg-rose-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+                [ngClass]="customer.do_not_disturb ? 'bg-rose-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
                 <i class="pi pi-ban text-sm"></i>
               </div>
               <div>
                 <span class="text-xs font-semibold"
-                      [ngClass]="customer.do_not_disturb ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'">
+                  [ngClass]="customer.do_not_disturb ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'">
                   Do Not Disturb
                 </span>
                 <span class="text-[10px] text-slate-400 block">
-                  {{ customer.do_not_disturb ? 'All automated outreach is blocked' : 'Customer accepts communications' }}
+                  {{ customer.do_not_disturb ? 'All automated outreach is blocked' : 'Customer accepts communications'
+                  }}
                 </span>
               </div>
             </div>
             <p-tag [value]="customer.do_not_disturb ? 'Active / Yes' : 'Disabled / No'"
-                   [severity]="customer.do_not_disturb ? 'danger' : 'secondary'"
-                   [rounded]="true" class="text-xs"></p-tag>
+              [severity]="customer.do_not_disturb ? 'danger' : 'secondary'" [rounded]="true" class="text-xs"></p-tag>
           </div>
         </div>
       </div>
     </div>
   </div>
-
-  <!-- Message Form Dialog -->
-  <p-dialog header="Send Message" [(visible)]="showMessageForm" [modal]="true"
-            [style]="{ width: '500px', maxWidth: '95vw' }" [draggable]="false">
-    <div class="flex flex-col gap-4">
-      <div>
-        <label class="block text-xs font-medium mb-2 text-slate-700 dark:text-slate-300">Channel</label>
-        <div class="flex gap-2">
-          <div *ngFor="let ch of channelOptions"
-               class="flex-1 p-3 rounded-xl cursor-pointer border-2 text-center transition-all duration-200"
-               [style.border-color]="messageChannel === ch.value ? '#6366f1' : 'var(--app-border)'"
-               [style.background]="messageChannel === ch.value ? 'rgba(99,102,241,0.1)' : 'transparent'"
-               [style.opacity]="hasConsent(ch.value) ? 1 : 0.4"
-               [style.pointer-events]="hasConsent(ch.value) ? 'auto' : 'none'"
-               [pTooltip]="!hasConsent(ch.value) ? 'Customer has not opted in for ' + ch.label : ''"
-               (click)="hasConsent(ch.value) && (messageChannel = ch.value)">
-            <i [class]="ch.icon" class="text-base mb-1" style="color: var(--app-text);"></i>
-            <p class="text-[11px] font-medium" style="color: var(--app-text-muted);">{{ ch.label }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <label class="block text-xs font-medium mb-1 text-slate-700 dark:text-slate-300">Message Content</label>
-        <textarea pInputText [(ngModel)]="messageText" [rows]="4" class="w-full text-xs" placeholder="Type your message..."></textarea>
-      </div>
-
-      <div *ngIf="!hasConsent(messageChannel)" class="p-3 rounded-xl text-xs bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-        <i class="pi pi-exclamation-triangle mr-1.5"></i>
-        <span>Customer has not opted in to receive messages via {{ messageChannel }}. Message cannot be sent.</span>
-      </div>
-
-      <div class="flex justify-end gap-2 pt-2">
-        <p-button label="Cancel" [text]="true" severity="secondary" size="small" (onClick)="showMessageForm = false"></p-button>
-        <p-button label="Send Message" icon="pi pi-send" size="small"
-                  [disabled]="!messageText.trim() || !hasConsent(messageChannel)"
-                  [loading]="sendingMessage" (onClick)="sendMessage()"></p-button>
-      </div>
-    </div>
-  </p-dialog>
 </div>

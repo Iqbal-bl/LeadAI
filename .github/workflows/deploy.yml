@@ -174,8 +174,8 @@ jobs:
     env:
       IMAGE_NAME: leadai-frontend
       CONTAINER_NAME: leadai-frontend
-      HOST_PORT: 7009
-      CONTAINER_PORT: 7009
+      HOST_PORT: 4302
+      CONTAINER_PORT: 4302
 
     steps:
       - name: Checkout source

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './guards/auth.guard';
 import { SUPER_ADMIN_GUARD } from './guards/role.guard';
+import { SubscriptionGuard } from './guards/subscription.guard';
 
 export const routes: Routes = [
   {
@@ -9,8 +10,16 @@ export const routes: Routes = [
       import('./features/auth/auth.routes').then((m) => m.AUTH_ROUTES),
   },
   {
-    path: 'client',
+    path: 'onboarding',
     canActivate: [AuthGuard],
+    loadComponent: () =>
+      import('./modules/client/pages/onboarding/onboarding.component').then(
+        (m) => m.OnboardingComponent,
+      ),
+  },
+  {
+    path: 'client',
+    canActivate: [AuthGuard, SubscriptionGuard],
     loadChildren: () =>
       import('./modules/client/client.routes').then((m) => m.CLIENT_ROUTES),
   },
@@ -40,6 +49,7 @@ export const routes: Routes = [
   },
   {
     path: 'plans',
+    canActivate: [AuthGuard],
     loadComponent: () =>
       import('./features/plans-pricing/plans-pricing.component').then(
         (m) => m.PlansPricingComponent,

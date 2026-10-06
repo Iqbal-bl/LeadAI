@@ -45,10 +45,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session
 from ..models import LeadJob, utcnow
+
+_utcnow = utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,7 @@ logger = logging.getLogger(__name__)
 _HANDLERS: dict[str, Callable[[Any, dict], dict | None]] = {}
 _worker_task: asyncio.Task | None = None
 _stopping = False
+_main_loop: asyncio.AbstractEventLoop | None = None
 
 
 def worker_id() -> str:
@@ -205,7 +209,11 @@ def _run_one(job_id: str) -> None:
 
 async def run_worker() -> None:
     """Poll loop. Started from the FastAPI startup hook when enabled."""
-    global _stopping
+    global _stopping, _main_loop
+    try:
+        _main_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        pass
     me = worker_id()
     logger.info("[LeadAI jobs] worker %s started (concurrency=%d)", me, settings.worker_concurrency)
     running: set[asyncio.Task] = set()
@@ -260,13 +268,17 @@ async def run_worker() -> None:
 
 
 def start(loop: asyncio.AbstractEventLoop | None = None) -> None:
-    global _worker_task, _stopping
+    global _worker_task, _stopping, _main_loop
     if not settings.worker_enabled:
         logger.info("[LeadAI jobs] worker disabled by config")
         return
     if _worker_task is not None and not _worker_task.done():
         return
     _stopping = False
+    try:
+        _main_loop = loop or asyncio.get_running_loop()
+    except RuntimeError:
+        _main_loop = loop
     _worker_task = asyncio.create_task(run_worker())
 
 
@@ -404,23 +416,224 @@ def handle_linkedin_sync_comments(db: Session, payload: dict) -> dict:
     results = {}
     for account in accounts:
         try:
-            res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account))
+            if _main_loop is not None and _main_loop.is_running() and not _main_loop.is_closed():
+                try:
+                    future = asyncio.run_coroutine_threadsafe(
+                        fetch_recent_posts_and_comments_browser(db, account, limit_posts=2, is_background_job=True),
+                        _main_loop,
+                    )
+                    res = future.result(timeout=240)
+                except RuntimeError as r_err:
+                    if "closed" in str(r_err).lower():
+                        res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account, limit_posts=2, is_background_job=True))
+                    else:
+                        raise
+            else:
+                res = asyncio.run(fetch_recent_posts_and_comments_browser(db, account, limit_posts=2, is_background_job=True))
             results[account.ClientId] = res
         except Exception as exc:
             logger.warning("[LeadAI jobs] LinkedIn comment sync error for client %s: %s", account.ClientId, exc)
             results[account.ClientId] = {"error": str(exc)}
 
-    # Schedule next check in ~1 hour (45-75 minutes) with wide human jitter (safe anti-bot cadence)
+    # Schedule next check in ~3 hours (120-210 minutes) with wide human jitter (safe anti-bot cadence).
+    # If deferred due to active live messaging, retry in 5 minutes so it runs as soon as messaging is idle!
     if not company_id:
-        run_at = calculate_next_periodic_run(base_minutes=60, jitter_minutes=15, min_minutes=45)
+        has_deferred = any(isinstance(r, dict) and r.get("status") == "deferred" for r in results.values())
+        if has_deferred:
+            run_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=5)
+            logger.info("[LeadAI jobs] Live messaging active during comment sync. Rescheduling quick retry in 5 mins at %s", run_at)
+        else:
+            run_at = calculate_next_periodic_run(base_minutes=180, jitter_minutes=30, min_minutes=120)
+            logger.info("[LeadAI jobs] Scheduled next periodic linkedin.sync_comments at %s", run_at)
         enqueue(db, "linkedin.sync_comments", run_at=run_at)
-        logger.info("[LeadAI jobs] Scheduled next periodic linkedin.sync_comments at %s", run_at)
 
     return {"synced_accounts": len(accounts), "details": results}
 
 
+def calculate_next_random_schedule(runs_per_day: int = 3, active_hours_start: int = 9, active_hours_end: int = 19) -> datetime:
+    """Calculate the next randomized execution time during active business hours (e.g. 9 AM - 7 PM)."""
+    import random
+    now_utc = datetime.now(timezone.utc)
+    active_window_hours = max(1.0, float(active_hours_end - active_hours_start))
+    base_interval_minutes = int((active_window_hours * 60) / max(1, runs_per_day))
+    
+    # Add random humanized jitter (+/- 25%)
+    jitter_range = max(10, int(base_interval_minutes * 0.25))
+    offset_minutes = base_interval_minutes + random.randint(-jitter_range, jitter_range)
+    offset_minutes = max(15, offset_minutes)
+    
+    candidate = now_utc + timedelta(minutes=offset_minutes)
+    return candidate.replace(tzinfo=None)
+
+
+@register("linkedin.auto_search_and_connect")
+def handle_linkedin_auto_search_and_connect(db: Session, payload: dict) -> dict:
+    """
+    Periodic job to search LinkedIn for target candidate profiles matching the company's
+    configured keywords and send personalized connection requests automatically with random scheduling.
+    """
+    from ..models_ext import LeadChannelAccount
+    from ..social import linkedin_bot
+    from . import billing as billing_svc
+    import random
+    import asyncio
+
+    company_id = payload.get("company_id")
+    query = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsActive == True,
+        LeadChannelAccount.IsDeleted == False
+    )
+    if company_id:
+        query = query.filter(LeadChannelAccount.ClientId == company_id)
+
+    accounts = query.all()
+    results = {}
+
+    for account in accounts:
+        meta = account.MetaJson or {}
+        auto_cfg = meta.get("linkedin_auto_connect") or {}
+        
+        # If running globally (not a targeted manual trigger), skip accounts where auto_connect is disabled
+        if not company_id and not auto_cfg.get("enabled", False):
+            continue
+
+        allowed, reason = billing_svc.check_channel_access(db, account.ClientId, "linkedin")
+        if not allowed:
+            logger.info("[LeadAI jobs] Skipping LinkedIn auto-connect for %s: %s", account.ClientId, reason)
+            continue
+
+        keywords = auto_cfg.get("target_keywords") or auto_cfg.get("keywords")
+        if not keywords:
+            prompt = auto_cfg.get("target_prompt")
+            if prompt:
+                try:
+                    if _main_loop is not None and _main_loop.is_running() and not _main_loop.is_closed():
+                        keywords = asyncio.run_coroutine_threadsafe(
+                            linkedin_bot.generate_search_keywords(prompt),
+                            _main_loop
+                        ).result(timeout=30)
+                    else:
+                        keywords = asyncio.run(linkedin_bot.generate_search_keywords(prompt))
+                    auto_cfg["target_keywords"] = keywords
+                except Exception as kw_err:
+                    logger.warning("Failed to auto-generate search keywords: %s", kw_err)
+        
+        if not keywords:
+            logger.info("[LeadAI jobs] LinkedIn auto-connect skipped for %s (no keywords set)", account.ClientId)
+            continue
+
+        if not account.LinkedinCookieEnc and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
+            logger.warning("[LeadAI jobs] LinkedIn credentials missing for account %s", account.ClientId)
+            continue
+
+        limit = min(15, max(1, int(auto_cfg.get("profiles_per_run", 5))))
+        custom_message_template = auto_cfg.get("custom_message") or ""
+
+        try:
+            # 1. Search candidate profiles
+            if _main_loop is not None and _main_loop.is_running() and not _main_loop.is_closed():
+                search_batch = asyncio.run_coroutine_threadsafe(
+                    linkedin_bot.search_profiles_api(account, keywords, limit=max(25, limit * 3)),
+                    _main_loop
+                ).result(timeout=60)
+            else:
+                search_batch = asyncio.run(linkedin_bot.search_profiles_api(account, keywords, limit=max(25, limit * 3)))
+            
+            contacted_ids = set(auto_cfg.get("contacted_profile_ids", []))
+            fresh_profiles = [p for p in search_batch if p.get("public_id") and p.get("public_id") not in contacted_ids]
+            
+            targets = fresh_profiles[:limit]
+            
+            sent_count = 0
+            failed_count = 0
+            
+            for profile in targets:
+                pid = profile.get("public_id")
+                name = profile.get("name", "")
+                first_name = name.split()[0] if name else "there"
+                
+                # Format message template if provided
+                msg = None
+                if custom_message_template.strip():
+                    msg = custom_message_template.replace("{firstName}", first_name).replace("{name}", name)
+                
+                # Send connection invitation
+                if _main_loop is not None and _main_loop.is_running() and not _main_loop.is_closed():
+                    res = asyncio.run_coroutine_threadsafe(
+                        linkedin_bot.send_connection_invitations_api(account, [profile], message=msg),
+                        _main_loop
+                    ).result(timeout=60)
+                else:
+                    res = asyncio.run(linkedin_bot.send_connection_invitations_api(account, [profile], message=msg))
+                
+                res_detail = res.get(pid, {})
+                if res_detail.get("success"):
+                    sent_count += 1
+                    contacted_ids.add(pid)
+                else:
+                    failed_count += 1
+                
+                # Anti-bot human delay
+                time.sleep(random.uniform(5.0, 10.0))
+            
+            updated_contacted = list(contacted_ids)[-2000:]
+            
+            now_iso = datetime.now(timezone.utc).isoformat()
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            last_date_str = auto_cfg.get("today_date", "")
+            if last_date_str != today_str:
+                auto_cfg["today_date"] = today_str
+                auto_cfg["total_sent_today"] = sent_count
+            else:
+                auto_cfg["total_sent_today"] = int(auto_cfg.get("total_sent_today", 0)) + sent_count
+
+            auto_cfg["total_sent_all_time"] = int(auto_cfg.get("total_sent_all_time", 0)) + sent_count
+            auto_cfg["contacted_profile_ids"] = updated_contacted
+            auto_cfg["last_run_at"] = now_iso
+            auto_cfg["last_run_status"] = "success" if failed_count == 0 else "partial_success" if sent_count > 0 else "failed"
+            auto_cfg["last_run_detail"] = f"Sent {sent_count} invitation{'s' if sent_count != 1 else ''} ({failed_count} skipped/failed) for query: '{keywords}'"
+            
+            # Calculate next scheduled run
+            runs_per_day = int(auto_cfg.get("runs_per_day", 3))
+            next_run_dt = calculate_next_random_schedule(
+                runs_per_day=runs_per_day,
+                active_hours_start=int(auto_cfg.get("active_hours_start", 9)),
+                active_hours_end=int(auto_cfg.get("active_hours_end", 19)),
+            )
+            auto_cfg["next_run_at"] = next_run_dt.isoformat()
+            
+            meta["linkedin_auto_connect"] = auto_cfg
+            account.MetaJson = meta
+            account.UpdatedAt = utcnow()
+            db.commit()
+
+            results[account.ClientId] = {
+                "sent": sent_count,
+                "failed": failed_count,
+                "targets_found": len(search_batch),
+                "next_run_at": auto_cfg["next_run_at"],
+            }
+        except Exception as exc:
+            logger.error("Error in LinkedIn auto-connect for client %s: %s", account.ClientId, exc)
+            auto_cfg["last_run_status"] = "error"
+            auto_cfg["last_run_detail"] = str(exc)
+            meta["linkedin_auto_connect"] = auto_cfg
+            account.MetaJson = meta
+            db.commit()
+            results[account.ClientId] = {"error": str(exc)}
+
+    # If global recurring run, schedule the next iteration
+    if not company_id:
+        run_at = calculate_next_periodic_run(base_minutes=90, jitter_minutes=25, min_minutes=45)
+        enqueue(db, "linkedin.auto_search_and_connect", run_at=run_at)
+        logger.info("[LeadAI jobs] Scheduled next global periodic linkedin.auto_search_and_connect at %s", run_at)
+
+    return {"processed_accounts": len(accounts), "details": results}
+
+
 def bootstrap_linkedin_job(db) -> None:
-    """Ensure that the recurring LinkedIn connection request and comment sync jobs exist."""
+    """Ensure that recurring LinkedIn automation jobs exist."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     # 1. Connection requests sync (~90-120 mins)
     existing_invites = (
@@ -437,7 +650,7 @@ def bootstrap_linkedin_job(db) -> None:
         enqueue(db, "linkedin.process_invitations", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.process_invitations at %s", run_at)
 
-    # 2. Comments & AI Replies scanner (~1 hour, 45-75 mins with wide jitter)
+    # 2. Comments & AI Replies scanner (~3 hours, safe anti-detection cadence)
     existing_comments = (
         db.query(LeadJob)
         .filter(
@@ -448,9 +661,24 @@ def bootstrap_linkedin_job(db) -> None:
         .first()
     )
     if not existing_comments:
-        run_at = now + timedelta(seconds=10)
+        run_at = now + timedelta(minutes=180)
         enqueue(db, "linkedin.sync_comments", run_at=run_at)
         logger.info("[LeadAI jobs] Enqueued first run of linkedin.sync_comments at %s", run_at)
+
+    # 3. Auto-Pilot Search & Connect Scheduler (~90 mins with jitter)
+    existing_auto_connect = (
+        db.query(LeadJob)
+        .filter(
+            LeadJob.Kind == "linkedin.auto_search_and_connect",
+            LeadJob.Status.in_(("queued", "claimed")),
+            LeadJob.IsDeleted == False
+        )
+        .first()
+    )
+    if not existing_auto_connect:
+        run_at = now + timedelta(minutes=45)
+        enqueue(db, "linkedin.auto_search_and_connect", run_at=run_at)
+        logger.info("[LeadAI jobs] Enqueued first run of linkedin.auto_search_and_connect at %s", run_at)
 
 
 

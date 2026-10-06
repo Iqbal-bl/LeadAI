@@ -154,7 +154,13 @@ def test_bug_10_batch_telephony_quota_and_tenancy():
     def mock_get_leadai_db():
         yield db
 
-    with patch("LeadAI.db.get_leadai_db", mock_get_leadai_db):
+    from contextlib import contextmanager
+    @contextmanager
+    def mock_leadai_session():
+        yield db
+
+    with patch("LeadAI.db.get_leadai_db", mock_get_leadai_db), \
+         patch("LeadAI.db.session", mock_leadai_session):
         # Attempt to dial when balance is 0
         resp = asyncio.run(batch_service.make_single_call_core_for_batch(
             db=db,
@@ -173,7 +179,7 @@ def test_bug_10_batch_telephony_quota_and_tenancy():
         empty_recharge.RemainingMinutes = 50.0
         db.commit()
 
-        sid = asyncio.run(batch_service.make_single_call_core_for_batch(
+        res = asyncio.run(batch_service.make_single_call_core_for_batch(
             db=db,
             email="manager@tenant.com",
             to_number="+1234567890",
@@ -181,7 +187,10 @@ def test_bug_10_batch_telephony_quota_and_tenancy():
             batch_execution_id="exec_1",
             call_number_id="cn_1",
         ))
-        assert sid == mock_call.sid, f"Expected call SID {mock_call.sid}, got {sid}"
+        import json
+        data = json.loads(res.body) if hasattr(res, "body") else res
+        sid = (data.get("call_sid") or data.get("sid") or data.get("callSid")) if isinstance(data, dict) else data
+        assert sid == mock_call.sid, f"Expected call SID {mock_call.sid}, got {sid} (data={data})"
         assert mock_call.sid in batch_service.call_to_config
         cfg = batch_service.call_to_config[mock_call.sid]
         assert cfg.get("client_id") == client_id, f"Expected client_id {client_id}, got {cfg.get('client_id')}"
@@ -251,7 +260,13 @@ def test_bug_5_manual_outbound_call_quota():
     mock_tw.calls.create.return_value = mock_call_obj
     multiligual_call.twilio_client = mock_tw
 
+    from contextlib import contextmanager
+    @contextmanager
+    def mock_leadai_session():
+        yield db
+
     with patch("LeadAI.db.get_leadai_db", mock_get_leadai_db), \
+         patch("LeadAI.db.session", mock_leadai_session), \
          patch("outbound.app.validate_phone_number", return_value="+919876543210"):
 
         # 1. 0 Balance -> HTTP 402
@@ -320,6 +335,86 @@ def test_bug_11_payment_history_read_only():
     db.close()
 
 
+def test_zero_second_call_refund_and_ledger_suppression():
+    print("\n--- Testing Zero-Second Call Refund & Ledger Suppression ---")
+    from LeadAI.services.billing import reserve_minute_pulse, deduct_call_usage
+    db = SessionLocal()
+    client_id = f"client_{uuid4().hex[:8]}"
+
+    recharge = LeadClientRecharge(
+        Id=f"rec_{uuid4().hex[:8]}",
+        ClientId=client_id,
+        PlanNameSnapshot="Starter Voice",
+        ValidityDaysSnapshot=30,
+        PricePaid=999.0,
+        PurchasedMinutes=50.0,
+        RemainingMinutes=50.0,
+        Status=RECHARGE_STATUS_ACTIVE,
+        ExpiresAt=datetime.now(timezone.utc) + timedelta(days=30),
+    )
+    db.add(recharge)
+    db.commit()
+
+    call_sid_zero = f"CA_zero_{uuid4().hex[:8]}"
+
+    # Step 1: Upfront pulse reserved 1 minute
+    ok, bal_after_pulse, _ = reserve_minute_pulse(
+        db, client_id=client_id, call_sid=call_sid_zero, minute_number=1
+    )
+    assert ok is True
+    assert bal_after_pulse == 49.0
+    pulse_count = db.query(LeadUsageLog).filter(LeadUsageLog.CallSid == call_sid_zero).count()
+    assert pulse_count == 1
+    print(f"PASS: 1 pulse reserved upfront -> Balance: {bal_after_pulse}m, Logs: {pulse_count}")
+
+    # Step 2: Call dropped or zero seconds duration (busy / failed / 0s)
+    deducted, final_bal, is_ex = deduct_call_usage(
+        db, client_id=client_id, call_sid=call_sid_zero, duration_seconds=0
+    )
+    assert deducted == 0.0, f"Expected 0.0 deducted for 0s call, got {deducted}"
+    assert final_bal == 50.0, f"Expected balance restored to 50.0, got {final_bal}"
+
+    db.refresh(recharge)
+    assert recharge.RemainingMinutes == 50.0, f"Expected recharge balance 50.0, got {recharge.RemainingMinutes}"
+
+    # Step 3: Verify the zero-second call log is completely SUPPRESSED from the ledger
+    ledger_logs = db.query(LeadUsageLog).filter(LeadUsageLog.CallSid == call_sid_zero).all()
+    assert len(ledger_logs) == 0, f"Expected 0 ledger logs for 0s call, found {len(ledger_logs)}"
+    print("PASS: Zero-second call refunded 100% and completely suppressed from ledger!")
+
+    db.close()
+
+
+def test_decoupled_bundle_pricing():
+    print("\n--- Testing Decoupled Bundle Base Voice Pricing ---")
+    from LeadAI.services.billing import _extract_base_voice_price
+    db = SessionLocal()
+    client_id = f"client_{uuid4().hex[:8]}"
+
+    # Client bought bundle: Starter (999) + WhatsApp (2000) = 2999
+    bundle_rec = LeadClientRecharge(
+        Id=f"rec_{uuid4().hex[:8]}",
+        ClientId=client_id,
+        PlanNameSnapshot="Starter + WhatsApp Bundle",
+        ValidityDaysSnapshot=30,
+        PricePaid=2999.0,
+        PurchasedMinutes=50.0,
+        RemainingMinutes=50.0,
+        ActiveChannels=["whatsapp"],
+        NextCycleChannels=["whatsapp"],
+        Status=RECHARGE_STATUS_ACTIVE,
+        ExpiresAt=datetime.now(timezone.utc) + timedelta(days=30),
+    )
+    db.add(bundle_rec)
+    db.commit()
+
+    base_voice = _extract_base_voice_price(db, bundle_rec)
+    assert base_voice == 999.0, f"Expected base voice price 999.0, got {base_voice}"
+    print(f"PASS: Extracted pure base voice price ₹{base_voice} (preventing ₹2000 double-charge)!")
+
+    db.close()
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("RUNNING PHASE 3 AUTOMATED TEST SUITE")
@@ -328,6 +423,8 @@ if __name__ == "__main__":
     test_bug_10_batch_telephony_quota_and_tenancy()
     test_bug_5_manual_outbound_call_quota()
     test_bug_11_payment_history_read_only()
+    test_zero_second_call_refund_and_ledger_suppression()
+    test_decoupled_bundle_pricing()
     print("\n" + "=" * 60)
     print("ALL PHASE 3 VERIFICATIONS PASSED SUCCESSFULLY!")
     print("=" * 60)

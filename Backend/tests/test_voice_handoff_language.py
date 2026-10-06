@@ -38,9 +38,9 @@ HINDI_Q = "मुझे किसी इंसान से बात करन�
 
 # --------------------------------------------------------------------------- the line-pickers
 def test_callback_and_unsure_lines_exist_for_hindi_punjabi_and_default_to_english():
-    for lang, must_contain in (("hi-IN", "विशेषज्ञ"), ("pa-IN", "ਮਾਹਿਰ"), ("xx-XX", "specialist")):
+    for lang, must_contain in (("hi-IN", "प्रतिनिधि"), ("pa-IN", "ਪ੍ਰਤੀਨਿਧੀ"), ("xx-XX", "representative")):
         assert must_contain in voice_flow.callback_line(lang), lang
-    for lang, must_contain in (("hi-IN", "विशेषज्ञ"), ("pa-IN", "ਮਾਹਿਰ"), (None, "specialist")):
+    for lang, must_contain in (("hi-IN", "प्रतिनिधि"), ("pa-IN", "ਪ੍ਰਤੀਨਿਧੀ"), (None, "representative")):
         assert must_contain in voice_flow.unsure_line(lang), lang
 
 
@@ -60,7 +60,7 @@ def test_a_hindi_callers_request_for_a_human_is_answered_in_hindi_not_the_kb_lan
     db, conv, call, out = live.turn(HINDI_Q, language="hi-IN")
     assert out.language == "hi-IN"
     assert out.reply_text == voice_flow.callback_line("hi-IN")
-    assert "specialist" not in out.reply_text            # not the English line
+    assert "representative" not in out.reply_text            # not the English line
 
 
 def test_an_english_callers_request_for_a_human_is_still_answered_in_english():

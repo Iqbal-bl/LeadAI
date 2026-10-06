@@ -32,13 +32,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Any
 
-from pipecat.frames.frames import TranscriptionFrame
+from pipecat.frames.frames import TranscriptionFrame, VADUserStoppedSpeakingFrame
 from pipecat.processors.frame_processor import FrameProcessor
 
 from ..config import settings
+from ..services import telephony
 from .brain import LeadAIBrainProcessor
 from .session import CallSession
 
@@ -46,11 +48,30 @@ logger = logging.getLogger(__name__)
 
 # A silent or dead call must not hold a pipeline (and its paid connections) open forever.
 IDLE_TIMEOUT_SECONDS = 120
+# A real incident: Sarvam's STT websocket connect hung mid-handshake and never raised —
+# pipecat's own default setup timeout (20 s) is itself none too fast, and in that call it
+# fired nearly 40 s late besides (something in the hang was blocking the event loop, not
+# just taking a while). The caller heard total silence — the pre-composed opener never
+# even got synthesized — until THEY gave up and hung up, ~57 s in. A bounded wait that
+# fails fast into a clean hangup (see on_setup_timeout below) beats leaving a live person
+# on a dead line for however long a wedged connection to a third party takes to give up.
+PIPELINE_SETUP_TIMEOUT_SECONDS = 8.0
 # Voice activity reports "silence" after this long, and Pipecat's Smart Turn model then
 # decides whether the caller has really finished. 0.2 s is Pipecat's recommended value for
 # that pairing; the first version used 0.6 s and added 0.4 s to EVERY turn for nothing (the
 # log showed Smart Turn correctly waiting through mid-sentence pauses on its own).
 VAD_STOP_SECONDS = 0.2
+# Silero's own defaults (confidence 0.7, start_secs 0.2, min_volume 0.6) assume a
+# clean microphone. Carrier-encoded phone audio (Twilio/Exotel, 8kHz) carries more
+# line noise and encoding artifacts than that — background noise alone was enough
+# to trip "user started speaking" mid-reply, broadcasting an interruption that cut
+# the bot off (see brain.py's _call_ending guard for the other half of that fix).
+# Raised the bar on all three: a higher confidence and a longer required run of
+# speech-like audio before triggering, plus a higher volume floor, costs a little
+# responsiveness on a genuinely quiet "yes" but stops noise alone from interrupting.
+VAD_CONFIDENCE = 0.8
+VAD_START_SECONDS = 0.35
+VAD_MIN_VOLUME = 0.7
 # Smart Turn decides whether a pause is the end of a thought. When it says "not finished" it
 # still gives up after this much silence. Its default is 3 s: on the second live call "Okay,
 # bye." was judged unfinished and the reply came 3 s later, after the caller had hung up. 1.5 s
@@ -70,6 +91,20 @@ _TERMINAL_CALL_STATUSES = frozenset({"completed", "failed", "busy", "no-answer",
 
 class CallRejected(Exception):
     """The call may not use this pipeline. The message is safe to log, not to send."""
+
+
+async def handle_pipeline_setup_timeout(call_sid: str, provider: str) -> None:
+    """A processor (almost always STT/TTS connecting to Sarvam) never finished
+    setting up within PIPELINE_SETUP_TIMEOUT_SECONDS. The caller is on a silent
+    line RIGHT NOW — hang up rather than let them sit there for however long the
+    wedged connection takes to give up on its own (see the real incident recorded
+    on PIPELINE_SETUP_TIMEOUT_SECONDS above).
+
+    A plain function, not inlined in the event handler, so it's directly
+    testable without constructing a full pipecat worker/transport.
+    """
+    logger.error("[LeadAI voice] call %s: pipeline setup never completed — hanging up", call_sid)
+    await asyncio.to_thread(telephony.hangup, call_sid, provider)
 
 
 # --------------------------------------------------------------------------- auth
@@ -146,9 +181,28 @@ def sarvam_language(code: str | None):
     return table.get((code or "").strip().lower())        # "multi" / unknown -> auto-detect
 
 
+def deepgram_language(code: str | None):
+    """A Deepgram language for our short codes; None lets Nova auto-detect.
+
+    Deepgram's codes are plain (no "-IN" region suffix the way Sarvam's are) —
+    same short codes we already use, so this is the same table shape as
+    sarvam_language() with the generic (non-regional) Language members.
+    """
+    from pipecat.transcriptions.language import Language
+
+    table = {
+        "hi": Language.HI, "hi-in": Language.HI, "raj": Language.HI,
+        "en": Language.EN, "en-in": Language.EN,
+        "bn": Language.BN, "gu": Language.GU, "kn": Language.KN, "ml": Language.ML,
+        "mr": Language.MR, "od": Language.OR, "pa": Language.PA, "ta": Language.TA,
+        "te": Language.TE,
+    }
+    return table.get((code or "").strip().lower())
+
+
 @dataclass
 class Services:
-    """The speech services. Real ones talk to Sarvam; tests pass stand-ins."""
+    """The speech services. Real ones talk to Sarvam or Deepgram; tests pass stand-ins."""
 
     stt: Any
     tts: Any
@@ -156,8 +210,7 @@ class Services:
     language_frame: Any = None
 
 
-def build_services(context: dict) -> Services:
-    """Sarvam speech-to-text and text-to-speech, the same vendor the legacy loop uses."""
+def _build_sarvam_services(context: dict) -> Services:
     from pipecat.services.sarvam.stt import SarvamSTTService
     from pipecat.services.sarvam.tts import SarvamTTSService
 
@@ -167,7 +220,12 @@ def build_services(context: dict) -> Services:
     language = sarvam_language(context.get("language")) if not context.get("multi_stt") else None
     stt_settings = SarvamSTTService.Settings(language=language) if language else SarvamSTTService.Settings()
     # 1.0 is Sarvam's normal speaking speed; valid range on bulbul:v3 is 0.5-2.0.
-    tts_kwargs = {"voice": context.get("speaker") or "anushka", "pace": 1.1}
+    # 1.1 (slightly faster) is the platform default; a super admin can override
+    # it per company (see LeadCompanySettings.VoiceSpeed) — never a company admin.
+    # "anushka" isn't in bulbul:v3's speaker roster (it's a leftover bulbul:v2
+    # name) — only reached if company_voice_settings() itself somehow handed
+    # back nothing, but kept valid for the same reason that one is "ritu".
+    tts_kwargs = {"voice": context.get("speaker") or "ritu", "pace": context.get("pace") or 1.1}
     if language:
         tts_kwargs["language"] = language
     def language_frame(code: str):
@@ -184,6 +242,48 @@ def build_services(context: dict) -> Services:
         tts=SarvamTTSService(api_key=api_key, settings=SarvamTTSService.Settings(**tts_kwargs)),
         language_frame=language_frame,
     )
+
+
+def _build_deepgram_services(context: dict) -> Services:
+    """Deepgram Nova (STT) + Aura (TTS). Switched to per company via
+    LeadCompanySettings.SttTtsProvider — see routers/companies.py's
+    update_voice_settings (super-admin only).
+
+    Deliberately ignores context["speaker"]/["gender"]/["pace"]: those are
+    Sarvam voice ids and a 0.5-2.0 pace range, neither valid for Deepgram's
+    Aura voices (fixed voice-name-per-language-and-gender, 0.7-1.5 speed) —
+    passing a Sarvam value through would 400 against Deepgram's API exactly
+    like the old hardcoded "anushka" default 400'd against bulbul:v3.
+
+    Aura's Indic-language coverage is far narrower than Sarvam bulbul's at
+    time of writing — mainly English and Spanish voices. A company whose
+    callers speak Hindi/other Indic languages should stay on Sarvam; this
+    path exists for companies that specifically want Deepgram's English
+    accuracy/latency, not as a drop-in replacement for every company.
+    """
+    from pipecat.services.deepgram.stt import DeepgramSTTService
+    from pipecat.services.deepgram.tts import DeepgramTTSService
+
+    api_key = os.getenv("DEEPGRAM_API_KEY")
+    if not api_key:
+        raise CallRejected("DEEPGRAM_API_KEY is not set")
+    language = deepgram_language(context.get("language")) if not context.get("multi_stt") else None
+    stt_settings = DeepgramSTTService.Settings(language=language) if language else DeepgramSTTService.Settings()
+
+    return Services(
+        stt=DeepgramSTTService(api_key=api_key, settings=stt_settings),
+        tts=DeepgramTTSService(api_key=api_key),   # fixed "aura-2-helena-en" default voice/speed
+        language_frame=None,   # Aura's voice name bakes in the language; no per-reply switch to make
+    )
+
+
+def build_services(context: dict) -> Services:
+    """Dispatches to whichever speech vendor this company is configured for
+    (see LeadCompanySettings.SttTtsProvider) — "sarvam" unless a super admin
+    explicitly switched it."""
+    if (context.get("provider") or "sarvam") == "deepgram":
+        return _build_deepgram_services(context)
+    return _build_sarvam_services(context)
 
 
 # ----------------------------------------------------------------------- assembly
@@ -276,19 +376,42 @@ class LanguageTracker(FrameProcessor):
 
     Sits between speech-to-text and the turn aggregator, which consumes transcripts, so the
     language would otherwise be lost before the brain runs. Forwards every frame untouched.
+
+    Also times the STT round trip (VAD says the caller stopped -> STT finally delivers that
+    utterance's transcript) and logs it when it's unusually slow. A real incident: a caller's
+    utterance took ~10s to come back as a transcript even though Sarvam's own self-reported
+    processing_latency was 78ms — the delay was somewhere in transit/queueing, not in Sarvam's
+    transcription itself, and nothing surfaced that gap on its own; it took manually diffing
+    raw DEBUG timestamps after the fact to even see it. This makes that visible without having
+    to do that again.
     """
+
+    # Above this, the gap is worth a log line of its own rather than scrolling past unremarked.
+    _SLOW_STT_ROUND_TRIP_SECONDS = 3.0
 
     def __init__(self, *, on_language, **kwargs):
         super().__init__(**kwargs)
         self._on_language = on_language
+        self._stopped_speaking_at: float | None = None
 
     async def process_frame(self, frame, direction):
         await super().process_frame(frame, direction)
-        if isinstance(frame, TranscriptionFrame) and frame.language:
-            try:
-                self._on_language(getattr(frame.language, "value", str(frame.language)))
-            except Exception:  # noqa: BLE001 — tracking must never disturb the audio path
-                logger.debug("language tracker hook failed", exc_info=True)
+        if isinstance(frame, VADUserStoppedSpeakingFrame):
+            self._stopped_speaking_at = time.monotonic()
+        elif isinstance(frame, TranscriptionFrame):
+            if self._stopped_speaking_at is not None:
+                elapsed = time.monotonic() - self._stopped_speaking_at
+                self._stopped_speaking_at = None
+                if elapsed >= self._SLOW_STT_ROUND_TRIP_SECONDS:
+                    logger.warning(
+                        "[LeadAI voice] STT took %.1fs to return a transcript after the "
+                        "caller stopped speaking (text=%r)", elapsed, frame.text[:80],
+                    )
+            if frame.language:
+                try:
+                    self._on_language(getattr(frame.language, "value", str(frame.language)))
+                except Exception:  # noqa: BLE001 — tracking must never disturb the audio path
+                    logger.debug("language tracker hook failed", exc_info=True)
         await self.push_frame(frame, direction)
 
 
@@ -357,19 +480,29 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
             serializer=serializer,
         ),
     )
-    pipeline, _brain, _aggregators = assemble(
+    pipeline, brain, _aggregators = assemble(
         transport_in=transport.input(),
         transport_out=transport.output(),
         services=services,
         session=session,
-        vad=SileroVADAnalyzer(params=VADParams(stop_secs=VAD_STOP_SECONDS)),
+        vad=SileroVADAnalyzer(params=VADParams(
+            stop_secs=VAD_STOP_SECONDS,
+            confidence=VAD_CONFIDENCE,
+            start_secs=VAD_START_SECONDS,
+            min_volume=VAD_MIN_VOLUME,
+        )),
     )
     worker = PipelineWorker(
         pipeline,
         params=PipelineParams(audio_in_sample_rate=sample_rate, audio_out_sample_rate=sample_rate),
         idle_timeout_secs=IDLE_TIMEOUT_SECONDS,
         enable_rtvi=False,
+        setup_timeout_secs=PIPELINE_SETUP_TIMEOUT_SECONDS,
     )
+
+    @worker.event_handler("on_setup_timeout")
+    async def _on_setup_timeout(_worker):
+        await handle_pipeline_setup_timeout(call_sid, transport_type)
 
     # Compose the opening line WHILE the pipeline is starting, not after: the first live call
     # spent about 3 s of dead air generating the greeting only once the pipeline was ready.
@@ -377,13 +510,32 @@ async def run_call(websocket, *, services_factory=build_services, session_factor
 
     @transport.event_handler("on_client_connected")
     async def _on_connected(_transport, _client):
+        connected_at = time.monotonic()
         try:
             opening = await opening_task
         except Exception:  # noqa: BLE001 — no greeting is better than no call
             logger.exception("[LeadAI voice] could not compose the opening line")
             return
-        for frame in opening_frames(opening, services):
+        frames = opening_frames(opening, services)
+        if frames:
+            # Tells the brain an opener was actually queued — only then is a
+            # bare "Hello?" overlapping it treated as noise rather than a
+            # real question (see brain.py's mark_opener_spoken()).
+            brain.mark_opener_spoken()
+        for frame in frames:
             await worker.queue_frame(frame)
+        if frames:
+            # A real incident: pipeline setup reported fully ready, but TTS
+            # didn't start generating the (already-composed) opener until
+            # ~4.3s later — with nothing logged in between to say why. This
+            # timestamp pins down OUR side of that gap precisely, so the next
+            # time it's slow, whatever's logged next (pipecat's own "Generating
+            # TTS [...]" debug line) shows exactly how much of the delay is
+            # on our side of queue_frame() versus pipecat's own worker.
+            logger.info(
+                "[LeadAI voice] call %s: opener queued %.2fs after client-connected",
+                call_sid, time.monotonic() - connected_at,
+            )
 
     @transport.event_handler("on_client_disconnected")
     async def _on_disconnected(_transport, _client):

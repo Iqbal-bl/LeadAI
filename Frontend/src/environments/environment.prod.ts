@@ -1,14 +1,15 @@
 export const environment = {
   production: true,
-  apiPrefix: '/api/leadai',
-  wsUrl: '',
+  apiPrefix: ' https://6b1c-223-178-214-156.ngrok-free.app/api/leadai',
+  wsUrl: 'wss://6b1c-223-178-214-156.ngrok-free.app',
   authConfig: {
-    issuer: '', // Add production Identity Server URL
-    clientId: 'leadai_frontend',
-    loginRedirectUri: '/login/callback',
-    postLogoutRedirectUri: '/login',
+    issuer: 'https://identity.bharatlogicllp.com',
+    clientId: 'angular-client',
+    loginRedirectUri:
+      'https://tuna-next-internally.ngrok-free.app/auth/callback',
+    postLogoutRedirectUri: 'https://tuna-next-internally.ngrok-free.app/',
     pkce: true,
     clientSecret: '',
-    checkSessionApi: '/api/session'
-  }
+    checkSessionApi: 'https://identity.bharatlogicllp.com/api/session',
+  },
 };

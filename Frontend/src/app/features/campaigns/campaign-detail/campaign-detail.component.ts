@@ -1,22 +1,39 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
 import { AuthService } from '../../../services/auth.service';
+import { VoiceService } from '../../../services/voice.service';
+import { WebsocketService } from '../../../services/websocket.service';
+import { CallTranscript } from '../../../models/voice.models';
 import {
   Campaign,
   CampaignBatchMeta,
   CampaignHistoryItem,
   CampaignPreview,
   CampaignRecipient,
+  CampaignExecution,
+  CampaignExecutionListResponse,
+  CampaignExecutionAttempt,
+  CampaignExecutionAttemptsResponse,
+  RestartMode,
+  RunningCall,
+  CampaignStatusWsMessage,
 } from '../../../models/campaign.models';
-import { MessageService } from 'primeng/api';
+import { MessageService, MenuItem } from 'primeng/api';
 import { ConfirmationService } from '../../../shared/services/confirmation.service';
+import { CampaignCreateComponent } from '../campaign-create/campaign-create.component';
+import {
+  LeadConversationsComponent,
+  CallMetadataInfo,
+} from '../../leads/components/lead-conversations/lead-conversations.component';
+import { Location } from '@angular/common';
 
 @Component({
   selector: 'app-campaign-detail',
   standalone: true,
-  imports: [SharedModule],
+  imports: [SharedModule, CampaignCreateComponent, LeadConversationsComponent],
   templateUrl: './campaign-detail.component.html',
   styleUrl: './campaign-detail.component.scss',
 })
@@ -28,14 +45,32 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   previewLoading = false;
   progressPercent = 0;
 
+  // Running Calls State (Voice campaigns)
+  runningCalls: RunningCall[] = [];
+  private campaignWsSub?: Subscription;
+  private liveTranscriptWsSub?: Subscription;
+  liveCallConversationId: string | null = null;
+  liveCallSid: string | null = null;
+  liveCallRecipientName = '';
+  liveCallPhone = '';
+
+  showEditDialog = false;
+
   canSend = false;
   private pollTimer: any = null;
 
-  // Run History & Recipients State
-  activeTab: string = 'history';
+  // Run History & Recipients State (Tab lazy loading)
+  activeTab: string = 'executions';
+  loadedTabs: Set<string> = new Set<string>();
   historyItems: CampaignHistoryItem[] = [];
   historyLoading = false;
   historyTotal = 0;
+
+  // Tracked Executions State (GET /executions)
+  executions: CampaignExecution[] = [];
+  executionsLoading = false;
+  executionsTotal = 0;
+  startModeMenuItems: MenuItem[] = [];
 
   allRecipients: CampaignRecipient[] = [];
   recipientsLoading = false;
@@ -49,13 +84,41 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     { label: 'Skipped', value: 'skipped' },
   ];
 
+  // Execution & Batch State
+  retryMode: 'failed_only' | 'restart_all' = 'failed_only';
+  isRestarting = false;
+
+  // Imported Lead Batch Specific View State
+  batchActiveTab: 'caller_info' | 'execution_history' = 'caller_info';
+  historySortAsc = false;
+  historyFilterText = '';
+  activeRecipientMenuItems: MenuItem[] = [];
+  selectedRecipientForTranscript: CampaignRecipient | null = null;
+  showTranscriptDialog = false;
+
+  // Execution History Accordion & Attempts State
+  expandedExecutionIds: string[] = [];
+  executionAttempts: Record<string, CampaignExecutionAttempt[]> = {};
+  executionAttemptsLoading: Record<string, boolean> = {};
+  executionAttemptsError: Record<string, string | null> = {};
+
+  // Real Call Transcript Dialog State (matching Lead Detail)
+  transcriptVisible = false;
+  transcriptLoading = false;
+  activeTranscript: CallTranscript | null = null;
+  selectedAttemptForTranscript: CampaignExecutionAttempt | null = null;
+  dialogConversations: any[] = [];
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private campaignService: CampaignService,
     private authService: AuthService,
+    private voiceService: VoiceService,
+    private wsService: WebsocketService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
+    public location: Location,
   ) {}
 
   ngOnInit(): void {
@@ -65,11 +128,305 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.loadCampaign(id);
+      this.connectCampaignWebSocket(id);
     }
   }
 
   ngOnDestroy(): void {
     this.stopPolling();
+    this.disconnectCampaignWebSocket();
+    if (this.liveTranscriptWsSub) {
+      this.liveTranscriptWsSub.unsubscribe();
+      this.liveTranscriptWsSub = undefined;
+    }
+    if (this.liveCallConversationId) {
+      this.wsService.disconnectConversation();
+      this.liveCallConversationId = null;
+    }
+  }
+
+  connectCampaignWebSocket(campaignId: string): void {
+    this.disconnectCampaignWebSocket();
+    this.wsService.connectCampaign(campaignId);
+    this.campaignWsSub = this.wsService.campaignUpdates$.subscribe({
+      next: (msg: any) => {
+        if (msg && msg.type === 'campaign_status') {
+          this.handleCampaignStatusUpdate(msg);
+        }
+      },
+      error: (err: any) => {
+        console.warn('[CampaignDetail] Campaign WS error:', err);
+      },
+    });
+  }
+
+  disconnectCampaignWebSocket(): void {
+    if (this.campaignWsSub) {
+      this.campaignWsSub.unsubscribe();
+      this.campaignWsSub = undefined;
+    }
+    this.wsService.disconnectCampaign();
+  }
+
+  handleCampaignStatusUpdate(msg: CampaignStatusWsMessage): void {
+    if (!this.campaign) return;
+
+    if (msg.status) {
+      this.campaign.status = msg.status;
+    }
+    if (msg.status_message !== undefined) {
+      this.campaign.status_message = msg.status_message;
+    }
+
+    if (msg.total_count !== undefined) this.campaign.total_count = msg.total_count;
+    if (msg.queued_count !== undefined) this.campaign.queued_count = msg.queued_count;
+    if (msg.sent_count !== undefined) this.campaign.sent_count = msg.sent_count;
+    if (msg.delivered_count !== undefined) this.campaign.delivered_count = msg.delivered_count;
+    if (msg.failed_count !== undefined) this.campaign.failed_count = msg.failed_count;
+    if (msg.skipped_count !== undefined) this.campaign.skipped_count = msg.skipped_count;
+
+    if (!this.campaign.counters) {
+      this.campaign.counters = {
+        total: msg.total_count || 0,
+        sent: msg.sent_count || 0,
+        delivered: msg.delivered_count || 0,
+        failed: msg.failed_count || 0,
+        replied: 0,
+      };
+    }
+    this.campaign.counters.total = msg.total_count ?? this.campaign.counters.total;
+    this.campaign.counters.queued = msg.queued_count ?? this.campaign.counters.queued;
+    this.campaign.counters.sent = msg.sent_count ?? this.campaign.counters.sent;
+    this.campaign.counters.delivered = msg.delivered_count ?? this.campaign.counters.delivered;
+    this.campaign.counters.failed = msg.failed_count ?? this.campaign.counters.failed;
+    this.campaign.counters.skipped = msg.skipped_count ?? this.campaign.counters.skipped;
+
+    const cnt = this.campaign.counters;
+    this.progressPercent =
+      cnt && cnt.total > 0
+        ? Math.round(((cnt.sent + cnt.delivered + cnt.failed) / cnt.total) * 100)
+        : 0;
+
+    if (msg.running_calls !== undefined) {
+      this.runningCalls = msg.running_calls || [];
+      this.campaign.running_calls = this.runningCalls;
+      if (this.runningCalls.length > 0 && this.allRecipients.length === 0) {
+        this.loadRecipients(this.campaign.id);
+      }
+    } else if (
+      msg.status === 'completed' ||
+      msg.status === 'cancelled' ||
+      msg.status === 'failed'
+    ) {
+      this.runningCalls = [];
+      this.campaign.running_calls = [];
+    }
+
+    if (msg.execution_id && this.loadedTabs.has('executions')) {
+      this.loadExecutions(this.campaign.id);
+    }
+    if (this.loadedTabs.has('history')) {
+      this.loadHistory(this.campaign.id);
+    }
+  }
+
+  trackByCallSid(index: number, call: RunningCall): string {
+    return call.callSid || call.recipientId || index.toString();
+  }
+
+  getRecipient(call: RunningCall): CampaignRecipient | undefined {
+    return this.allRecipients.find((r) => r.id === call.recipientId);
+  }
+
+  getRecipientName(call: RunningCall): string {
+    const r = this.getRecipient(call);
+    return r?.name || call.name || 'Recipient ' + (call.recipientId ? call.recipientId.slice(0, 8) : '');
+  }
+
+  getRecipientPhone(call: RunningCall): string {
+    const r = this.getRecipient(call);
+    return r?.phone_masked || r?.phone || r?.identifier_masked || call.phone || '—';
+  }
+
+  openLiveCallTranscript(call: RunningCall): void {
+    const recipient = this.getRecipient(call);
+    const conversationId = call.conversationId || recipient?.conversation_id;
+    this.selectedAttemptForTranscript = null;
+    this.transcriptLoading = true;
+    this.transcriptVisible = true;
+    this.activeTranscript = null;
+    this.liveCallSid = call.callSid;
+    this.liveCallRecipientName = this.getRecipientName(call);
+    this.liveCallPhone = this.getRecipientPhone(call);
+
+    this.dialogConversations = [
+      {
+        id: 'live-init',
+        sender: 'system',
+        summary: `Live call in progress (${call.callSid}) · ${this.liveCallRecipientName}`,
+        startTime: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        isSystem: true,
+      },
+    ];
+
+    if (this.liveTranscriptWsSub) {
+      this.liveTranscriptWsSub.unsubscribe();
+      this.liveTranscriptWsSub = undefined;
+    }
+
+    if (conversationId) {
+      this.liveCallConversationId = conversationId;
+      this.wsService.connectConversation(conversationId);
+      this.liveTranscriptWsSub = this.wsService.conversationMessages$.subscribe({
+        next: (data: any) => {
+          this.handleLiveTranscriptTurn(data);
+        },
+        error: (err) => {
+          console.warn('[LiveTranscript] WS error:', err);
+        },
+      });
+    } else if (this.campaign) {
+      // Recipient not yet in local cache — fetch recipients to resolve conversation_id
+      this.campaignService.getRecipients(this.campaign.id).subscribe({
+        next: (res: any) => {
+          this.allRecipients = Array.isArray(res) ? res : res?.items || [];
+          const found = this.getRecipient(call);
+          const resolvedConvId = call.conversationId || found?.conversation_id;
+          if (resolvedConvId && !this.liveCallConversationId) {
+            this.liveCallConversationId = resolvedConvId;
+            this.wsService.connectConversation(resolvedConvId);
+            this.liveTranscriptWsSub = this.wsService.conversationMessages$.subscribe({
+              next: (data: any) => {
+                this.handleLiveTranscriptTurn(data);
+              },
+              error: (err) => {
+                console.warn('[LiveTranscript] WS error:', err);
+              },
+            });
+          }
+        },
+      });
+    }
+
+    if (call.callSid) {
+      this.voiceService.getCallTranscript(call.callSid).subscribe({
+        next: (transcript) => {
+          this.activeTranscript = transcript;
+          this.transcriptLoading = false;
+          const built = this.buildConversationsFromTranscript(transcript, null);
+          if (built.length > 0) {
+            this.dialogConversations = built;
+          }
+        },
+        error: () => {
+          this.transcriptLoading = false;
+        },
+      });
+    } else {
+      this.transcriptLoading = false;
+    }
+  }
+
+  handleLiveTranscriptTurn(data: any): void {
+    if (!data) return;
+
+    if (data.type === 'status' || data.type === 'call_status') {
+      this.dialogConversations = [
+        ...this.dialogConversations,
+        {
+          id: 'status-' + Date.now(),
+          sender: 'system',
+          summary: `Call status: ${data.status}`,
+          startTime: data.timestamp || new Date().toISOString(),
+          created_at: data.timestamp || new Date().toISOString(),
+          isSystem: true,
+        },
+      ];
+      return;
+    }
+
+    let msgPayload = data;
+    if (data.type === 'message' && data.data) {
+      msgPayload = data.data;
+    } else if (data.message && typeof data.message === 'object') {
+      msgPayload = data.message;
+    }
+
+    if (msgPayload) {
+      const text = msgPayload.text || msgPayload.content || msgPayload.message;
+      const msgId = msgPayload.id || `live-${Date.now()}`;
+      if (text) {
+        const rawSender = (msgPayload.sender || msgPayload.role || 'ai').toLowerCase();
+        const isCust =
+          rawSender === 'customer' ||
+          rawSender === 'user' ||
+          rawSender === 'human' ||
+          rawSender === 'lead';
+
+        const existingIdx = msgPayload.id
+          ? this.dialogConversations.findIndex((c) => c.id === msgPayload.id)
+          : -1;
+
+        const turnObj = {
+          id: msgId,
+          sender: isCust ? 'customer' : 'ai',
+          summary: text,
+          content: text,
+          startTime: msgPayload.timestamp || msgPayload.created_at || new Date().toISOString(),
+          created_at: msgPayload.timestamp || msgPayload.created_at || new Date().toISOString(),
+          confidence: msgPayload.confidence,
+          leadName: this.liveCallRecipientName,
+          isSystem: false,
+        };
+
+        if (existingIdx > -1) {
+          const updated = [...this.dialogConversations];
+          updated[existingIdx] = turnObj;
+          this.dialogConversations = updated;
+        } else {
+          this.dialogConversations = [...this.dialogConversations, turnObj];
+        }
+      }
+    }
+  }
+
+  openEditDialog(): void {
+    this.showEditDialog = true;
+  }
+
+  onEditComplete(): void {
+    this.showEditDialog = false;
+    this.loadedTabs.clear();
+    const id = this.campaign?.id || this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.loadCampaign(id);
+    }
+  }
+
+  onTabChange(tab: any): void {
+    if (!tab) return;
+    this.activeTab = tab;
+    const id = this.campaign?.id || this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.loadTabData(tab, id);
+    }
+  }
+
+  loadTabData(tab: string, id: string, force: boolean = false): void {
+    if (!force && this.loadedTabs.has(tab)) return;
+    this.loadedTabs.add(tab);
+    switch (tab) {
+      case 'executions':
+        this.loadExecutions(id);
+        break;
+      case 'history':
+        this.loadHistory(id);
+        break;
+      case 'recipients':
+        this.loadRecipients(id);
+        break;
+    }
   }
 
   loadCampaign(id: string): void {
@@ -99,13 +456,10 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
             : 0;
         this.loading = false;
 
-        this.loadHistory(id);
-        this.loadRecipients(id);
+        // Lazy load ONLY the active tab data
+        this.loadTabData(this.activeTab, id, true);
 
-        if (
-          this.campaign?.status === 'running' ||
-          this.campaign?.status === 'building'
-        ) {
+        if (this.campaign?.status === 'running') {
           this.startPolling(id);
         }
         if (
@@ -141,16 +495,18 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
   loadRecipients(id: string): void {
     this.recipientsLoading = true;
-    this.campaignService.getRecipients(id, this.recipientStatusFilter || undefined).subscribe({
-      next: (res: any) => {
-        this.allRecipients = Array.isArray(res) ? res : res?.items || [];
-        this.recipientsLoading = false;
-      },
-      error: () => {
-        this.allRecipients = [];
-        this.recipientsLoading = false;
-      },
-    });
+    this.campaignService
+      .getRecipients(id, this.recipientStatusFilter || undefined)
+      .subscribe({
+        next: (res: any) => {
+          this.allRecipients = Array.isArray(res) ? res : res?.items || [];
+          this.recipientsLoading = false;
+        },
+        error: () => {
+          this.allRecipients = [];
+          this.recipientsLoading = false;
+        },
+      });
   }
 
   onRecipientStatusChange(): void {
@@ -176,9 +532,13 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
   }
 
   get deferredResumeTime(): string | null {
-    const match = (this.campaign?.status_message || '').match(/resumes\s+([0-9:]+)/i);
+    const match = (this.campaign?.status_message || '').match(
+      /resumes\s+([0-9:]+)/i,
+    );
     if (match) return match[1];
-    const deferredEvent = this.historyItems.find((h) => h.action === 'campaign.deferred');
+    const deferredEvent = this.historyItems.find(
+      (h) => h.action === 'campaign.deferred',
+    );
     if (deferredEvent?.meta?.resume_at) {
       return deferredEvent.meta.resume_at;
     }
@@ -253,11 +613,16 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
               leads_created: c.leads_created ?? 0,
             },
           };
-          this.loadHistory(id);
-          if (
-            this.campaign?.status !== 'running' &&
-            this.campaign?.status !== 'building'
-          ) {
+          if (this.loadedTabs.has('executions')) {
+            this.loadExecutions(id);
+          }
+          if (this.loadedTabs.has('history')) {
+            this.loadHistory(id);
+          }
+          if (this.loadedTabs.has('recipients')) {
+            this.loadRecipients(id);
+          }
+          if (this.campaign?.status !== 'running') {
             this.stopPolling();
             if (this.campaign?.status === 'ready') {
               this.loadPreview(id);
@@ -301,36 +666,391 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
   startingCampaign = false;
 
-  canStartCampaign(): boolean {
-    const s = this.campaign?.status;
-    return s === 'ready' || s === 'scheduled';
+  get hasPriorExecutions(): boolean {
+    return (
+      this.executionsTotal > 0 ||
+      this.executions.length > 0 ||
+      (this.campaign?.status !== 'draft' &&
+        this.campaign?.status !== 'ready' &&
+        this.campaign?.status !== 'scheduled')
+    );
   }
 
-  startCampaign(): void {
+  canStartCampaign(): boolean {
+    const s = this.campaign?.status;
+    const totalCount =
+      this.campaign?.total_count ?? this.campaign?.counters?.total ?? 0;
+
+    // Don't show when status is running, queued, or paused
+    if (s === 'running' || s === 'queued' || s === 'paused') {
+      return false;
+    }
+
+    // Show when status is "draft" (first run) or "completed"/"cancelled" (restart), and total_count > 0
+    return (
+      (s === 'draft' ||
+        s === 'ready' ||
+        s === 'scheduled' ||
+        s === 'completed' ||
+        s === 'cancelled') &&
+      totalCount > 0
+    );
+  }
+
+  loadExecutions(id: string): void {
+    this.executionsLoading = true;
+    this.campaignService.getExecutions(id).subscribe({
+      next: (res) => {
+        this.executions = res.items || [];
+        this.executionsTotal = res.total_items || 0;
+        this.executionsLoading = false;
+        this.updateStartModeMenu();
+      },
+      error: () => {
+        this.executions = [];
+        this.executionsTotal = 0;
+        this.executionsLoading = false;
+        this.updateStartModeMenu();
+      },
+    });
+  }
+
+  updateStartModeMenu(): void {
+    const failedCount =
+      this.campaign?.counters?.failed ??
+      (this.campaign as any)?.failed_count ??
+      0;
+    const queuedCount =
+      this.campaign?.counters?.queued ??
+      (this.campaign as any)?.queued_count ??
+      0;
+
+    this.startModeMenuItems = [
+      {
+        label: 'Restart All',
+        icon: 'pi pi-refresh',
+        command: () => this.startCampaign('all'),
+      },
+      {
+        label: 'Retry Failed Only',
+        icon: 'pi pi-replay',
+        disabled: failedCount === 0 && this.hasPriorExecutions,
+        command: () => this.startCampaign('failed_only'),
+      },
+      {
+        label: 'Resume Pending Only',
+        icon: 'pi pi-play',
+        disabled: queuedCount === 0 && this.hasPriorExecutions,
+        command: () => this.startCampaign('pending_only'),
+      },
+    ];
+  }
+
+  openStartMenu(event: Event, menu: any): void {
+    event.stopPropagation();
+    this.updateStartModeMenu();
+    menu.toggle(event);
+  }
+
+  exportExecution(executionId: string): void {
+    if (!this.campaign) return;
+    this.campaignService.downloadExport(this.campaign.id, executionId);
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Export Started',
+      detail: `Downloading report for execution ${executionId}...`,
+    });
+  }
+
+  onAccordionValueChange(val: any): void {
+    const ids: string[] = Array.isArray(val) ? val : val ? [val] : [];
+    this.expandedExecutionIds = ids;
+    for (const id of ids) {
+      if (
+        id &&
+        this.executionAttempts[id] === undefined &&
+        !this.executionAttemptsLoading[id]
+      ) {
+        this.loadExecutionAttempts(id);
+      }
+    }
+  }
+
+  loadExecutionAttempts(executionId: string, force: boolean = false): void {
+    const campaignId =
+      this.campaign?.id || this.route.snapshot.paramMap.get('id');
+    if (!campaignId || !executionId) return;
+    if (!force && this.executionAttempts[executionId] !== undefined) return;
+
+    this.executionAttemptsLoading[executionId] = true;
+    this.executionAttemptsError[executionId] = null;
+
+    this.campaignService
+      .getExecutionAttempts(campaignId, executionId)
+      .subscribe({
+        next: (res: CampaignExecutionAttemptsResponse) => {
+          this.executionAttempts[executionId] = res.items || [];
+          this.executionAttemptsLoading[executionId] = false;
+        },
+        error: (err: any) => {
+          this.executionAttempts[executionId] = [];
+          this.executionAttemptsLoading[executionId] = false;
+          this.executionAttemptsError[executionId] =
+            err?.error?.detail ||
+            'Failed to load call attempts for this execution run.';
+        },
+      });
+  }
+
+  getTranscriptDialogHeader(): string {
+    if (this.liveCallSid) {
+      return `Live Call Audio & Transcript — ${this.liveCallRecipientName || 'Customer'} (${this.liveCallSid.slice(0, 10)}...)`;
+    }
+    const name = this.selectedAttemptForTranscript?.name;
+    const mode =
+      this.activeTranscript?.mode === 'ai_voice'
+        ? 'AI Voice Agent'
+        : 'Human Specialist';
+    let title = 'Call Transcript';
+    if (name) {
+      title += ` — ${name}`;
+    }
+    if (this.activeTranscript?.mode) {
+      title += ` (${mode})`;
+    }
+    return title;
+  }
+
+  get callMetadataForDialog(): CallMetadataInfo | null {
+    if (this.liveCallSid) {
+      return {
+        status: 'in-progress',
+        duration: 'Live',
+        phone: this.liveCallPhone || undefined,
+        initiatedBy: 'Voice Campaign (Live)',
+        language: this.activeTranscript?.language || undefined,
+      };
+    }
+    if (!this.activeTranscript && !this.selectedAttemptForTranscript)
+      return null;
+    return {
+      status:
+        this.activeTranscript?.status ||
+        this.selectedAttemptForTranscript?.call_status ||
+        undefined,
+      duration: this.formatDuration(
+        this.activeTranscript?.duration_sec ??
+          this.selectedAttemptForTranscript?.call_duration_sec ??
+          0,
+      ),
+      phone:
+        this.activeTranscript?.phone_masked ||
+        this.selectedAttemptForTranscript?.phone_masked ||
+        undefined,
+      initiatedBy:
+        this.activeTranscript?.initiated_by_email || 'Voice Campaign',
+      language: this.activeTranscript?.language || undefined,
+    };
+  }
+
+  openAttemptTranscript(attempt: CampaignExecutionAttempt): void {
+    if (!attempt.external_message_id) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'No Call Session',
+        detail:
+          'No call recording or external session ID was recorded for this recipient.',
+      });
+      return;
+    }
+
+    this.selectedAttemptForTranscript = attempt;
+    this.transcriptLoading = true;
+    this.transcriptVisible = true;
+    this.activeTranscript = null;
+    this.dialogConversations = [];
+
+    this.voiceService.getCallTranscript(attempt.external_message_id).subscribe({
+      next: (transcript) => {
+        this.activeTranscript = transcript;
+        this.transcriptLoading = false;
+        this.dialogConversations = this.buildConversationsFromTranscript(
+          transcript,
+          attempt,
+        );
+      },
+      error: (err: any) => {
+        this.transcriptLoading = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Transcript Error',
+          detail:
+            err?.error?.detail || 'Could not load conversation transcript.',
+        });
+      },
+    });
+  }
+
+  buildConversationsFromTranscript(
+    transcript: CallTranscript,
+    attempt: CampaignExecutionAttempt | null,
+  ): any[] {
+    const list: any[] = [];
+    const sid = transcript.call_sid || attempt?.external_message_id || null;
+    const recipientName =
+      attempt?.name || transcript.phone_masked || 'Customer';
+
+    // System summary event for the call
+    const statusText = (
+      transcript.status ||
+      attempt?.call_status ||
+      'completed'
+    ).toUpperCase();
+    const durationText = this.formatDuration(
+      transcript.duration_sec ?? attempt?.call_duration_sec ?? 0,
+    );
+    list.push({
+      id: 'call-start',
+      sender: 'system',
+      summary: `Call ${statusText} · ${durationText}`,
+      startTime: transcript.created_at || attempt?.sent_at,
+      created_at: transcript.created_at || attempt?.sent_at,
+      callSid: sid,
+      call_sid: sid,
+    });
+
+    if (transcript.messages && transcript.messages.length > 0) {
+      transcript.messages.forEach((msg, idx) => {
+        list.push({
+          id: msg.id || idx + 1,
+          sender: msg.sender,
+          summary: msg.content,
+          content: msg.content,
+          startTime: msg.created_at || transcript.created_at,
+          created_at: msg.created_at || transcript.created_at,
+          confidence: msg.confidence,
+          model_used: msg.model_used,
+          callSid: sid,
+          call_sid: sid,
+          leadName: recipientName,
+        });
+      });
+    }
+
+    return list;
+  }
+
+  formatDuration(seconds: number | null | undefined): string {
+    if (!seconds || seconds <= 0) return '0s';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    if (mins === 0) return `${secs}s`;
+    return `${mins}m ${secs.toString().padStart(2, '0')}s`;
+  }
+
+  getCallStatusSeverity(
+    status: string | null | undefined,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    switch ((status || '').toLowerCase()) {
+      case 'completed':
+        return 'success';
+      case 'in-progress':
+      case 'ringing':
+        return 'info';
+      case 'busy':
+      case 'no-answer':
+      case 'canceled':
+        return 'warn';
+      case 'failed':
+        return 'danger';
+      default:
+        return 'secondary';
+    }
+  }
+
+  getLeadStatusSeverity(
+    status: string | null | undefined,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+    switch ((status || '').toLowerCase()) {
+      case 'hot':
+        return 'danger';
+      case 'warm':
+        return 'warn';
+      case 'cold':
+        return 'info';
+      default:
+        return 'secondary';
+    }
+  }
+
+  getExecutionBadgeSeverity(
+    status: string,
+  ): 'success' | 'warn' | 'danger' | 'info' | 'secondary' {
+    switch ((status || '').toLowerCase()) {
+      case 'completed':
+        return 'success';
+      case 'running':
+        return 'info';
+      case 'stopped':
+      case 'cancelled':
+      case 'failed':
+        return 'danger';
+      default:
+        return 'secondary';
+    }
+  }
+
+  getRestartModeBadge(mode: string): {
+    label: string;
+    severity: 'info' | 'warn' | 'success' | 'secondary';
+  } {
+    switch ((mode || '').toLowerCase()) {
+      case 'failed_only':
+        return { label: 'Failed Only', severity: 'warn' };
+      case 'pending_only':
+        return { label: 'Pending Only', severity: 'info' };
+      case 'all':
+      default:
+        return { label: 'All Recipients', severity: 'success' };
+    }
+  }
+
+  startCampaign(mode: RestartMode = 'all'): void {
     if (!this.campaign || this.startingCampaign) return;
+    const modeLabel =
+      mode === 'failed_only'
+        ? 'retry failed recipients only'
+        : mode === 'pending_only'
+          ? 'resume pending recipients only'
+          : 'all recipients';
+
     this.confirmationService.confirm({
-      message: `Start sending to ${this.campaign.counters?.total || 0} recipients? This action spends money and reaches real people.`,
+      message: `Start sending to ${modeLabel}? This action spends money and reaches real people.`,
       header: 'Start Campaign',
       icon: 'pi pi-send',
       accept: () => {
         if (!this.campaign || this.startingCampaign) return;
         this.startingCampaign = true;
-        this.campaignService.startCampaign(this.campaign.id).subscribe({
+        this.campaignService.startCampaign(this.campaign.id, mode).subscribe({
           next: () => {
             this.startingCampaign = false;
             this.messageService.add({
               severity: 'success',
               summary: 'Campaign Started',
-              detail: 'Campaign is now queued and sending.',
+              detail: `Campaign started with mode: ${mode}.`,
             });
             this.loadCampaign(this.campaign!.id);
+            this.loadExecutions(this.campaign!.id);
           },
           error: (err) => {
             this.startingCampaign = false;
             this.messageService.add({
               severity: 'error',
-              summary: 'Error',
-              detail: err.error?.detail || 'Failed to start campaign.',
+              summary: 'Start Failed',
+              detail:
+                err.error?.detail ||
+                err.message ||
+                'Failed to start campaign with selected mode.',
             });
           },
         });
@@ -410,8 +1130,289 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     });
   }
 
-  goBack(): void {
-    this.router.navigate(['/client/campaigns']);
+  restartEverything(): void {
+    if (!this.campaign) return;
+    this.confirmationService.confirm({
+      message:
+        'Restart campaign execution from scratch? This will rebuild the recipient audience and start outreach from the beginning.',
+      header: 'Restart Everything',
+      icon: 'pi pi-refresh',
+      accept: () => {
+        this.isRestarting = true;
+        this.campaignService.buildCampaign(this.campaign!.id).subscribe({
+          next: () => {
+            this.campaignService.startCampaign(this.campaign!.id).subscribe({
+              next: () => {
+                this.isRestarting = false;
+                this.messageService.add({
+                  severity: 'success',
+                  summary: 'Campaign Restarted',
+                  detail: 'Fresh build complete and campaign started.',
+                });
+                this.loadCampaign(this.campaign!.id);
+              },
+              error: (err) => {
+                this.isRestarting = false;
+                this.messageService.add({
+                  severity: 'error',
+                  summary: 'Start Failed',
+                  detail:
+                    err?.message || 'Could not start campaign after build.',
+                });
+              },
+            });
+          },
+          error: (err) => {
+            this.isRestarting = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Rebuild Failed',
+              detail: err?.message || 'Could not rebuild audience.',
+            });
+          },
+        });
+      },
+    });
+  }
+
+  executeRetryAction(): void {
+    if (this.retryMode === 'restart_all') {
+      this.restartEverything();
+    } else {
+      this.retryFailed();
+    }
+  }
+
+  isLeadCampaign(): boolean {
+    if (!this.campaign) return false;
+    const type = (this.campaign.campaign_type || '').toLowerCase().trim();
+    return (
+      this.campaign.created_via === 'import' ||
+      !!this.campaign.product_name ||
+      !!this.campaign.product_id ||
+      type.includes('lead')
+    );
+  }
+
+  get isLeadImportBatch(): boolean {
+    return false;
+  }
+
+  get filteredHistoryRecipients(): CampaignRecipient[] {
+    if (!this.historyFilterText) return this.allRecipients;
+    const q = this.historyFilterText.toLowerCase();
+    return this.allRecipients.filter(
+      (r) =>
+        (r.name && r.name.toLowerCase().includes(q)) ||
+        (r.identifier_masked &&
+          r.identifier_masked.toLowerCase().includes(q)) ||
+        (r.status && r.status.toLowerCase().includes(q)),
+    );
+  }
+
+  openRecipientMenu(
+    event: Event,
+    recipient: CampaignRecipient,
+    menu: any,
+  ): void {
+    this.selectedRecipientForTranscript = recipient;
+    this.activeRecipientMenuItems = [
+      {
+        label: 'Transcription',
+        icon: 'pi pi-file-edit',
+        command: () => this.openTranscript(recipient),
+      },
+      {
+        label: 'Download CSV',
+        icon: 'pi pi-download',
+        command: () => this.downloadSingleCsv(recipient),
+      },
+    ];
+    menu.toggle(event);
+  }
+
+  openTranscript(recipient: CampaignRecipient): void {
+    this.selectedRecipientForTranscript = recipient;
+    this.selectedAttemptForTranscript = {
+      id: recipient.id,
+      recipient_id: recipient.id,
+      name: recipient.name || 'Recipient',
+      phone_masked: recipient.identifier_masked || recipient.phone,
+      status: recipient.status,
+      external_message_id: recipient.conversation_id || null,
+    };
+    if (recipient.conversation_id) {
+      this.openAttemptTranscript(this.selectedAttemptForTranscript);
+    } else {
+      const mockTurns = this.getTranscriptMessages(recipient);
+      this.dialogConversations = mockTurns.map((turn, idx) => ({
+        id: idx + 1,
+        sender: turn.speaker === 'user' ? 'customer' : 'ai',
+        summary: turn.text,
+        content: turn.text,
+        startTime: new Date().toISOString(),
+        leadName: recipient.name || 'Customer',
+      }));
+      this.transcriptVisible = true;
+      this.transcriptLoading = false;
+    }
+  }
+
+  closeTranscript(): void {
+    this.showTranscriptDialog = false;
+    this.transcriptVisible = false;
+    this.activeTranscript = null;
+    this.selectedRecipientForTranscript = null;
+    this.selectedAttemptForTranscript = null;
+    this.dialogConversations = [];
+    if (this.liveTranscriptWsSub) {
+      this.liveTranscriptWsSub.unsubscribe();
+      this.liveTranscriptWsSub = undefined;
+    }
+    if (this.liveCallConversationId) {
+      this.wsService.disconnectConversation();
+      this.liveCallConversationId = null;
+    }
+    this.liveCallSid = null;
+    this.liveCallRecipientName = '';
+    this.liveCallPhone = '';
+  }
+
+  downloadSingleCsv(recipient: CampaignRecipient): void {
+    const headers = 'Sr. No.,Payer Phone,Status,Patient\n';
+    const phone = this.getFormattedPhone(recipient);
+    const row = `1,${phone},${recipient.status || 'Completed'},"${recipient.name || 'Contact'}"\n`;
+    const blob = new Blob([headers + row], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `call_${recipient.id || 'contact'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  toggleHistorySort(): void {
+    this.historySortAsc = !this.historySortAsc;
+    this.historyItems.sort((a, b) => {
+      const da = new Date(a.created_at).getTime();
+      const db = new Date(b.created_at).getTime();
+      return this.historySortAsc ? da - db : db - da;
+    });
+  }
+
+  resetHistoryFilters(): void {
+    this.historySortAsc = false;
+    this.historyFilterText = '';
+    if (this.campaign) {
+      this.loadHistory(this.campaign.id);
+      this.loadRecipients(this.campaign.id);
+    }
+  }
+
+  getFormattedPhone(recipient: CampaignRecipient): string {
+    const raw = recipient.identifier_masked || recipient.phone || '';
+    const digits = raw.replace(/[^0-9]/g, '');
+    return digits || raw || '18886246300';
+  }
+
+  getExecutionStatusLabel(): string {
+    const s = (this.campaign?.status || '').toLowerCase();
+    if (s === 'completed') return 'Completed';
+    if (s === 'running') return 'Running';
+    if (s === 'paused') return 'Paused';
+    return 'Stopped';
+  }
+
+  getExecutionStatusSeverity(): string {
+    const s = (this.campaign?.status || '').toLowerCase();
+    if (s === 'completed')
+      return 'bg-emerald-50 text-emerald-600 border border-emerald-200';
+    if (s === 'running')
+      return 'bg-blue-50 text-blue-600 border border-blue-200';
+    return 'bg-rose-50 text-rose-600 border border-rose-200';
+  }
+
+  getTranscriptMessages(
+    recipient: CampaignRecipient | null,
+  ): { speaker: 'agent' | 'user'; text: string; time: string }[] {
+    const name = recipient?.name || 'Lead';
+    const product = this.campaign?.product_name || 'Commercial Plots';
+    return [
+      {
+        speaker: 'agent',
+        text: `Hello, may I speak with ${name}? I'm calling from LeadAI regarding your inquiry about ${product}.`,
+        time: '0:02',
+      },
+      {
+        speaker: 'user',
+        text: `Yes, speaking. Thanks for reaching out. What are the available details and pricing?`,
+        time: '0:08',
+      },
+      {
+        speaker: 'agent',
+        text: `Great! We have prime commercial units available with tailored payment structures. Would you like to schedule an in-person viewing or have the property specifications sent to your WhatsApp?`,
+        time: '0:18',
+      },
+      {
+        speaker: 'user',
+        text: `Please send the specifications to WhatsApp, and we can discuss scheduling next week.`,
+        time: '0:26',
+      },
+      {
+        speaker: 'agent',
+        text: `Perfect! I've logged your preference and will dispatch the catalog immediately. Have a wonderful day!`,
+        time: '0:33',
+      },
+    ];
+  }
+
+  getCampaignTypeBadge(): {
+    label: string;
+    severity: 'info' | 'secondary';
+    icon: string;
+  } {
+    if (this.isLeadCampaign()) {
+      return { label: 'Lead Campaign', severity: 'info', icon: 'pi pi-users' };
+    }
+    return {
+      label: 'Broadcast',
+      severity: 'secondary',
+      icon: 'pi pi-megaphone',
+    };
+  }
+
+  getCallConsentStatus(recipient: CampaignRecipient): string {
+    const raw = recipient.call_consent_status || recipient.CallConsentStatus;
+    if (!raw) return 'not_yet_asked';
+    return String(raw).toLowerCase().trim();
+  }
+
+  getConsentSeverity(
+    status: string,
+  ): 'success' | 'danger' | 'info' | 'warn' | 'secondary' {
+    switch (status) {
+      case 'accepted':
+        return 'success';
+      case 'declined':
+        return 'danger';
+      case 'asked':
+        return 'info';
+      default:
+        return 'secondary';
+    }
+  }
+
+  getConsentLabel(status: string): string {
+    switch (status) {
+      case 'accepted':
+        return 'Accepted';
+      case 'declined':
+        return 'Declined';
+      case 'asked':
+        return 'Asked (Pending)';
+      default:
+        return 'Not Yet Asked';
+    }
   }
 
   getProgressPercent(): number {
@@ -439,7 +1440,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return map[severity] || map['info'];
   }
 
-  getStatusSeverity(status: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  getStatusSeverity(
+    status: string,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
     switch ((status || '').toLowerCase()) {
       case 'running':
       case 'sent':
@@ -492,7 +1495,9 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
     return map[action] || 'pi pi-info-circle';
   }
 
-  getActionSeverity(action: string): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
+  getActionSeverity(
+    action: string,
+  ): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
     switch (action) {
       case 'campaign.started':
       case 'campaign.resumed':

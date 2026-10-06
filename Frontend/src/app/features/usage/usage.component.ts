@@ -500,17 +500,17 @@ export class UsageComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Calculates 18% standard GST on the subtotal.
+   * GST calculation (set to 0 for now until tax invoicing is enabled).
    */
   public getGstAmount(): number {
-    return Math.round(this.getSubtotal() * 0.18 * 100) / 100;
+    return 0;
   }
 
   /**
-   * Computes grand total payable including GST.
+   * Computes grand total payable.
    */
   public getGrandTotal(): number {
-    return Math.round((this.getSubtotal() + this.getGstAmount()) * 100) / 100;
+    return this.getSubtotal();
   }
 
   /**
@@ -811,5 +811,17 @@ export class UsageComponent implements OnInit, OnDestroy {
    */
   public navigateToPricing(): void {
     this.router.navigate(['/plans']);
+  }
+
+  /**
+   * Formats duration in seconds into human-readable format:
+   * e.g., 111s -> "1min 51sec", 45s -> "45sec", 120s -> "2min"
+   */
+  public formatDuration(seconds: number | null | undefined): string {
+    if (!seconds || seconds <= 0) return '—';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    if (mins === 0) return `${secs}sec`;
+    return secs > 0 ? `${mins}min ${secs}sec` : `${mins}min`;
   }
 }

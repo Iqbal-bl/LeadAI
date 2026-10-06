@@ -66,12 +66,15 @@ export interface LinkedInInvitationItem {
   shared_secret: string;
   sender_urn?: string;
   public_id?: string;
+  profile_url?: string;
   name: string;
   headline?: string;
   message?: string;
   sent_time?: number | string;
   avatar_url?: string;
   processing?: boolean;
+  is_crm_lead?: boolean;
+  [key: string]: any;
 }
 
 export interface GetInvitationsResponse {
@@ -90,6 +93,7 @@ export interface LinkedInReplyInvitationPayload {
 export interface LinkedInSettingsPayload {
   auto_accept: boolean;
   welcome_message?: string | null;
+  auto_dm_leads?: boolean;
 }
 
 export interface BatchAcceptResponse {
@@ -121,6 +125,12 @@ export interface LinkedInConversation {
   unread_count?: number;
   is_read?: boolean;
   total_events?: number;
+  is_lead_candidate?: boolean;
+  lead_status?: string;
+  lead_score?: number;
+  lead_intent?: string;
+  crm_account_id?: string;
+  [key: string]: any;
 }
 
 export interface LinkedInMessage {
@@ -214,4 +224,33 @@ export interface SyncCommentsResponse {
   };
 }
 
+export interface LinkedInAutoConnectSettings {
+  enabled: boolean;
+  runs_per_day: number;
+  profiles_per_run: number;
+  target_prompt: string;
+  target_keywords: string;
+  custom_message: string;
+  active_hours_start: number;
+  active_hours_end: number;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  total_sent_today?: number;
+  total_sent_all_time?: number;
+  last_run_status?: string | null;
+  last_run_detail?: string | null;
+}
 
+export interface GetAutoConnectSettingsResponse {
+  settings: LinkedInAutoConnectSettings;
+}
+
+export interface SaveAutoConnectSettingsResponse {
+  ok: boolean;
+  settings: LinkedInAutoConnectSettings;
+}
+
+export interface TriggerAutoConnectResponse {
+  ok: boolean;
+  message: string;
+}

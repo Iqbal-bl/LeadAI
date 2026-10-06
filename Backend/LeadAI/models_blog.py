@@ -25,7 +25,7 @@ from sqlalchemy import (
 try:
     from core.base import Base
 except ImportError:
-    from base import Base
+    from core.base import Base
 
 
 def _uuid() -> str:
@@ -206,6 +206,7 @@ class LeadSocialComment(LeadAIBase):
     )
 
     ClientId = Column(String(36), nullable=False, index=True)
+    AccountId = Column(String(36), nullable=True, index=True)        # Linked LeadChannelAccount.Id for multi-account isolation
     Channel = Column(String(30), nullable=False, default="linkedin")  # linkedin | facebook | instagram
     
     # Post Context

@@ -11,12 +11,6 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'analytics.read',
       },
       {
-        label: 'Leads',
-        icon: 'pi pi-users',
-        routerLink: '/client/leads',
-        permission: 'lead.read.all',
-      },
-      {
         label: 'Customers',
         icon: 'pi pi-id-card',
         routerLink: '/client/customers',
@@ -27,6 +21,23 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         icon: 'pi pi-users',
         routerLink: '/client/team',
         permission: 'role.read',
+      },
+    ],
+  },
+  {
+    title: 'Leads',
+    items: [
+      {
+        label: 'Leads List',
+        icon: 'pi pi-users',
+        routerLink: '/client/leads/list',
+        permission: 'lead.read.all',
+      },
+      {
+        label: 'Lead Batches',
+        icon: 'pi pi-users',
+        routerLink: '/client/leads/batches',
+        permission: 'lead.read.all',
       },
     ],
   },
@@ -73,7 +84,7 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     title: 'Outreach & Campaigns',
     items: [
       {
-        label: 'Campaigns',
+        label: 'BroadCasts',
         icon: 'pi pi-megaphone',
         routerLink: '/client/campaigns',
         permission: 'campaign.read',
@@ -93,6 +104,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         label: 'Knowledge Base',
         icon: 'pi pi-book',
         routerLink: '/client/knowledge-base',
+        permission: 'kb.read',
+      },
+      {
+        label: 'Products',
+        icon: 'pi pi-box',
+        routerLink: '/client/products',
         permission: 'kb.read',
       },
       {

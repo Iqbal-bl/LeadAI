@@ -39,6 +39,7 @@ from .schemas import (
     CompanyOut,
     ConversationDetail,
     ConversationOut,
+    DataPointOut,
     DocumentDetailOut,
     DocumentOut,
     LeadOut,
@@ -77,6 +78,12 @@ def company_out(db: Session, client: Client, with_counts: bool = True) -> Compan
             .filter(LeadConversation.ClientId == client.Id,
                     LeadConversation.IsDeleted == False).count(),  # noqa: E712
         }
+    has_sub = None
+    if with_counts:
+        from .services import billing as billing_svc
+        active = billing_svc.get_active_recharge(db, client.Id)
+        has_sub = bool(active and active.Status == "active")
+
     return CompanyOut(
         id=client.Id,
         name=client.Name,
@@ -85,6 +92,7 @@ def company_out(db: Session, client: Client, with_counts: bool = True) -> Compan
         description=client.Description,
         is_active=bool(client.IsActive),
         created_at=client.CreatedAt,
+        has_active_subscription=has_sub,
         **counts,
     )
 
@@ -119,6 +127,7 @@ def document_out(row: LeadKbDocument) -> DocumentOut:
         file_name=row.FileName,
         content_type=row.ContentType,
         source_type=row.SourceType,
+        source_url=row.SourceUrl,
         status=row.Status,
         status_message=row.StatusMessage,
         chunk_count=row.ChunkCount or 0,
@@ -153,12 +162,25 @@ def script_out(row: LeadCompanyScript) -> ScriptOut:
         version=row.Version,
         is_default=bool(row.IsDefault),
         is_active=bool(row.IsActive),
-        voice_gender=row.VoiceGender,
-        voice_speaker=row.VoiceSpeaker,
         multi_stt=bool(row.MultiStt),
         section_count=len(sections),
         created_at=row.CreatedAt,
         updated_at=row.UpdatedAt,
+    )
+
+
+def data_point_out(row) -> DataPointOut:
+    return DataPointOut(
+        id=row.Id,
+        key=row.Key,
+        label=row.Label,
+        data_type=row.DataType,
+        options=row.OptionsJson,
+        description=row.Description,
+        required=bool(row.Required),
+        display_order=row.DisplayOrder or 0,
+        is_active=bool(row.IsActive),
+        created_at=row.CreatedAt,
     )
 
 
@@ -214,6 +236,7 @@ def lead_out(row: Lead | None) -> LeadOut | None:
         sentiment=row.Sentiment or "neutral",
         score_breakdown=row.ScoreBreakdown,
         qualified_at=row.QualifiedAt,
+        data_points=row.DataPointsJson,
     )
 
 

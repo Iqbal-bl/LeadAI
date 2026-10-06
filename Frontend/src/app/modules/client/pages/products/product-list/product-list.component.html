@@ -1,0 +1,673 @@
+<!-- Page Header -->
+<div
+  class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
+>
+  <div>
+    <h1
+      class="text-2xl font-bold tracking-tight"
+      style="color: var(--app-text)"
+    >
+      Products
+    </h1>
+    <p class="text-sm mt-0.5" style="color: var(--app-text-muted)">
+      Manage company products and their knowledge base training documents for AI
+      chat and qualification
+    </p>
+  </div>
+  <div class="flex items-center gap-3">
+    <p-button
+      *appHasPermission="PERMISSIONS.KB_MANAGE"
+      label="Add Product"
+      icon="pi pi-plus"
+      size="small"
+      (click)="openAddDialog()"
+      [style]="{
+        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+        border: 'none',
+      }"
+    ></p-button>
+  </div>
+</div>
+
+<!-- DataTable Card -->
+<div class="card-base overflow-hidden">
+  <p-table
+    #dtProducts
+    [value]="products"
+    [loading]="isLoading"
+    [paginator]="true"
+    [rows]="10"
+    [rowHover]="true"
+    dataKey="id"
+    [globalFilterFields]="[
+      'product_name',
+      'product_description',
+      'knowledge_base_file',
+    ]"
+    [tableStyle]="{ 'min-width': '65rem' }"
+  >
+    <ng-template pTemplate="caption">
+      <div
+        class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-2"
+      >
+        <div class="flex items-center gap-3 flex-1 max-w-lg">
+          <p-iconfield class="w-full">
+            <p-inputicon styleClass="pi pi-search" />
+            <input
+              pInputText
+              type="text"
+              [(ngModel)]="searchQuery"
+              (ngModelChange)="loadProducts()"
+              placeholder="Search products by name or description..."
+              class="w-full text-sm"
+            />
+          </p-iconfield>
+        </div>
+      </div>
+    </ng-template>
+
+    <ng-template pTemplate="header">
+      <tr>
+        <th style="min-width: 14rem">Product Name</th>
+        <th style="min-width: 12rem">Description</th>
+        <th style="min-width: 16rem">Knowledge Base File</th>
+        <th style="min-width: 10rem">Created At</th>
+        <th style="min-width: 10rem">Created By</th>
+        <th style="min-width: 8rem">Status</th>
+        <th style="width: 5rem"></th>
+      </tr>
+    </ng-template>
+
+    <ng-template pTemplate="body" let-product>
+      <tr>
+        <td>
+          <div class="flex items-center gap-3">
+            <div
+              class="w-9 h-9 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+              style="
+                background: linear-gradient(
+                  135deg,
+                  rgba(99, 102, 241, 0.12),
+                  rgba(139, 92, 246, 0.12)
+                );
+                color: #6366f1;
+                border: 1px solid rgba(99, 102, 241, 0.2);
+              "
+            >
+              <i class="pi pi-box"></i>
+            </div>
+            <div>
+              <span
+                class="font-semibold text-sm block"
+                style="color: var(--app-text)"
+              >
+                {{ product.product_name }}
+              </span>
+            </div>
+          </div>
+        </td>
+        <td class="max-w-xs">
+          <span
+            *ngIf="product.product_description"
+            class="text-xs text-slate-600 dark:text-slate-300 line-clamp-2"
+            [pTooltip]="product.product_description"
+            tooltipPosition="top"
+          >
+            {{ product.product_description }}
+          </span>
+          <span *ngIf="!product.product_description" class="text-xs text-slate-400">—</span>
+        </td>
+        <td>
+          <div *ngIf="product.knowledge_base_file || (product.bound_kb_documents && product.bound_kb_documents.length > 0)" class="space-y-1.5">
+            <div class="flex items-center gap-2">
+              <div
+                class="w-7 h-7 rounded flex items-center justify-center text-xs flex-shrink-0"
+                style="
+                  background: var(--app-surface-hover, rgba(0, 0, 0, 0.04));
+                  color: #8b5cf6;
+                "
+              >
+                <i class="pi pi-file"></i>
+              </div>
+              <div class="truncate max-w-xs">
+                <span
+                  class="text-xs font-medium block truncate"
+                  style="color: var(--app-text)"
+                >
+                  {{ product.knowledge_base_file || (product.bound_kb_documents && product.bound_kb_documents[0]?.file_name) || (product.bound_kb_documents && product.bound_kb_documents[0]?.title) }}
+                </span>
+                <span
+                  class="text-[11px] text-emerald-600 flex items-center gap-1 font-medium"
+                >
+                  <i class="pi pi-check-circle text-[10px]"></i> Indexed in KB
+                </span>
+              </div>
+            </div>
+
+            <!-- Additional Bound KB Badge -->
+            <div *ngIf="product.bound_kb_documents && product.bound_kb_documents.length > 1" class="pl-9">
+              <button
+                type="button"
+                (click)="openBindDialog(product)"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-colors hover:opacity-80"
+                style="background: rgba(99, 102, 241, 0.12); color: #6366f1; border: 1px solid rgba(99, 102, 241, 0.25);"
+                title="Click to view and manage all bound knowledge bases"
+              >
+                <i class="pi pi-paperclip text-[10px]"></i>
+                +{{ product.bound_kb_documents.length - 1 }} more bound KB
+              </button>
+            </div>
+          </div>
+
+          <div
+            *ngIf="!product.knowledge_base_file && (!product.bound_kb_documents || product.bound_kb_documents.length === 0)"
+            class="flex items-center gap-2"
+          >
+            <span class="text-xs italic" style="color: var(--app-text-muted)">
+              No file attached
+            </span>
+            <button
+              type="button"
+              (click)="openBindDialog(product)"
+              class="text-indigo-600 hover:text-indigo-700 text-xs font-medium flex items-center gap-0.5 ml-1"
+            >
+              <i class="pi pi-plus text-[10px]"></i> Bind KB
+            </button>
+          </div>
+        </td>
+        <td>
+          <span
+            class="text-xs font-mono"
+            style="color: var(--app-text-secondary)"
+          >
+            {{
+              product.created_at
+                ? (product.created_at | date: "mediumDate")
+                : "—"
+            }}
+          </span>
+        </td>
+        <td>
+          <span class="text-xs" style="color: var(--app-text-secondary)">
+            {{ product.created_by || "system" }}
+          </span>
+        </td>
+        <td>
+          <p-tag
+            [value]="product.is_deleted ? 'Archived' : 'Active'"
+            [severity]="product.is_deleted ? 'danger' : 'success'"
+            [rounded]="true"
+          ></p-tag>
+        </td>
+        <td class="text-right whitespace-nowrap">
+          <p-button
+            icon="pi pi-paperclip"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            pTooltip="Manage & Bind Knowledge Base"
+            tooltipPosition="top"
+            (click)="openBindDialog(product)"
+          ></p-button>
+          <p-button
+            icon="pi pi-ellipsis-v"
+            [rounded]="true"
+            [text]="true"
+            severity="secondary"
+            size="small"
+            (click)="openProductMenu($event, product)"
+          ></p-button>
+        </td>
+      </tr>
+    </ng-template>
+
+    <ng-template pTemplate="emptymessage">
+      <tr>
+        <td colspan="7">
+          <app-empty-state
+            [title]="'No Products'"
+            [description]="
+              'No products found. Add your first product to link its knowledge base documentation for AI answers.'
+            "
+            [icon]="'pi pi-box'"
+          />
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+
+  <p-menu
+    #productActionMenu
+    [popup]="true"
+    appendTo="body"
+    [model]="activeActionMenuItems"
+  ></p-menu>
+</div>
+
+<!-- Add / Edit Product Dialog -->
+<p-dialog
+  [header]="isEditMode ? 'Edit Product' : 'Add New Product'"
+  [(visible)]="showProductDialog"
+  [modal]="true"
+  [dismissableMask]="true"
+  [style]="{ width: '92vw', maxWidth: '560px' }"
+  [draggable]="false"
+  [resizable]="false"
+>
+  <div class="space-y-4 pt-2">
+    <!-- Notice Banner -->
+    <div
+      class="p-3 rounded-xl border flex items-start gap-3"
+      style="
+        background: linear-gradient(
+          135deg,
+          rgba(99, 102, 241, 0.05),
+          rgba(139, 92, 246, 0.05)
+        );
+        border-color: rgba(99, 102, 241, 0.2);
+      "
+    >
+      <i class="pi pi-info-circle text-indigo-500 mt-0.5"></i>
+      <p
+        class="text-xs leading-relaxed"
+        style="color: var(--app-text-secondary)"
+      >
+        Knowledge base documents attached to this product are automatically
+        parsed, embedded, and indexed so your AI agent can accurately answer
+        product-specific queries across chat and voice calls.
+      </p>
+    </div>
+
+    <!-- Product Name -->
+    <div>
+      <label
+        class="text-xs font-semibold uppercase tracking-wider block mb-1.5"
+        style="color: var(--app-text-secondary)"
+      >
+        Product Name <span class="text-red-500">*</span>
+      </label>
+      <input
+        pInputText
+        type="text"
+        [(ngModel)]="form.product_name"
+        class="w-full text-sm"
+        placeholder="e.g. Personal Loan Standard, Gold Subscription, Villa Model A"
+      />
+    </div>
+
+    <!-- Product Description -->
+    <div>
+      <label
+        class="text-xs font-semibold uppercase tracking-wider block mb-1.5"
+        style="color: var(--app-text-secondary)"
+      >
+        Product Description
+      </label>
+      <textarea
+        pInputText
+        [rows]="3"
+        [(ngModel)]="form.product_description"
+        class="w-full text-sm"
+        placeholder="Brief description of the product, key features, pricing, or target audience..."
+      ></textarea>
+      <span class="text-[11px] block mt-1" style="color: var(--app-text-muted)">
+        Provide details about the product to help AI agents accurately answer customer queries.
+      </span>
+    </div>
+
+    <!-- Knowledge Base File Upload -->
+    <div>
+      <label
+        class="text-xs font-semibold uppercase tracking-wider block mb-1.5"
+        style="color: var(--app-text-secondary)"
+      >
+        Knowledge Base File
+      </label>
+
+      <!-- Existing file indicator in edit mode -->
+      <div
+        *ngIf="isEditMode && form.existingFileName && !form.file"
+        class="mb-2 p-2.5 rounded-lg border flex items-center justify-between"
+        style="background: var(--app-surface); border-color: var(--app-border)"
+      >
+        <div class="flex items-center gap-2">
+          <i class="pi pi-file text-indigo-500"></i>
+          <span class="text-xs font-medium" style="color: var(--app-text)">
+            Current file: {{ form.existingFileName }}
+          </span>
+        </div>
+        <span class="text-[11px] text-emerald-600 font-medium">Active</span>
+      </div>
+
+      <!-- Selected new file preview -->
+      <div
+        *ngIf="form.file"
+        class="mb-2 p-2.5 rounded-lg border flex items-center justify-between"
+        style="
+          background: rgba(99, 102, 241, 0.06);
+          border-color: rgba(99, 102, 241, 0.3);
+        "
+      >
+        <div class="flex items-center gap-2 truncate">
+          <i class="pi pi-file text-indigo-600"></i>
+          <span
+            class="text-xs font-medium truncate"
+            style="color: var(--app-text)"
+          >
+            {{ form.file.name }} ({{ (form.file.size / 1024).toFixed(1) }} KB)
+          </span>
+        </div>
+        <button
+          type="button"
+          (click)="removeSelectedFile()"
+          class="text-red-500 hover:text-red-700 text-xs font-medium p-1"
+        >
+          <i class="pi pi-times"></i>
+        </button>
+      </div>
+
+      <!-- File upload dropzone -->
+      <div
+        class="p-4 rounded-xl border border-dashed text-center cursor-pointer transition-colors hover:border-indigo-400 relative"
+        style="border-color: var(--app-border); background: var(--app-surface)"
+      >
+        <input
+          type="file"
+          id="kbProductFileInput"
+          (change)="onFileSelected($event)"
+          accept=".pdf,.docx,.txt,.csv,.md,.json"
+          class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        />
+        <i class="pi pi-cloud-upload text-3xl mb-2 text-indigo-500"></i>
+        <p class="text-xs font-semibold" style="color: var(--app-text)">
+          {{
+            form.file
+              ? "Click or drop to replace file"
+              : "Click to browse or drop file here"
+          }}
+        </p>
+        <p class="text-[11px] mt-0.5" style="color: var(--app-text-muted)">
+          Supports PDF, DOCX, TXT, CSV, MD up to 10MB
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-end gap-2 pt-3">
+      <p-button
+        label="Cancel"
+        [text]="true"
+        severity="secondary"
+        (click)="showProductDialog = false"
+      ></p-button>
+      <p-button
+        [label]="isEditMode ? 'Update Product' : 'Add Product'"
+        icon="pi pi-check"
+        [loading]="isSaving"
+        (click)="saveProduct()"
+        [style]="{
+          background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+          border: 'none',
+        }"
+      ></p-button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<!-- Manage & Bind Knowledge Base Dialog -->
+<p-dialog
+  [header]="'Knowledge Base • ' + (managingProduct?.product_name || 'Product')"
+  [(visible)]="showBindDialog"
+  [modal]="true"
+  [dismissableMask]="true"
+  [style]="{ width: '92vw', maxWidth: '640px' }"
+  [draggable]="false"
+  [resizable]="false"
+>
+  <div class="space-y-5 pt-2">
+    <!-- Explanatory banner -->
+    <div
+      class="p-3.5 rounded-xl border flex items-start gap-3"
+      style="
+        background: linear-gradient(
+          135deg,
+          rgba(99, 102, 241, 0.06),
+          rgba(139, 92, 246, 0.06)
+        );
+        border-color: rgba(99, 102, 241, 0.2);
+      "
+    >
+      <i class="pi pi-book text-indigo-500 mt-0.5 text-base"></i>
+      <p
+        class="text-xs leading-relaxed"
+        style="color: var(--app-text-secondary)"
+      >
+        You can bind multiple knowledge bases to this product (such as specifications, price sheets, layout plans, and legal terms).
+        The AI retrieval engine indexes and references all bound documents to formulate grounded responses.
+      </p>
+    </div>
+
+    <!-- Currently Bound Knowledge Bases List -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <h4 class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-secondary)">
+          Attached Knowledge Bases ({{ managingProduct?.bound_kb_documents?.length || 0 }})
+        </h4>
+        <span *ngIf="managingProduct?.product_description" class="text-[11px] font-medium px-2 py-0.5 rounded-full" style="background: var(--app-surface-hover); color: var(--app-text-muted)">
+          {{ managingProduct?.product_description }}
+        </span>
+      </div>
+
+      <div *ngIf="managingProduct?.bound_kb_documents && managingProduct!.bound_kb_documents!.length > 0" class="space-y-2">
+        <div
+          *ngFor="let doc of managingProduct!.bound_kb_documents"
+          class="p-3 rounded-xl border flex items-center justify-between gap-3 transition-colors"
+          style="background: var(--app-surface); border-color: var(--app-border)"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <div
+              class="w-8 h-8 rounded-lg flex items-center justify-center text-xs flex-shrink-0"
+              [style.background]="doc.is_primary ? 'rgba(99, 102, 241, 0.12)' : 'rgba(16, 185, 129, 0.12)'"
+              [style.color]="doc.is_primary ? '#6366f1' : '#10b981'"
+            >
+              <i [class]="doc.is_primary ? 'pi pi-file' : 'pi pi-paperclip'"></i>
+            </div>
+            <div class="truncate">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold truncate block" style="color: var(--app-text)">
+                  {{ doc.title }}
+                </span>
+                <span
+                  class="text-[10px] font-medium px-1.5 py-0.2 rounded-full uppercase tracking-wider flex-shrink-0"
+                  [style.background]="doc.is_primary ? 'rgba(99, 102, 241, 0.15)' : 'rgba(16, 185, 129, 0.15)'"
+                  [style.color]="doc.is_primary ? '#4f46e5' : '#059669'"
+                >
+                  {{ doc.is_primary ? 'Primary' : 'Bound' }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2 text-[11px] mt-0.5" style="color: var(--app-text-muted)">
+                <span *ngIf="doc.file_name" class="truncate max-w-[200px]">{{ doc.file_name }}</span>
+                <span>•</span>
+                <span>{{ doc.chunk_count }} chunks</span>
+                <span>•</span>
+                <span class="text-emerald-600 font-medium capitalize">{{ doc.status }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <button
+              type="button"
+              (click)="unbindKb(doc.id, doc.title)"
+              class="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 rounded-lg transition-colors text-xs"
+              pTooltip="Unbind this knowledge base"
+              tooltipPosition="left"
+            >
+              <i class="pi pi-trash"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        *ngIf="!managingProduct?.bound_kb_documents || managingProduct!.bound_kb_documents!.length === 0"
+        class="p-4 rounded-xl border border-dashed text-center text-xs italic"
+        style="border-color: var(--app-border); color: var(--app-text-muted)"
+      >
+        No knowledge bases currently bound to this product. Bind one below to enhance AI grounding.
+      </div>
+    </div>
+
+    <!-- Bind Another Knowledge Base Form -->
+    <div class="pt-2 border-t" style="border-color: var(--app-border)">
+      <div class="flex items-center justify-between mb-3">
+        <h4 class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-secondary)">
+          Bind Another Knowledge Base
+        </h4>
+
+        <!-- Mode selector tabs -->
+        <div class="inline-flex rounded-lg p-0.5 border" style="background: var(--app-surface); border-color: var(--app-border)">
+          <button
+            type="button"
+            (click)="bindMode = 'existing'"
+            class="px-2.5 py-1 text-xs font-medium rounded-md transition-all"
+            [style.background]="bindMode === 'existing' ? 'var(--app-surface-hover, rgba(99,102,241,0.1))' : 'transparent'"
+            [style.color]="bindMode === 'existing' ? '#6366f1' : 'var(--app-text-muted)'"
+          >
+            <i class="pi pi-database text-[10px] mr-1"></i> From Library
+          </button>
+          <button
+            type="button"
+            (click)="bindMode = 'upload'"
+            class="px-2.5 py-1 text-xs font-medium rounded-md transition-all"
+            [style.background]="bindMode === 'upload' ? 'var(--app-surface-hover, rgba(99,102,241,0.1))' : 'transparent'"
+            [style.color]="bindMode === 'upload' ? '#6366f1' : 'var(--app-text-muted)'"
+          >
+            <i class="pi pi-upload text-[10px] mr-1"></i> Upload New File
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode 1: Select from existing company KB documents -->
+      <div *ngIf="bindMode === 'existing'" class="space-y-3">
+        <div *ngIf="availableKbOptions.length > 0">
+          <label class="text-xs font-semibold block mb-1.5" style="color: var(--app-text)">
+            Choose Existing Knowledge Base Document
+          </label>
+          <p-dropdown
+            [options]="availableKbOptions"
+            [(ngModel)]="selectedExistingKbId"
+            placeholder="Select a knowledge base to bind..."
+            optionLabel="label"
+            optionValue="value"
+            [filter]="true"
+            filterPlaceholder="Search knowledge base docs..."
+            styleClass="w-full text-sm"
+          ></p-dropdown>
+          <span class="text-[11px] block mt-1" style="color: var(--app-text-muted)">
+            Select from documents previously uploaded or created in your Knowledge Base.
+          </span>
+        </div>
+
+        <div
+          *ngIf="availableKbOptions.length === 0"
+          class="p-3 rounded-lg border text-xs"
+          style="background: var(--app-surface); border-color: var(--app-border); color: var(--app-text-muted)"
+        >
+          <i class="pi pi-info-circle mr-1 text-indigo-500"></i>
+          All company knowledge base documents are already bound to this product, or none exist. Switch to "Upload New File" to add another document.
+        </div>
+
+        <div class="flex justify-end pt-1">
+          <p-button
+            label="Bind Selected KB"
+            icon="pi pi-link"
+            size="small"
+            [disabled]="!selectedExistingKbId"
+            [loading]="isBinding"
+            (click)="bindSelectedExistingKb()"
+            [style]="{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+            }"
+          ></p-button>
+        </div>
+      </div>
+
+      <!-- Mode 2: Upload new file to bind -->
+      <div *ngIf="bindMode === 'upload'" class="space-y-3">
+        <!-- Selected file pill -->
+        <div
+          *ngIf="bindUploadFile"
+          class="p-2.5 rounded-lg border flex items-center justify-between"
+          style="background: rgba(99, 102, 241, 0.06); border-color: rgba(99, 102, 241, 0.3)"
+        >
+          <div class="flex items-center gap-2 truncate">
+            <i class="pi pi-file text-indigo-600"></i>
+            <span class="text-xs font-medium truncate" style="color: var(--app-text)">
+              {{ bindUploadFile.name }} ({{ (bindUploadFile.size / 1024).toFixed(1) }} KB)
+            </span>
+          </div>
+          <button
+            type="button"
+            (click)="removeBindUploadFile()"
+            class="text-red-500 hover:text-red-700 text-xs font-medium p-1"
+          >
+            <i class="pi pi-times"></i>
+          </button>
+        </div>
+
+        <!-- Dropzone -->
+        <div
+          class="p-4 rounded-xl border border-dashed text-center cursor-pointer transition-colors hover:border-indigo-400 relative"
+          style="border-color: var(--app-border); background: var(--app-surface)"
+        >
+          <input
+            type="file"
+            id="bindNewKbFileInput"
+            (change)="onBindFileSelected($event)"
+            accept=".pdf,.docx,.txt,.csv,.md,.json"
+            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+          <i class="pi pi-cloud-upload text-3xl mb-2 text-indigo-500"></i>
+          <p class="text-xs font-semibold" style="color: var(--app-text)">
+            {{ bindUploadFile ? 'Click or drop to replace file' : 'Click to browse or drop file here' }}
+          </p>
+          <p class="text-[11px] mt-0.5" style="color: var(--app-text-muted)">
+            Supports PDF, DOCX, TXT, CSV, MD up to 10MB
+          </p>
+        </div>
+
+        <div class="flex justify-end pt-1">
+          <p-button
+            label="Upload & Bind KB"
+            icon="pi pi-cloud-upload"
+            size="small"
+            [disabled]="!bindUploadFile"
+            [loading]="isBinding"
+            (click)="uploadAndBindNewKb()"
+            [style]="{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+            }"
+          ></p-button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-end gap-2 pt-3">
+      <p-button
+        label="Close"
+        [text]="true"
+        severity="secondary"
+        (click)="showBindDialog = false"
+      ></p-button>
+    </div>
+  </ng-template>
+</p-dialog>
+
+<app-confirmation-dialog></app-confirmation-dialog>

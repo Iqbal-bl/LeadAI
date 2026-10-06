@@ -49,10 +49,18 @@ class A:
     KB_REINDEXED = "kb.document_reindexed"
     KB_TESTED = "kb.retrieval_tested"
 
+    # products
+    PRODUCT_CREATED = "product.created"
+    PRODUCT_UPDATED = "product.updated"
+    PRODUCT_DELETED = "product.deleted"
+
     # scripts / prompts
     SCRIPT_CREATED = "script.created"
     SCRIPT_UPDATED = "script.updated"
     SCRIPT_DELETED = "script.deleted"
+    DATA_POINT_CREATED = "data_point.created"
+    DATA_POINT_UPDATED = "data_point.updated"
+    DATA_POINT_DELETED = "data_point.deleted"
     SCRIPT_ACTIVATED = "script.set_default"
     PROMPT_UPDATED = "prompt.updated"
     PROMPT_RESET = "prompt.reset"
@@ -99,13 +107,13 @@ class A:
     CAMPAIGN_UPDATED = "campaign.updated"
     CAMPAIGN_BUILT = "campaign.audience_built"
     CAMPAIGN_STARTED = "campaign.started"
+    CAMPAIGN_BATCH_PROCESSED = "campaign.batch_processed"
+    CAMPAIGN_DEFERRED = "campaign.deferred"
     CAMPAIGN_PAUSED = "campaign.paused"
     CAMPAIGN_RESUMED = "campaign.resumed"
     CAMPAIGN_CANCELLED = "campaign.cancelled"
     CAMPAIGN_COMPLETED = "campaign.completed"
     CAMPAIGN_FAILED = "campaign.failed"
-    CAMPAIGN_BATCH_PROCESSED = "campaign.batch_processed"
-    CAMPAIGN_DEFERRED = "campaign.deferred"
 
     # CRM accounts
     ACCOUNT_CREATED = "account.created"

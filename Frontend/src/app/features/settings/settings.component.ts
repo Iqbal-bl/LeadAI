@@ -43,7 +43,9 @@ export class SettingsComponent implements OnInit {
   };
 
   companyId: string | null = null;
-  companySettings!: CompanySettings;
+  companySettings: CompanySettings | null = null;
+  agentName: string = '';
+  savingAiConfig = false;
 
   isCompanyAdmin = false;
   loadingPermissions = false;
@@ -86,7 +88,8 @@ export class SettingsComponent implements OnInit {
     this.loadingPermissions = true;
     forkJoin({
       manager: this.roleManagementService.getCompanyRolePermissions('manager'),
-      employee: this.roleManagementService.getCompanyRolePermissions('employee'),
+      employee:
+        this.roleManagementService.getCompanyRolePermissions('employee'),
     }).subscribe({
       next: ({ manager, employee }) => {
         this.loadingPermissions = false;
@@ -136,7 +139,9 @@ export class SettingsComponent implements OnInit {
           if (role === 'manager') this.savingManager = false;
           if (role === 'employee') this.savingEmployee = false;
           this.toastService.error(
-            err?.error?.detail || err?.message || 'Failed to update permission.',
+            err?.error?.detail ||
+              err?.message ||
+              'Failed to update permission.',
             'Update Failed',
           );
         },
@@ -148,6 +153,7 @@ export class SettingsComponent implements OnInit {
       this.companyService.getCompanySettings(this.companyId).subscribe({
         next: (settings) => {
           this.companySettings = settings;
+          this.agentName = settings.agent_name || '';
           this.aiConfig.confidenceThreshold = settings.handoff_threshold;
           this.aiConfig.autoHandoff = settings.auto_assign_enabled;
           this.aiConfig.enableSentiment = settings.widget_enabled;
@@ -169,19 +175,35 @@ export class SettingsComponent implements OnInit {
 
   saveAiConfig(): void {
     if (this.companyId && this.companySettings) {
-      this.companySettings.handoff_threshold =
-        this.aiConfig.confidenceThreshold;
-      this.companySettings.auto_assign_enabled = this.aiConfig.autoHandoff;
-      this.companySettings.widget_enabled = this.aiConfig.enableSentiment;
+      this.savingAiConfig = true;
+      const updatedSettings: CompanySettings = {
+        ...this.companySettings,
+        handoff_threshold: this.aiConfig.confidenceThreshold,
+        auto_assign_enabled: this.aiConfig.autoHandoff,
+        widget_enabled: this.aiConfig.enableSentiment,
+        agent_name: this.agentName?.trim() ? this.agentName.trim() : null,
+      };
 
       this.companyService
-        .updateCompanySettings(this.companyId, this.companySettings)
+        .updateCompanySettings(this.companyId, updatedSettings)
         .subscribe({
           next: (updated) => {
-            console.log('AI configuration updated successfully', updated);
+            this.savingAiConfig = false;
+            this.companySettings = updated;
+            this.agentName = updated.agent_name || '';
+            this.toastService.success(
+              'Company settings and Agent Name updated successfully.',
+              'Settings Saved',
+            );
           },
           error: (err) => {
-            console.error('Failed to update AI configuration', err);
+            this.savingAiConfig = false;
+            this.toastService.error(
+              err?.error?.detail ||
+                err?.message ||
+                'Failed to update company settings.',
+              'Save Failed',
+            );
           },
         });
     }

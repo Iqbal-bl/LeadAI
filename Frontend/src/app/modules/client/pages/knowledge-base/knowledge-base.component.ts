@@ -40,6 +40,13 @@ export class KnowledgeBaseComponent implements OnInit {
   newFaq = { question: '', answer: '', category: 'Product' };
 
   showUploadDialog = false;
+  isUploading = false;
+  uploadMethod: 'file' | 'cloud' = 'file';
+  cloudLinkTitle = '';
+  cloudLinkUrl = '';
+  cloudLinkNotes = '';
+  isImportingCloud = false;
+  isReindexing = false;
 
   // View Document dialog state
   showViewDocDialog = false;
@@ -195,6 +202,11 @@ export class KnowledgeBaseComponent implements OnInit {
         command: () => this.viewDoc(doc),
       },
       {
+        label: 'Re-index',
+        icon: 'pi pi-refresh',
+        command: () => this.reindexDoc(doc),
+      },
+      {
         label: 'Download',
         icon: 'pi pi-download',
         command: () => this.downloadDoc(doc),
@@ -219,28 +231,38 @@ export class KnowledgeBaseComponent implements OnInit {
 
     if (doc.id) {
       this.isLoadingDocContent = true;
+      this.kbService.getDocument(String(doc.id)).subscribe({
+        next: (docDetail) => {
+          this.selectedDocDetail = docDetail;
+        },
+      });
+
       this.kbService.getDocumentChunks(String(doc.id), 500).subscribe({
         next: (chunkData) => {
           this.selectedDocChunks = chunkData.chunks || [];
           const assembled = this.selectedDocChunks
             .map((c) => c.text)
             .join('\n\n');
-          this.selectedDocDetail = {
-            id: String(doc.id),
-            title: chunkData.title || doc.fileName,
-            file_name: doc.fileName,
-            content_type: doc.fileType,
-            source_type: 'upload',
-            status: 'indexed',
-            status_message: null,
-            chunk_count: chunkData.total_chunks || doc.chunks,
-            char_count: assembled.length,
-            embedding_model: this.selectedDocChunks[0]?.embedding_model || '',
-            tags: '',
-            created_at: doc.uploadDate,
-            created_by: doc.uploadedBy,
-            raw_text: assembled,
-          };
+          if (!this.selectedDocDetail) {
+            this.selectedDocDetail = {
+              id: String(doc.id),
+              title: chunkData.title || doc.fileName,
+              file_name: doc.fileName,
+              content_type: doc.fileType,
+              source_type: 'upload',
+              status: 'indexed',
+              status_message: null,
+              chunk_count: chunkData.total_chunks || doc.chunks,
+              char_count: assembled.length,
+              embedding_model: this.selectedDocChunks[0]?.embedding_model || '',
+              tags: '',
+              created_at: doc.uploadDate,
+              created_by: doc.uploadedBy,
+              raw_text: assembled,
+            };
+          } else if (!this.selectedDocDetail.raw_text) {
+            this.selectedDocDetail.raw_text = assembled;
+          }
           this.isLoadingDocContent = false;
         },
         error: (err) => {
@@ -250,6 +272,64 @@ export class KnowledgeBaseComponent implements OnInit {
         },
       });
     }
+  }
+
+  importCloudDoc(): void {
+    if (!this.cloudLinkTitle.trim() || !this.cloudLinkUrl.trim()) {
+      this.toastService.warn('Please provide a document title and cloud link.');
+      return;
+    }
+
+    this.isImportingCloud = true;
+    this.kbService
+      .importCloudLink({
+        title: this.cloudLinkTitle.trim(),
+        url: this.cloudLinkUrl.trim(),
+        notes: this.cloudLinkNotes.trim() || undefined,
+        tags: 'cloud_link',
+      })
+      .subscribe({
+        next: (doc) => {
+          this.isImportingCloud = false;
+          this.showUploadDialog = false;
+          this.cloudLinkTitle = '';
+          this.cloudLinkUrl = '';
+          this.cloudLinkNotes = '';
+          this.toastService.success(
+            `"${doc.title || doc.file_name}" downloaded and indexed successfully!`,
+          );
+          this.loadDocuments();
+        },
+        error: (err) => {
+          this.isImportingCloud = false;
+          this.toastService.error(
+            err?.error?.detail ||
+              'Failed to download file from cloud link. Ensure file sharing is set to viewable by anyone with the link.',
+          );
+        },
+      });
+  }
+
+  reindexDoc(doc: KnowledgeBaseDoc): void {
+    if (!doc.id) return;
+    this.isReindexing = true;
+    this.toastService.info(`Re-indexing "${doc.fileName}"...`);
+    this.kbService.reindexDocument(String(doc.id)).subscribe({
+      next: () => {
+        this.isReindexing = false;
+        this.toastService.success(`"${doc.fileName}" re-indexed successfully.`);
+        this.loadDocuments();
+        if (this.showViewDocDialog && this.selectedDoc?.id === doc.id) {
+          this.viewDoc(doc);
+        }
+      },
+      error: (err) => {
+        this.isReindexing = false;
+        this.toastService.error(
+          err?.error?.detail || `Failed to re-index "${doc.fileName}".`,
+        );
+      },
+    });
   }
 
   downloadDoc(doc: KnowledgeBaseDoc): void {
@@ -338,14 +418,30 @@ export class KnowledgeBaseComponent implements OnInit {
   onUpload(event: any): void {
     const files: File[] = event.files;
     if (files && files.length > 0) {
-      this.kbService.uploadDocument(files[0]).subscribe({
-        next: () => {
-          this.loadDocuments();
-          this.showUploadDialog = false;
-        },
-        error: (err) => {
-          console.error('File upload failed', err);
-        },
+      this.isUploading = true;
+      let completedCount = 0;
+      const total = files.length;
+
+      files.forEach((file) => {
+        this.kbService.uploadDocument(file).subscribe({
+          next: () => {
+            completedCount++;
+            if (completedCount === total) {
+              this.isUploading = false;
+              this.loadDocuments();
+              this.showUploadDialog = false;
+              this.toastService.success(`Uploaded and indexed ${total} document(s)!`);
+            }
+          },
+          error: (err) => {
+            completedCount++;
+            if (completedCount === total) {
+              this.isUploading = false;
+              this.loadDocuments();
+            }
+            this.toastService.error(err?.error?.detail || `Failed to upload "${file.name}".`);
+          },
+        });
       });
     }
   }
