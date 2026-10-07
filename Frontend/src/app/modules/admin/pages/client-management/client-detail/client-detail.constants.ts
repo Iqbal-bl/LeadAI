@@ -45,6 +45,9 @@ export interface ServiceStaticConfig {
   };
 }
 
+export const DEFAULT_SARVAM_FEMALE_VOICE = 'ritu';
+export const DEFAULT_SARVAM_MALE_VOICE = 'shubh';
+
 export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   handoff_threshold: 65,
   retrieval_top_k: 5,
@@ -56,14 +59,14 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   agent_name: null,
   voice_gender: 'female',
   voice_speed: 1.1,
-  voice_speaker: 'anushka',
+  voice_speaker: DEFAULT_SARVAM_FEMALE_VOICE,
   stt_tts_provider: 'sarvam',
 };
 
 export const DEFAULT_VOICE_SETTINGS = {
   voice_gender: 'female' as const,
   voice_speed: 1.1,
-  voice_speaker: 'anushka',
+  voice_speaker: DEFAULT_SARVAM_FEMALE_VOICE,
   stt_tts_provider: 'sarvam' as const,
 };
 
@@ -74,39 +77,74 @@ export interface VoiceSpeakerOption {
 }
 
 /**
- * Supported Sarvam bulbul:v3 voice roster for AI call telephony.
- * Kept as an independent frontend configuration constant.
+ * Confirmed Sarvam bulbul:v3 voice roster for AI call telephony (37 real voices).
+ * Grouped by gender with lowercase API values and recommended badges.
  */
 export const SARVAM_VOICE_ROSTER: VoiceSpeakerOption[] = [
-  // Female Voices
-  { label: 'Anushka (Hindi/English - Recommended)', value: 'anushka', gender: 'female' },
-  { label: 'Priya (Hindi/English)', value: 'priya', gender: 'female' },
-  { label: 'Ritu (Hindi/English)', value: 'ritu', gender: 'female' },
-  { label: 'Neha (Hindi)', value: 'neha', gender: 'female' },
-  { label: 'Pooja (Hindi)', value: 'pooja', gender: 'female' },
-  { label: 'Simran (Hindi)', value: 'simran', gender: 'female' },
-  { label: 'Kavya (Hindi)', value: 'kavya', gender: 'female' },
-  { label: 'Ishita (Hindi)', value: 'ishita', gender: 'female' },
-  { label: 'Shreya (Hindi)', value: 'shreya', gender: 'female' },
-  { label: 'Roopa (Hindi)', value: 'roopa', gender: 'female' },
-  { label: 'Amelia (English)', value: 'amelia', gender: 'female' },
-  { label: 'Sophia (English)', value: 'sophia', gender: 'female' },
-  { label: 'Ana (English)', value: 'ana', gender: 'female' },
-  // Male Voices
-  { label: 'Shubh (Hindi/English - Recommended)', value: 'shubh', gender: 'male' },
-  { label: 'Aditya (Hindi/English)', value: 'aditya', gender: 'male' },
-  { label: 'Ashutosh (Hindi)', value: 'ashutosh', gender: 'male' },
-  { label: 'Rahul (Hindi)', value: 'rahul', gender: 'male' },
-  { label: 'Rohan (English/Hindi)', value: 'rohan', gender: 'male' },
-  { label: 'Amit (Hindi)', value: 'amit', gender: 'male' },
-  { label: 'Dev (Hindi)', value: 'dev', gender: 'male' },
-  { label: 'Ratan (Hindi)', value: 'ratan', gender: 'male' },
-  { label: 'Varun (Hindi)', value: 'varun', gender: 'male' },
-  { label: 'Manan (Hindi)', value: 'manan', gender: 'male' },
-  { label: 'Sumit (Hindi)', value: 'sumit', gender: 'male' },
-  { label: 'Kabir (Hindi)', value: 'kabir', gender: 'male' },
-  { label: 'Aayan (Hindi)', value: 'aayan', gender: 'male' },
-  { label: 'Advait (Hindi)', value: 'advait', gender: 'male' },
+  // Female Voices (14)
+  {
+    label: 'Ritu (Default - Standard Platform Voice)',
+    value: 'ritu',
+    gender: 'female',
+  },
+  {
+    label: 'Priya (⭐ Recommended - Best Overall)',
+    value: 'priya',
+    gender: 'female',
+  },
+  {
+    label: 'Ishita (⭐ Recommended - Hindi & Multi-Language)',
+    value: 'ishita',
+    gender: 'female',
+  },
+  { label: 'Neha', value: 'neha', gender: 'female' },
+  { label: 'Pooja', value: 'pooja', gender: 'female' },
+  { label: 'Simran', value: 'simran', gender: 'female' },
+  { label: 'Kavya', value: 'kavya', gender: 'female' },
+  { label: 'Shreya', value: 'shreya', gender: 'female' },
+  { label: 'Roopa', value: 'roopa', gender: 'female' },
+  { label: 'Tanya', value: 'tanya', gender: 'female' },
+  { label: 'Shruti', value: 'shruti', gender: 'female' },
+  { label: 'Suhani', value: 'suhani', gender: 'female' },
+  { label: 'Kavitha', value: 'kavitha', gender: 'female' },
+  { label: 'Rupali', value: 'rupali', gender: 'female' },
+
+  // Male Voices (23)
+  {
+    label: 'Shubh (⭐ Recommended - Hindi, Telugu, Kannada, Odia, Malayalam)',
+    value: 'shubh',
+    gender: 'male',
+  },
+  {
+    label: 'Mani (⭐ Recommended - Best Overall & Punjabi)',
+    value: 'mani',
+    gender: 'male',
+  },
+  {
+    label: 'Ratan (⭐ Recommended - English & Multi-Language)',
+    value: 'ratan',
+    gender: 'male',
+  },
+  { label: 'Aditya', value: 'aditya', gender: 'male' },
+  { label: 'Rahul', value: 'rahul', gender: 'male' },
+  { label: 'Rohan', value: 'rohan', gender: 'male' },
+  { label: 'Amit', value: 'amit', gender: 'male' },
+  { label: 'Dev', value: 'dev', gender: 'male' },
+  { label: 'Varun', value: 'varun', gender: 'male' },
+  { label: 'Manan', value: 'manan', gender: 'male' },
+  { label: 'Sumit', value: 'sumit', gender: 'male' },
+  { label: 'Kabir', value: 'kabir', gender: 'male' },
+  { label: 'Aayan', value: 'aayan', gender: 'male' },
+  { label: 'Ashutosh', value: 'ashutosh', gender: 'male' },
+  { label: 'Advait', value: 'advait', gender: 'male' },
+  { label: 'Anand', value: 'anand', gender: 'male' },
+  { label: 'Tarun', value: 'tarun', gender: 'male' },
+  { label: 'Sunny', value: 'sunny', gender: 'male' },
+  { label: 'Gokul', value: 'gokul', gender: 'male' },
+  { label: 'Vijay', value: 'vijay', gender: 'male' },
+  { label: 'Mohit', value: 'mohit', gender: 'male' },
+  { label: 'Rehan', value: 'rehan', gender: 'male' },
+  { label: 'Soham', value: 'soham', gender: 'male' },
 ];
 
 export const WIDGET_EMBED_CONFIG = {
