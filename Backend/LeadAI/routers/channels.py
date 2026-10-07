@@ -168,23 +168,26 @@ def create_account(
     elif channel_lower == "whatsapp":
         principal.require("social.whatsapp")
 
-    # The (channel, external_id) pair is globally unique — the same WhatsApp
-    # number cannot be claimed by two companies, or inbound routing would be
-    # ambiguous and one tenant would read another's leads.
-    clash = (
+    # The (channel, external_id) pair is globally unique at the DB level
+    # (uq_leadai_channel_external) regardless of IsDeleted — a soft-deleted
+    # row still occupies that slot. So this lookup must NOT filter IsDeleted,
+    # or reconnecting a previously-disconnected account tries to INSERT a
+    # second row with the same key and hits a duplicate-entry IntegrityError
+    # instead of reviving the old one. A clash only actually blocks the
+    # request when the found row is still live.
+    existing = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.Channel == payload.channel,
             LeadChannelAccount.ExternalId == payload.external_id,
-            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .first()
     )
-    if clash is not None:
+    if existing is not None and not existing.IsDeleted:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "That account is already connected"
-            + (" to this company." if clash.ClientId == client_id else " to another company."),
+            + (" to this company." if existing.ClientId == client_id else " to another company."),
         )
     _assert_single_account_per_channel(db, client_id, payload.channel, payload.external_id)
 
@@ -593,6 +596,10 @@ def _upsert_fb_account(
     meta: dict,
 ) -> LeadChannelAccount:
     """Create or update one channel row from a Facebook Page connection."""
+    # Not filtering IsDeleted here: the (Channel, ExternalId) pair is unique at
+    # the DB level regardless of soft-delete status, so a previously
+    # disconnected Page must be found and revived, not left invisible to this
+    # query only to collide with its own row on INSERT (uq_leadai_channel_external).
     existing = (
         db.query(LeadChannelAccount)
         .filter(
@@ -707,6 +714,12 @@ def instagram_callback(
     external_id = result["external_id"]
     username = result.get("username") or external_id
 
+    # Not filtering IsDeleted here: the (Channel, ExternalId) pair is unique at
+    # the DB level regardless of soft-delete status, so a previously
+    # disconnected account must be found and revived, not left invisible to
+    # this query only to collide with its own row on INSERT
+    # (uq_leadai_channel_external) — this is exactly the "Duplicate entry"
+    # IntegrityError that disconnect-then-reconnect used to hit.
     existing = (
         db.query(LeadChannelAccount)
         .filter(

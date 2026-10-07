@@ -13,10 +13,9 @@ WORKER_SYSTEM = """
 You are a senior technical writer and content specialist.
 Write ONE section of a blog post in clean, well-formatted Markdown.
 
-Constraints:
-- Follow the provided Goal and cover ALL bullets in order.
-- Do not skip or merge bullets.
-- Stay close to the Target words (+-15%).
+STRICT CONSTRAINTS:
+- HARD WORD LIMIT: Adhere strictly to the requested section Target words. Do NOT exceed this word count limit. Keep writing dense, punchy, and impactful. Eliminate conversational filler, redundant introductions, and wordy transitions.
+- Follow the provided Goal and cover the bullets succinctly in order.
 - Output ONLY the section content in Markdown.
 - Start with a '## <Section Title>' heading.
 - Do NOT include the overarching blog title H1.
@@ -32,7 +31,7 @@ def _get_llm():
     return ChatOpenAI(
         model=settings.openai_model or "gpt-4o-mini",
         api_key=api_key,
-        temperature=0.4,
+        temperature=0.3,
     )
 
 
@@ -55,6 +54,7 @@ def worker_node(payload: dict) -> dict:
         )
 
     citation_section = f"Evidence to Cite:\n{evidence_text}" if evidence_text else ""
+    max_words = int(task.target_words * 1.05)
 
     llm = _get_llm()
     section_md = llm.invoke(
@@ -70,7 +70,7 @@ def worker_node(payload: dict) -> dict:
                     f"As-of Date: {as_of}\n\n"
                     f"Section Title: {task.title}\n"
                     f"Goal: {task.goal}\n"
-                    f"Target words: {task.target_words}\n"
+                    f"STRICT WORD BUDGET: Exactly ~{task.target_words} words (HARD CEILING: {max_words} words. Do NOT exceed {max_words} words!)\n"
                     f"Bullets to Cover:\n{bullets_text}\n\n"
                     f"{citation_section}"
                 )

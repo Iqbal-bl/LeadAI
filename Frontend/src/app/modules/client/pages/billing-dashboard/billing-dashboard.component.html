@@ -42,7 +42,7 @@
       <div class="mt-4 flex items-baseline gap-2">
         <span class="text-4xl font-extrabold tracking-tight">{{ summary?.total_remaining_minutes | number:'1.0-0'
           }}</span>
-        <span class="text-indigo-200 text-sm">/ {{ summary?.active_recharge?.purchased_minutes || 0 }} Mins</span>
+        <span class="text-indigo-200 text-sm">/ {{ summary?.active_recharge?.purchased_minutes || 0 }}<ng-container *ngIf="boosterMinutes > 0"> + {{ boosterMinutes | number:'1.0-0' }}</ng-container> Mins</span>
       </div>
 
       <!-- Progress Bar -->

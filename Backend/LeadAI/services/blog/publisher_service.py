@@ -34,6 +34,15 @@ class PublisherService:
         Publishes an article across all requested channels (WordPress, LinkedIn, Facebook, Instagram).
         Updates article.Results, post IDs, status, and published_at.
         """
+        # Idempotency guard: If article is already published live, prevent duplicate publishing
+        if article.Status == "published" and article.PublishedAt:
+            logger.info(
+                "[PublisherService] Article %s is already published at %s. Skipping duplicate publication across channels.",
+                article.Id,
+                article.PublishedAt,
+            )
+            return article.Results or {}
+
         client_id = article.ClientId
         blog_settings: Optional[LeadBlogSettings] = db.query(LeadBlogSettings).filter(
             LeadBlogSettings.ClientId == client_id,

@@ -218,16 +218,31 @@ async def generate_search_keywords(prompt: str) -> str:
     except Exception as exc:
         logger.warning("LLM keyword generation failed: %s", exc)
     
-    # Fallback to exact phrase
-    return f'"{prompt}"'
+    # Fallback to plain prompt without quotes
+    return prompt.strip()
 
 
 async def search_profiles_api(account, keywords: str, limit: int = 15) -> List[dict]:
-    """Perform people search on LinkedIn using the unofficial api wrapper."""
+    """Perform people search on LinkedIn using the unofficial api wrapper with Voyager query sanitization."""
     api = get_linkedin_client(account)
     
+    def _clean(q: str) -> str:
+        if not q:
+            return ""
+        # Strip parentheses, quotes, brackets, and commas which break Rest.li URL serialization
+        s = re.sub(r'[\(\)\[\]"\'\`,]', ' ', q)
+        return re.sub(r'\s+', ' ', s).strip()
+
     def _search():
-        results = api.search_people(keywords=keywords, limit=limit, include_private_profiles=True)
+        clean_kw = _clean(keywords)
+        results = api.search_people(keywords=clean_kw, limit=limit, include_private_profiles=True)
+        
+        # If no results found with compound query, fallback to the primary keyword
+        if not results and clean_kw:
+            terms = [t.strip() for t in re.split(r'\s+OR\s+|\s+AND\s+', clean_kw, flags=re.IGNORECASE) if t.strip()]
+            if len(terms) > 1 and terms[0]:
+                results = api.search_people(keywords=terms[0], limit=limit, include_private_profiles=True)
+
         profiles = []
         for r in results:
             urn_id = r.get("urn_id")
@@ -242,6 +257,7 @@ async def search_profiles_api(account, keywords: str, limit: int = 15) -> List[d
                     "name": name,
                     "headline": headline,
                     "location": location,
+                    "profile_url": f"https://www.linkedin.com/in/{urn_id}",
                 })
         return profiles
 
@@ -683,6 +699,8 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
 
                 accepted_count += 1
                 logger.info("Accepted LinkedIn invitation from %s (%s)", display_name, sender_urn)
+                
+                profile_url = f"https://www.linkedin.com/in/{public_id}" if public_id else None
 
                 # Find or create identity & customer on accepted connection via unified resolver
                 customer, identity = find_or_link_linkedin_customer(
