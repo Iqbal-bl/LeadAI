@@ -28,7 +28,7 @@ export class KnowledgeBaseComponent implements OnInit {
   faqs: Faq[] = [];
 
   activeDocMenuItems: MenuItem[] = [];
-  kbActiveTab: 'docs' | 'test' | 'faq' = 'docs';
+  kbActiveTab: 'docs' | 'test' = 'docs';
 
   // Testing tab state
   testQuestion = 'What is the enterprise pricing model and refund policy?';
@@ -159,33 +159,29 @@ export class KnowledgeBaseComponent implements OnInit {
   }
 
   saveFaq(): void {
-    if (this.newFaq.question && this.newFaq.answer) {
-      this.kbService
-        .createFAQ({
-          title: this.newFaq.question,
-          content: this.newFaq.answer,
-          tags: 'faq,' + this.newFaq.category,
-        })
-        .subscribe({
-          next: () => {
-            this.loadDocuments();
-            this.newFaq = { question: '', answer: '', category: 'Product' };
-            this.showAddFaqDialog = false;
-          },
-          error: () => {
-            // Fallback to local
-            this.faqs.unshift({
-              id: this.faqs.length + 1,
-              question: this.newFaq.question,
-              answer: this.newFaq.answer,
-              category: this.newFaq.category,
-              updatedDate: new Date().toISOString().split('T')[0],
-            });
-            this.newFaq = { question: '', answer: '', category: 'Product' };
-            this.showAddFaqDialog = false;
-          },
-        });
+    if (!this.newFaq.question.trim() || !this.newFaq.answer.trim()) {
+      this.toastService.warn('Please provide both a question and an answer.');
+      return;
     }
+
+    this.kbService
+      .createFAQ({
+        title: this.newFaq.question.trim(),
+        content: this.newFaq.answer.trim(),
+        tags: 'faq,' + this.newFaq.category,
+      })
+      .subscribe({
+        next: () => {
+          this.loadDocuments();
+          this.newFaq = { question: '', answer: '', category: 'Product' };
+          this.showAddFaqDialog = false;
+          this.toastService.success('FAQ added and indexed successfully!');
+        },
+        error: (err) => {
+          console.error('Failed to create FAQ', err);
+          this.toastService.error('Failed to create FAQ. Please try again.');
+        },
+      });
   }
 
   deleteFaq(faq: Faq): void {

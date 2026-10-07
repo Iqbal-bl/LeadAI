@@ -4,8 +4,7 @@ export type CampaignChannel =
   | 'whatsapp'
   | 'messenger'
   | 'instagram'
-  | 'sms'
-  | 'email'
+  | 'linkedin'
   | 'voice';
 
 export type CampaignPurpose =
@@ -181,7 +180,13 @@ export interface CampaignRecipient {
   status: 'pending' | 'sent' | 'delivered' | 'failed' | 'replied';
   failure_reason?: string;
   sent_at?: string;
-  call_consent_status?: 'asked' | 'accepted' | 'declined' | 'not_yet_asked' | string | null;
+  call_consent_status?:
+    | 'asked'
+    | 'accepted'
+    | 'declined'
+    | 'not_yet_asked'
+    | string
+    | null;
   CallConsentStatus?: string | null;
   conversation_id?: string | null;
   attempts?: number;

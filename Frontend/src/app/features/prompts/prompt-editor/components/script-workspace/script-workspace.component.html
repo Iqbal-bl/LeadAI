@@ -84,6 +84,9 @@
         </div>
       </div>
 
+      <!-- Persona Panel: Inline Agent Name & Company Configuration -->
+      <app-persona-panel (agentSaved)="onAgentSaved.emit($event)"></app-persona-panel>
+
       <!-- CODE Editor (existing textarea) -->
       <div
         *ngIf="editorMode === 'code'"
