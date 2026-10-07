@@ -255,6 +255,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
                 ? item.status.toUpperCase()
                 : 'NEW',
             source: item.channel || 'web',
+            originAttribution: item.origin_attribution || null,
             assignedTo: item.assigned_user_email || 'AI Assistant',
             createdAt: item.created_at || '',
             updatedAt: item.last_message_at || item.created_at || '',
@@ -565,5 +566,31 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
   goToImport(): void {
     this.router.navigate(['/client/leads/import']);
+  }
+
+  getOriginIcon(origin: any): string {
+    if (!origin) return 'pi pi-send';
+    switch (origin.origin_type) {
+      case 'post_comment':
+        return 'pi pi-comment';
+      case 'campaign':
+        return 'pi pi-megaphone';
+      case 'ad':
+        return 'pi pi-tag';
+      case 'website':
+        return 'pi pi-globe';
+      case 'voice_call':
+        return 'pi pi-phone';
+      default:
+        return 'pi pi-send';
+    }
+  }
+
+  getOriginTooltip(origin: any): string {
+    if (!origin) return 'Direct Inbound';
+    const parts: string[] = [];
+    if (origin.title) parts.push(origin.title);
+    if (origin.snippet && origin.snippet !== origin.title) parts.push(origin.snippet);
+    return parts.join(' — ') || origin.origin_type;
   }
 }

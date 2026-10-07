@@ -82,6 +82,17 @@ export interface LeadInboxItem {
   lead: LeadInfo | null;
   above_threshold?: boolean;
   campaign_id?: string;
+  origin_attribution?: OriginAttribution | null;
+}
+
+export interface OriginAttribution {
+  origin_type: 'post_comment' | 'campaign' | 'ad' | 'direct' | 'website' | 'voice_call' | string;
+  channel: string;
+  title?: string | null;
+  snippet?: string | null;
+  reference_id?: string | null;
+  url?: string | null;
+  interaction_type?: string | null;
 }
 
 export interface DeliveryInfo {

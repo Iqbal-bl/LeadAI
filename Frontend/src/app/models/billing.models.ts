@@ -33,6 +33,7 @@ export interface ClientRecharge {
   plan_name_snapshot: string;
   purchased_minutes: number;
   remaining_minutes: number;
+  booster_minutes?: number;
   rollover_minutes_carried?: number;
   validity_days_snapshot: number;
   price_paid: number;
