@@ -11,7 +11,9 @@
 
 <div *ngIf="!loading && company" class="space-y-6">
   <!-- Top Navigation & Header -->
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+  <div
+    class="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+  >
     <div class="flex items-center gap-4">
       <button
         pButton
@@ -43,7 +45,8 @@
             ></p-tag>
           </div>
           <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
-            ID: <span class="font-mono">{{ company.id }}</span> · {{ company.email }}
+            ID: <span class="font-mono">{{ company.id }}</span> ·
+            {{ company.email }}
           </p>
         </div>
       </div>
@@ -84,7 +87,10 @@
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
     <div class="card-base p-4">
       <div class="flex items-center justify-between mb-1">
-        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider"
+          style="color: var(--app-text-muted)"
+        >
           Licensed Seats
         </span>
         <i class="pi pi-users text-sm text-indigo-500"></i>
@@ -92,23 +98,31 @@
       <div class="text-2xl font-bold" style="color: var(--app-text)">
         {{ company.user_count || 0 }}
       </div>
-      <span class="text-[11px]" style="color: var(--app-text-muted)">Assigned user licenses</span>
+      <span class="text-[11px]" style="color: var(--app-text-muted)"
+        >Assigned user licenses</span
+      >
     </div>
 
     <div class="card-base p-4">
       <div class="flex items-center justify-between mb-1">
-        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider"
+          style="color: var(--app-text-muted)"
+        >
           Knowledge Base
         </span>
         <i class="pi pi-book text-sm text-emerald-500"></i>
       </div>
       <div class="text-2xl font-bold" style="color: var(--app-text)">
-        {{ company.document_count || 0 }} <span class="text-sm font-normal text-slate-400">docs</span>
+        {{ company.document_count || 0 }}
+        <span class="text-sm font-normal text-slate-400">docs</span>
       </div>
-      <span class="text-[11px]" style="color: var(--app-text-muted)">{{ company.chunk_count || 0 }} vector chunks</span>
+      <span class="text-[11px]" style="color: var(--app-text-muted)"
+        >{{ company.chunk_count || 0 }} vector chunks</span
+      >
     </div>
 
-    <div class="card-base p-4">
+    <!-- <div class="card-base p-4">
       <div class="flex items-center justify-between mb-1">
         <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
           AI Traffic
@@ -119,11 +133,14 @@
         {{ company.conversation_count || 0 }}
       </div>
       <span class="text-[11px]" style="color: var(--app-text-muted)">Total AI conversations & calls</span>
-    </div>
+    </div> -->
 
     <div class="card-base p-4">
       <div class="flex items-center justify-between mb-1">
-        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider"
+          style="color: var(--app-text-muted)"
+        >
           Active Services
         </span>
         <i class="pi pi-sparkles text-sm text-purple-500"></i>
@@ -131,24 +148,40 @@
       <div class="text-2xl font-bold" style="color: var(--app-text)">
         {{ services.length }}
       </div>
-      <span class="text-[11px]" style="color: var(--app-text-muted)">Omnichannel access channels</span>
+      <span class="text-[11px]" style="color: var(--app-text-muted)"
+        >Omnichannel access channels</span
+      >
     </div>
   </div>
 
   <!-- Services & Channels Hub Title Bar -->
   <div class="card-base p-5">
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 pb-4 border-b border-solid" style="border-color: var(--app-border)">
+    <div
+      class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6 pb-4 border-b border-solid"
+      style="border-color: var(--app-border)"
+    >
       <div>
-        <h2 class="text-lg font-bold flex items-center gap-2" style="color: var(--app-text)">
-          <i class="pi pi-th-large text-indigo-500"></i> Provided Services & Channel Access
+        <h2
+          class="text-lg font-bold flex items-center gap-2"
+          style="color: var(--app-text)"
+        >
+          <i class="pi pi-th-large text-indigo-500"></i> Provided Services &
+          Channel Access
         </h2>
         <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
-          Configure and monitor communication channels and automated AI services provisioned for this workspace
+          Configure and monitor communication channels and automated AI services
+          provisioned for this workspace
         </p>
       </div>
 
       <div class="flex items-center gap-2">
-        <span class="text-xs px-2.5 py-1 rounded-full font-medium" style="background: var(--app-surface-alt, #f1f5f9); color: var(--app-text-secondary)">
+        <span
+          class="text-xs px-2.5 py-1 rounded-full font-medium"
+          style="
+            background: var(--app-surface-alt, #f1f5f9);
+            color: var(--app-text-secondary);
+          "
+        >
           Omnichannel Engine v2.5
         </span>
       </div>
@@ -159,7 +192,7 @@
       <div
         *ngFor="let s of services"
         class="service-card flex flex-col justify-between p-5 rounded-xl border transition-all duration-200"
-        style="background: var(--card-bg); border-color: var(--app-border);"
+        style="background: var(--card-bg); border-color: var(--app-border)"
       >
         <div>
           <!-- Service Card Header -->
@@ -175,7 +208,9 @@
                 <h3 class="text-sm font-bold" style="color: var(--app-text)">
                   {{ s.name }}
                 </h3>
-                <span class="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
+                <span
+                  class="text-[11px] uppercase tracking-wider font-semibold text-slate-400"
+                >
                   {{ s.category }}
                 </span>
               </div>
@@ -188,13 +223,19 @@
           </div>
 
           <!-- Description -->
-          <p class="text-xs leading-relaxed mb-4" style="color: var(--app-text-secondary)">
+          <p
+            class="text-xs leading-relaxed mb-4"
+            style="color: var(--app-text-secondary)"
+          >
             {{ s.description }}
           </p>
 
           <!-- Key Features Included -->
           <div class="space-y-1.5 mb-4">
-            <span class="text-[10px] font-bold uppercase tracking-wider block" style="color: var(--app-text-muted)">
+            <span
+              class="text-[10px] font-bold uppercase tracking-wider block"
+              style="color: var(--app-text-muted)"
+            >
               Included Capabilities
             </span>
             <div
@@ -211,23 +252,47 @@
           <div
             *ngIf="s.configDetails"
             class="p-2.5 rounded-lg text-xs space-y-1 mb-4"
-            style="background: var(--app-bg); border: 1px solid var(--app-border-light);"
+            style="
+              background: var(--app-bg);
+              border: 1px solid var(--app-border-light);
+            "
           >
-            <div *ngIf="s.configDetails.accountName" class="flex justify-between">
+            <div
+              *ngIf="s.configDetails.accountName"
+              class="flex justify-between"
+            >
               <span style="color: var(--app-text-muted)">Account:</span>
-              <span class="font-medium" style="color: var(--app-text)">{{ s.configDetails.accountName }}</span>
+              <span class="font-medium" style="color: var(--app-text)">{{
+                s.configDetails.accountName
+              }}</span>
             </div>
-            <div *ngIf="s.configDetails.displayNumber" class="flex justify-between">
+            <div
+              *ngIf="s.configDetails.displayNumber"
+              class="flex justify-between"
+            >
               <span style="color: var(--app-text-muted)">Number:</span>
-              <span class="font-mono font-medium" style="color: var(--app-text)">{{ s.configDetails.displayNumber }}</span>
+              <span
+                class="font-mono font-medium"
+                style="color: var(--app-text)"
+                >{{ s.configDetails.displayNumber }}</span
+              >
             </div>
-            <div *ngIf="s.configDetails.accountHandle" class="flex justify-between">
+            <div
+              *ngIf="s.configDetails.accountHandle"
+              class="flex justify-between"
+            >
               <span style="color: var(--app-text-muted)">Handle:</span>
-              <span class="font-medium" style="color: var(--app-text)">{{ s.configDetails.accountHandle }}</span>
+              <span class="font-medium" style="color: var(--app-text)">{{
+                s.configDetails.accountHandle
+              }}</span>
             </div>
             <div *ngIf="s.configDetails.extraNote" class="flex justify-between">
               <span style="color: var(--app-text-muted)">Details:</span>
-              <span class="font-medium truncate max-w-[180px]" [title]="s.configDetails.extraNote" style="color: var(--app-text)">
+              <span
+                class="font-medium truncate max-w-[180px]"
+                [title]="s.configDetails.extraNote"
+                style="color: var(--app-text)"
+              >
                 {{ s.configDetails.extraNote }}
               </span>
             </div>
@@ -235,7 +300,10 @@
         </div>
 
         <!-- Card Footer Actions -->
-        <div class="pt-3 border-t flex items-center justify-between" style="border-color: var(--app-border);">
+        <div
+          class="pt-3 border-t flex items-center justify-between"
+          style="border-color: var(--app-border)"
+        >
           <div class="flex items-center gap-2">
             <p-inputSwitch
               *ngIf="s.key && s.key !== 'web'"
@@ -243,11 +311,16 @@
               (onChange)="toggleServiceEnabled(s.key!, s.isEnabled ?? true)"
               pTooltip="Enable / Disable Service for this Client"
             ></p-inputSwitch>
-            <span class="text-xs font-semibold" [style.color]="s.isEnabled ? s.brandColor : 'var(--app-text-muted)'">
-              {{ s.isEnabled ? '● Enabled' : '○ Disabled' }}
+            <span
+              class="text-xs font-semibold"
+              [style.color]="
+                s.isEnabled ? s.brandColor : 'var(--app-text-muted)'
+              "
+            >
+              {{ s.isEnabled ? "● Enabled" : "○ Disabled" }}
             </span>
           </div>
-          <div class="flex items-center gap-1">
+          <!-- <div class="flex items-center gap-1">
             <button
               pButton
               icon="pi pi-copy"
@@ -255,7 +328,7 @@
               pTooltip="Copy Service Key"
               (click)="copySnippet(s.key || s.id, s.name)"
             ></button>
-          </div>
+          </div> -->
         </div>
       </div>
     </div>
@@ -265,8 +338,14 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Company Profile Details Card -->
     <div class="card-base p-5">
-      <div class="flex items-center justify-between mb-4 pb-3 border-b border-solid" style="border-color: var(--app-border)">
-        <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--app-text)">
+      <div
+        class="flex items-center justify-between mb-4 pb-3 border-b border-solid"
+        style="border-color: var(--app-border)"
+      >
+        <h3
+          class="text-sm font-bold flex items-center gap-2"
+          style="color: var(--app-text)"
+        >
           <i class="pi pi-building text-indigo-500"></i> Organization Profile
         </h3>
         <p-button
@@ -279,28 +358,59 @@
       </div>
 
       <div class="space-y-3 text-sm">
-        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
+        <div
+          class="flex items-center justify-between py-1 border-b border-solid"
+          style="border-color: var(--app-border-light)"
+        >
           <span style="color: var(--app-text-muted)">Company Name</span>
-          <span class="font-semibold" style="color: var(--app-text)">{{ company.name }}</span>
+          <span class="font-semibold" style="color: var(--app-text)">{{
+            company.name
+          }}</span>
         </div>
-        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
-          <span style="color: var(--app-text-muted)">Billing / Admin Email</span>
-          <span class="font-mono" style="color: var(--app-text)">{{ company.email }}</span>
+        <div
+          class="flex items-center justify-between py-1 border-b border-solid"
+          style="border-color: var(--app-border-light)"
+        >
+          <span style="color: var(--app-text-muted)"
+            >Billing / Admin Email</span
+          >
+          <span class="font-mono" style="color: var(--app-text)">{{
+            company.email
+          }}</span>
         </div>
-        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
+        <div
+          class="flex items-center justify-between py-1 border-b border-solid"
+          style="border-color: var(--app-border-light)"
+        >
           <span style="color: var(--app-text-muted)">Phone Contact</span>
-          <span class="font-mono" style="color: var(--app-text)">{{ company.phone_number || 'Not Provided' }}</span>
+          <span class="font-mono" style="color: var(--app-text)">{{
+            company.phone_number || "Not Provided"
+          }}</span>
         </div>
-        <div class="flex items-center justify-between py-1 border-b border-solid" style="border-color: var(--app-border-light)">
+        <div
+          class="flex items-center justify-between py-1 border-b border-solid"
+          style="border-color: var(--app-border-light)"
+        >
           <span style="color: var(--app-text-muted)">Created Date</span>
-          <span style="color: var(--app-text)">{{ company.created_at | date:'mediumDate' }}</span>
+          <span style="color: var(--app-text)">{{
+            company.created_at | date: "mediumDate"
+          }}</span>
         </div>
         <div class="py-1">
-          <span class="text-xs font-semibold uppercase tracking-wider block mb-1" style="color: var(--app-text-muted)">
+          <span
+            class="text-xs font-semibold uppercase tracking-wider block mb-1"
+            style="color: var(--app-text-muted)"
+          >
             Description / Mission
           </span>
-          <p class="text-xs leading-relaxed" style="color: var(--app-text-secondary)">
-            {{ company.description || 'No specific description recorded for this enterprise workspace.' }}
+          <p
+            class="text-xs leading-relaxed"
+            style="color: var(--app-text-secondary)"
+          >
+            {{
+              company.description ||
+                "No specific description recorded for this enterprise workspace."
+            }}
           </p>
         </div>
       </div>
@@ -308,11 +418,20 @@
 
     <!-- AI Automation & Service Tuning Card -->
     <div class="card-base p-5">
-      <div class="flex items-center justify-between mb-4 pb-3 border-b border-solid" style="border-color: var(--app-border)">
-        <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--app-text)">
-          <i class="pi pi-sliders-h text-purple-500"></i> AI Engine & Policy Rules
+      <div
+        class="flex items-center justify-between mb-4 pb-3 border-b border-solid"
+        style="border-color: var(--app-border)"
+      >
+        <h3
+          class="text-sm font-bold flex items-center gap-2"
+          style="color: var(--app-text)"
+        >
+          <i class="pi pi-sliders-h text-purple-500"></i> AI Engine & Policy
+          Rules
         </h3>
-        <span class="text-xs font-semibold text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded">
+        <span
+          class="text-xs font-semibold text-purple-600 bg-purple-50 dark:bg-purple-900/20 px-2 py-0.5 rounded"
+        >
           Active Policies
         </span>
       </div>
@@ -321,7 +440,10 @@
         <!-- Handoff Threshold -->
         <div class="flex items-center justify-between">
           <div>
-            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+            <span
+              class="font-semibold block text-xs"
+              style="color: var(--app-text)"
+            >
               Human Handoff Threshold
             </span>
             <span class="text-[11px]" style="color: var(--app-text-muted)">
@@ -336,7 +458,10 @@
         <!-- Top K Retrieval -->
         <div class="flex items-center justify-between">
           <div>
-            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+            <span
+              class="font-semibold block text-xs"
+              style="color: var(--app-text)"
+            >
               RAG Vector Retrieval (Top-K)
             </span>
             <span class="text-[11px]" style="color: var(--app-text-muted)">
@@ -351,7 +476,10 @@
         <!-- Auto Hot Lead Calling -->
         <div class="flex items-center justify-between">
           <div>
-            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+            <span
+              class="font-semibold block text-xs"
+              style="color: var(--app-text)"
+            >
               Auto-Dial Hot Leads
             </span>
             <span class="text-[11px]" style="color: var(--app-text-muted)">
@@ -359,8 +487,12 @@
             </span>
           </div>
           <p-tag
-            [value]="companySettings.auto_call_on_hot_lead ? 'Enabled' : 'Disabled'"
-            [severity]="companySettings.auto_call_on_hot_lead ? 'success' : 'secondary'"
+            [value]="
+              companySettings.auto_call_on_hot_lead ? 'Enabled' : 'Disabled'
+            "
+            [severity]="
+              companySettings.auto_call_on_hot_lead ? 'success' : 'secondary'
+            "
             [rounded]="true"
           ></p-tag>
         </div>
@@ -368,15 +500,19 @@
         <!-- Company Agent Name -->
         <div class="flex items-center justify-between">
           <div>
-            <span class="font-semibold block text-xs" style="color: var(--app-text)">
+            <span
+              class="font-semibold block text-xs"
+              style="color: var(--app-text)"
+            >
               Company Agent Name
             </span>
             <span class="text-[11px]" style="color: var(--app-text-muted)">
-              Default identity substituted for &#123;agent&#125; in AI call scripts
+              Default identity substituted for &#123;agent&#125; in AI call
+              scripts
             </span>
           </div>
           <span class="font-bold text-sm text-indigo-500">
-            {{ companySettings.agent_name || 'Not configured' }}
+            {{ companySettings.agent_name || "Not configured" }}
           </span>
         </div>
 
@@ -396,21 +532,34 @@
           </div>
           <pre
             class="p-2.5 rounded-lg text-[11px] font-mono overflow-x-auto select-all"
-            style="background: var(--app-bg); border: 1px solid var(--app-border); color: var(--app-text-secondary);"
-          >{{ getWidgetEmbedSnippet() }}</pre>
+            style="
+              background: var(--app-bg);
+              border: 1px solid var(--app-border);
+              color: var(--app-text-secondary);
+            "
+            >{{ getWidgetEmbedSnippet() }}</pre
+          >
         </div>
       </div>
     </div>
 
     <!-- Platform Voice Settings Card (Superadmin Only) -->
     <div *ngIf="isSuperAdmin" class="card-base p-5 lg:col-span-2 space-y-5">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-solid" style="border-color: var(--app-border)">
+      <div
+        class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-solid"
+        style="border-color: var(--app-border)"
+      >
         <div>
-          <h3 class="text-sm font-bold flex items-center gap-2" style="color: var(--app-text)">
-            <i class="pi pi-volume-up text-pink-500"></i> Platform Voice & Telephony Engine (Superadmin Only)
+          <h3
+            class="text-sm font-bold flex items-center gap-2"
+            style="color: var(--app-text)"
+          >
+            <i class="pi pi-volume-up text-pink-500"></i> Platform Voice &
+            Telephony Engine (Superadmin Only)
           </h3>
           <p class="text-xs mt-0.5" style="color: var(--app-text-muted)">
-            Scoped per company. Controls STT/TTS engine, synthetic voice persona, speaker, and speaking speed for AI phone calls.
+            Scoped per company. Controls STT/TTS engine, synthetic voice
+            persona, speaker, and speaking speed for AI phone calls.
           </p>
         </div>
         <p-tag
@@ -421,25 +570,58 @@
       </div>
 
       <!-- STT / TTS Provider Selection -->
-      <div class="p-4 rounded-xl border space-y-3" style="background: var(--app-bg-hover); border-color: var(--app-border)">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div
+        class="p-4 rounded-xl border space-y-3"
+        style="background: var(--app-bg-hover); border-color: var(--app-border)"
+      >
+        <div
+          class="flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+        >
           <div>
-            <label class="text-xs font-bold uppercase tracking-wider block" style="color: var(--app-text)">
+            <label
+              class="text-xs font-bold uppercase tracking-wider block"
+              style="color: var(--app-text)"
+            >
               STT / TTS Provider
             </label>
             <span class="text-[11px]" style="color: var(--app-text-muted)">
-              Select speech-to-text and text-to-speech synthesis pipeline for this client.
+              Select speech-to-text and text-to-speech synthesis pipeline for
+              this client.
             </span>
           </div>
           <div class="flex items-center gap-3">
-            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
-              [ngClass]="sttTtsProvider === 'sarvam' ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'">
-              <input type="radio" name="sttTtsProvider" value="sarvam" [(ngModel)]="sttTtsProvider" class="accent-indigo-600" />
+            <label
+              class="flex items-center gap-2 cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
+              [ngClass]="
+                sttTtsProvider === 'sarvam'
+                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-300'
+                  : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+              "
+            >
+              <input
+                type="radio"
+                name="sttTtsProvider"
+                value="sarvam"
+                [(ngModel)]="sttTtsProvider"
+                class="accent-indigo-600"
+              />
               <span>Sarvam (Bulbul:v3)</span>
             </label>
-            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
-              [ngClass]="sttTtsProvider === 'deepgram' ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300' : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'">
-              <input type="radio" name="sttTtsProvider" value="deepgram" [(ngModel)]="sttTtsProvider" class="accent-amber-600" />
+            <label
+              class="flex items-center gap-2 cursor-pointer text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all"
+              [ngClass]="
+                sttTtsProvider === 'deepgram'
+                  ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                  : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+              "
+            >
+              <input
+                type="radio"
+                name="sttTtsProvider"
+                value="deepgram"
+                [(ngModel)]="sttTtsProvider"
+                class="accent-amber-600"
+              />
               <span>Deepgram</span>
             </label>
           </div>
@@ -450,10 +632,18 @@
           *ngIf="sttTtsProvider === 'deepgram'"
           class="p-3.5 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/50 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 transition-all"
         >
-          <i class="pi pi-exclamation-triangle text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0 text-base"></i>
+          <i
+            class="pi pi-exclamation-triangle text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0 text-base"
+          ></i>
           <div>
-            <strong class="font-bold block mb-0.5">Deepgram Language Limitation Warning</strong>
-            <span>Deepgram has limited support for Hindi and other Indic languages. Only switch a company to Deepgram if its callers speak primarily English.</span>
+            <strong class="font-bold block mb-0.5"
+              >Deepgram Language Limitation Warning</strong
+            >
+            <span
+              >Deepgram has limited support for Hindi and other Indic languages.
+              Only switch a company to Deepgram if its callers speak primarily
+              English.</span
+            >
           </div>
         </div>
 
@@ -463,25 +653,34 @@
           class="text-[11px] text-slate-500 dark:text-slate-400 italic flex items-center gap-1.5"
         >
           <i class="pi pi-info-circle text-slate-400"></i>
-          <span>These voice settings apply only to Sarvam. Gender, speed, and speaker settings are saved and will resume if switched back to Sarvam.</span>
+          <span
+            >These voice settings apply only to Sarvam. Gender, speed, and
+            speaker settings are saved and will resume if switched back to
+            Sarvam.</span
+          >
         </div>
       </div>
 
       <!-- Sarvam Voice Persona Controls (Disabled when provider is Deepgram) -->
       <div
         class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end p-4 rounded-xl border transition-opacity"
-        [ngClass]="sttTtsProvider === 'deepgram' ? 'opacity-50 pointer-events-none' : ''"
+        [ngClass]="
+          sttTtsProvider === 'deepgram' ? 'opacity-50 pointer-events-none' : ''
+        "
         style="border-color: var(--app-border)"
       >
         <!-- Voice Gender Selector -->
         <div class="space-y-1.5">
-          <label class="text-xs font-semibold block" style="color: var(--app-text)">
+          <label
+            class="text-xs font-semibold block"
+            style="color: var(--app-text)"
+          >
             Voice Gender
           </label>
           <p-dropdown
             [options]="[
               { label: 'Female', value: 'female' },
-              { label: 'Male', value: 'male' }
+              { label: 'Male', value: 'male' },
             ]"
             [(ngModel)]="voiceGender"
             (onChange)="onVoiceGenderChange()"
@@ -497,7 +696,10 @@
 
         <!-- Voice Speaker (Sarvam Bulbul:v3 Roster) -->
         <div class="space-y-1.5">
-          <label class="text-xs font-semibold block" style="color: var(--app-text)">
+          <label
+            class="text-xs font-semibold block"
+            style="color: var(--app-text)"
+          >
             Voice Speaker (Sarvam Bulbul:v3)
           </label>
           <p-dropdown
@@ -518,11 +720,16 @@
         <!-- Voice Speed Slider -->
         <div class="space-y-1.5">
           <div class="flex justify-between items-center">
-            <label class="text-xs font-semibold block" style="color: var(--app-text)">
+            <label
+              class="text-xs font-semibold block"
+              style="color: var(--app-text)"
+            >
               Voice Speed (0.5x – 2.0x)
             </label>
-            <span class="text-xs font-bold font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400">
-              {{ voiceSpeed | number:'1.1-2' }}x
+            <span
+              class="text-xs font-bold font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
+            >
+              {{ voiceSpeed | number: "1.1-2" }}x
             </span>
           </div>
           <p-slider
@@ -541,8 +748,13 @@
       </div>
 
       <!-- Save Voice Action -->
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-        <span *ngIf="hasVoiceSettingsChanges" class="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1.5">
+      <div
+        class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2"
+      >
+        <span
+          *ngIf="hasVoiceSettingsChanges"
+          class="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1.5"
+        >
           <i class="pi pi-pencil"></i> You have unsaved voice settings changes.
         </span>
         <span *ngIf="!hasVoiceSettingsChanges" class="text-xs text-slate-400">

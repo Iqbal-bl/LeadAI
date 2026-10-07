@@ -1,4 +1,11 @@
-import { Component, EventEmitter, Input, Output, OnChanges, SimpleChanges } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  Output,
+  OnChanges,
+  SimpleChanges,
+} from '@angular/core';
 import { SharedModule } from '../../../shared/shared.module';
 import { CampaignService } from '../../../services/campaign.service';
 import { ContactListService } from '../../../services/contact-list.service';
@@ -18,7 +25,11 @@ import { MessageService } from 'primeng/api';
 
 // Channels where a campaign must send through one specific connected account,
 // same channels the backend requires channel_account_id for (routers/campaigns.py).
-const ACCOUNT_REQUIRED_CHANNELS: CampaignChannel[] = ['whatsapp', 'messenger', 'instagram'];
+const ACCOUNT_REQUIRED_CHANNELS: CampaignChannel[] = [
+  'whatsapp',
+  'messenger',
+  'instagram',
+];
 
 @Component({
   selector: 'app-campaign-create',
@@ -51,15 +62,15 @@ export class CampaignCreateComponent implements OnChanges {
   contactLists: ContactList[] = [];
   channels: Channel[] = [];
 
-  timezoneOptions = [
-    { label: 'Asia/Kolkata (IST)', value: 'Asia/Kolkata' },
-    { label: 'UTC', value: 'UTC' },
-    { label: 'America/New_York (EST/EDT)', value: 'America/New_York' },
-    { label: 'America/Los_Angeles (PST/PDT)', value: 'America/Los_Angeles' },
-    { label: 'Europe/London (GMT/BST)', value: 'Europe/London' },
-    { label: 'Asia/Dubai (GST)', value: 'Asia/Dubai' },
-    { label: 'Asia/Singapore (SGT)', value: 'Asia/Singapore' },
-  ];
+  // timezoneOptions = [
+  //   { label: 'Asia/Kolkata (IST)', value: 'Asia/Kolkata' },
+  //   { label: 'UTC', value: 'UTC' },
+  //   { label: 'America/New_York (EST/EDT)', value: 'America/New_York' },
+  //   { label: 'America/Los_Angeles (PST/PDT)', value: 'America/Los_Angeles' },
+  //   { label: 'Europe/London (GMT/BST)', value: 'Europe/London' },
+  //   { label: 'Asia/Dubai (GST)', value: 'Asia/Dubai' },
+  //   { label: 'Asia/Singapore (SGT)', value: 'Asia/Singapore' },
+  // ];
 
   kindOptions: { label: string; value: CampaignKind; icon: string }[] = [
     { label: 'Message', value: 'message', icon: 'pi pi-envelope' },
@@ -70,8 +81,7 @@ export class CampaignCreateComponent implements OnChanges {
     { label: 'WhatsApp', value: 'whatsapp' },
     { label: 'Messenger', value: 'messenger' },
     { label: 'Instagram', value: 'instagram' },
-    { label: 'SMS', value: 'sms' },
-    { label: 'Email', value: 'email' },
+    { label: 'LinkedIn', value: 'linkedin' },
     { label: 'Voice', value: 'voice' },
   ];
 
@@ -106,8 +116,6 @@ export class CampaignCreateComponent implements OnChanges {
 
   audienceTypeOptions: { label: string; value: AudienceType }[] = [
     { label: 'Contact List', value: 'list' },
-    { label: 'Leads Filter', value: 'leads' },
-    { label: 'Customers', value: 'customers' },
   ];
 
   constructor(
@@ -355,9 +363,7 @@ export class CampaignCreateComponent implements OnChanges {
     };
 
     if (this.scheduleMode === 'later' && this.scheduledAt) {
-      createPayload.scheduled_at = this.formatToPlainDateTime(
-        this.scheduledAt,
-      );
+      createPayload.scheduled_at = this.formatToPlainDateTime(this.scheduledAt);
       if (this.timezone) {
         createPayload.timezone = this.timezone;
       }

@@ -2,12 +2,13 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { Script, ScriptPreview } from '../../../../../models/script.models';
 import { SharedModule } from '../../../../../shared/shared.module';
 import { FlowchartEditorComponent } from '../flowchart-editor/flowchart-editor.component';
+import { PersonaPanelComponent } from '../persona-panel/persona-panel.component';
 import { CLIENT_PERMISSIONS } from '../../../../../modules/client/constants/permission.constants';
 
 @Component({
   selector: 'app-script-workspace',
   standalone: true,
-  imports: [SharedModule, FlowchartEditorComponent],
+  imports: [SharedModule, FlowchartEditorComponent, PersonaPanelComponent],
   templateUrl: './script-workspace.component.html',
 })
 export class ScriptWorkspaceComponent {
@@ -31,6 +32,7 @@ export class ScriptWorkspaceComponent {
   @Output() onChannelChange = new EventEmitter<'chat' | 'voice'>();
   @Output() scriptXmlEditorContentChange = new EventEmitter<string>();
   @Output() toggleList = new EventEmitter<void>();
+  @Output() onAgentSaved = new EventEmitter<string>();
 
   editorMode: 'code' | 'flowchart' = 'code';
 

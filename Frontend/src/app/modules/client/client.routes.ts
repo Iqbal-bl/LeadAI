@@ -155,15 +155,6 @@ export const CLIENT_ROUTES: Routes = [
           ),
       },
       {
-        path: 'contact-lists',
-        canActivate: [ClientPermissionGuard],
-        data: { permission: 'campaign.manage' },
-        loadComponent: () =>
-          import('../../features/contact-lists/contact-list-list/contact-list-list.component').then(
-            (m) => m.ContactListListComponent,
-          ),
-      },
-      {
         path: 'campaigns',
         canActivate: [ClientPermissionGuard],
         data: { permission: 'campaign.read' },
@@ -174,11 +165,6 @@ export const CLIENT_ROUTES: Routes = [
               import('../../features/campaigns/broadcast-list/broadcast-list.component').then(
                 (m) => m.BroadcastListComponent,
               ),
-          },
-          {
-            path: 'broadcasts',
-            redirectTo: '',
-            pathMatch: 'full',
           },
           {
             path: ':id',
