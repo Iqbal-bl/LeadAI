@@ -19,7 +19,9 @@ import { Subscription } from 'rxjs';
   standalone: true,
   imports: [CommonModule, FormsModule, SharedModule],
   templateUrl: './blog-dashboard.component.html',
-  styleUrl: './blog-dashboard.component.scss',
+  host: {
+    class: 'block w-full',
+  },
   providers: [MessageService],
 })
 export class BlogDashboardComponent implements OnInit, OnDestroy {
@@ -757,7 +759,7 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
       return {
         label: 'LeadAI Daily Scheduler (Autonomous)',
         icon: 'pi pi-bolt',
-        badgeClass: 'mechanism-auto',
+        badgeClass: 'bg-purple-50 border border-purple-200 text-purple-700',
       };
     }
     if (article.reviewed_at || (article.review_notes && article.review_notes.length > 0)) {
@@ -765,13 +767,13 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
       return {
         label: `Admin Approved (${reviewer})`,
         icon: 'pi pi-check-circle',
-        badgeClass: 'mechanism-approval',
+        badgeClass: 'bg-blue-50 border border-blue-200 text-blue-700',
       };
     }
     return {
       label: 'Manual 1-Click Publish',
       icon: 'pi pi-send',
-      badgeClass: 'mechanism-manual',
+      badgeClass: 'bg-slate-50 border border-slate-200 text-slate-700',
     };
   }
 
@@ -794,21 +796,21 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   getStatusClass(status: string): string {
     switch (status) {
       case 'published':
-        return 'badge-published';
+        return 'bg-emerald-100 text-emerald-800';
       case 'approved':
-        return 'badge-approved';
+        return 'bg-blue-100 text-blue-800';
       case 'pending_approval':
-        return 'badge-pending';
+        return 'bg-amber-100 text-amber-800';
       case 'changes_requested':
-        return 'badge-changes';
+        return 'bg-red-100 text-red-800';
       case 'scheduled':
-        return 'badge-scheduled';
+        return 'bg-purple-100 text-purple-800';
       case 'rejected':
-        return 'badge-rejected';
+        return 'bg-rose-100 text-rose-800';
       case 'generating':
-        return 'badge-generating';
+        return 'bg-indigo-100 text-indigo-800 animate-pulse';
       default:
-        return 'badge-draft';
+        return 'bg-slate-100 text-slate-600';
     }
   }
 
