@@ -14,8 +14,29 @@ Run:  python main.py
   or: uvicorn main:app --host 0.0.0.0 --port 5050
 """
 import asyncio
-import os
 import logging
+import os
+import sys
+import types
+import uuid
+
+# If Windows Application Control or AppLocker blocks the compiled _uuid_utils.pyd,
+# provide a pure-Python fallback for uuid_utils & uuid_utils.compat (required by langchain_core & fastapi).
+if "uuid_utils" not in sys.modules:
+    u_mod = types.ModuleType("uuid_utils")
+    for attr in dir(uuid):
+        setattr(u_mod, attr, getattr(uuid, attr))
+    u_mod.uuid7 = lambda *a, **k: uuid.uuid4()
+
+    compat_mod = types.ModuleType("uuid_utils.compat")
+    for attr in dir(uuid):
+        setattr(compat_mod, attr, getattr(uuid, attr))
+    compat_mod.uuid7 = lambda *a, **k: uuid.uuid4()
+    u_mod.compat = compat_mod
+
+    sys.modules["uuid_utils"] = u_mod
+    sys.modules["uuid_utils.compat"] = compat_mod
+    sys.modules["_uuid_utils"] = u_mod
 
 # Validate the environment BEFORE importing anything that reads it.
 # outbound/app.py builds its SessionMiddleware with `os.getenv("SESSION_SECRET",

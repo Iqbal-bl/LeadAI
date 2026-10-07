@@ -682,6 +682,7 @@ class LeadClientRecharge(LeadAIBase):
     PlanNameSnapshot = Column(String(100), nullable=False)
     PurchasedMinutes = Column(Float, nullable=False)
     RemainingMinutes = Column(Float, nullable=False)
+    BoosterMinutes = Column(Float, nullable=False, default=0.0)
     RolloverMinutesCarried = Column(Float, nullable=False, default=0.0)
     ValidityDaysSnapshot = Column(Integer, nullable=False)
     PricePaid = Column(Float, nullable=False, default=0.0)

@@ -192,7 +192,7 @@ def resolve(
         account_name=account.Name,
         graph_base=(
             "https://graph.instagram.com"
-            if (account.LoginType or "facebook") == "instagram"
+            if (account.LoginType or "facebook") == "instagram" or (token and token.startswith("IG"))
             else None
         ),
         meta={"channel": account.Channel, "external_id": account.ExternalId},

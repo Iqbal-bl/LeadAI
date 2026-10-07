@@ -617,6 +617,17 @@ class LeadOut(BaseModel):
         return dt.isoformat()
 
 
+class OriginAttributionOut(BaseModel):
+    """Origin and contextual attribution of a lead (post, campaign, ad, DM, etc.)."""
+    origin_type: str = "direct"  # post_comment | campaign | ad | direct | website | voice_call
+    channel: str = "web"
+    title: str | None = None
+    snippet: str | None = None
+    reference_id: str | None = None
+    url: str | None = None
+    interaction_type: str | None = None
+
+
 class ConversationOut(BaseModel):
     id: str
     client_id: str
@@ -636,6 +647,7 @@ class ConversationOut(BaseModel):
     last_message_at: datetime | None = None
     created_at: datetime | None = None
     lead: LeadOut | None = None
+    origin_attribution: OriginAttributionOut | None = None
 
     @field_serializer('last_message_at', 'created_at')
     def serialize_dates(self, dt: datetime | None, _info):
@@ -1109,6 +1121,7 @@ class ClientRechargeOut(BaseModel):
     plan_name_snapshot: str
     purchased_minutes: float
     remaining_minutes: float
+    booster_minutes: float = 0.0
     rollover_minutes_carried: float = 0.0
     validity_days_snapshot: int
     price_paid: float

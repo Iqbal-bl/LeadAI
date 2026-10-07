@@ -99,11 +99,15 @@ LOGIN_TYPE_FACEBOOK = "facebook"
 #   pages_messaging        — send and receive Messenger messages
 #   pages_manage_metadata  — required to call /<page>/subscribed_apps
 #   business_management    — Pages owned by a Business rather than a person
+#   pages_manage_posts     — publish and manage posts on behalf of the Page
+#   pages_read_engagement  — read Page content, comments, and post engagement
 SCOPES_MESSAGING = (
     "pages_show_list",
     "pages_messaging",
     "pages_manage_metadata",
     "business_management",
+    "pages_manage_posts",
+    "pages_read_engagement",
 )
 # Only requested when the caller wants the Page's linked Instagram too. Asking
 # for Instagram scopes when the company has no linked IG account makes the
@@ -111,6 +115,8 @@ SCOPES_MESSAGING = (
 SCOPES_INSTAGRAM = (
     "instagram_basic",
     "instagram_manage_messages",
+    "instagram_content_publish",
+    "instagram_manage_comments",
 )
 
 
