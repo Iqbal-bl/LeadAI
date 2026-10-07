@@ -362,6 +362,22 @@ class ArticleService:
 
         db.commit()
         db.refresh(article)
+
+        from ... import activity
+        from ...activity import A
+        activity.log(
+            db,
+            action=A.BLOG_ARTICLE_GENERATED,
+            client_id=client_id,
+            actor_email=req.author_email or "system",
+            entity_type="blog",
+            entity_id=article.Id,
+            log_type="Info",
+            message=f"Blog article generated: '{article.Title[:80]}' ({'Requires Approval' if requires_approval else 'Auto-Published'})",
+            meta={"topic": req.topic, "mode": req.generation_mode, "requires_approval": requires_approval, "channels": channels},
+            commit=True,
+        )
+
         return cls._to_response(db, article)
 
     @classmethod
@@ -497,6 +513,28 @@ class ArticleService:
         article.UpdatedAt = now
         db.commit()
         db.refresh(article)
+
+        from ... import activity
+        from ...activity import A
+        action_map = {
+            "approved": A.BLOG_ARTICLE_STATUS_CHANGED,
+            "rejected": A.BLOG_ARTICLE_STATUS_CHANGED,
+            "changes_requested": A.BLOG_ARTICLE_STATUS_CHANGED,
+            "regenerate": A.BLOG_ARTICLE_GENERATING,
+        }
+        activity.log(
+            db,
+            action=action_map.get(req.action, A.BLOG_ARTICLE_STATUS_CHANGED),
+            client_id=client_id,
+            actor_email=req.reviewer_name or "admin",
+            entity_type="blog",
+            entity_id=article.Id,
+            log_type="Info",
+            message=f"Blog article '{article.Title[:80]}' editorial review action: {req.action}",
+            meta={"action": req.action, "notes": req.notes, "version": article.CurrentVersion},
+            commit=True,
+        )
+
         return cls._to_response(db, article)
 
     @classmethod

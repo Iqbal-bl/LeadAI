@@ -28,7 +28,7 @@ export class KnowledgeBaseComponent implements OnInit {
   faqs: Faq[] = [];
 
   activeDocMenuItems: MenuItem[] = [];
-  kbActiveTab: 'docs' | 'test' | 'faq' = 'docs';
+  kbActiveTab: 'docs' | 'test' = 'docs';
 
   // Testing tab state
   testQuestion = 'What is the enterprise pricing model and refund policy?';
@@ -41,6 +41,12 @@ export class KnowledgeBaseComponent implements OnInit {
 
   showUploadDialog = false;
   isUploading = false;
+  uploadMethod: 'file' | 'cloud' = 'file';
+  cloudLinkTitle = '';
+  cloudLinkUrl = '';
+  cloudLinkNotes = '';
+  isImportingCloud = false;
+  isReindexing = false;
 
   // View Document dialog state
   showViewDocDialog = false;
@@ -153,33 +159,29 @@ export class KnowledgeBaseComponent implements OnInit {
   }
 
   saveFaq(): void {
-    if (this.newFaq.question && this.newFaq.answer) {
-      this.kbService
-        .createFAQ({
-          title: this.newFaq.question,
-          content: this.newFaq.answer,
-          tags: 'faq,' + this.newFaq.category,
-        })
-        .subscribe({
-          next: () => {
-            this.loadDocuments();
-            this.newFaq = { question: '', answer: '', category: 'Product' };
-            this.showAddFaqDialog = false;
-          },
-          error: () => {
-            // Fallback to local
-            this.faqs.unshift({
-              id: this.faqs.length + 1,
-              question: this.newFaq.question,
-              answer: this.newFaq.answer,
-              category: this.newFaq.category,
-              updatedDate: new Date().toISOString().split('T')[0],
-            });
-            this.newFaq = { question: '', answer: '', category: 'Product' };
-            this.showAddFaqDialog = false;
-          },
-        });
+    if (!this.newFaq.question.trim() || !this.newFaq.answer.trim()) {
+      this.toastService.warn('Please provide both a question and an answer.');
+      return;
     }
+
+    this.kbService
+      .createFAQ({
+        title: this.newFaq.question.trim(),
+        content: this.newFaq.answer.trim(),
+        tags: 'faq,' + this.newFaq.category,
+      })
+      .subscribe({
+        next: () => {
+          this.loadDocuments();
+          this.newFaq = { question: '', answer: '', category: 'Product' };
+          this.showAddFaqDialog = false;
+          this.toastService.success('FAQ added and indexed successfully!');
+        },
+        error: (err) => {
+          console.error('Failed to create FAQ', err);
+          this.toastService.error('Failed to create FAQ. Please try again.');
+        },
+      });
   }
 
   deleteFaq(faq: Faq): void {
@@ -194,6 +196,11 @@ export class KnowledgeBaseComponent implements OnInit {
         label: 'View Document',
         icon: 'pi pi-eye',
         command: () => this.viewDoc(doc),
+      },
+      {
+        label: 'Re-index',
+        icon: 'pi pi-refresh',
+        command: () => this.reindexDoc(doc),
       },
       {
         label: 'Download',
@@ -220,28 +227,38 @@ export class KnowledgeBaseComponent implements OnInit {
 
     if (doc.id) {
       this.isLoadingDocContent = true;
+      this.kbService.getDocument(String(doc.id)).subscribe({
+        next: (docDetail) => {
+          this.selectedDocDetail = docDetail;
+        },
+      });
+
       this.kbService.getDocumentChunks(String(doc.id), 500).subscribe({
         next: (chunkData) => {
           this.selectedDocChunks = chunkData.chunks || [];
           const assembled = this.selectedDocChunks
             .map((c) => c.text)
             .join('\n\n');
-          this.selectedDocDetail = {
-            id: String(doc.id),
-            title: chunkData.title || doc.fileName,
-            file_name: doc.fileName,
-            content_type: doc.fileType,
-            source_type: 'upload',
-            status: 'indexed',
-            status_message: null,
-            chunk_count: chunkData.total_chunks || doc.chunks,
-            char_count: assembled.length,
-            embedding_model: this.selectedDocChunks[0]?.embedding_model || '',
-            tags: '',
-            created_at: doc.uploadDate,
-            created_by: doc.uploadedBy,
-            raw_text: assembled,
-          };
+          if (!this.selectedDocDetail) {
+            this.selectedDocDetail = {
+              id: String(doc.id),
+              title: chunkData.title || doc.fileName,
+              file_name: doc.fileName,
+              content_type: doc.fileType,
+              source_type: 'upload',
+              status: 'indexed',
+              status_message: null,
+              chunk_count: chunkData.total_chunks || doc.chunks,
+              char_count: assembled.length,
+              embedding_model: this.selectedDocChunks[0]?.embedding_model || '',
+              tags: '',
+              created_at: doc.uploadDate,
+              created_by: doc.uploadedBy,
+              raw_text: assembled,
+            };
+          } else if (!this.selectedDocDetail.raw_text) {
+            this.selectedDocDetail.raw_text = assembled;
+          }
           this.isLoadingDocContent = false;
         },
         error: (err) => {
@@ -251,6 +268,64 @@ export class KnowledgeBaseComponent implements OnInit {
         },
       });
     }
+  }
+
+  importCloudDoc(): void {
+    if (!this.cloudLinkTitle.trim() || !this.cloudLinkUrl.trim()) {
+      this.toastService.warn('Please provide a document title and cloud link.');
+      return;
+    }
+
+    this.isImportingCloud = true;
+    this.kbService
+      .importCloudLink({
+        title: this.cloudLinkTitle.trim(),
+        url: this.cloudLinkUrl.trim(),
+        notes: this.cloudLinkNotes.trim() || undefined,
+        tags: 'cloud_link',
+      })
+      .subscribe({
+        next: (doc) => {
+          this.isImportingCloud = false;
+          this.showUploadDialog = false;
+          this.cloudLinkTitle = '';
+          this.cloudLinkUrl = '';
+          this.cloudLinkNotes = '';
+          this.toastService.success(
+            `"${doc.title || doc.file_name}" downloaded and indexed successfully!`,
+          );
+          this.loadDocuments();
+        },
+        error: (err) => {
+          this.isImportingCloud = false;
+          this.toastService.error(
+            err?.error?.detail ||
+              'Failed to download file from cloud link. Ensure file sharing is set to viewable by anyone with the link.',
+          );
+        },
+      });
+  }
+
+  reindexDoc(doc: KnowledgeBaseDoc): void {
+    if (!doc.id) return;
+    this.isReindexing = true;
+    this.toastService.info(`Re-indexing "${doc.fileName}"...`);
+    this.kbService.reindexDocument(String(doc.id)).subscribe({
+      next: () => {
+        this.isReindexing = false;
+        this.toastService.success(`"${doc.fileName}" re-indexed successfully.`);
+        this.loadDocuments();
+        if (this.showViewDocDialog && this.selectedDoc?.id === doc.id) {
+          this.viewDoc(doc);
+        }
+      },
+      error: (err) => {
+        this.isReindexing = false;
+        this.toastService.error(
+          err?.error?.detail || `Failed to re-index "${doc.fileName}".`,
+        );
+      },
+    });
   }
 
   downloadDoc(doc: KnowledgeBaseDoc): void {

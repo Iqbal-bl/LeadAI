@@ -55,6 +55,7 @@ class ChannelAccountCreate(BaseModel):
 
 class ChannelAccountUpdate(BaseModel):
     name: str | None = None
+    external_id: str | None = None
     access_token: str | None = None
     app_secret: str | None = None
     verify_token: str | None = None

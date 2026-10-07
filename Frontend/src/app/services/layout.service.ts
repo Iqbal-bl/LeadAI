@@ -453,8 +453,10 @@ export class LayoutService {
     if (this.authService.hasFeature('blog')) {
       socialItems.push({ label: 'Blog & Content Studio', icon: 'pi pi-book', routerLink: '/client/blog' });
     }
-    socialItems.push({ label: 'Social Media Analytics', icon: 'pi pi-chart-pie', routerLink: '/client/social-analytics' });
-    socialItems.push({ label: 'Create a Post', icon: 'pi pi-send', routerLink: '/client/create-post' });
+    if (this.authService.hasFeature('social')) {
+      socialItems.push({ label: 'Social Media Analytics', icon: 'pi pi-chart-pie', routerLink: '/client/social-analytics' });
+      socialItems.push({ label: 'Create a Post', icon: 'pi pi-send', routerLink: '/client/create-post' });
+    }
 
     if (socialItems.length > 0) {
       sections.push({

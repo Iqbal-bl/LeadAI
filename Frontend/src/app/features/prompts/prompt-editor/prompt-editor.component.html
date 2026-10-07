@@ -71,6 +71,7 @@
             scriptXmlEditorContent = selectedScript?.script_xml || ''
           "
           (onChannelChange)="onPreviewChannelChange($event)"
+          (onAgentSaved)="onAgentSaved($event)"
         >
         </app-script-workspace>
       </div>
@@ -287,6 +288,9 @@
   [style]="{ width: '650px' }"
 >
   <div class="space-y-4 py-3">
+    <!-- Persona Configuration Panel (Agent Name & Company) -->
+    <app-persona-panel (agentSaved)="onAgentSaved($event)"></app-persona-panel>
+
     <!-- Placeholders Helpers -->
     <div
       class="p-3 rounded-lg border"

@@ -1,93 +1,43 @@
-<div class="min-h-screen flex flex-col" style="background-color: var(--app-bg, #f8fafc);">
-
-  <!-- ========================================================= -->
-  <!-- TOP HEADER (No Sidebar Layout)                            -->
-  <!-- ========================================================= -->
-  <header
-    class="w-full border-b px-6 lg:px-12 py-3.5 flex items-center justify-between"
-    style="background-color: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);"
-  >
-    <!-- Brand / Logo -->
-    <div class="flex items-center gap-3">
-      <div
-        class="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-xs"
-        style="background: linear-gradient(135deg, #6366f1, #8b5cf6);"
-      >
-        <i class="pi pi-bolt text-lg"></i>
-      </div>
-      <div class="flex flex-col">
-        <span class="text-lg font-bold tracking-tight leading-none" style="color: var(--app-text, #0f172a);">
-          LeadAI
-        </span>
-        <span class="text-[10px] uppercase font-semibold tracking-wider text-slate-400 mt-0.5">
-          Workspace Onboarding
-        </span>
-      </div>
-    </div>
-
-    <!-- Right Controls: Language Selector -->
-    <div class="relative">
-      <button
-        type="button"
-        (click)="showLanguageDropdown = !showLanguageDropdown"
-        class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all hover:bg-slate-50 dark:hover:bg-slate-800"
-        style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0); color: var(--app-text, #0f172a);"
-      >
-        <span class="text-sm">{{ selectedLanguage.flag }}</span>
-        <span>{{ selectedLanguage.name }}</span>
-        <i class="pi pi-chevron-down text-[10px] text-slate-400 ml-1"></i>
-      </button>
-
-      <!-- Language Dropdown Menu -->
-      <div
-        *ngIf="showLanguageDropdown"
-        class="absolute right-0 mt-1.5 w-36 rounded-xl border shadow-lg py-1 z-50 animate-fade-in"
-        style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);"
-      >
-        <button
-          *ngFor="let lang of languages"
-          type="button"
-          (click)="selectLanguage(lang)"
-          class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-          [style.color]="lang.code === selectedLanguage.code ? '#6366f1' : 'var(--app-text, #0f172a)'"
-        >
-          <span>{{ lang.flag }}</span>
-          <span class="font-medium">{{ lang.name }}</span>
-        </button>
-      </div>
-    </div>
-  </header>
-
+<div
+  class="min-h-screen flex flex-col"
+  style="background-color: var(--app-bg, #fbfbfb)"
+>
   <!-- ========================================================= -->
   <!-- MAIN ONBOARDING WORKSPACE                                 -->
   <!-- ========================================================= -->
-  <main class="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-12">
-    <div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-
-      <!-- ======================================================= -->
-      <!-- LEFT SECTION: Main Interactive Card (7-8 cols)         -->
-      <!-- ======================================================= -->
-      <div class="lg:col-span-8 flex flex-col justify-center">
-
-        <!-- STEP 1: CONNECT CHANNELS VIEW -->
-        <div *ngIf="currentStep === 'channels'" class="space-y-6 animate-fade-in">
-
-          <!-- Section Heading -->
-          <div class="text-center sm:text-left space-y-1 mb-2">
-            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight" style="color: var(--app-text, #0f172a);">
-              Connect your channels
+  <main class="flex-1 flex flex-col justify-center items-center w-full min-h-screen py-8 sm:py-12 px-4 sm:px-6 relative">
+    <!-- ======================================================= -->
+    <!-- CENTER SECTION: Main Interactive Content (Dead Center)  -->
+    <!-- ======================================================= -->
+    <div class="w-full max-w-xl my-auto">
+        <!-- ───────────────────────────────────────────────────── -->
+        <!-- STEP 1: CONNECT CHANNELS VIEW                         -->
+        <!-- ───────────────────────────────────────────────────── -->
+        <div *ngIf="currentStep === 'channels'" class="animate-fade-in">
+          <!-- Centered Section Heading -->
+          <div class="text-center mb-7 sm:mb-8">
+            <h1
+              class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100"
+            >
+              Connect your customer channels
             </h1>
-            <p class="text-sm" style="color: var(--app-text-secondary, #64748b);">
-              Get the most out of LeadAI by connecting the channels in your plan.
+            <p
+              class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto"
+            >
+              Get the most out of your AI Agent by connecting your communication
+              channels.
             </p>
           </div>
 
-          <!-- Main White Container Card (Reference UI) -->
+          <!-- Main White Container Card -->
           <div
             class="rounded-2xl border shadow-xs overflow-hidden"
-            style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);"
+            style="
+              background: var(--app-surface, #ffffff);
+              border-color: var(--app-border, #e2e8f0);
+            "
           >
-            <!-- Direct inline Channel Wizard (Configures & shows platform supports right here) -->
+            <!-- Direct inline Channel Wizard -->
             <div class="p-5 sm:p-7">
               <app-channel-wizard
                 [inline]="true"
@@ -96,94 +46,234 @@
               ></app-channel-wizard>
             </div>
 
-
-            <!-- Footer Action Controls (Reference UI) -->
+            <!-- Footer Action Controls -->
             <div
-              class="p-4 sm:p-5 border-t flex items-center justify-between gap-4"
-              style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);"
+              class="px-5 py-3.5 sm:px-6 sm:py-4 border-t flex items-center justify-between gap-3"
+              style="
+                background: var(--app-surface, #ffffff);
+                border-color: var(--app-border, #e2e8f0);
+              "
             >
               <button
                 type="button"
                 (click)="skipChannels()"
-                class="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                class="text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
               >
-                Skip for now
+                Skip channel setup for now
               </button>
 
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2.5">
                 <p-button
-                  label="Continue"
+                  label="Continue to Knowledge Base"
                   icon="pi pi-arrow-right"
                   iconPos="right"
                   [rounded]="true"
                   (onClick)="continueFromChannels()"
-                  styleClass="px-6"
-                  [style]="{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }"
+                  styleClass="px-5 py-2 text-xs"
+                  [style]="{
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    border: 'none',
+                  }"
                 ></p-button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- STEP 2: KNOWLEDGE BASE VIEW -->
-        <div *ngIf="currentStep === 'knowledge-base'" class="space-y-6 animate-fade-in">
-
-          <!-- Section Heading -->
-          <div class="text-center sm:text-left space-y-1 mb-2">
-            <h1 class="text-2xl sm:text-3xl font-bold tracking-tight" style="color: var(--app-text, #0f172a);">
-              Add your knowledge base
+        <!-- ───────────────────────────────────────────────────── -->
+        <!-- STEP 2: KNOWLEDGE BASE VIEW                           -->
+        <!-- ───────────────────────────────────────────────────── -->
+        <div *ngIf="currentStep === 'knowledge-base'" class="animate-fade-in">
+          <!-- Centered Section Heading -->
+          <div class="text-center mb-7 sm:mb-8">
+            <h1
+              class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100"
+            >
+              Connect your knowledge base
             </h1>
-            <p class="text-sm" style="color: var(--app-text-secondary, #64748b);">
-              Give your AI the information it needs to understand your business.
+            <p
+              class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1.5 max-w-md mx-auto"
+            >
+              Train your AI Agent with business context so it answers questions
+              accurately.
             </p>
           </div>
 
-          <!-- Main White Container Card (Reference UI) -->
+          <!-- Main White Container Card (4 Ingestion Options) -->
           <div
             class="rounded-2xl border shadow-xs overflow-hidden"
-            style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);"
+            style="
+              background: var(--app-surface, #ffffff);
+              border-color: var(--app-border, #e2e8f0);
+            "
           >
             <!-- 4 Ingestion Options Accordion / Stack -->
-            <div class="divide-y" style="border-color: var(--app-border, #e2e8f0);">
-
+            <div class="divide-y divide-slate-100 dark:divide-slate-800">
               <!-- Method 1: Google Drive -->
               <div>
                 <div
                   (click)="toggleKbMethod('drive')"
-                  class="p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 select-none transition-colors"
+                  class="p-4 sm:p-5 flex items-center justify-between gap-3.5 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30 select-none transition-colors"
                 >
                   <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center text-lg shrink-0 shadow-2xs">
+                    <div
+                      class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center text-sm shrink-0"
+                    >
                       <i class="pi pi-google"></i>
                     </div>
                     <div class="min-w-0">
-                      <div class="text-sm font-bold" style="color: var(--app-text, #0f172a);">Google Drive</div>
-                      <p class="text-xs text-slate-400 mt-0.5 line-clamp-1">Import knowledge from Google Drive shared links</p>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span
+                          class="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >Google Drive</span
+                        >
+                        <span
+                          *ngIf="getDocsForType('drive').length > 0"
+                          class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                        >
+                          {{ getDocsForType("drive").length }} connected
+                        </span>
+                      </div>
+                      <p
+                        class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1"
+                      >
+                        Import knowledge from Google Drive shared links (PDF,
+                        Docs, Sheets)
+                      </p>
                     </div>
                   </div>
-                  <div class="flex items-center gap-3 shrink-0">
-                    <span class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hidden sm:inline">Add link</span>
-                    <i class="pi text-xs text-slate-400" [ngClass]="activeKbMethod === 'drive' ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+                  <div class="shrink-0 pl-2">
+                    <i
+                      class="pi text-xs text-slate-400"
+                      [ngClass]="
+                        activeKbMethod === 'drive'
+                          ? 'pi-chevron-down'
+                          : 'pi-chevron-right'
+                      "
+                    ></i>
                   </div>
                 </div>
 
-                <!-- Google Drive Inline Form -->
-                <div *ngIf="activeKbMethod === 'drive'" class="p-5 border-t space-y-3.5 animate-fade-in" style="background: var(--app-surface-alt, #f8fafc); border-color: var(--app-border, #e2e8f0);">
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Document Title *</label>
-                    <input pInputText type="text" [(ngModel)]="driveTitle" placeholder="e.g. Sales Playbook & FAQ 2026" class="w-full text-sm" />
+                <!-- Google Drive Inline Content -->
+                <div
+                  *ngIf="activeKbMethod === 'drive'"
+                  class="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20 space-y-3.5 animate-fade-in"
+                >
+                  <!-- Connected Documents Box -->
+                  <div
+                    *ngIf="getDocsForType('drive').length > 0"
+                    class="border border-slate-200/90 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 p-3.5 space-y-2.5"
+                  >
+                    <div
+                      *ngFor="let doc of getDocsForType('drive')"
+                      class="flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <span
+                          class="w-6 h-6 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center text-[10px] font-bold shrink-0"
+                        >
+                          <i class="pi pi-google"></i>
+                        </span>
+                        <span
+                          class="font-medium text-slate-800 dark:text-slate-200 truncate"
+                          >{{ doc.title }}</span
+                        >
+                        <span
+                          class="px-2 py-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full shrink-0"
+                        >
+                          Connected
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        (click)="removeDoc(doc, $event)"
+                        class="text-xs text-slate-400 hover:text-red-500 font-medium shrink-0 transition-colors"
+                      >
+                        Revoke access
+                      </button>
+                    </div>
+
+                    <div
+                      *ngIf="!isAddingNewDoc['drive']"
+                      class="pt-2 border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <button
+                        type="button"
+                        (click)="toggleAddDocForm('drive')"
+                        class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
+                      >
+                        <i class="pi pi-plus text-[10px]"></i>
+                        <span>Connect another account or link</span>
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Google Drive Link *</label>
-                    <input pInputText type="url" [(ngModel)]="driveUrl" placeholder="https://drive.google.com/file/d/.../view" class="w-full text-sm font-mono" />
+
+                  <!-- Google Drive Input Form -->
+                  <div
+                    *ngIf="
+                      getDocsForType('drive').length === 0 ||
+                      isAddingNewDoc['drive']
+                    "
+                    class="space-y-3 pt-1"
+                  >
+                    <div>
+                      <label
+                        class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                        >Document Title *</label
+                      >
+                      <input
+                        pInputText
+                        type="text"
+                        [(ngModel)]="driveTitle"
+                        placeholder="e.g. Sales Playbook & FAQ 2026"
+                        class="w-full text-xs sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                        >Google Drive Link *</label
+                      >
+                      <input
+                        pInputText
+                        type="url"
+                        [(ngModel)]="driveUrl"
+                        placeholder="https://drive.google.com/file/d/.../view"
+                        class="w-full text-xs sm:text-sm font-mono"
+                      />
+                    </div>
+                    <div class="flex items-center justify-between pt-1">
+                      <button
+                        *ngIf="getDocsForType('drive').length > 0"
+                        type="button"
+                        (click)="toggleAddDocForm('drive')"
+                        class="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                      <div class="ml-auto">
+                        <p-button
+                          label="Download & Index File"
+                          icon="pi pi-download"
+                          [loading]="isSavingDrive"
+                          [disabled]="!driveTitle.trim() || !driveUrl.trim()"
+                          (onClick)="saveGoogleDrive()"
+                          [rounded]="true"
+                          size="small"
+                        ></p-button>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Notes (Optional)</label>
-                    <textarea [(ngModel)]="driveNotes" rows="2" placeholder="Brief context about this resource..." class="w-full text-sm p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></textarea>
-                  </div>
-                  <div class="flex justify-end pt-1">
-                    <p-button label="Save Google Drive Link" icon="pi pi-check" [loading]="isSavingDrive" [disabled]="!driveTitle.trim() || !driveUrl.trim()" (onClick)="saveGoogleDrive()" [rounded]="true" size="small"></p-button>
-                  </div>
+
+                  <!-- Helper Note -->
+                  <p class="text-[11px] text-slate-400 leading-relaxed pt-1">
+                    Can't find the file you're looking for? Ensure file sharing
+                    is set to
+                    <strong class="text-slate-600 dark:text-slate-300"
+                      >"Anyone with the link can view"</strong
+                    >. You can connect as many files as you want and revoke
+                    access at any time.
+                  </p>
                 </div>
               </div>
 
@@ -191,334 +281,712 @@
               <div>
                 <div
                   (click)="toggleKbMethod('dropbox')"
-                  class="p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 select-none transition-colors"
+                  class="p-4 sm:p-5 flex items-center justify-between gap-3.5 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30 select-none transition-colors"
                 >
                   <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 flex items-center justify-center text-lg shrink-0 shadow-2xs">
+                    <div
+                      class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center text-sm shrink-0"
+                    >
                       <i class="pi pi-box"></i>
                     </div>
                     <div class="min-w-0">
-                      <div class="text-sm font-bold" style="color: var(--app-text, #0f172a);">Dropbox</div>
-                      <p class="text-xs text-slate-400 mt-0.5 line-clamp-1">Import knowledge from Dropbox shared links</p>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span
+                          class="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >Dropbox</span
+                        >
+                        <span
+                          *ngIf="getDocsForType('dropbox').length > 0"
+                          class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                        >
+                          {{ getDocsForType("dropbox").length }} connected
+                        </span>
+                      </div>
+                      <p
+                        class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1"
+                      >
+                        Import knowledge from Dropbox shared links (PDF, Word,
+                        TXT, CSV)
+                      </p>
                     </div>
                   </div>
-                  <div class="flex items-center gap-3 shrink-0">
-                    <span class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hidden sm:inline">Add link</span>
-                    <i class="pi text-xs text-slate-400" [ngClass]="activeKbMethod === 'dropbox' ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+                  <div class="shrink-0 pl-2">
+                    <i
+                      class="pi text-xs text-slate-400"
+                      [ngClass]="
+                        activeKbMethod === 'dropbox'
+                          ? 'pi-chevron-down'
+                          : 'pi-chevron-right'
+                      "
+                    ></i>
                   </div>
                 </div>
 
-                <!-- Dropbox Inline Form -->
-                <div *ngIf="activeKbMethod === 'dropbox'" class="p-5 border-t space-y-3.5 animate-fade-in" style="background: var(--app-surface-alt, #f8fafc); border-color: var(--app-border, #e2e8f0);">
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Document Title *</label>
-                    <input pInputText type="text" [(ngModel)]="dropboxTitle" placeholder="e.g. Product Catalog & Specs" class="w-full text-sm" />
+                <!-- Dropbox Inline Content -->
+                <div
+                  *ngIf="activeKbMethod === 'dropbox'"
+                  class="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20 space-y-3.5 animate-fade-in"
+                >
+                  <!-- Connected Documents Box -->
+                  <div
+                    *ngIf="getDocsForType('dropbox').length > 0"
+                    class="border border-slate-200/90 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 p-3.5 space-y-2.5"
+                  >
+                    <div
+                      *ngFor="let doc of getDocsForType('dropbox')"
+                      class="flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <span
+                          class="w-6 h-6 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0"
+                        >
+                          <i class="pi pi-box"></i>
+                        </span>
+                        <span
+                          class="font-medium text-slate-800 dark:text-slate-200 truncate"
+                          >{{ doc.title }}</span
+                        >
+                        <span
+                          class="px-2 py-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full shrink-0"
+                        >
+                          Connected
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        (click)="removeDoc(doc, $event)"
+                        class="text-xs text-slate-400 hover:text-red-500 font-medium shrink-0 transition-colors"
+                      >
+                        Revoke access
+                      </button>
+                    </div>
+
+                    <div
+                      *ngIf="!isAddingNewDoc['dropbox']"
+                      class="pt-2 border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <button
+                        type="button"
+                        (click)="toggleAddDocForm('dropbox')"
+                        class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
+                      >
+                        <i class="pi pi-plus text-[10px]"></i>
+                        <span>Connect another shared link</span>
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Dropbox Link *</label>
-                    <input pInputText type="url" [(ngModel)]="dropboxUrl" placeholder="https://www.dropbox.com/scl/fi/..." class="w-full text-sm font-mono" />
+
+                  <!-- Dropbox Input Form -->
+                  <div
+                    *ngIf="
+                      getDocsForType('dropbox').length === 0 ||
+                      isAddingNewDoc['dropbox']
+                    "
+                    class="space-y-3 pt-1"
+                  >
+                    <div>
+                      <label
+                        class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                        >Document Title *</label
+                      >
+                      <input
+                        pInputText
+                        type="text"
+                        [(ngModel)]="dropboxTitle"
+                        placeholder="e.g. Product Catalog & Specs"
+                        class="w-full text-xs sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                        >Dropbox Link *</label
+                      >
+                      <input
+                        pInputText
+                        type="url"
+                        [(ngModel)]="dropboxUrl"
+                        placeholder="https://www.dropbox.com/scl/fi/..."
+                        class="w-full text-xs sm:text-sm font-mono"
+                      />
+                    </div>
+                    <div class="flex items-center justify-between pt-1">
+                      <button
+                        *ngIf="getDocsForType('dropbox').length > 0"
+                        type="button"
+                        (click)="toggleAddDocForm('dropbox')"
+                        class="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                      <div class="ml-auto">
+                        <p-button
+                          label="Download & Index File"
+                          icon="pi pi-download"
+                          [loading]="isSavingDropbox"
+                          [disabled]="
+                            !dropboxTitle.trim() || !dropboxUrl.trim()
+                          "
+                          (onClick)="saveDropbox()"
+                          [rounded]="true"
+                          size="small"
+                        ></p-button>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Notes (Optional)</label>
-                    <textarea [(ngModel)]="dropboxNotes" rows="2" placeholder="Brief context about this resource..." class="w-full text-sm p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></textarea>
-                  </div>
-                  <div class="flex justify-end pt-1">
-                    <p-button label="Save Dropbox Link" icon="pi pi-check" [loading]="isSavingDropbox" [disabled]="!dropboxTitle.trim() || !dropboxUrl.trim()" (onClick)="saveDropbox()" [rounded]="true" size="small"></p-button>
-                  </div>
+
+                  <!-- Helper Note -->
+                  <p class="text-[11px] text-slate-400 leading-relaxed pt-1">
+                    Ensure the Dropbox shared link is
+                    <strong class="text-slate-600 dark:text-slate-300"
+                      >publicly viewable</strong
+                    >. You can connect as many files as you want and revoke
+                    access at any time.
+                  </p>
                 </div>
               </div>
 
-              <!-- Method 3: Upload File -->
+              <!-- Method 3: Upload Files Directly -->
               <div>
                 <div
                   (click)="toggleKbMethod('upload')"
-                  class="p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 select-none transition-colors"
+                  class="p-4 sm:p-5 flex items-center justify-between gap-3.5 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30 select-none transition-colors"
                 >
                   <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center text-lg shrink-0 shadow-2xs">
+                    <div
+                      class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-sm shrink-0"
+                    >
                       <i class="pi pi-upload"></i>
                     </div>
                     <div class="min-w-0">
-                      <div class="text-sm font-bold" style="color: var(--app-text, #0f172a);">Upload File</div>
-                      <p class="text-xs text-slate-400 mt-0.5 line-clamp-1">Upload PDF, DOCX, TXT, CSV, or MD knowledge documents</p>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span
+                          class="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >Upload Files Directly</span
+                        >
+                        <span
+                          *ngIf="getDocsForType('upload').length > 0"
+                          class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                        >
+                          {{ getDocsForType("upload").length }} uploaded
+                        </span>
+                      </div>
+                      <p
+                        class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1"
+                      >
+                        Upload PDF, DOCX, TXT, CSV, or MD knowledge documents up
+                        to 10MB
+                      </p>
                     </div>
                   </div>
-                  <div class="flex items-center gap-3 shrink-0">
-                    <span class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hidden sm:inline">Upload</span>
-                    <i class="pi text-xs text-slate-400" [ngClass]="activeKbMethod === 'upload' ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+                  <div class="shrink-0 pl-2">
+                    <i
+                      class="pi text-xs text-slate-400"
+                      [ngClass]="
+                        activeKbMethod === 'upload'
+                          ? 'pi-chevron-down'
+                          : 'pi-chevron-right'
+                      "
+                    ></i>
                   </div>
                 </div>
 
-                <!-- File Upload Inline Form -->
-                <div *ngIf="activeKbMethod === 'upload'" class="p-5 border-t space-y-3 animate-fade-in relative min-h-[160px]" style="background: var(--app-surface-alt, #f8fafc); border-color: var(--app-border, #e2e8f0);">
-                  <!-- Uploading & Indexing Overlay Loader -->
+                <!-- File Upload Inline Content -->
+                <div
+                  *ngIf="activeKbMethod === 'upload'"
+                  class="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20 space-y-3.5 animate-fade-in"
+                >
+                  <!-- Connected Documents Box -->
                   <div
-                    *ngIf="isUploading"
-                    class="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs gap-3 p-6 text-center animate-fade-in"
+                    *ngIf="getDocsForType('upload').length > 0"
+                    class="border border-slate-200/90 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 p-3.5 space-y-2.5"
                   >
-                    <i class="pi pi-spin pi-spinner text-3xl text-indigo-600 dark:text-indigo-400"></i>
-                    <div class="space-y-1">
-                      <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100">Uploading & Indexing Documents...</h4>
-                      <p class="text-xs text-slate-500 dark:text-slate-400">Extracting content and generating AI vector embeddings for your workspace.</p>
+                    <div
+                      *ngFor="let doc of getDocsForType('upload')"
+                      class="flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <span
+                          class="w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center text-[10px] font-bold shrink-0"
+                        >
+                          <i class="pi pi-file"></i>
+                        </span>
+                        <span
+                          class="font-medium text-slate-800 dark:text-slate-200 truncate"
+                          >{{ doc.title }}</span
+                        >
+                        <span
+                          class="px-2 py-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full shrink-0"
+                        >
+                          Indexed
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        (click)="removeDoc(doc, $event)"
+                        class="text-xs text-slate-400 hover:text-red-500 font-medium shrink-0 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+
+                    <div
+                      *ngIf="!isAddingNewDoc['upload']"
+                      class="pt-2 border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <button
+                        type="button"
+                        (click)="toggleAddDocForm('upload')"
+                        class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
+                      >
+                        <i class="pi pi-plus text-[10px]"></i>
+                        <span>Upload more documents</span>
+                      </button>
                     </div>
                   </div>
 
-                  <p-fileUpload
-                    name="kbFiles[]"
-                    [customUpload]="true"
-                    [multiple]="true"
-                    accept=".pdf,.docx,.txt,.csv,.md"
-                    maxFileSize="10000000"
-                    (uploadHandler)="onFileUpload($event)"
-                    [disabled]="isUploading"
+                  <!-- File Upload Dropzone -->
+                  <div
+                    *ngIf="
+                      getDocsForType('upload').length === 0 ||
+                      isAddingNewDoc['upload']
+                    "
+                    class="relative min-h-[130px]"
                   >
-                    <ng-template pTemplate="content">
-                      <div class="py-6 text-center text-slate-400">
-                        <i class="pi pi-cloud-upload text-3xl mb-2 text-indigo-500"></i>
-                        <p class="text-xs font-medium text-slate-600 dark:text-slate-300">Drag and drop documents here to upload</p>
-                        <p class="text-[11px] mt-0.5">Supports PDF, DOCX, TXT, CSV, MD up to 10MB each</p>
+                    <div
+                      *ngIf="isUploading"
+                      class="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs gap-2.5 p-4 text-center"
+                    >
+                      <i
+                        class="pi pi-spin pi-spinner text-2xl text-indigo-600 dark:text-indigo-400"
+                      ></i>
+                      <div class="space-y-0.5">
+                        <h4
+                          class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100"
+                        >
+                          Extracting & Vectorizing Documents...
+                        </h4>
+                        <p class="text-[11px] text-slate-500">
+                          Generating embeddings and indexing into vector memory.
+                        </p>
                       </div>
-                    </ng-template>
-                  </p-fileUpload>
+                    </div>
+
+                    <p-fileUpload
+                      name="kbFiles[]"
+                      [customUpload]="true"
+                      [multiple]="true"
+                      accept=".pdf,.docx,.txt,.csv,.md"
+                      maxFileSize="10000000"
+                      (uploadHandler)="onFileUpload($event)"
+                      [disabled]="isUploading"
+                    >
+                      <ng-template pTemplate="content">
+                        <div class="py-4 text-center text-slate-400">
+                          <i
+                            class="pi pi-cloud-upload text-2xl mb-1 text-indigo-500"
+                          ></i>
+                          <p
+                            class="text-xs font-medium text-slate-600 dark:text-slate-300"
+                          >
+                            Drag and drop documents here to upload
+                          </p>
+                          <p class="text-[11px] mt-0.5">
+                            Supports PDF, DOCX, TXT, CSV, MD up to 10MB each
+                          </p>
+                        </div>
+                      </ng-template>
+                    </p-fileUpload>
+                  </div>
+
+                  <!-- Helper Note -->
+                  <p class="text-[11px] text-slate-400 leading-relaxed pt-1">
+                    Documents are securely chunked and vectorized for fast,
+                    ground-truth AI retrieval. You can delete documents at any
+                    time.
+                  </p>
                 </div>
               </div>
 
-              <!-- Method 4: Create with Editor -->
+              <!-- Method 4: Create with Text Editor -->
               <div>
                 <div
                   (click)="toggleKbMethod('editor')"
-                  class="p-4 sm:p-5 flex items-center justify-between gap-4 cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 select-none transition-colors"
+                  class="p-4 sm:p-5 flex items-center justify-between gap-3.5 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/30 select-none transition-colors"
                 >
                   <div class="flex items-center gap-3.5 min-w-0">
-                    <div class="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 flex items-center justify-center text-lg shrink-0 shadow-2xs">
+                    <div
+                      class="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center text-sm shrink-0"
+                    >
                       <i class="pi pi-file-edit"></i>
                     </div>
                     <div class="min-w-0">
-                      <div class="text-sm font-bold" style="color: var(--app-text, #0f172a);">Create with Editor</div>
-                      <p class="text-xs text-slate-400 mt-0.5 line-clamp-1">Write or paste text, FAQs, and business policies</p>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span
+                          class="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100"
+                          >Create with Text Editor</span
+                        >
+                        <span
+                          *ngIf="getDocsForType('editor').length > 0"
+                          class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
+                        >
+                          {{ getDocsForType("editor").length }} entries
+                        </span>
+                      </div>
+                      <p
+                        class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1"
+                      >
+                        Write or paste FAQs, return policies, or instructions
+                        directly
+                      </p>
                     </div>
                   </div>
-                  <div class="flex items-center gap-3 shrink-0">
-                    <span class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hidden sm:inline">Write</span>
-                    <i class="pi text-xs text-slate-400" [ngClass]="activeKbMethod === 'editor' ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+                  <div class="shrink-0 pl-2">
+                    <i
+                      class="pi text-xs text-slate-400"
+                      [ngClass]="
+                        activeKbMethod === 'editor'
+                          ? 'pi-chevron-down'
+                          : 'pi-chevron-right'
+                      "
+                    ></i>
                   </div>
                 </div>
 
-                <!-- Editor Inline Form -->
-                <div *ngIf="activeKbMethod === 'editor'" class="p-5 border-t space-y-3.5 animate-fade-in" style="background: var(--app-surface-alt, #f8fafc); border-color: var(--app-border, #e2e8f0);">
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Entry Title *</label>
-                    <input pInputText type="text" [(ngModel)]="editorTitle" placeholder="e.g. Return Policy, Pricing Rules, or Company FAQs" class="w-full text-sm" />
+                <!-- Text Editor Inline Content -->
+                <div
+                  *ngIf="activeKbMethod === 'editor'"
+                  class="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20 space-y-3.5 animate-fade-in"
+                >
+                  <!-- Connected Documents Box -->
+                  <div
+                    *ngIf="getDocsForType('editor').length > 0"
+                    class="border border-slate-200/90 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 p-3.5 space-y-2.5"
+                  >
+                    <div
+                      *ngFor="let doc of getDocsForType('editor')"
+                      class="flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <span
+                          class="w-6 h-6 rounded-full bg-purple-500/10 text-purple-600 flex items-center justify-center text-[10px] font-bold shrink-0"
+                        >
+                          <i class="pi pi-file-edit"></i>
+                        </span>
+                        <span
+                          class="font-medium text-slate-800 dark:text-slate-200 truncate"
+                          >{{ doc.title }}</span
+                        >
+                        <span
+                          class="px-2 py-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full shrink-0"
+                        >
+                          Saved
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        (click)="removeDoc(doc, $event)"
+                        class="text-xs text-slate-400 hover:text-red-500 font-medium shrink-0 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+
+                    <div
+                      *ngIf="!isAddingNewDoc['editor']"
+                      class="pt-2 border-t border-slate-100 dark:border-slate-800"
+                    >
+                      <button
+                        type="button"
+                        (click)="toggleAddDocForm('editor')"
+                        class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700"
+                      >
+                        <i class="pi pi-plus text-[10px]"></i>
+                        <span>Write another knowledge entry</span>
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label class="block text-xs font-semibold mb-1" style="color: var(--app-text-muted, #64748b);">Knowledge Content *</label>
-                    <textarea [(ngModel)]="editorContent" rows="5" placeholder="Write or paste your knowledge content here..." class="w-full text-sm p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"></textarea>
+
+                  <!-- Text Editor Form -->
+                  <div
+                    *ngIf="
+                      getDocsForType('editor').length === 0 ||
+                      isAddingNewDoc['editor']
+                    "
+                    class="space-y-3 pt-1"
+                  >
+                    <div>
+                      <label
+                        class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                        >Entry Title *</label
+                      >
+                      <input
+                        pInputText
+                        type="text"
+                        [(ngModel)]="editorTitle"
+                        placeholder="e.g. Return Policy, Pricing Rules, or Company FAQs"
+                        class="w-full text-xs sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                        >Knowledge Content *</label
+                      >
+                      <textarea
+                        [(ngModel)]="editorContent"
+                        rows="4"
+                        placeholder="Write or paste your knowledge content here..."
+                        class="w-full text-xs sm:text-sm p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                      ></textarea>
+                    </div>
+                    <div class="flex items-center justify-between pt-1">
+                      <button
+                        *ngIf="getDocsForType('editor').length > 0"
+                        type="button"
+                        (click)="toggleAddDocForm('editor')"
+                        class="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                      <div class="ml-auto">
+                        <p-button
+                          label="Save Knowledge Entry"
+                          icon="pi pi-check"
+                          [loading]="isSavingEditor"
+                          [disabled]="
+                            !editorTitle.trim() || !editorContent.trim()
+                          "
+                          (onClick)="saveEditorKnowledge()"
+                          [rounded]="true"
+                          size="small"
+                        ></p-button>
+                      </div>
+                    </div>
                   </div>
-                  <div class="flex justify-end pt-1">
-                    <p-button label="Save Knowledge Entry" icon="pi pi-check" [loading]="isSavingEditor" [disabled]="!editorTitle.trim() || !editorContent.trim()" (onClick)="saveEditorKnowledge()" [rounded]="true" size="small"></p-button>
-                  </div>
+
+                  <!-- Helper Note -->
+                  <p class="text-[11px] text-slate-400 leading-relaxed pt-1">
+                    Write answers to frequent questions or operational
+                    instructions. You can edit or remove entries at any time.
+                  </p>
                 </div>
               </div>
-
             </div>
 
-            <!-- Footer Action Controls (Reference UI) -->
+            <!-- Footer Action Controls -->
             <div
-              class="p-4 sm:p-5 border-t flex items-center justify-between gap-4"
-              style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);"
+              class="px-5 py-3.5 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3"
+              style="background: var(--app-surface, #ffffff)"
             >
-              <div class="flex items-center gap-3">
-                <button
-                  type="button"
-                  (click)="backToChannels()"
-                  class="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors flex items-center gap-1"
-                >
-                  <i class="pi pi-arrow-left text-[10px]"></i>
-                  <span>Back</span>
-                </button>
-                <span class="text-slate-300">|</span>
+              <div class="flex items-center gap-2.5">
                 <button
                   type="button"
                   (click)="skipKnowledgeBase()"
-                  class="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                  class="text-xs font-medium text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
                 >
                   Skip for now
                 </button>
               </div>
 
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-2.5">
                 <p-button
-                  [label]="hasAddedDocs ? 'Complete & Go to Dashboard' : 'Continue to Dashboard'"
+                  [label]="
+                    hasAddedDocs
+                      ? 'Complete Setup & Go to Dashboard'
+                      : 'Continue to Dashboard'
+                  "
                   icon="pi pi-arrow-right"
                   iconPos="right"
                   [rounded]="true"
                   (onClick)="continueToDashboard()"
-                  styleClass="px-6"
-                  [style]="{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }"
+                  styleClass="px-5 py-2 text-xs"
+                  [style]="{
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    border: 'none',
+                  }"
                 ></p-button>
               </div>
             </div>
           </div>
-
-          <!-- Recently Added Items Pill Bar -->
-          <div *ngIf="recentDocs.length > 0" class="p-3 rounded-xl border flex items-center justify-between text-xs" style="background: var(--app-surface, #ffffff); border-color: var(--app-border, #e2e8f0);">
-            <div class="flex items-center gap-2">
-              <i class="pi pi-check-circle text-emerald-500"></i>
-              <span class="font-medium" style="color: var(--app-text, #0f172a);">
-                {{ recentDocs.length }} knowledge document(s) indexed for your AI
-              </span>
-            </div>
-            <span class="text-slate-400 font-mono text-[11px]">Ready</span>
-          </div>
-
         </div>
-
       </div>
 
-      <!-- ======================================================= -->
-      <!-- RIGHT SECTION: Vertical Stepper & Help (4 cols)         -->
-      <!-- ======================================================= -->
-      <div class="lg:col-span-4 lg:border-l lg:pl-10 space-y-10" style="border-color: var(--app-border, #e2e8f0);">
-
-        <!-- Vertical Stepper List (Matches Reference Screenshot) -->
-        <div class="space-y-6">
-
-          <!-- Step 1: Subscription (Always Completed at this stage) -->
-          <div class="flex items-start gap-4 relative">
-            <!-- Connecting Line down to Step 2 -->
-            <div class="absolute left-4 top-8 -bottom-6 w-0.5 bg-emerald-500"></div>
-
-            <div class="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs z-10">
-              <i class="pi pi-check text-xs"></i>
+    <!-- ======================================================= -->
+    <!-- TOP RIGHT CORNER: Simple Vertical Stepper               -->
+    <!-- ======================================================= -->
+    <aside
+      class="w-full max-w-xl lg:max-w-none lg:w-60 xl:w-64 mt-8 lg:mt-0 lg:fixed lg:top-8 xl:top-10 lg:right-8 xl:right-12 z-10"
+    >
+        <!-- Stepper Items -->
+        <div class="space-y-0">
+          <!-- Step 1: Plan & Subscription -->
+          <div class="flex items-start gap-3.5 relative pb-7">
+            <div
+              class="absolute left-3 top-6 bottom-0 w-0.5 bg-emerald-500"
+            ></div>
+            <div
+              class="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs z-10"
+            >
+              <i class="pi pi-check text-[10px]"></i>
             </div>
-            <div class="pt-0.5">
-              <h4 class="text-sm font-bold" style="color: var(--app-text, #0f172a);">
-                Choose plan
+            <div class="pt-0.5 min-w-0">
+              <h4
+                class="text-xs font-semibold text-slate-800 dark:text-slate-200"
+              >
+                Choose plan & system
               </h4>
-              <p class="text-xs text-slate-400 mt-0.5">
-                {{ planName || 'Subscription active' }}
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                {{ planName || "Subscription active & configured" }}
               </p>
             </div>
           </div>
 
           <!-- Step 2: Connect Channels -->
-          <div class="flex items-start gap-4 relative">
-            <!-- Connecting Line down to Step 3 -->
+          <div class="flex items-start gap-3.5 relative pb-7">
             <div
-              class="absolute left-4 top-8 -bottom-6 w-0.5"
-              [ngClass]="(hasConnectedChannels || channelSkipped) ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'"
+              class="absolute left-3 top-6 bottom-0 w-0.5"
+              [ngClass]="
+                hasConnectedChannels || channelSkipped
+                  ? 'bg-emerald-500'
+                  : 'bg-slate-200 dark:bg-slate-700'
+              "
             ></div>
 
-            <!-- Circle Status -->
             <div
-              class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 z-10 transition-colors"
+              class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 z-10 transition-colors"
               [ngClass]="{
-                'bg-emerald-500 text-white shadow-xs': hasConnectedChannels || (currentStep === 'knowledge-base' && channelSkipped),
-                'border-2 border-indigo-600 bg-white dark:bg-slate-900 text-indigo-600 ring-4 ring-indigo-50 dark:ring-indigo-950/40': currentStep === 'channels' && !hasConnectedChannels,
-                'border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400': currentStep !== 'channels' && !hasConnectedChannels && !channelSkipped
+                'bg-emerald-500 text-white shadow-2xs':
+                  hasConnectedChannels ||
+                  (currentStep === 'knowledge-base' && channelSkipped),
+                'border-2 border-indigo-600 bg-white dark:bg-slate-900 text-indigo-600 ring-2 ring-indigo-50 dark:ring-indigo-950/40':
+                  currentStep === 'channels' && !hasConnectedChannels,
+                'border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-400':
+                  currentStep !== 'channels' &&
+                  !hasConnectedChannels &&
+                  !channelSkipped,
               }"
             >
-              <i *ngIf="hasConnectedChannels || (currentStep === 'knowledge-base' && channelSkipped)" class="pi pi-check text-xs"></i>
-              <span *ngIf="!hasConnectedChannels && (!channelSkipped || currentStep === 'channels')">2</span>
+              <i
+                *ngIf="
+                  hasConnectedChannels ||
+                  (currentStep === 'knowledge-base' && channelSkipped)
+                "
+                class="pi pi-check text-[10px]"
+              ></i>
+              <span
+                *ngIf="
+                  !hasConnectedChannels &&
+                  (!channelSkipped || currentStep === 'channels')
+                "
+                >2</span
+              >
             </div>
 
-            <div class="pt-0.5">
+            <div class="pt-0.5 min-w-0">
               <h4
-                class="text-sm font-bold"
-                [style.color]="currentStep === 'channels' ? '#4f46e5' : 'var(--app-text, #0f172a)'"
+                class="text-xs font-semibold"
+                [style.color]="
+                  currentStep === 'channels'
+                    ? '#4f46e5'
+                    : 'var(--app-text, #0f172a)'
+                "
               >
-                Connect channels
+                Connect Channels
               </h4>
-              <p class="text-xs text-slate-400 mt-0.5">
-                Connect the channels in your plan
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                {{
+                  hasConnectedChannels
+                    ? "Channels linked"
+                    : channelSkipped
+                      ? "Skipped for now"
+                      : "WhatsApp, Twilio Voice, and Chat"
+                }}
               </p>
             </div>
           </div>
 
-          <!-- Step 3: Knowledge Base -->
-          <div class="flex items-start gap-4 relative">
-            <!-- Connecting Line down to Step 4 -->
+          <!-- Step 3: Add Knowledge Base -->
+          <div class="flex items-start gap-3.5 relative pb-7">
             <div
-              class="absolute left-4 top-8 -bottom-6 w-0.5"
-              [ngClass]="(hasAddedDocs || kbSkipped) ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'"
+              class="absolute left-3 top-6 bottom-0 w-0.5"
+              [ngClass]="
+                hasAddedDocs || kbSkipped
+                  ? 'bg-emerald-500'
+                  : 'bg-slate-200 dark:bg-slate-700'
+              "
             ></div>
 
-            <!-- Circle Status -->
             <div
-              class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 z-10 transition-colors"
+              class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0 z-10 transition-colors"
               [ngClass]="{
-                'bg-emerald-500 text-white shadow-xs': hasAddedDocs || kbSkipped,
-                'border-2 border-indigo-600 bg-white dark:bg-slate-900 text-indigo-600 ring-4 ring-indigo-50 dark:ring-indigo-950/40': currentStep === 'knowledge-base' && !hasAddedDocs && !kbSkipped,
-                'border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400': currentStep !== 'knowledge-base' && !hasAddedDocs && !kbSkipped
+                'bg-emerald-500 text-white shadow-2xs':
+                  hasAddedDocs || kbSkipped,
+                'border-2 border-indigo-600 bg-white dark:bg-slate-900 text-indigo-600 ring-2 ring-indigo-50 dark:ring-indigo-950/40':
+                  currentStep === 'knowledge-base' &&
+                  !hasAddedDocs &&
+                  !kbSkipped,
+                'border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-400':
+                  currentStep !== 'knowledge-base' &&
+                  !hasAddedDocs &&
+                  !kbSkipped,
               }"
             >
-              <i *ngIf="hasAddedDocs || kbSkipped" class="pi pi-check text-xs"></i>
+              <i
+                *ngIf="hasAddedDocs || kbSkipped"
+                class="pi pi-check text-[10px]"
+              ></i>
               <span *ngIf="!hasAddedDocs && !kbSkipped">3</span>
             </div>
 
-            <div class="pt-0.5">
+            <div class="pt-0.5 min-w-0">
               <h4
-                class="text-sm font-bold"
-                [style.color]="currentStep === 'knowledge-base' ? '#4f46e5' : 'var(--app-text, #0f172a)'"
+                class="text-xs font-semibold"
+                [style.color]="
+                  currentStep === 'knowledge-base'
+                    ? '#4f46e5'
+                    : 'var(--app-text, #0f172a)'
+                "
               >
-                Add knowledge
+                Connect Knowledge Base
               </h4>
-              <p class="text-xs text-slate-400 mt-0.5">
-                Add information for your AI
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                {{
+                  hasAddedDocs
+                    ? recentDocs.length + " document(s) indexed"
+                    : kbSkipped
+                      ? "Skipped for now"
+                      : "Google Drive, Dropbox, and docs"
+                }}
               </p>
             </div>
           </div>
 
-          <!-- Step 4: Dashboard / Launch -->
-          <div class="flex items-start gap-4 relative">
-            <div class="w-8 h-8 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center font-bold text-xs shrink-0 z-10">
+          <!-- Step 4: Launch Workspace -->
+          <div class="flex items-start gap-3.5 relative">
+            <div
+              class="w-6 h-6 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-400 flex items-center justify-center font-medium text-xs shrink-0 z-10"
+            >
               4
             </div>
-            <div class="pt-0.5">
-              <h4 class="text-sm font-bold text-slate-400">
-                Launch Dashboard
+            <div class="pt-0.5 min-w-0">
+              <h4 class="text-xs font-semibold text-slate-400">
+                Launch Workspace
               </h4>
-              <p class="text-xs text-slate-400 mt-0.5">
-                Ready to launch workspace
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                Review setup and enter client dashboard
               </p>
             </div>
           </div>
-
         </div>
 
-        <!-- Having Trouble / Help Box (Matches Reference Screenshot) -->
-        <div class="pt-6 border-t space-y-3" style="border-color: var(--app-border, #e2e8f0);">
-          <div class="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-500">
-            <i class="pi pi-question text-xs"></i>
-          </div>
-          <div>
-            <h5 class="text-sm font-bold" style="color: var(--app-text, #0f172a);">
-              Having trouble?
-            </h5>
-            <p class="text-xs text-slate-400 leading-relaxed mt-1">
-              Feel free to contact us and we will always help you through the process.
-            </p>
-          </div>
-          <p-button
-            label="Contact us"
-            [text]="true"
-            size="small"
-            styleClass="p-button-outlined text-xs border border-slate-300 dark:border-slate-700 px-4 py-2"
-            (onClick)="showSupportDialog = true"
-          ></p-button>
-        </div>
-
-      </div>
-
-    </div>
-  </main>
-
-</div>
-
+      </aside>
+    </main>
+  </div>
 
 <!-- Contact Support Dialog -->
 <p-dialog
-  header="Need Help?"
+  header="Need Setup Assistance?"
   [(visible)]="showSupportDialog"
   [modal]="true"
   [style]="{ width: '450px' }"
@@ -526,22 +994,33 @@
 >
   <div class="space-y-4 pt-1">
     <p class="text-sm text-slate-600 dark:text-slate-300">
-      Our team is available 24/7 to help you configure channels, upload knowledge files, or set up automated AI workflows.
+      Our team is available 24/7 to help you configure phone channels, upload
+      knowledge files, or set up automated AI workflows.
     </p>
-    <div class="p-4 rounded-xl border bg-slate-50 dark:bg-slate-800 space-y-2 text-xs">
+    <div
+      class="p-4 rounded-xl border bg-slate-50 dark:bg-slate-800 space-y-2 text-xs"
+    >
       <div class="flex items-center gap-2">
         <i class="pi pi-envelope text-indigo-500"></i>
         <span class="font-semibold">Email:</span>
-        <a href="mailto:support@leadai.io" class="text-indigo-600 dark:text-indigo-400">support&#64;leadai.io</a>
+        <a
+          href="mailto:support@leadai.io"
+          class="text-indigo-600 dark:text-indigo-400"
+          >support&#64;leadai.io</a
+        >
       </div>
       <div class="flex items-center gap-2">
         <i class="pi pi-comment text-indigo-500"></i>
-        <span class="font-semibold">Live Chat:</span>
-        <span>Available Mon-Fri (9am - 6pm EST)</span>
+        <span class="font-semibold">Live Support:</span>
+        <span>Available Mon-Sat (24 Hours)</span>
       </div>
     </div>
   </div>
   <ng-template pTemplate="footer">
-    <p-button label="Close" [text]="true" (onClick)="showSupportDialog = false"></p-button>
+    <p-button
+      label="Close"
+      [text]="true"
+      (onClick)="showSupportDialog = false"
+    ></p-button>
   </ng-template>
 </p-dialog>

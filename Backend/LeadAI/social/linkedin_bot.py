@@ -176,18 +176,40 @@ async def generate_search_keywords(prompt: str) -> str:
     from ..services.llm import complete_json
 
     system_prompt = (
-        "You are an expert LinkedIn search query assistant.\n"
-        "Your task is to convert a natural language description of target profiles "
-        "into a list of key search terms for the LinkedIn search bar.\n"
-        "Rules:\n"
-        "1. Avoid complex Boolean operators (like AND, OR, NOT, or parentheses) as they cause search failure.\n"
-        "2. Keep the query concise, outputting simple space-separated keywords/titles (e.g., 'Software Engineer Python').\n"
-        "3. Output ONLY a JSON object in this format:\n"
-        "{\n"
-        "  \"keywords\": \"Simple search terms here\"\n"
-        "}\n"
-    )
-    
+    "You are an expert LinkedIn Recruiter and Candidate Search Strategist.\n"
+    "Your task is to convert any natural language candidate description or target audience into a "
+    "clean, high-precision LinkedIn search keyword string.\n\n"
+
+    "Search Query Rules:\n"
+    "1. DO NOT use Boolean operators such as AND, OR, or NOT.\n"
+    "2. DO NOT use Boolean grouping with parentheses.\n"
+    "3. Extract only the most important searchable terms from the user's request.\n"
+    "4. Prioritize job titles, technical skills, technologies, industry/domain, seniority, and location.\n"
+    "5. Remove conversational or filler words such as 'looking for', 'need', 'find me', "
+    "'experienced', 'candidates', 'people', and similar terms.\n"
+    "6. Include useful title variations only when they improve search relevance, but avoid excessive synonyms.\n"
+    "7. If a location has a commonly used alternative name, include both naturally "
+    "(e.g. Bengaluru Bangalore).\n"
+    "8. Do not invent skills, titles, locations, companies, or requirements that were not stated "
+    "or strongly implied by the user's request.\n"
+    "9. Keep the search string concise and focused. Prefer fewer high-value keywords over many weak keywords.\n"
+    "10. Do not add explanations or additional text.\n\n"
+
+    "Examples:\n"
+    "User: Find senior Python backend developers in Bengaluru with FastAPI experience\n"
+    'Output: {\"keywords\": \"Senior Python Backend Developer FastAPI Bengaluru Bangalore\"}\n\n'
+
+    "User: Looking for React developers with Node.js experience in London\n"
+    'Output: {\"keywords\": \"React Developer Node.js London\"}\n\n'
+
+    "User: Find startup founders in New York working in fintech\n"
+    'Output: {\"keywords\": \"Founder Co-Founder Fintech Startup New York\"}\n\n'
+
+    "Output ONLY a valid JSON object in this format:\n"
+    "{\n"
+    '  \"keywords\": \"search terms here\"\n'
+    "}"
+)
     messages = [{"role": "user", "content": f"Description: {prompt}"}]
     try:
         result, _ = complete_json(system_prompt, messages)

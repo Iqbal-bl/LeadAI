@@ -563,6 +563,76 @@ async def linkedin_search_profiles(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"LinkedIn search failed: {str(exc)}")
 
 
+async def _send_manual_invitations_task(account_id: str, profiles_dict: list[dict], message: str | None, client_id: str, actor_email: str):
+    from ..social import linkedin_bot
+    from .. import activity
+    from ..activity import A
+    from ..db import session as db_session
+    
+    with db_session() as db:
+        account = db.get(LeadChannelAccount, account_id)
+        if not account:
+            return
+
+    results = await linkedin_bot.send_connection_invitations_api(account, profiles_dict, message=message)
+    
+    with db_session() as db:
+        sent_count = 0
+        failed_count = 0
+        for p in profiles_dict:
+            pid = p.get("public_id")
+            name = p.get("name") or p.get("full_name") or pid or "Candidate"
+            headline = p.get("headline") or ""
+            profile_url = p.get("profile_url") or (f"https://www.linkedin.com/in/{pid}" if pid and not pid.startswith("urn:") else "")
+            
+            res_detail = results.get(pid, {})
+            success = res_detail.get("success", False)
+            res_msg = res_detail.get("message", "Sent" if success else "Failed")
+            
+            if success:
+                sent_count += 1
+                activity.log(
+                    db,
+                    action=A.LINKEDIN_CONNECTION_SENT,
+                    client_id=client_id,
+                    actor_email=actor_email,
+                    entity_type="linkedin",
+                    entity_id=pid,
+                    log_type="Info",
+                    message=f"Sent connection invitation to {name}" + (f" ({headline})" if headline else ""),
+                    meta={
+                        "name": name,
+                        "public_id": pid,
+                        "headline": headline,
+                        "profile_url": profile_url,
+                        "invitation_message": message,
+                        "mode": "manual",
+                    },
+                    commit=True,
+                )
+            else:
+                failed_count += 1
+                activity.log(
+                    db,
+                    action=A.LINKEDIN_CONNECTION_FAILED,
+                    client_id=client_id,
+                    actor_email=actor_email,
+                    entity_type="linkedin",
+                    entity_id=pid,
+                    log_type="Warning",
+                    message=f"Failed to send connection invitation to {name}: {res_msg}",
+                    meta={
+                        "name": name,
+                        "public_id": pid,
+                        "headline": headline,
+                        "profile_url": profile_url,
+                        "error": res_msg,
+                        "mode": "manual",
+                    },
+                    commit=True,
+                )
+
+
 @router.post(
     "/send-invitations",
     summary="Send connection requests to selected profiles",
@@ -573,13 +643,11 @@ async def linkedin_send_invitations(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
-    _, company_id = scope
+    principal, company_id = scope
     from ..services import billing as billing_svc
     allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
     if not allowed:
         raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
-
-    from ..social import linkedin_bot
 
     # Retrieve credentials from database
     row = (
@@ -599,10 +667,12 @@ async def linkedin_send_invitations(
     try:
         profiles_dict = [p.model_dump() for p in payload.profiles]
         background_tasks.add_task(
-            linkedin_bot.send_connection_invitations_api,
-            row,
+            _send_manual_invitations_task,
+            row.Id,
             profiles_dict,
-            payload.message
+            payload.message,
+            company_id,
+            principal.email or "user",
         )
         
         # Generate compatible response mapping so the frontend requires no changes
@@ -653,6 +723,157 @@ async def save_linkedin_settings(
     row.UpdatedAt = utcnow()
     db.commit()
     return {"ok": True}
+
+
+class LinkedInAutoConnectSettingsInput(BaseModel):
+    enabled: bool = False
+    runs_per_day: int = Field(default=3, ge=1, le=10)
+    profiles_per_run: int = Field(default=5, ge=1, le=15)
+    target_prompt: str | None = None
+    target_keywords: str | None = None
+    custom_message: str | None = None
+    active_hours_start: int = Field(default=9, ge=0, le=23)
+    active_hours_end: int = Field(default=19, ge=0, le=23)
+
+
+@router.get(
+    "/auto-connect/settings",
+    summary="Get automated candidate search & connection scheduler settings",
+)
+async def get_auto_connect_settings(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
+    ).first()
+
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
+
+    meta = row.MetaJson or {}
+    auto_cfg = meta.get("linkedin_auto_connect") or {}
+    defaults = {
+        "enabled": False,
+        "runs_per_day": 3,
+        "profiles_per_run": 5,
+        "target_prompt": "",
+        "target_keywords": "",
+        "custom_message": "",
+        "active_hours_start": 9,
+        "active_hours_end": 19,
+        "last_run_at": None,
+        "next_run_at": None,
+        "total_sent_today": 0,
+        "total_sent_all_time": 0,
+        "last_run_status": None,
+        "last_run_detail": None,
+    }
+    defaults.update(auto_cfg)
+    return {"settings": defaults}
+
+
+@router.post(
+    "/auto-connect/settings",
+    summary="Update automated candidate search & connection scheduler settings",
+)
+async def save_auto_connect_settings(
+    payload: LinkedInAutoConnectSettingsInput,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..services import jobs
+    from ..services.jobs import calculate_next_random_schedule
+
+    row = db.query(LeadChannelAccount).filter(
+        LeadChannelAccount.ClientId == company_id,
+        LeadChannelAccount.Channel == "linkedin",
+        LeadChannelAccount.IsDeleted == False,
+    ).first()
+
+    if not row:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
+
+    meta = row.MetaJson or {}
+    auto_cfg = meta.get("linkedin_auto_connect") or {}
+    
+    auto_cfg["enabled"] = payload.enabled
+    auto_cfg["runs_per_day"] = payload.runs_per_day
+    auto_cfg["profiles_per_run"] = payload.profiles_per_run
+    auto_cfg["target_prompt"] = payload.target_prompt or ""
+    auto_cfg["target_keywords"] = payload.target_keywords or ""
+    auto_cfg["custom_message"] = payload.custom_message or ""
+    auto_cfg["active_hours_start"] = payload.active_hours_start
+    auto_cfg["active_hours_end"] = payload.active_hours_end
+    
+    if payload.enabled:
+        next_dt = calculate_next_random_schedule(
+            runs_per_day=payload.runs_per_day,
+            active_hours_start=payload.active_hours_start,
+            active_hours_end=payload.active_hours_end
+        )
+        auto_cfg["next_run_at"] = next_dt.isoformat()
+    else:
+        auto_cfg["next_run_at"] = None
+
+    meta["linkedin_auto_connect"] = auto_cfg
+    row.MetaJson = meta
+    row.UpdatedAt = utcnow()
+    db.commit()
+
+    activity.log(
+        db,
+        action=A.LINKEDIN_SETTINGS_UPDATED,
+        client_id=company_id,
+        entity_type="linkedin",
+        entity_id=row.Id,
+        log_type="Info",
+        message=f"LinkedIn Auto-Pilot settings updated (enabled={payload.enabled}, runs_per_day={payload.runs_per_day}, keywords='{payload.target_keywords}')",
+        meta=auto_cfg,
+        commit=True,
+    )
+
+    return {"ok": True, "settings": auto_cfg}
+
+
+@router.post(
+    "/auto-connect/run-now",
+    summary="Trigger immediate execution of automated candidate search and connect",
+)
+async def trigger_auto_connect_now(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..services import jobs, billing as billing_svc
+    _, company_id = scope
+
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
+    # Enqueue a job to run immediately for this company
+    jobs.enqueue(
+        db,
+        "linkedin.auto_search_and_connect",
+        payload={"company_id": company_id},
+        commit=True,
+    )
+
+    activity.log(
+        db,
+        action=A.LINKEDIN_AUTO_SEARCH_STARTED,
+        client_id=company_id,
+        entity_type="linkedin",
+        log_type="Info",
+        message="Manual run triggered for LinkedIn Auto-Pilot Candidate Search & Connection",
+        commit=True,
+    )
+
+    return {"ok": True, "message": "Automated search and connection dispatch enqueued in background"}
 
 
 @router.post(

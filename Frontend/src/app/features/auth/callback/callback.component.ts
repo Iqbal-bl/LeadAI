@@ -172,10 +172,6 @@ export class CallbackComponent implements OnInit {
                   error: () => this.router.navigate(['/plans']),
                 });
               },
-                  },
-                  error: () => this.router.navigate(['/plans']),
-                });
-              },
             });
           }
         }

@@ -697,6 +697,7 @@ def allocate_recharge(
         # Booster pack merges directly into active plan
         prev_bal = existing_active.RemainingMinutes
         existing_active.RemainingMinutes += minutes
+        existing_active.BoosterMinutes = float(getattr(existing_active, "BoosterMinutes", 0.0) or 0.0) + minutes
         existing_active.Status = RECHARGE_STATUS_ACTIVE
         db.add(existing_active)
 
@@ -931,6 +932,7 @@ def verify_razorpay_payment(
         # Booster minutes merge directly into current active plan
         prev_bal = existing_active.RemainingMinutes
         existing_active.RemainingMinutes += recharge.PurchasedMinutes
+        existing_active.BoosterMinutes = float(getattr(existing_active, "BoosterMinutes", 0.0) or 0.0) + recharge.PurchasedMinutes
         existing_active.Status = RECHARGE_STATUS_ACTIVE
         recharge.Status = RECHARGE_STATUS_SUPERSEDED
         recharge.PaymentReference = payment_id

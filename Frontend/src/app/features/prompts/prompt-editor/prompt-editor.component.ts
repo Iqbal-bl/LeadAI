@@ -12,6 +12,7 @@ import { ScriptListComponent } from './components/script-list/script-list.compon
 import { ScriptWorkspaceComponent } from './components/script-workspace/script-workspace.component';
 import { PromptGridComponent } from './components/prompt-grid/prompt-grid.component';
 import { DataPointsComponent } from './components/data-points/data-points.component';
+import { PersonaPanelComponent } from './components/persona-panel/persona-panel.component';
 
 export interface PromptItem {
   key: string;
@@ -59,6 +60,7 @@ const PROMPT_META: Record<string, { title: string; description: string }> = {
     ScriptWorkspaceComponent,
     PromptGridComponent,
     DataPointsComponent,
+    PersonaPanelComponent,
   ],
   templateUrl: './prompt-editor.component.html',
   styleUrl: './prompt-editor.component.scss',
@@ -531,6 +533,12 @@ export class PromptEditorComponent implements OnInit {
       }, 0);
     } else {
       this.promptEditContent = (this.promptEditContent || '') + token;
+    }
+  }
+
+  onAgentSaved(newAgentName: string): void {
+    if (this.selectedScript?.id) {
+      this.loadScriptPreview(this.selectedScript.id, this.previewChannel);
     }
   }
 }

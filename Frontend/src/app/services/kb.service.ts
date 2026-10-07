@@ -64,6 +64,18 @@ export class KbService {
     });
   }
 
+  // POST /knowledge/cloud-link
+  public importCloudLink(payload: {
+    title: string;
+    url: string;
+    notes?: string;
+    tags?: string;
+  }): Observable<KbDocument> {
+    return this.apiService.post<KbDocument>('knowledge/cloud-link', payload, {
+      companyScoped: true,
+    });
+  }
+
   // GET /knowledge/documents/{id}/chunks
   public getDocumentChunks(
     id: string,

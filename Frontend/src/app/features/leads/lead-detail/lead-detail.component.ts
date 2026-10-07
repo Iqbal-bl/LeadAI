@@ -19,6 +19,7 @@ import { LeadStatusBadgeComponent } from '../components/lead-status-badge/lead-s
 import { LeadConversationsComponent } from '../components/lead-conversations/lead-conversations.component';
 import { LeadDataPointsComponent } from '../components/lead-data-points/lead-data-points.component';
 import { LeadDetail } from '../../../models/inbox.models';
+import { Location } from '@angular/common';
 
 @Component({
   selector: 'app-lead-detail',
@@ -58,6 +59,7 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
     private voiceService: VoiceService,
     private toastService: ToastService,
     private roleManagementService: RoleManagementService,
+    private location: Location,
   ) {}
 
   ngOnInit(): void {
@@ -459,6 +461,6 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
   }
 
   goBack(): void {
-    this.router.navigate(['/client/leads']);
+    this.location.back();
   }
 }

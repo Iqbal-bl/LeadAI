@@ -86,6 +86,14 @@
         [class.enabled]="settings.is_auto_blog_enabled"
       ></span>
     </button>
+    <button
+      class="tab-btn"
+      [class.active]="mainTab === 'logs'"
+      (click)="setMainTab('logs')"
+    >
+      <i class="pi pi-history"></i>
+      <span>Automation & Audit Logs</span>
+    </button>
   </div>
 
   <!-- ======================================================================= -->
@@ -1529,6 +1537,18 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ======================================================================= -->
+  <!-- TAB 5: AUTOMATION & AUDIT LOGS                                          -->
+  <!-- ======================================================================= -->
+  <div *ngIf="mainTab === 'logs'" class="tab-content">
+    <app-module-activity-logs
+      entityType="blog"
+      actionPrefix="blog."
+      title="AI Blog Studio & Publisher Logs"
+      subtitle="Real-time chronological audit trail of daily auto-blog scheduling, LangGraph generations, approval workflows, and multi-channel publishing."
+    ></app-module-activity-logs>
   </div>
 
   <!-- ======================================================================= -->

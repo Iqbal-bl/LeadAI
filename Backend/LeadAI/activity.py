@@ -134,6 +134,35 @@ class A:
     CALL_COMPLETED = "call.completed"
     CALL_SYNCED = "call.transcript_synced"
 
+    # linkedin automation
+    LINKEDIN_AUTH_UPDATED = "linkedin.auth_updated"
+    LINKEDIN_AUTH_VERIFIED = "linkedin.auth_verified"
+    LINKEDIN_AUTH_FAILED = "linkedin.auth_failed"
+    LINKEDIN_AUTO_SEARCH_STARTED = "linkedin.auto_search_started"
+    LINKEDIN_AUTO_SEARCH_COMPLETED = "linkedin.auto_search_completed"
+    LINKEDIN_CONNECTION_SENT = "linkedin.connection_sent"
+    LINKEDIN_CONNECTION_FAILED = "linkedin.connection_failed"
+    LINKEDIN_INVITATION_ACCEPTED = "linkedin.invitation_accepted"
+    LINKEDIN_WELCOME_SENT = "linkedin.welcome_sent"
+    LINKEDIN_INBOX_SYNCED = "linkedin.inbox_synced"
+    LINKEDIN_MESSAGE_SENT = "linkedin.message_sent"
+    LINKEDIN_COMMENT_HARVESTED = "linkedin.comment_harvested"
+    LINKEDIN_COMMENT_REPLIED = "linkedin.comment_replied"
+    LINKEDIN_SETTINGS_UPDATED = "linkedin.settings_updated"
+    LINKEDIN_SCHEDULER_TICK = "linkedin.scheduler_tick"
+
+    # blog automation & content studio
+    BLOG_TOPIC_DISCOVERED = "blog.topic_discovered"
+    BLOG_ARTICLE_GENERATING = "blog.article_generating"
+    BLOG_ARTICLE_GENERATED = "blog.article_generated"
+    BLOG_ARTICLE_FAILED = "blog.article_failed"
+    BLOG_ARTICLE_UPDATED = "blog.article_updated"
+    BLOG_ARTICLE_STATUS_CHANGED = "blog.article_status_changed"
+    BLOG_ARTICLE_PUBLISHED = "blog.article_published"
+    BLOG_ARTICLE_DELETED = "blog.article_deleted"
+    BLOG_SETTINGS_UPDATED = "blog.settings_updated"
+    BLOG_SCHEDULER_TICK = "blog.scheduler_tick"
+
 
 def log(
     db: Session,

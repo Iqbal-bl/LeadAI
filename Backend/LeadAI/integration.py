@@ -131,6 +131,26 @@ def _register_websockets(app: FastAPI) -> None:
                 websocket, conversation_id, connection_type="leadai_conversation"
             )
 
+    @app.websocket("/ws/leadai/campaign/{campaign_id}")
+    async def leadai_campaign_ws(websocket: WebSocket, campaign_id: str):
+        """Per-campaign channel: status and progress while a batch is
+        scheduled, running, or finishing — see campaign_runner.broadcast_campaign()."""
+        from core.auth import get_current_user_websocket
+
+        try:
+            await get_current_user_websocket(websocket)
+        except Exception:  # noqa: BLE001
+            await manager.connect(websocket, campaign_id, connection_type="leadai_campaign")
+            await manager.disconnect(websocket, campaign_id, connection_type="leadai_campaign")
+            return
+
+        await manager.connect(websocket, campaign_id, connection_type="leadai_campaign")
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            await manager.disconnect(websocket, campaign_id, connection_type="leadai_campaign")
+
 
 def _register_worker(app: FastAPI) -> None:
     """Attach the job-queue worker to the app lifecycle."""
