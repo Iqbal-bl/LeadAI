@@ -209,6 +209,47 @@ COMMENT DETAILS:
             is_lead = bool(result.get("is_lead_candidate", intent_score >= settings.MinLeadIntentThreshold))
             rationale = result.get("rationale", "")
 
+        # Multi-turn engagement rule:
+        # If the user comments on a post, we reply, and the user replies back (or user has >=2 comments on this post),
+        # they are actively engaged and MUST be captured as a lead regardless of AI intent score cutoff.
+        is_multi_turn_reply = False
+        if comment.ParentCommentUrn:
+            parent = (
+                db.query(LeadSocialComment)
+                .filter(
+                    LeadSocialComment.CommentUrn == comment.ParentCommentUrn,
+                    LeadSocialComment.IsDeleted == False,
+                )
+                .first()
+            )
+            if parent and (parent.RepliedBy or parent.Status in ("approved", "auto_replied", "replied")):
+                is_multi_turn_reply = True
+
+        if not is_multi_turn_reply and (comment.AuthorUrn or comment.AuthorName):
+            author_filter = (
+                LeadSocialComment.AuthorUrn == comment.AuthorUrn
+                if comment.AuthorUrn
+                else LeadSocialComment.AuthorName == comment.AuthorName
+            )
+            prior_count = (
+                db.query(LeadSocialComment)
+                .filter(
+                    LeadSocialComment.ClientId == comment.ClientId,
+                    LeadSocialComment.PostUrn == comment.PostUrn,
+                    LeadSocialComment.Id != comment.Id,
+                    author_filter,
+                    LeadSocialComment.IsDeleted == False,
+                )
+                .count()
+            )
+            if prior_count >= 1:
+                is_multi_turn_reply = True
+
+        if is_multi_turn_reply:
+            is_lead = True
+            intent_score = max(intent_score, 0.75)
+            rationale = (rationale + " [Multi-turn engagement: User actively replied in thread]").strip()
+
         # Save updates to comment row
         comment.Sentiment = sentiment
         comment.IntentScore = intent_score

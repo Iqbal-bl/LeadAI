@@ -189,30 +189,31 @@ def create_account(
             "That account is already connected"
             + (" to this company." if existing.ClientId == client_id else " to another company."),
         )
-    if existing is None:
-        _assert_single_account_per_channel(db, client_id, payload.channel, payload.external_id)
+    _assert_single_account_per_channel(db, client_id, payload.channel, payload.external_id)
 
-    row = existing or LeadChannelAccount(Channel=payload.channel, ExternalId=payload.external_id)
-    row.ClientId = client_id
-    row.IsDeleted = False
-    row.Provider = "linkedin" if payload.channel == "linkedin" else "meta"
-    row.LoginType = "linkedin" if payload.channel == "linkedin" else "facebook"
-    row.Name = payload.name
-    row.BusinessAccountId = payload.business_account_id
-    row.DisplayNumber = payload.display_number
-    row.AccessTokenEnc = encrypt_pii(payload.access_token) if payload.access_token else None
-    row.AppSecretEnc = encrypt_pii(payload.app_secret) if payload.app_secret else None
-    row.VerifyToken = payload.verify_token or settings.meta_verify_token
-    row.ApiVersion = payload.api_version
-    row.AutoReply = payload.auto_reply
-    row.ScriptId = payload.script_id
-    row.DefaultLanguage = payload.default_language
-    if existing is None:
-        row.CreatedBy = principal.email
-        db.add(row)
-    else:
-        row.UpdatedBy = principal.email
-        row.UpdatedAt = utcnow()
+    row = LeadChannelAccount(
+        ClientId=client_id,
+        Channel=payload.channel,
+        Provider="linkedin" if payload.channel == "linkedin" else "meta",
+        LoginType=(
+            "linkedin" if payload.channel == "linkedin"
+            else "instagram" if payload.channel == "instagram"
+            else "facebook"
+        ),
+        Name=payload.name,
+        ExternalId=payload.external_id,
+        BusinessAccountId=payload.business_account_id,
+        DisplayNumber=payload.display_number,
+        AccessTokenEnc=encrypt_pii(payload.access_token) if payload.access_token else None,
+        AppSecretEnc=encrypt_pii(payload.app_secret) if payload.app_secret else None,
+        VerifyToken=payload.verify_token or settings.meta_verify_token,
+        ApiVersion=payload.api_version,
+        AutoReply=payload.auto_reply,
+        ScriptId=payload.script_id,
+        DefaultLanguage=payload.default_language,
+        CreatedBy=principal.email,
+    )
+    db.add(row)
     db.flush()
     activity.log_principal(
         db,
@@ -242,11 +243,15 @@ def update_account(
 
     data = payload.model_dump(exclude_unset=True)
     if "access_token" in data and data["access_token"]:
-        row.AccessTokenEnc = encrypt_pii(data.pop("access_token"))
+        token_val = data.pop("access_token")
+        row.AccessTokenEnc = encrypt_pii(token_val)
+        if row.Channel == "instagram" and token_val.startswith("IG"):
+            row.LoginType = "instagram"
     if "app_secret" in data and data["app_secret"]:
         row.AppSecretEnc = encrypt_pii(data.pop("app_secret"))
     mapping = {
         "name": "Name",
+        "external_id": "ExternalId",
         "verify_token": "VerifyToken",
         "display_number": "DisplayNumber",
         "api_version": "ApiVersion",
@@ -353,7 +358,7 @@ def test_send(
 )
 def instagram_connect(
     request: Request,
-    publishing: bool = False,
+    publishing: bool = True,
     scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
     _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
@@ -522,22 +527,33 @@ def facebook_select(
         # addressed at graph.facebook.com with the Page token and signed with
         # the Meta app secret — which is what makes it different from a
         # standalone LoginType=instagram account. See facebook_login's docstring.
-        created.append(
-            _upsert_fb_account(
-                db,
-                client_id=client_id,
-                channel="instagram",
-                external_id=ig["id"],
-                name=f"@{ig.get('username') or ig['id']}",
-                page_token=page["access_token"],
-                meta={
-                    "username": ig.get("username"),
-                    "profile_picture_url": ig.get("profile_picture_url"),
-                    "page_id": page["page_id"],
-                    "login": "facebook",
-                },
+        try:
+            created.append(
+                _upsert_fb_account(
+                    db,
+                    client_id=client_id,
+                    channel="instagram",
+                    external_id=ig["id"],
+                    name=f"@{ig.get('username') or ig['id']}",
+                    page_token=page["access_token"],
+                    meta={
+                        "username": ig.get("username"),
+                        "profile_picture_url": ig.get("profile_picture_url"),
+                        "page_id": page["page_id"],
+                        "login": "facebook",
+                    },
+                )
             )
-        )
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_409_CONFLICT:
+                logger.warning(
+                    "[LeadAI fb-login] Skipping linked Instagram %s for client %s: %s",
+                    ig.get("id"),
+                    client_id,
+                    exc.detail,
+                )
+            else:
+                raise
 
     db.flush()
 
@@ -592,7 +608,7 @@ def _upsert_fb_account(
         )
         .first()
     )
-    if existing is not None and existing.ClientId != client_id:
+    if existing is not None and existing.ClientId != client_id and not existing.IsDeleted:
         # Inbound webhooks route by ExternalId, so one Page serving two tenants
         # would deliver one company's messages into another company's inbox.
         raise HTTPException(
@@ -609,6 +625,7 @@ def _upsert_fb_account(
         ExternalId=external_id,
         CreatedBy="facebook-login",
     )
+    account.ClientId = client_id
     account.IsDeleted = False
     account.LoginType = fb_login.LOGIN_TYPE_FACEBOOK
     account.AppId = settings.meta_app_id
@@ -712,7 +729,7 @@ def instagram_callback(
         .one_or_none()
     )
 
-    if existing is not None and existing.ClientId != client_id:
+    if existing is not None and existing.ClientId != client_id and not existing.IsDeleted:
         # One Instagram account cannot serve two tenants: inbound webhooks are
         # routed by ExternalId, so allowing this would send one company's DMs to
         # another company's inbox.
@@ -730,6 +747,7 @@ def instagram_callback(
         ExternalId=external_id,
         CreatedBy="instagram-login",
     )
+    account.ClientId = client_id
     account.IsDeleted = False
 
     account.LoginType = ig_login.LOGIN_TYPE_INSTAGRAM
