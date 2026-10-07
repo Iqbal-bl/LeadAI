@@ -705,21 +705,29 @@ async def save_linkedin_settings(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
+    from sqlalchemy.orm.attributes import flag_modified
+
     _, company_id = scope
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found. Connect OAuth first.")
 
-    meta = row.MetaJson or {}
+    meta = dict(row.MetaJson or {})
     meta["linkedin_auto_accept"] = payload.auto_accept
     meta["linkedin_welcome_message"] = payload.welcome_message
     meta["linkedin_auto_dm_leads"] = payload.auto_dm_leads
     row.MetaJson = meta
+    flag_modified(row, "MetaJson")
     row.UpdatedAt = utcnow()
     db.commit()
     return {"ok": True}
@@ -745,11 +753,16 @@ async def get_auto_connect_settings(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False,
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
@@ -785,21 +798,28 @@ async def save_auto_connect_settings(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
+    from sqlalchemy.orm.attributes import flag_modified
+
     _, company_id = scope
     from ..services import jobs
     from ..services.jobs import calculate_next_random_schedule
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False,
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
 
-    meta = row.MetaJson or {}
-    auto_cfg = meta.get("linkedin_auto_connect") or {}
+    meta = dict(row.MetaJson or {})
+    auto_cfg = dict(meta.get("linkedin_auto_connect") or {})
     
     auto_cfg["enabled"] = payload.enabled
     auto_cfg["runs_per_day"] = payload.runs_per_day
@@ -822,6 +842,7 @@ async def save_auto_connect_settings(
 
     meta["linkedin_auto_connect"] = auto_cfg
     row.MetaJson = meta
+    flag_modified(row, "MetaJson")
     row.UpdatedAt = utcnow()
     db.commit()
 
