@@ -237,6 +237,8 @@ def lead_out(row: Lead | None) -> LeadOut | None:
         score_breakdown=row.ScoreBreakdown,
         qualified_at=row.QualifiedAt,
         data_points=row.DataPointsJson,
+        converted_account_id=row.ConvertedAccountId,
+        converted_at=row.ConvertedAt,
     )
 
 

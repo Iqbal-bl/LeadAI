@@ -607,9 +607,11 @@ class LeadOut(BaseModel):
     # frontend already has that schema from GET /data-points and joins by key,
     # so this stays a plain read of Lead.DataPointsJson with no extra query.
     data_points: dict[str, Any] | None = None
+    converted_account_id: str | None = None
+    converted_at: datetime | None = None
 
-    @field_serializer('qualified_at')
-    def serialize_qualified_at(self, dt: datetime | None, _info):
+    @field_serializer('qualified_at', 'converted_at')
+    def serialize_dates(self, dt: datetime | None, _info):
         if dt is None:
             return None
         if dt.tzinfo is None:
@@ -788,6 +790,7 @@ class ContactReveal(BaseModel):
     email: str | None = None
     whatsapp: str | None = None
     instagram: str | None = None
+    linkedin: str | None = None
     # Added so a reveal on a Messenger or Instagram lead shows a person rather
     # than a 16-digit id. Populated from leadai_channel_identities.
     display_name: str | None = None

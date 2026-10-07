@@ -423,6 +423,20 @@ async def fetch_received_invitations_api(account, limit: int = 50) -> list[dict]
 
 
 
+def normalize_contact_name(name: Optional[str]) -> str:
+    """Normalize a LinkedIn contact name by removing badges, degrees, and extra whitespace.
+    E.g. 'Pratik Raj Singh Verified Profile 3rd+' -> 'Pratik Raj Singh'
+         'Vanshika Verma  1st' -> 'Vanshika Verma'
+    """
+    import re
+    if not name:
+        return ""
+    cleaned = re.sub(r'(?i)\b(verified\s+profile|1st|2nd|3rd\+?)\b', '', name)
+    cleaned = re.sub(r'[\(\[\{].*?[\)\]\}]', '', cleaned)
+    cleaned = re.sub(r'[•·|].*$', '', cleaned)
+    return " ".join(cleaned.split()).strip()
+
+
 def find_or_link_linkedin_customer(
     db,
     client_id: str,
@@ -434,7 +448,7 @@ def find_or_link_linkedin_customer(
     conversation_id: Optional[str] = None,
     created_by: str = "linkedin_bot",
 ) -> tuple[Any, Any]:
-    """Find an existing LeadCustomer across URNs, member tokens, profile URLs, and threads.
+    """Find an existing LeadCustomer across URNs, member tokens, profile URLs, threads, and clean name.
     
     If found, ensures the new URN/token is linked to the SAME customer in LeadChannelIdentity,
     preventing duplicate customer records across DMs, Connection Requests, and Comments.
@@ -448,6 +462,7 @@ def find_or_link_linkedin_customer(
     urn_token = extract_linkedin_token(sender_urn)
     slug = public_id or extract_linkedin_slug(profile_url)
     display_name = (display_name or "LinkedIn Member").strip()
+    clean_name = normalize_contact_name(display_name)
 
     identity = None
     customer = None
@@ -503,9 +518,22 @@ def find_or_link_linkedin_customer(
         if db_conv_existing and db_conv_existing.CustomerId:
             customer = db.get(LeadCustomer, db_conv_existing.CustomerId)
 
-    # 5. If customer found: ensure this specific sender_urn is linked in LeadChannelIdentity
+    # 4.5 Match by normalized contact name (prevents duplicate customer rows for same person)
+    if not customer and clean_name and clean_name.lower() not in ("linkedin member", "unknown", "customer", ""):
+        candidates = db.query(LeadCustomer).filter(
+            LeadCustomer.ClientId == client_id,
+            LeadCustomer.IsDeleted == False
+        ).order_by(LeadCustomer.CreatedAt.desc()).all()
+        for cand in candidates:
+            cand_clean = normalize_contact_name(cand.DisplayName or "")
+            if cand_clean and cand_clean.lower() == clean_name.lower():
+                customer = cand
+                break
+
+    # 5. If customer found: link identity and maintain/upgrade profile URL
+    is_dummy_thread = str(sender_urn).startswith("li_conv-") if sender_urn else True
     if customer:
-        if sender_urn:
+        if sender_urn and not is_dummy_thread:
             exact_ident = db.query(LeadChannelIdentity).filter(
                 LeadChannelIdentity.ClientId == client_id,
                 LeadChannelIdentity.Channel == "linkedin",
@@ -519,39 +547,69 @@ def find_or_link_linkedin_customer(
                     Channel="linkedin",
                     ExternalUserId=str(sender_urn),
                     CustomerId=customer.Id,
-                    ProfileName=display_name or customer.DisplayName,
+                    ProfileName=clean_name or customer.DisplayName,
                     CreatedBy=created_by,
                 )
                 db.add(exact_ident)
                 db.flush()
             identity = exact_ident
 
-        # Upgrade profile URL on customer if incoming is vanity slug
-        if profile_url and (not customer.LinkedinProfileUrl or "ACoAA" in customer.LinkedinProfileUrl):
-            customer.LinkedinProfileUrl = profile_url
-            customer.UpdatedAt = utcnow()
+        # Prefer clean vanity profile URL over empty or internal ACoAA hash
+        if profile_url and profile_url.strip():
+            current_url = customer.LinkedinProfileUrl or ""
+            # If current has nothing, or current is an ACoAA hash and incoming is a vanity URL:
+            if not current_url or ("ACoAA" in current_url and "ACoAA" not in profile_url):
+                customer.LinkedinProfileUrl = profile_url
+                customer.UpdatedAt = utcnow()
+        
+        # If customer still has no profile URL, look for any prior record with a profile URL for this person
+        if not customer.LinkedinProfileUrl and clean_name:
+            prior_donors = db.query(LeadCustomer).filter(
+                LeadCustomer.ClientId == client_id,
+                LeadCustomer.LinkedinProfileUrl.isnot(None),
+                LeadCustomer.LinkedinProfileUrl != "",
+            ).all()
+            for d in prior_donors:
+                if normalize_contact_name(d.DisplayName or "").lower() == clean_name.lower():
+                    customer.LinkedinProfileUrl = d.LinkedinProfileUrl
+                    customer.UpdatedAt = utcnow()
+                    break
+
         return customer, identity
 
     # 6. If brand new: create LeadCustomer + LeadChannelIdentity
+    # Check if any prior customer record has the LinkedIn URL to avoid starting blank
+    final_url = profile_url
+    if not final_url and clean_name:
+        prior_donors = db.query(LeadCustomer).filter(
+            LeadCustomer.ClientId == client_id,
+            LeadCustomer.LinkedinProfileUrl.isnot(None),
+            LeadCustomer.LinkedinProfileUrl != "",
+        ).all()
+        for d in prior_donors:
+            if normalize_contact_name(d.DisplayName or "").lower() == clean_name.lower():
+                final_url = d.LinkedinProfileUrl
+                break
+
     customer = LeadCustomer(
         ClientId=client_id,
         PublicRef=f"Lead #{random.randint(10000, 99999)}",
-        DisplayName=display_name,
-        LinkedinProfileUrl=profile_url,
+        DisplayName=clean_name or display_name,
+        LinkedinProfileUrl=final_url,
         PhoneEnc=encrypt_pii(None),
         CreatedBy=created_by,
     )
     db.add(customer)
     db.flush()
 
-    if sender_urn:
+    if sender_urn and not is_dummy_thread:
         identity = LeadChannelIdentity(
             ClientId=client_id,
             ChannelAccountId=channel_account_id,
             Channel="linkedin",
             ExternalUserId=str(sender_urn),
             CustomerId=customer.Id,
-            ProfileName=display_name,
+            ProfileName=clean_name or display_name,
             CreatedBy=created_by,
         )
         db.add(identity)
@@ -607,17 +665,48 @@ def reply_invitation_api(
                 display_name, sender_urn, profile_url
             )
 
-        from ..services import crm as crm_service
-        crm_service.create_account(
-            db, account.ClientId,
-            display_name=display_name,
-            stage="lead",
-            source="linkedin_invitation",
-            customer_id=customer.Id if customer else (identity.CustomerId if identity else None),
-            linkedin_profile_url=profile_url,
-            tags="linkedin,connection_accepted,auto_captured",
-            actor="linkedin_invite_ai"
-        )
+        # Create or link Conversation & Lead in pipeline (without prematurely creating a Customer Account)
+        from ..models import LeadConversation, Lead
+        target_cust_id = customer.Id if customer else (identity.CustomerId if identity else None)
+        db_conv = None
+        if target_cust_id:
+            db_conv = db.query(LeadConversation).filter(
+                LeadConversation.ClientId == account.ClientId,
+                LeadConversation.Channel == "linkedin",
+                LeadConversation.CustomerId == target_cust_id,
+                LeadConversation.IsDeleted == False,
+            ).first()
+
+        if not db_conv and target_cust_id:
+            db_conv = LeadConversation(
+                ClientId=account.ClientId,
+                CustomerId=target_cust_id,
+                Channel="linkedin",
+                Status="open",
+                ChannelAccountId=account.Id,
+                ExternalThreadId=str(sender_urn or public_id or target_cust_id),
+                Summary=f"Accepted LinkedIn connection request from {display_name}",
+                LastMessageAt=utcnow(),
+            )
+            db.add(db_conv)
+            db.flush()
+
+        if db_conv:
+            db_lead = db.query(Lead).filter(
+                Lead.ConversationId == db_conv.Id,
+                Lead.IsDeleted == False,
+            ).first()
+            if not db_lead:
+                db_lead = Lead(
+                    ClientId=account.ClientId,
+                    ConversationId=db_conv.Id,
+                    Status="warm",
+                    Score=50,
+                    Intent="networking",
+                    Interest="LinkedIn Connection",
+                    CreatedBy="linkedin_invite_ai",
+                )
+                db.add(db_lead)
         db.commit()
 
         # Send welcome message if configured
@@ -724,23 +813,54 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
                         display_name, sender_urn, profile_url
                     )
 
-                from ..services import crm as crm_service
                 headline = parsed.get("headline") or ""
                 note = parsed.get("message") or ""
-                crm_service.create_account(
-                    db, account.ClientId,
-                    display_name=display_name,
-                    stage="lead",
-                    source="linkedin_invitation",
-                    customer_id=customer.Id if customer else (identity.CustomerId if identity else None),
-                    linkedin_profile_url=profile_url,
-                    company_name=headline[:100] if headline else None,
-                    tags="linkedin,connection_accepted,auto_captured" + (",has_note" if note else ""),
-                    fields={"headline": headline, "invitation_note": note, "sender_urn": sender_urn},
-                    actor="linkedin_invite_ai"
-                )
+
+                # Create or link Conversation & Lead in pipeline (without prematurely creating a Customer Account)
+                from ..models import LeadConversation, Lead
+                target_cust_id = customer.Id if customer else (identity.CustomerId if identity else None)
+                db_conv = None
+                if target_cust_id:
+                    db_conv = db.query(LeadConversation).filter(
+                        LeadConversation.ClientId == account.ClientId,
+                        LeadConversation.Channel == "linkedin",
+                        LeadConversation.CustomerId == target_cust_id,
+                        LeadConversation.IsDeleted == False,
+                    ).first()
+
+                if not db_conv and target_cust_id:
+                    db_conv = LeadConversation(
+                        ClientId=account.ClientId,
+                        CustomerId=target_cust_id,
+                        Channel="linkedin",
+                        Status="open",
+                        ChannelAccountId=account.Id,
+                        ExternalThreadId=str(sender_urn or public_id or target_cust_id),
+                        Summary=note[:500] if note else f"Accepted connection request from {display_name}",
+                        LastMessageAt=utcnow(),
+                    )
+                    db.add(db_conv)
+                    db.flush()
+
+                if db_conv:
+                    db_lead = db.query(Lead).filter(
+                        Lead.ConversationId == db_conv.Id,
+                        Lead.IsDeleted == False,
+                    ).first()
+                    if not db_lead:
+                        db_lead = Lead(
+                            ClientId=account.ClientId,
+                            ConversationId=db_conv.Id,
+                            Status="warm",
+                            Score=50,
+                            Intent="networking",
+                            Interest="LinkedIn Connection",
+                            Product=headline[:200] if headline else "unknown",
+                            CreatedBy="linkedin_invite_ai",
+                        )
+                        db.add(db_lead)
                 db.commit()
-                logger.info("Captured accepted LinkedIn connection as CRM lead: %s (%s)", display_name, sender_urn)
+                logger.info("Captured accepted LinkedIn connection as Lead in pipeline: %s (%s)", display_name, sender_urn)
 
                 # Send welcome message if configured
                 if welcome_message:
@@ -1259,6 +1379,7 @@ def _parse_graphql_conversations_payload(data: dict) -> list[dict]:
                 "contact_headline": other_p.get("headline", "") if other_p else "",
                 "contact_public_id": other_p.get("public_id", "") if other_p else "",
                 "contact_urn": other_p.get("urn", "") if other_p else "",
+                "profile_url": other_p.get("profile_url", "") if other_p else "",
                 "contact_avatar": other_p.get("picture_url") if other_p else None,
                 "participants": participants,
                 "last_message": last_msg,
@@ -1873,7 +1994,7 @@ async def send_conversation_message_api(account, conversation_urn_id: str, messa
             raise RuntimeError(f"Failed to dispatch message: {str(exc)}")
 
 
-def auto_convert_linkedin_dm_to_crm_lead(
+def capture_linkedin_dm_as_lead(
     db,
     account,
     conversation_id: str,
@@ -1884,21 +2005,20 @@ def auto_convert_linkedin_dm_to_crm_lead(
     last_message: Optional[str] = None,
     eval_res: Optional[Any] = None,
 ) -> Optional[Any]:
-    """Auto-captures a qualified LinkedIn DM / InMail with commercial buying intent into CRM Customers.
+    """Captures a qualified LinkedIn DM / InMail with commercial buying intent into CRM Leads pipeline.
     
-    Idempotent by design: if an account for this customer already exists, it updates metadata
-    and returns the existing account without creating duplicates.
+    Stores strictly as an unconverted Lead in leadai_leads.
+    Does NOT create a customer account in leadai_accounts; leaves conversion to management.
     """
-    from ..models import LeadCustomer, LeadConversation, Lead, LeadAccount, utcnow
+    from ..models import LeadCustomer, LeadConversation, Lead, utcnow
     from ..models_ext import LeadChannelIdentity
     from ..security import encrypt_pii
-    from ..services import crm as crm_service
     from ..services.intent_detector import LeadIntentEvaluator
 
     # Check settings: is auto_dm_leads enabled for this account?
     meta = account.MetaJson or {}
     if not meta.get("linkedin_auto_dm_leads", True):
-        logger.debug("LinkedIn auto DM leads conversion is disabled in settings; skipping CRM capture.")
+        logger.debug("LinkedIn auto DM leads capture is disabled in settings; skipping capture.")
         return None
 
     if not eval_res or not eval_res.is_lead:
@@ -1935,13 +2055,24 @@ def auto_convert_linkedin_dm_to_crm_lead(
             profile_url, customer.Id, effective_contact_name
         )
 
-    # 2. Find or create LeadConversation
-    db_conv = db.query(LeadConversation).filter(
-        LeadConversation.ClientId == account.ClientId,
-        LeadConversation.Channel == "linkedin",
-        LeadConversation.ExternalThreadId == str(conversation_id),
-        LeadConversation.IsDeleted == False,
-    ).first()
+    # 2. Find or create LeadConversation (with strict single-lead-per-person deduplication)
+    db_conv = None
+    if conversation_id and not str(conversation_id).startswith("conv-"):
+        db_conv = db.query(LeadConversation).filter(
+            LeadConversation.ClientId == account.ClientId,
+            LeadConversation.Channel == "linkedin",
+            LeadConversation.ExternalThreadId == str(conversation_id),
+            LeadConversation.IsDeleted == False,
+        ).first()
+
+    # Deduplication: check if an active conversation already exists for this customer in LinkedIn channel
+    if not db_conv and customer:
+        db_conv = db.query(LeadConversation).filter(
+            LeadConversation.ClientId == account.ClientId,
+            LeadConversation.Channel == "linkedin",
+            LeadConversation.CustomerId == customer.Id,
+            LeadConversation.IsDeleted == False,
+        ).order_by(LeadConversation.CreatedAt.desc()).first()
 
     if not db_conv:
         db_conv = LeadConversation(
@@ -1957,36 +2088,16 @@ def auto_convert_linkedin_dm_to_crm_lead(
         db.add(db_conv)
         db.flush()
     else:
+        # Existing conversation found for this customer: reuse and update!
+        if customer and db_conv.CustomerId != customer.Id:
+            db_conv.CustomerId = customer.Id
+        if conversation_id and not str(conversation_id).startswith("conv-"):
+            db_conv.ExternalThreadId = str(conversation_id)
         if last_message:
             db_conv.Summary = last_message[:500]
         db_conv.LastMessageAt = utcnow()
 
-    # 3. Create or return LeadAccount in CRM
-    crm_lead = crm_service.create_account(
-        db,
-        account.ClientId,
-        display_name=effective_contact_name,
-        stage="lead",
-        source="linkedin_dm",
-        customer_id=customer.Id if customer else None,
-        linkedin_profile_url=profile_url or (customer.LinkedinProfileUrl if customer else None),
-        tags=f"linkedin,dm_lead,{eval_res.category}," + ",".join(eval_res.signals),
-        fields={
-            "intent_score": eval_res.score,
-            "intent_category": eval_res.category,
-            "intent_signals": eval_res.signals,
-            "conversation_id": conversation_id,
-            "last_message": last_message,
-            "rationale": eval_res.rationale,
-        },
-        actor="linkedin_dm_ai",
-    )
-
-    if profile_url and not crm_lead.LinkedinProfileUrl:
-        crm_lead.LinkedinProfileUrl = profile_url
-        crm_lead.UpdatedAt = utcnow()
-
-    # 4. Link or update Lead in leadai_leads
+    # 3. Create or update Lead in leadai_leads (WITHOUT creating LeadAccount)
     db_lead = db.query(Lead).filter(
         Lead.ConversationId == db_conv.Id,
         Lead.IsDeleted == False,
@@ -2009,21 +2120,28 @@ def auto_convert_linkedin_dm_to_crm_lead(
         "rationale": eval_res.rationale,
         "evaluated_at": utcnow().isoformat(),
     }
-    db_lead.ConvertedAccountId = crm_lead.Id
-    db_lead.ConvertedAt = utcnow()
-    db_lead.UpdatedAt = utcnow()
+    db_lead.Interest = "LinkedIn Inbound DM"
+    if last_message and not db_lead.FactsJson:
+        db_lead.FactsJson = [f"Initial message: {last_message[:200]}"]
 
-    if not crm_lead.SourceConversationId:
-        crm_lead.SourceConversationId = db_conv.Id
-    if not crm_lead.SourceLeadId:
-        crm_lead.SourceLeadId = db_lead.Id
+    # Keep ConvertedAccountId and ConvertedAt NULL until explicit conversion by manager/admin!
+    # If the lead was not already converted, ensure they stay None.
+    if not db_lead.ConvertedAccountId:
+        db_lead.ConvertedAccountId = None
+        db_lead.ConvertedAt = None
+
+    db_lead.UpdatedAt = utcnow()
 
     db.commit()
     logger.info(
-        "Auto-converted LinkedIn DM to CRM Customer Lead: %s (%s) - Intent: %s (score=%.2f)",
-        effective_contact_name, crm_lead.Id, eval_res.category, eval_res.score
+        "Captured LinkedIn DM as Lead in pipeline: %s (%s) - Intent: %s (score=%.2f)",
+        effective_contact_name, db_lead.Id, eval_res.category, eval_res.score
     )
-    return crm_lead
+    return db_lead
+
+
+# Backward-compatible alias
+auto_convert_linkedin_dm_to_crm_lead = capture_linkedin_dm_as_lead
 
 
 async def sync_linkedin_conversations(db, account) -> dict:
