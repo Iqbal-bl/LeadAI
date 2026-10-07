@@ -33,21 +33,40 @@ from botocore.config import Config as BotoConfig
 logger = logging.getLogger(__name__)
 
 
+def _env(name: str, default=None):
+    """The value of an env var, with a trailing inline comment removed.
+
+    A real incident: `.env` files only treat `#` as a comment, and that's
+    fine for python-dotenv (used by LeadAI/config.py's own `_env()`, which
+    this mirrors) — but Docker Compose's `env_file:` directive does NOT
+    strip an inline `# comment` the same way, so a container saw the raw
+    value `"false     # set true once MinIO has a certificate signed by a
+    real CA"` for MINIO_VERIFY_SSL. `== "false"` never matched, verification
+    silently stayed on, and every recording archive failed with a
+    self-signed-cert SSLCertVerificationError. Stripping here makes this
+    module correct regardless of which tool parsed the .env file.
+    """
+    value = os.getenv(name)
+    if value is None:
+        return default
+    for marker in (" //", "\t//", " #", "\t#"):
+        cut = value.find(marker)
+        if cut != -1:
+            value = value[:cut]
+    return value.strip()
+
+
 def minio_enabled() -> bool:
     """True only when the core MinIO settings are present."""
-    return bool(
-        os.getenv("MINIO_ENDPOINT")
-        and os.getenv("MINIO_ACCESS_KEY")
-        and os.getenv("MINIO_SECRET_KEY")
-    )
+    return bool(_env("MINIO_ENDPOINT") and _env("MINIO_ACCESS_KEY") and _env("MINIO_SECRET_KEY"))
 
 
 def _bucket() -> str:
-    return os.getenv("MINIO_BUCKET_RECORDINGS", os.getenv("MINIO_BUCKET", "call-recordings"))
+    return _env("MINIO_BUCKET_RECORDINGS", _env("MINIO_BUCKET", "call-recordings"))
 
 
 def _public_url(key: str) -> str:
-    base = (os.getenv("MINIO_PUBLIC_ENDPOINT") or os.getenv("MINIO_ENDPOINT") or "").rstrip("/")
+    base = (_env("MINIO_PUBLIC_ENDPOINT") or _env("MINIO_ENDPOINT") or "").rstrip("/")
     return f"{base}/{_bucket()}/{key}"
 
 
@@ -58,10 +77,10 @@ def _verify_setting():
       - MINIO_VERIFY_SSL=false -> skip verification entirely
       - otherwise -> default botocore verification (True)
     """
-    ca_bundle = os.getenv("MINIO_CA_BUNDLE")
+    ca_bundle = _env("MINIO_CA_BUNDLE")
     if ca_bundle:
         return ca_bundle
-    if os.getenv("MINIO_VERIFY_SSL", "true").strip().lower() == "false":
+    if (_env("MINIO_VERIFY_SSL", "true") or "true").lower() == "false":
         return False
     return True
 
@@ -71,10 +90,10 @@ def _session_and_kwargs():
     session = aioboto3.Session()
     kwargs = dict(
         service_name="s3",
-        endpoint_url=os.getenv("MINIO_ENDPOINT"),
-        aws_access_key_id=os.getenv("MINIO_ACCESS_KEY"),
-        aws_secret_access_key=os.getenv("MINIO_SECRET_KEY"),
-        region_name=os.getenv("MINIO_REGION", "us-east-1"),
+        endpoint_url=_env("MINIO_ENDPOINT"),
+        aws_access_key_id=_env("MINIO_ACCESS_KEY"),
+        aws_secret_access_key=_env("MINIO_SECRET_KEY"),
+        region_name=_env("MINIO_REGION", "us-east-1"),
         verify=_verify_setting(),
         # path-style addressing is required for MinIO (no virtual-host buckets)
         config=BotoConfig(s3={"addressing_style": "path"}),
