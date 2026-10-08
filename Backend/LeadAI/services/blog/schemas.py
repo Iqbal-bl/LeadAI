@@ -92,7 +92,7 @@ class GenerateBlogRequest(BaseModel):
     include_images: Optional[bool] = True
     num_images: Optional[int] = 1
     target_words: Optional[int] = 1000
-    target_length: Optional[str] = "~1000 words"
+    target_length: Optional[str] = None
     language: Optional[str] = "English"
     cta_text: Optional[str] = "Book Free Strategy Session Today"
     cta_url: Optional[str] = "#strategy-session"

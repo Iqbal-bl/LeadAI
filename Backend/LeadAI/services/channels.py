@@ -80,30 +80,47 @@ def social_identities_for(db: Session, customer_id: str | None) -> list:
         .order_by(LeadChannelIdentity.CreatedAt.asc())
         .all()
     )
+    from ..models import LeadCustomer
+    customer = db.get(LeadCustomer, customer_id) if customer_id else None
+
     social = []
+    seen = set()
+
     for ident in identities:
-        # ProfileName is the person's real display name ("Manmeet Kaur"); ExternalUsername
-        # is the resolved @handle ("_man11_10") — a separate lookup, cached once per contact
-        # (see the bot-loop guard in routers/webhooks.py). On Instagram the handle IS the
-        # @username — SocialIdentityOut's own docstring says so — so it must win whenever
-        # it's known, or a real name with a space in it produces a handle that isn't the
-        # handle at all and a profile_url that isn't a valid link. Messenger has no @handle
-        # concept at all (Meta never exposes one), so ProfileName is the only thing to show.
+        # Ignore dummy thread identifiers
+        if ident.Channel == "linkedin" and ident.ExternalUserId and str(ident.ExternalUserId).startswith("li_conv-"):
+            continue
+
         if ident.Channel == CHANNEL_INSTAGRAM:
             handle = ident.ExternalUsername or ident.ProfileName
+            display_str = handle or ""
+        elif ident.Channel == "linkedin":
+            handle = ident.ExternalUsername  # Only set handle if real handle exists (no spaces)
+            display_str = ident.ProfileName or ident.ExternalUsername or ""
         else:
             handle = ident.ProfileName or ident.ExternalUsername
+            display_str = handle or ""
+
+        # Deduplicate per channel + normalized name
+        key = (ident.Channel, display_str.strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+
         profile_url = None
         if ident.Channel == CHANNEL_INSTAGRAM and ident.ExternalUsername:
-            # Only a resolved username makes a working link; a raw IGSID (or a real name
-            # with spaces in it) does not.
             profile_url = f"https://instagram.com/{ident.ExternalUsername.lstrip('@')}"
         elif ident.Channel == CHANNEL_MESSENGER and ident.ExternalUserId:
             profile_url = f"https://m.me/{ident.ExternalUserId}"
+        elif ident.Channel == "linkedin":
+            profile_url = getattr(customer, "LinkedinProfileUrl", None) if customer else None
+            if not profile_url and ident.ExternalUsername:
+                profile_url = f"https://www.linkedin.com/in/{ident.ExternalUsername}"
+
         social.append(
             SocialIdentityOut(
                 channel=ident.Channel,
-                handle=handle or ident.ExternalUserId,
+                handle=handle,
                 profile_name=ident.ProfileName,
                 external_user_id=ident.ExternalUserId,
                 profile_url=profile_url,
@@ -147,6 +164,22 @@ class StatusUpdate:
     status: str
     error: str | None = None
     timestamp: datetime | None = None
+
+
+@dataclass
+class InboundComment:
+    """Comment on a social media post (Facebook Page feed or Instagram post)."""
+
+    channel: str                     # CHANNEL_MESSENGER (facebook) or CHANNEL_INSTAGRAM
+    account_external_id: str         # page id or ig business id
+    comment_id: str                  # unique comment id
+    post_id: str                     # post id or media id
+    text: str                        # comment content
+    author_id: str                   # commenter id / PSID / IGSID
+    author_name: str | None = None   # commenter display name or username
+    parent_comment_id: str | None = None
+    created_time: datetime | None = None
+    raw: dict = field(default_factory=dict)
 
 
 # =========================================================================== #
@@ -261,7 +294,15 @@ def is_instagram_login(account: LeadChannelAccount | None) -> bool:
     Such an account has no Facebook Page, holds an Instagram User access token
     rather than a Page token, and must be addressed at graph.instagram.com.
     """
-    return bool(account is not None and (account.LoginType or "facebook") == "instagram")
+    if account is None:
+        return False
+    if (account.LoginType or "facebook") == "instagram":
+        return True
+    if account.Channel == CHANNEL_INSTAGRAM:
+        token = _token_for(account) or ""
+        if token.startswith("IG"):
+            return True
+    return False
 
 
 def _graph_base(account: LeadChannelAccount | None) -> tuple[str, str]:
@@ -295,15 +336,16 @@ def _graph_url(account: LeadChannelAccount | None, path: str) -> str:
 # =========================================================================== #
 # inbound normalisation
 # =========================================================================== #
-def normalise(payload: dict) -> tuple[list[InboundMessage], list[StatusUpdate]]:
-    """Turn one Meta webhook body into our own message/status objects.
+def normalise(payload: dict) -> tuple[list[InboundMessage], list[StatusUpdate], list[InboundComment]]:
+    """Turn one Meta webhook body into our own message/status/comment objects.
 
     Meta batches: a single POST can carry several entries, each with several
-    changes, each with several messages. All three levels are flattened here so
-    the router only ever sees a flat list.
+    changes, each with several messages or comments. All three levels are flattened here so
+    the router only ever sees flat lists.
     """
     messages: list[InboundMessage] = []
     statuses: list[StatusUpdate] = []
+    comments: list[InboundComment] = []
     obj = (payload or {}).get("object", "")
 
     import json as _json
@@ -359,7 +401,7 @@ def normalise(payload: dict) -> tuple[list[InboundMessage], list[StatusUpdate]]:
 
         # --- Instagram -------------------------------------------------------
         # Instagram can send in two formats:
-        #   1. changes[] with field="messages"|"messaging_postbacks"|etc.
+        #   1. changes[] with field="messages"|"messaging_postbacks"|"comments"|etc.
         #   2. messaging[] with object="instagram" (same shape as Messenger)
         if obj == "instagram":
             IG_MSG_FIELDS = {"messages", "messaging_postbacks", "messaging_referrals"}
@@ -370,6 +412,33 @@ def normalise(payload: dict) -> tuple[list[InboundMessage], list[StatusUpdate]]:
                 value = change.get("value", {}) or {}
                 sender = str((value.get("sender") or {}).get("id", ""))
                 recipient_id = str((value.get("recipient") or {}).get("id", ""))
+
+                if field == "comments":
+                    comment_id = str(value.get("id", ""))
+                    comment_text = value.get("text", "")
+                    from_user = value.get("from", {}) or {}
+                    author_id = str(from_user.get("id", ""))
+                    author_name = from_user.get("username")
+                    media = value.get("media", {}) or {}
+                    media_id = str(media.get("id", ""))
+                    parent_id = str(value.get("parent_id", "")) if value.get("parent_id") else None
+                    if comment_id and comment_text and author_id and author_id != account_id:
+                        comments.append(
+                            InboundComment(
+                                channel=CHANNEL_INSTAGRAM,
+                                account_external_id=account_id,
+                                comment_id=comment_id,
+                                post_id=media_id,
+                                text=comment_text,
+                                author_id=author_id,
+                                author_name=author_name,
+                                parent_comment_id=parent_id,
+                                created_time=_ts(value.get("created_time")),
+                                raw=value,
+                            )
+                        )
+                    continue
+
                 if not sender:
                     continue
 
@@ -465,10 +534,41 @@ def normalise(payload: dict) -> tuple[list[InboundMessage], list[StatusUpdate]]:
                         )
             continue
 
-        # --- Messenger ------------------------------------------------------
-        # Messenger uses the `messaging` array with `object=page`.
+        # --- Facebook Page / Messenger --------------------------------------
+        # Messenger uses the `messaging` array; Facebook feed comments arrive in `changes`.
         channel = CHANNEL_MESSENGER
         account_id = str(entry.get("id", ""))
+
+        for change in entry.get("changes", []) or []:
+            field = change.get("field", "")
+            value = change.get("value", {}) or {}
+            if field == "feed":
+                item = value.get("item", "")
+                verb = value.get("verb", "")
+                if item == "comment" and verb in ("add", "edited", ""):
+                    comment_id = str(value.get("comment_id", ""))
+                    post_id = str(value.get("post_id", ""))
+                    msg_text = value.get("message", "")
+                    from_obj = value.get("from", {}) or {}
+                    sender_id = str(from_obj.get("id") or value.get("sender_id", ""))
+                    sender_name = from_obj.get("name") or value.get("sender_name")
+                    parent_id = str(value.get("parent_id", "")) if value.get("parent_id") else None
+                    if comment_id and msg_text and sender_id and sender_id != account_id:
+                        comments.append(
+                            InboundComment(
+                                channel=channel,
+                                account_external_id=account_id,
+                                comment_id=comment_id,
+                                post_id=post_id,
+                                text=msg_text,
+                                author_id=sender_id,
+                                author_name=sender_name,
+                                parent_comment_id=parent_id if parent_id != post_id else None,
+                                created_time=_ts(value.get("created_time")),
+                                raw=value,
+                            )
+                        )
+
         for event in entry.get("messaging", []) or []:
             message = event.get("message") or {}
             if message.get("is_echo"):
@@ -507,7 +607,7 @@ def normalise(payload: dict) -> tuple[list[InboundMessage], list[StatusUpdate]]:
                             status=kind,
                         )
                     )
-    return messages, statuses
+    return messages, statuses, comments
 
 
 def _whatsapp_text(msg: dict) -> str:
@@ -865,6 +965,89 @@ def _post(url: str, body: dict, token: str, timeout: float) -> str:
     if "messages" in data and data["messages"]:
         return str(data["messages"][0].get("id", ""))
     return str(data.get("message_id") or data.get("id") or "")
+
+
+def fetch_post_context(
+    account: LeadChannelAccount | None,
+    channel: str,
+    post_id: str,
+    *,
+    timeout: float = 10.0,
+) -> dict:
+    """Fetch post title/caption and permalink URL for origin attribution."""
+    if not post_id or not account:
+        return {}
+    token = _token_for(account)
+    if not token:
+        return {}
+
+    try:
+        import httpx
+        if channel == CHANNEL_INSTAGRAM:
+            url = _graph_url(account, post_id)
+            r = httpx.get(url, params={"fields": "caption,permalink", "access_token": token}, timeout=timeout)
+            data = r.json() or {}
+            caption = data.get("caption", "")
+            return {
+                "post_title": caption[:120] if caption else "Instagram Post",
+                "post_snippet": caption[:500] if caption else "",
+                "permalink_url": data.get("permalink", ""),
+            }
+        elif channel == CHANNEL_MESSENGER:
+            url = _graph_url(account, post_id)
+            r = httpx.get(url, params={"fields": "message,permalink_url", "access_token": token}, timeout=timeout)
+            data = r.json() or {}
+            msg = data.get("message", "")
+            return {
+                "post_title": msg[:120] if msg else "Facebook Post",
+                "post_snippet": msg[:500] if msg else "",
+                "permalink_url": data.get("permalink_url", ""),
+            }
+    except Exception as exc:
+        logger.warning("[LeadAI channels] fetch_post_context failed for %s/%s: %s", channel, post_id, exc)
+    return {}
+
+
+def reply_to_comment(
+    account: LeadChannelAccount | None,
+    channel: str,
+    comment_id: str,
+    reply_text: str,
+    *,
+    timeout: float = 15.0,
+) -> str | None:
+    """Post an AI reply directly to a Facebook or Instagram comment."""
+    if not comment_id or not reply_text or not account:
+        return None
+    token = _token_for(account)
+    if not token:
+        return None
+
+    try:
+        import httpx
+        if channel == CHANNEL_INSTAGRAM:
+            url = _graph_url(account, f"{comment_id}/replies")
+            resp = httpx.post(
+                url,
+                json={"message": reply_text},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=timeout,
+            )
+            data = resp.json() or {}
+            return str(data.get("id", ""))
+        elif channel == CHANNEL_MESSENGER:
+            url = _graph_url(account, f"{comment_id}/comments")
+            resp = httpx.post(
+                url,
+                json={"message": reply_text},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=timeout,
+            )
+            data = resp.json() or {}
+            return str(data.get("id", ""))
+    except Exception as exc:
+        logger.error("[LeadAI channels] reply_to_comment failed for %s/%s: %s", channel, comment_id, exc)
+    return None
 
 
 def send_sms(to: str, text: str) -> str:

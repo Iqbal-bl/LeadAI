@@ -93,6 +93,34 @@ def test_a_different_companys_first_whatsapp_number_is_unaffected():
     assert out.name == "Line B"
 
 
+def test_reconnecting_a_disconnected_whatsapp_number_revives_it_instead_of_duplicate_key_error():
+    """A real production incident: disconnecting a channel soft-deletes the
+    row (IsDeleted=1), but (Channel, ExternalId) is unique at the DB level
+    regardless of IsDeleted. The lookup used to filter IsDeleted==False, so a
+    soft-deleted row was invisible to it and reconnecting tried to INSERT a
+    second row with the same key — MySQLdb.IntegrityError: Duplicate entry.
+    Reconnecting the same number must revive the existing row instead."""
+    db, client, principal = setup()
+    first = channels.create_account(
+        ChannelAccountCreate(channel="whatsapp", name="Main line", external_id="wa-revive",
+                            access_token="x" * 20),
+        fake_request(), scope=(principal, client.Id), db=db,
+    )
+    channels.delete_account(first.id, fake_request(), scope=(principal, client.Id), db=db)
+    row = db.get(models.LeadChannelAccount, first.id)
+    assert row.IsDeleted is True
+
+    revived = channels.create_account(
+        ChannelAccountCreate(channel="whatsapp", name="Main line (again)", external_id="wa-revive",
+                            access_token="y" * 20),
+        fake_request(), scope=(principal, client.Id), db=db,
+    )
+    assert revived.id == first.id   # same row revived, not a second one
+    db.refresh(row)
+    assert row.IsDeleted is False
+    assert row.Name == "Main line (again)"
+
+
 # ----------------------------------------------------------------------- Facebook login
 def test_a_different_facebook_page_is_refused_but_reconnecting_the_same_page_is_not():
     db, client, principal = setup()
@@ -116,6 +144,35 @@ def test_a_different_facebook_page_is_refused_but_reconnecting_the_same_page_is_
         assert False, "a second Facebook Page should have been refused"
     except HTTPException as exc:
         assert exc.status_code == 409
+
+
+def test_reconnecting_a_disconnected_facebook_page_revives_it_instead_of_duplicate_key_error():
+    """Same production incident as the WhatsApp version above, for the
+    Facebook/Instagram OAuth callback path specifically — this is the exact
+    function behind the real stack trace (MySQLdb.IntegrityError: Duplicate
+    entry 'instagram-...' for key 'uq_leadai_channel_external'), since
+    _upsert_fb_account shares its structure with the Instagram callback."""
+    db, client, principal = setup()
+    first = channels._upsert_fb_account(
+        db, client_id=client.Id, channel="messenger", external_id="page-revive",
+        name="Page One", page_token="tok1", meta={},
+    )
+    db.commit()
+    page_id = first.Id
+
+    row = db.get(models.LeadChannelAccount, page_id)
+    row.IsDeleted = True
+    db.commit()
+
+    revived = channels._upsert_fb_account(
+        db, client_id=client.Id, channel="messenger", external_id="page-revive",
+        name="Page One (reconnected)", page_token="tok1-new", meta={},
+    )
+    db.commit()
+    assert revived.Id == page_id   # same row revived, not a duplicate-key crash
+    db.refresh(row)
+    assert row.IsDeleted is False
+    assert row.Name == "Page One (reconnected)"
 
 
 def test_a_facebook_pages_linked_instagram_account_is_refused_if_a_different_one_is_connected():

@@ -4,7 +4,6 @@ import { ChannelService } from '../../../services/channel.service';
 import {
   Channel,
   ChannelStatus,
-  ChannelUpdateRequest,
   LinkedInStatus,
 } from '../../../models/channel.models';
 import { MessageService, MenuItem } from 'primeng/api';
@@ -12,8 +11,6 @@ import { Menu } from 'primeng/menu';
 import { ConfirmationService } from '../../../shared/services/confirmation.service';
 import { ChannelWizardComponent } from '../channel-wizard/channel-wizard.component';
 import { ChannelContactsComponent } from '../channel-contacts/channel-contacts.component';
-import { ScriptService } from '../../../services/script.service';
-import { Script } from '../../../models/script.models';
 
 @Component({
   selector: 'app-channel-list',
@@ -33,61 +30,25 @@ export class ChannelListComponent implements OnInit, OnDestroy {
   private messageEventListener!: (event: MessageEvent) => void;
   loading = true;
 
-  // Scripts for dropdown selection
-  scripts: Script[] = [];
-
   // Dialog Visibility Flags
   showWizard = false;
   showContacts = false;
-  showEditDialog = false;
-  showTestDialog = false;
   showWebhookDialog = false;
 
   // Selected Channels for Dialogs
   selectedChannel: Channel | null = null;
-  editingChannel: Channel | null = null;
-  testingChannel: Channel | null = null;
   webhookChannel: Channel | null = null;
-
-  // Edit Form Model
-  editForm: ChannelUpdateRequest = {
-    name: '',
-    access_token: '',
-    app_secret: '',
-    verify_token: '',
-    display_number: '',
-    api_version: 'v21.0',
-    is_active: true,
-    auto_reply: true,
-    script_id: '',
-    default_language: 'en',
-  };
-  editLoading = false;
-  editError = '';
-
-  // Test Message Form Model
-  testForm = {
-    to: '',
-    message: 'Hello! This is a test message from LeadAI.',
-    template_name: '',
-    template_language: 'en',
-  };
-  testLoading = false;
-  testSuccess = false;
-  testError = '';
 
   constructor(
     private channelService: ChannelService,
     private messageService: MessageService,
     private confirmationService: ConfirmationService,
-    private scriptService: ScriptService,
   ) {}
 
   ngOnInit(): void {
     this.loadChannels();
     this.loadStatus();
     // this.loadLinkedInStatus();
-    this.loadScripts();
     this.messageEventListener = (event: MessageEvent) => this.handleOAuthMessage(event);
     window.addEventListener('message', this.messageEventListener);
   }
@@ -122,16 +83,6 @@ export class ChannelListComponent implements OnInit, OnDestroy {
     }
   }
 
-  loadScripts(): void {
-    this.scriptService.getScripts(undefined, true).subscribe({
-      next: (res) => {
-        this.scripts = res || [];
-      },
-      error: () => {
-        this.scripts = [];
-      },
-    });
-  }
 
   loadLinkedInStatus(): void {
     this.channelService.getLinkedInStatus().subscribe({
@@ -306,123 +257,6 @@ export class ChannelListComponent implements OnInit, OnDestroy {
     });
   }
 
-  // --- Edit Channel Modal ---
-  openEditDialog(channel: Channel): void {
-    this.editingChannel = channel;
-    this.editError = '';
-    this.editForm = {
-      name: channel.name || channel.display_name || '',
-      access_token: '',
-      app_secret: '',
-      verify_token: channel.verify_token || '',
-      display_number: channel.display_number || '',
-      api_version: channel.api_version || 'v21.0',
-      is_active: channel.is_active !== undefined ? channel.is_active : true,
-      auto_reply: channel.auto_reply !== undefined ? channel.auto_reply : true,
-      script_id: channel.script_id || '',
-      default_language: channel.default_language || 'en',
-    };
-    this.showEditDialog = true;
-  }
-
-  closeEditDialog(): void {
-    this.showEditDialog = false;
-    this.editingChannel = null;
-  }
-
-  saveEdit(): void {
-    if (!this.editingChannel) return;
-
-    this.editLoading = true;
-    this.editError = '';
-
-    const payload: ChannelUpdateRequest = {
-      name: this.editForm.name?.trim() || undefined,
-      display_number: this.editForm.display_number?.trim() || undefined,
-      api_version: this.editForm.api_version?.trim() || undefined,
-      is_active: this.editForm.is_active,
-      auto_reply: this.editForm.auto_reply,
-      script_id: this.editForm.script_id || undefined,
-      default_language: this.editForm.default_language?.trim() || undefined,
-    };
-
-    if (this.editForm.access_token?.trim()) {
-      payload.access_token = this.editForm.access_token.trim();
-    }
-    if (this.editForm.app_secret?.trim()) {
-      payload.app_secret = this.editForm.app_secret.trim();
-    }
-    if (this.editForm.verify_token?.trim()) {
-      payload.verify_token = this.editForm.verify_token.trim();
-    }
-
-    this.channelService.updateChannel(this.editingChannel.id, payload).subscribe({
-      next: (updated) => {
-        this.editLoading = false;
-        this.showEditDialog = false;
-        this.editingChannel = null;
-        this.loadChannels();
-        this.loadStatus();
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Channel Updated',
-          detail: 'Channel configurations updated successfully.',
-        });
-      },
-      error: (err) => {
-        this.editLoading = false;
-        this.editError = err.error?.detail || err.message || 'Failed to update channel.';
-      },
-    });
-  }
-
-  // --- Send Test Message Modal ---
-  openTestDialog(channel: Channel): void {
-    this.testingChannel = channel;
-    this.testSuccess = false;
-    this.testError = '';
-    this.testForm = {
-      to: '',
-      message: 'Hello! This is a test message from LeadAI.',
-      template_name: '',
-      template_language: 'en',
-    };
-    this.showTestDialog = true;
-  }
-
-  closeTestDialog(): void {
-    this.showTestDialog = false;
-    this.testingChannel = null;
-  }
-
-  sendTest(): void {
-    if (!this.testingChannel || !this.testForm.to.trim()) return;
-
-    this.testLoading = true;
-    this.testError = '';
-    this.testSuccess = false;
-
-    this.channelService.testChannel(this.testingChannel.id, {
-      to: this.testForm.to.trim(),
-      message: this.testForm.message?.trim() || undefined,
-      template_name: this.testForm.template_name?.trim() || undefined,
-      template_language: this.testForm.template_language?.trim() || 'en',
-    }).subscribe({
-      next: () => {
-        this.testLoading = false;
-        this.testSuccess = true;
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Test Sent',
-          detail: 'Test message sent successfully!',
-        });
-      },
-      error: (err) => {
-        this.testLoading = false;
-        this.testError = err.error?.detail || err.message || 'Failed to send test message. Check token permissions and recipient 24h window.';
-      },
-    });
-  }
 
   // --- Disconnect / Delete Channel ---
   deleteChannel(channel: Channel): void {
@@ -538,11 +372,6 @@ export class ChannelListComponent implements OnInit, OnDestroy {
         label: 'Webhook Configuration',
         icon: 'pi pi-link',
         command: () => this.openWebhookInfo(channel),
-      },
-      {
-        label: 'Edit Settings',
-        icon: 'pi pi-pencil',
-        command: () => this.openEditDialog(channel),
       },
       {
         separator: true,

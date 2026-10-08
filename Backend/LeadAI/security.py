@@ -123,6 +123,16 @@ def mask_email(email: str | None) -> str | None:
     return f"{head}{'*' * max(3, len(local) - len(head))}@{domain}"
 
 
+def mask_linkedin(url: str | None) -> str | None:
+    """Masks a LinkedIn profile URL (e.g. 'https://www.linkedin.com/in/*********')."""
+    if not url:
+        return None
+    clean = url.strip()
+    if not clean:
+        return None
+    return "https://www.linkedin.com/in/*********"
+
+
 # ===========================================================================
 # Chat widget session tokens
 # ===========================================================================

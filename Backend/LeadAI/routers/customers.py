@@ -85,42 +85,6 @@ def list_customers(
     """
     principal, client_id = scope
 
-    # Auto-heal: Ensure any captured LinkedIn comments have an account in leadai_accounts
-    try:
-        from ..models_blog import LeadSocialComment
-        captured_comments = (
-            db.query(LeadSocialComment)
-            .filter(
-                LeadSocialComment.ClientId == client_id,
-                LeadSocialComment.CustomerId != None,
-                LeadSocialComment.IsDeleted == False,
-            )
-            .all()
-        )
-        for c_comm in captured_comments:
-            has_acct = (
-                db.query(LeadAccount)
-                .filter(
-                    LeadAccount.ClientId == client_id,
-                    LeadAccount.CustomerId == c_comm.CustomerId,
-                    LeadAccount.IsDeleted == False,
-                )
-                .first()
-            )
-            if not has_acct:
-                crm.create_account(
-                    db,
-                    client_id,
-                    display_name=c_comm.AuthorName or "LinkedIn Member",
-                    source="linkedin",
-                    stage="lead",
-                    customer_id=c_comm.CustomerId,
-                    linkedin_profile_url=c_comm.AuthorProfileUrl,
-                    actor="linkedin_comment_ai",
-                )
-                db.commit()
-    except Exception as sync_err:
-        logger.warning(f"Error auto-syncing captured LinkedIn comments to accounts: {sync_err}")
 
     query = db.query(LeadAccount).filter(
         LeadAccount.ClientId == client_id,
@@ -205,7 +169,7 @@ def create_customer(
 def convert(
     payload: ConvertLeadRequest,
     request: Request,
-    scope: tuple[Principal, str] = Depends(scoped("customer.manage", "lead.status")),
+    scope: tuple[Principal, str] = Depends(scoped("customer.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     """Promote a qualified conversation. Idempotent — safe to double-click."""
@@ -406,6 +370,8 @@ def reveal_contact(
         "phone": decrypt_pii(row.PhoneEnc),
         "email": decrypt_pii(row.EmailEnc),
         "whatsapp": decrypt_pii(row.WhatsAppEnc),
+        "linkedin": getattr(row, "LinkedinProfileUrl", None),
+        "linkedin_profile_url": getattr(row, "LinkedinProfileUrl", None),
         # A customer converted from Instagram/Messenger had no handle/IGSID here at
         # all — this endpoint only ever decrypted phone/email/whatsapp, even though
         # the social identity behind row.CustomerId was one join away the whole time.

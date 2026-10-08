@@ -39,28 +39,45 @@ import { MessageService } from 'primeng/api';
           </div>
 
           <div class="header-actions">
-            <button
-              class="btn btn-outline"
-              (click)="openFeedbackModal('changes_requested')"
-            >
-              <i class="pi pi-pencil"></i> Request Changes
-            </button>
-            <button
-              class="btn btn-warning"
-              (click)="openFeedbackModal('regenerate')"
-            >
-              <i class="pi pi-refresh"></i> Regenerate (AI)
-            </button>
-            <button class="btn btn-success glow-btn" (click)="approveArticle()">
-              <i class="pi pi-check-circle"></i> Approve & Publish Live
-            </button>
+            <ng-container *ngIf="article.status !== 'published'">
+              <button
+                class="btn btn-outline"
+                [disabled]="submitting"
+                (click)="openFeedbackModal('changes_requested')"
+              >
+                <i class="pi pi-pencil"></i> Request Changes
+              </button>
+              <button
+                class="btn btn-warning"
+                [disabled]="submitting"
+                (click)="openFeedbackModal('regenerate')"
+              >
+                <i class="pi pi-refresh"></i> Regenerate (AI)
+              </button>
+              <button
+                class="btn btn-success glow-btn"
+                [disabled]="submitting"
+                (click)="approveArticle()"
+              >
+                <i class="pi" [ngClass]="submitting ? 'pi-spin pi-spinner' : 'pi-check-circle'"></i>
+                <span>{{ submitting ? 'Publishing Live...' : 'Approve & Publish Live' }}</span>
+              </button>
+            </ng-container>
+
+            <div *ngIf="article.status === 'published'" class="published-header-status">
+              <span class="published-btn-locked">
+                <i class="pi pi-check-circle"></i> Published Live
+              </span>
+            </div>
           </div>
         </header>
 
         <!-- Article Reader Area -->
         <main class="reader-container">
           <div class="article-meta-banner">
-            <span class="status-badge">{{ article.status }}</span>
+            <span class="status-badge" [ngClass]="article.status === 'published' ? 'published-status' : ''">
+              {{ article.status === 'published' ? 'Live & Published' : article.status }}
+            </span>
             <h1 class="article-title">{{ article.title }}</h1>
             <div class="meta-info">
               <span
@@ -90,8 +107,8 @@ import { MessageService } from 'primeng/api';
           <!-- Formatted HTML Body -->
           <article class="article-body" [innerHTML]="article.content"></article>
 
-          <!-- Bottom Action Deck -->
-          <div class="bottom-action-deck">
+          <!-- Bottom Action Deck: Actionable ONLY when NOT published -->
+          <div class="bottom-action-deck" *ngIf="article.status !== 'published'">
             <h3>Decision Required for Publication</h3>
             <p>
               Approve this post to publish across connected channels or provide
@@ -100,22 +117,42 @@ import { MessageService } from 'primeng/api';
             <div class="deck-buttons">
               <button
                 class="btn btn-outline"
+                [disabled]="submitting"
                 (click)="openFeedbackModal('changes_requested')"
               >
                 <i class="pi pi-pencil"></i> Request Changes
               </button>
               <button
                 class="btn btn-warning"
+                [disabled]="submitting"
                 (click)="openFeedbackModal('regenerate')"
               >
                 <i class="pi pi-refresh"></i> Regenerate New Version
               </button>
               <button
                 class="btn btn-success lg glow-btn"
+                [disabled]="submitting"
                 (click)="approveArticle()"
               >
-                <i class="pi pi-check-circle"></i> Approve & Publish to Channels
+                <i class="pi" [ngClass]="submitting ? 'pi-spin pi-spinner' : 'pi-check-circle'"></i>
+                <span>{{ submitting ? 'Publishing to Channels...' : 'Approve & Publish to Channels' }}</span>
               </button>
+            </div>
+          </div>
+
+          <!-- Bottom Published Confirmation Banner: Shown when article is published -->
+          <div class="bottom-action-deck published-banner-box" *ngIf="article.status === 'published'">
+            <div class="published-icon-circle">
+              <i class="pi pi-check-circle"></i>
+            </div>
+            <h3>Article Published & Live</h3>
+            <p>
+              This article has been successfully approved and published across connected channels. No further review actions are permitted.
+            </p>
+            <div class="deck-buttons" *ngIf="article.wordpress_post_url">
+              <a [href]="article.wordpress_post_url" target="_blank" class="btn btn-primary lg">
+                <i class="pi pi-external-link"></i> View Live on Website
+              </a>
             </div>
           </div>
         </main>
@@ -383,6 +420,58 @@ import { MessageService } from 'primeng/api';
           padding: 14px 28px;
           font-size: 15px;
         }
+
+        &[disabled], &:disabled {
+          opacity: 0.6;
+          cursor: not-allowed !important;
+          filter: grayscale(0.4);
+          pointer-events: none;
+        }
+      }
+
+      .published-header-status {
+        display: flex;
+        align-items: center;
+      }
+
+      .published-btn-locked {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #ecfdf5;
+        color: #059669;
+        border: 1px solid #a7f3d0;
+        font-weight: 700;
+        font-size: 13px;
+        padding: 8px 16px;
+        border-radius: 9999px;
+      }
+
+      .published-banner-box {
+        background: #f0fdf4 !important;
+        border-color: #86efac !important;
+
+        .published-icon-circle {
+          width: 56px;
+          height: 56px;
+          background: #22c55e;
+          color: #ffffff;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 28px;
+          margin: 0 auto 16px auto;
+          box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3);
+        }
+
+        h3 {
+          color: #14532d !important;
+        }
+
+        p {
+          color: #166534 !important;
+        }
       }
 
       /* Modal */
@@ -488,8 +577,18 @@ export class ReviewPortalComponent implements OnInit {
   }
 
   approveArticle(): void {
-    if (!this.token) return;
+    if (!this.token || this.submitting) return;
 
+    if (this.article?.status === 'published') {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article has already been approved and published live.',
+      });
+      return;
+    }
+
+    this.submitting = true;
     const req: ReviewActionRequest = {
       action: 'approved',
       notes: 'Approved via email review portal.',
@@ -498,6 +597,7 @@ export class ReviewPortalComponent implements OnInit {
 
     this.blogService.reviewArticleByToken(this.token, req).subscribe({
       next: (updated) => {
+        this.submitting = false;
         this.article = updated;
         this.messageService.add({
           severity: 'success',
@@ -507,6 +607,7 @@ export class ReviewPortalComponent implements OnInit {
         });
       },
       error: (err) => {
+        this.submitting = false;
         this.messageService.add({
           severity: 'error',
           summary: 'Action Failed',
@@ -517,13 +618,26 @@ export class ReviewPortalComponent implements OnInit {
   }
 
   openFeedbackModal(action: 'changes_requested' | 'regenerate'): void {
+    if (this.article?.status === 'published') {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article is already published live. Further editorial actions are locked.',
+      });
+      return;
+    }
     this.modalAction = action;
     this.feedbackText = '';
     this.showModal = true;
   }
 
   submitFeedback(): void {
-    if (!this.token) return;
+    if (!this.token || this.submitting) return;
+
+    if (this.article?.status === 'published') {
+      this.showModal = false;
+      return;
+    }
 
     this.submitting = true;
     const req: ReviewActionRequest = {

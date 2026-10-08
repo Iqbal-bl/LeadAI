@@ -58,7 +58,7 @@
             {{ (summary?.active_recharge?.remaining_minutes ?? summary?.total_remaining_minutes ?? 0) | number:'1.0-1' }}
           </span>
           <span class="text-xs font-medium" style="color: var(--app-text-muted)">
-            / {{ summary?.active_recharge?.purchased_minutes ?? 0 }} mins
+            / {{ summary?.active_recharge?.purchased_minutes ?? 0 }}<ng-container *ngIf="boosterMinutes > 0"> + <span class="text-brand-600 dark:text-brand-400 font-semibold">{{ boosterMinutes | number:'1.0-0' }}</span></ng-container> mins
           </span>
         </div>
       </div>

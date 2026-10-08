@@ -569,7 +569,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Invitation Accepted',
-            detail: `Accepted connection request from ${item.name}. Lead created in CRM.`,
+            detail: `Accepted connection request from ${item.name}. Captured as a Lead in the Leads pipeline.`,
           });
         },
         error: (err) => {
@@ -1167,7 +1167,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'Messages Synced',
-          detail: `Synced ${res.synced_conversations || 0} conversations and ${res.synced_messages || 0} messages to CRM.`,
+          detail: `Synced ${res.synced_conversations || 0} conversations and ${res.synced_messages || 0} messages to Leads pipeline.`,
         });
         this.loadConversations();
       },
@@ -1498,7 +1498,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'Lead Captured',
-          detail: `${res.display_name || comment.author_name} logged as a CRM Lead.`,
+          detail: `${res.display_name || comment.author_name} captured as a Lead in the Leads pipeline.`,
         });
       },
       error: (err) => {

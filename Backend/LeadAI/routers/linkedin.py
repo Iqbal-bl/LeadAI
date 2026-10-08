@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from .. import activity
 from ..activity import A
 from ..db import get_leadai_db
-from ..models import LeadChannelAccount, LeadAccount, utcnow
+from ..models import LeadChannelAccount, LeadAccount, LeadConversation, LeadCustomer, Lead, LeadMessage, utcnow
 from ..models_ext import LeadChannelIdentity
 from ..rbac import Principal, assert_owns, scoped
 from ..security import encrypt_pii
@@ -879,21 +879,29 @@ async def save_linkedin_settings(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
+    from sqlalchemy.orm.attributes import flag_modified
+
     _, company_id = scope
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found. Connect OAuth first.")
 
-    meta = row.MetaJson or {}
+    meta = dict(row.MetaJson or {})
     meta["linkedin_auto_accept"] = payload.auto_accept
     meta["linkedin_welcome_message"] = payload.welcome_message
     meta["linkedin_auto_dm_leads"] = payload.auto_dm_leads
     row.MetaJson = meta
+    flag_modified(row, "MetaJson")
     row.UpdatedAt = utcnow()
     db.commit()
     return {"ok": True}
@@ -919,11 +927,16 @@ async def get_auto_connect_settings(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False,
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
@@ -959,21 +972,28 @@ async def save_auto_connect_settings(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
+    from sqlalchemy.orm.attributes import flag_modified
+
     _, company_id = scope
     from ..services import jobs
     from ..services.jobs import calculate_next_random_schedule
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False,
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
 
-    meta = row.MetaJson or {}
-    auto_cfg = meta.get("linkedin_auto_connect") or {}
+    meta = dict(row.MetaJson or {})
+    auto_cfg = dict(meta.get("linkedin_auto_connect") or {})
     
     auto_cfg["enabled"] = payload.enabled
     auto_cfg["runs_per_day"] = payload.runs_per_day
@@ -996,6 +1016,7 @@ async def save_auto_connect_settings(
 
     meta["linkedin_auto_connect"] = auto_cfg
     row.MetaJson = meta
+    flag_modified(row, "MetaJson")
     row.UpdatedAt = utcnow()
     db.commit()
 
@@ -1121,7 +1142,7 @@ async def get_linkedin_invitations(
             is_lead = False
             crm_account_id = None
 
-            # 1. Check by unique sender URN in channel identities
+            # 1. Check by unique sender URN in channel identities and pipeline leads
             if sender_urn:
                 ident = (
                     db.query(LeadChannelIdentity)
@@ -1134,36 +1155,67 @@ async def get_linkedin_invitations(
                     .first()
                 )
                 if ident and ident.CustomerId:
-                    crm_acc = (
-                        db.query(LeadAccount)
+                    conv = (
+                        db.query(LeadConversation)
                         .filter(
-                            LeadAccount.ClientId == company_id,
-                            LeadAccount.CustomerId == ident.CustomerId,
-                            LeadAccount.IsDeleted == False,
+                            LeadConversation.ClientId == company_id,
+                            LeadConversation.CustomerId == ident.CustomerId,
+                            LeadConversation.Channel == "linkedin",
+                            LeadConversation.IsDeleted == False,
                         )
                         .first()
                     )
-                    if crm_acc:
-                        is_lead = True
-                        crm_account_id = crm_acc.Id
+                    if conv:
+                        lead_record = (
+                            db.query(Lead)
+                            .filter(
+                                Lead.ConversationId == conv.Id,
+                                Lead.IsDeleted == False,
+                            )
+                            .first()
+                        )
+                        if lead_record:
+                            is_lead = True
+                            crm_account_id = lead_record.ConvertedAccountId
 
-            # 2. Check by verified public_id in account profile URL if not found by URN
+            # 2. Check by verified public_id in customer profile URL if not found by URN
             if not is_lead and public_id:
-                crm_acc = (
-                    db.query(LeadAccount)
+                cust_match = (
+                    db.query(LeadCustomer)
                     .filter(
-                        LeadAccount.ClientId == company_id,
-                        LeadAccount.LinkedinProfileUrl.like(f"%linkedin.com/in/{public_id}%"),
-                        LeadAccount.IsDeleted == False,
+                        LeadCustomer.ClientId == company_id,
+                        LeadCustomer.LinkedinProfileUrl.like(f"%linkedin.com/in/{public_id}%"),
+                        LeadCustomer.IsDeleted == False,
                     )
                     .first()
                 )
-                if crm_acc:
-                    is_lead = True
-                    crm_account_id = crm_acc.Id
+                if cust_match:
+                    conv = (
+                        db.query(LeadConversation)
+                        .filter(
+                            LeadConversation.ClientId == company_id,
+                            LeadConversation.CustomerId == cust_match.Id,
+                            LeadConversation.Channel == "linkedin",
+                            LeadConversation.IsDeleted == False,
+                        )
+                        .first()
+                    )
+                    if conv:
+                        lead_record = (
+                            db.query(Lead)
+                            .filter(
+                                Lead.ConversationId == conv.Id,
+                                Lead.IsDeleted == False,
+                            )
+                            .first()
+                        )
+                        if lead_record:
+                            is_lead = True
+                            crm_account_id = lead_record.ConvertedAccountId
 
             inv["is_crm_lead"] = is_lead
             inv["crm_account_id"] = crm_account_id
+            inv["is_converted"] = bool(crm_account_id)
         return {"invitations": invitations}
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -1324,12 +1376,13 @@ async def get_linkedin_conversations(
             tid = c.get("conversation_id")
             conv = conv_rows.get(tid)
             lead = lead_rows.get(conv.Id) if conv else None
-            if lead and lead.ConvertedAccountId:
+            if lead:
                 c["is_lead_candidate"] = True
                 c["lead_status"] = lead.Status
                 c["lead_score"] = lead.Score
                 c["lead_intent"] = lead.Intent
                 c["crm_account_id"] = lead.ConvertedAccountId
+                c["is_converted"] = bool(lead.ConvertedAccountId)
             else:
                 last_msg = c.get("last_message") or ""
                 eval_res = LeadIntentEvaluator.evaluate_text(last_msg, use_llm_fallback=False)
@@ -1337,11 +1390,13 @@ async def get_linkedin_conversations(
                 c["lead_status"] = "warm" if eval_res.is_lead else None
                 c["lead_score"] = int(eval_res.score * 100) if eval_res.is_lead else 0
                 c["lead_intent"] = eval_res.category if eval_res.is_lead else None
+                c["crm_account_id"] = None
+                c["is_converted"] = False
 
-                # Automatically convert DM to CRM Customer Lead if commercial buying intent is detected!
+                # Automatically capture DM as Lead in pipeline if commercial buying intent is detected!
                 if eval_res.is_lead:
                     try:
-                        crm_acc = linkedin_bot.auto_convert_linkedin_dm_to_crm_lead(
+                        captured_lead = linkedin_bot.capture_linkedin_dm_as_lead(
                             db=db,
                             account=row,
                             conversation_id=tid,
@@ -1352,8 +1407,6 @@ async def get_linkedin_conversations(
                             last_message=last_msg,
                             eval_res=eval_res,
                         )
-                        if crm_acc:
-                            c["crm_account_id"] = crm_acc.Id
                     except Exception as auto_err:
                         logger.warning("Auto-capture DM lead error: %s", auto_err)
 
@@ -1397,6 +1450,23 @@ async def get_linkedin_conversation_messages(
         # Check thread messages for commercial buying intent and auto-capture if found
         from ..services.intent_detector import LeadIntentEvaluator
         for m in messages:
+            if not m.get("is_self"):
+                # Enrich profile URL on customer if message turn contains profile URL
+                sender_url = m.get("sender_profile_url")
+                if sender_url:
+                    existing_conv = db.query(LeadConversation).filter(
+                        LeadConversation.ClientId == company_id,
+                        LeadConversation.Channel == "linkedin",
+                        LeadConversation.ExternalThreadId == str(conversation_urn_id),
+                        LeadConversation.IsDeleted == False,
+                    ).first()
+                    if existing_conv and existing_conv.CustomerId:
+                        cust = db.get(LeadCustomer, existing_conv.CustomerId)
+                        if cust and (not cust.LinkedinProfileUrl or ("ACoAA" in cust.LinkedinProfileUrl and "ACoAA" not in sender_url)):
+                            cust.LinkedinProfileUrl = sender_url
+                            cust.UpdatedAt = utcnow()
+                            db.commit()
+
             if not m.get("is_self") and m.get("text"):
                 eval_res = LeadIntentEvaluator.evaluate_text(m["text"], use_llm_fallback=False)
                 if eval_res.is_lead:

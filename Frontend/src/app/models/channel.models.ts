@@ -64,6 +64,7 @@ export interface ChannelCreateRequest {
 
 export interface ChannelUpdateRequest {
   name?: string;
+  external_id?: string;
   access_token?: string;
   app_secret?: string;
   verify_token?: string;

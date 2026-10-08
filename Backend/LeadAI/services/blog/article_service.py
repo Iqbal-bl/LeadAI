@@ -459,6 +459,15 @@ class ArticleService:
         if not article:
             raise ValueError(f"Article {article_id} not found.")
 
+        # Locked state guard: once an article is published live, no further editorial actions are permitted
+        if article.Status == "published":
+            logger.info(
+                "[ArticleService.review_article] Article %s is already published live. Action '%s' ignored.",
+                article_id,
+                req.action,
+            )
+            return cls._to_response(db, article)
+
         now = datetime.now(timezone.utc)
 
         if req.action == "approved":

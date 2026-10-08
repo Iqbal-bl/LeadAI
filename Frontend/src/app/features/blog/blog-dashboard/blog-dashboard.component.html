@@ -1,94 +1,64 @@
-<div class="blog-dashboard-container">
+<div class="min-h-screen p-4 sm:p-6 lg:p-7 max-w-7xl mx-auto text-slate-800">
   <!-- Toast Notification -->
   <p-toast></p-toast>
 
   <!-- Top Header -->
-  <div class="header-section">
-    <div class="title-area">
-      <h1 class="page-title">
-        <span class="gradient-text">Blog & Content Studio</span>
+  <div class="flex justify-between items-start mb-7 gap-5 flex-wrap">
+    <div class="flex-1 min-w-[280px]">
+      <h1 class="text-2xl lg:text-3xl font-extrabold tracking-tight mb-1.5 text-slate-900">
+        <span class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">Blog & Content Studio</span>
       </h1>
-      <p class="page-subtitle">
+      <p class="text-sm text-slate-500 m-0 leading-relaxed">
         Automated multi-channel blog creation, daily trending topic scheduler,
         and editorial approval workflow.
       </p>
     </div>
-
-    <!-- Header Actions -->
-    <!-- <div class="header-actions">
-      <button
-        class="btn btn-secondary"
-        (click)="mainTab = 'settings'"
-        [class.active]="mainTab === 'settings'"
-      >
-        <i class="pi pi-cog"></i>
-        <span>Auto-Blog Settings</span>
-      </button>
-
-      <button
-        class="btn btn-secondary"
-        (click)="mainTab = 'generator'"
-        [class.active]="mainTab === 'generator'"
-      >
-        <i class="pi pi-pencil"></i>
-        <span>Custom Draft</span>
-      </button>
-
-      <button
-        class="btn btn-primary glow-btn"
-        (click)="triggerDailyRun()"
-        [disabled]="isGeneratingDaily"
-      >
-        <i class="pi" [ngClass]="isGeneratingDaily ? 'pi-spin pi-spinner' : 'pi-sparkles'"></i>
-        <span>{{ isGeneratingDaily ? 'Generating Today\'s Post...' : 'Generate Today\'s Topic' }}</span>
-      </button>
-    </div> -->
   </div>
 
   <!-- Navigation Tabs -->
-  <div class="main-tabs-nav">
+  <div class="flex gap-2.5 border-b-2 border-slate-200 mb-7 overflow-x-auto pb-px">
     <button
-      class="tab-btn"
-      [class.active]="mainTab === 'articles'"
+      class="inline-flex items-center gap-2 px-5 py-3 bg-transparent border-none border-b-2 -mb-0.5 text-sm font-semibold transition cursor-pointer whitespace-nowrap"
+      [ngClass]="mainTab === 'articles' ? 'text-blue-600 border-b-blue-600' : 'border-b-transparent text-slate-500 hover:text-blue-600'"
       (click)="setMainTab('articles')"
     >
       <i class="pi pi-book"></i>
       <span>Editorial Queue ({{ stats.total }})</span>
     </button>
     <button
-      class="tab-btn"
-      [class.active]="mainTab === 'history'"
+      class="inline-flex items-center gap-2 px-5 py-3 bg-transparent border-none border-b-2 -mb-0.5 text-sm font-semibold transition cursor-pointer whitespace-nowrap"
+      [ngClass]="mainTab === 'history' ? 'text-blue-600 border-b-blue-600' : 'border-b-transparent text-slate-500 hover:text-blue-600'"
       (click)="setMainTab('history')"
     >
       <i class="pi pi-history"></i>
-      <span>Upload & Publishing History ({{ publishedArticles.length }})</span>
-      <span class="count-badge" *ngIf="publishedArticles.length > 0">{{
+      <span>Upload & Publishing History</span>
+      <span class="ml-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold" *ngIf="publishedArticles.length > 0">{{
         publishedArticles.length
       }}</span>
     </button>
     <button
-      class="tab-btn"
-      [class.active]="mainTab === 'generator'"
+      class="inline-flex items-center gap-2 px-5 py-3 bg-transparent border-none border-b-2 -mb-0.5 text-sm font-semibold transition cursor-pointer whitespace-nowrap"
+      [ngClass]="mainTab === 'generator' ? 'text-blue-600 border-b-blue-600' : 'border-b-transparent text-slate-500 hover:text-blue-600'"
       (click)="setMainTab('generator')"
     >
       <i class="pi pi-bolt"></i>
       <span>AI Generator Studio</span>
     </button>
     <button
-      class="tab-btn"
-      [class.active]="mainTab === 'settings'"
+      class="inline-flex items-center gap-2 px-5 py-3 bg-transparent border-none border-b-2 -mb-0.5 text-sm font-semibold transition cursor-pointer whitespace-nowrap"
+      [ngClass]="mainTab === 'settings' ? 'text-blue-600 border-b-blue-600' : 'border-b-transparent text-slate-500 hover:text-blue-600'"
       (click)="setMainTab('settings')"
     >
       <i class="pi pi-sliders-h"></i>
       <span>Company Auto-Blog Settings</span>
       <span
-        class="status-indicator"
-        [class.enabled]="settings.is_auto_blog_enabled"
+        class="inline-block w-2 h-2 rounded-full"
+        [ngClass]="settings.is_auto_blog_enabled ? 'bg-emerald-500 shadow-sm shadow-emerald-500/60' : 'bg-slate-300'"
       ></span>
     </button>
     <button
-      class="tab-btn"
-      [class.active]="mainTab === 'logs'"
+      class="inline-flex items-center gap-2 px-5 py-3 bg-transparent border-none border-b-2 -mb-0.5 text-sm font-semibold transition cursor-pointer whitespace-nowrap"
+      [ngClass]="mainTab === 'logs' ? 'text-blue-600 border-b-blue-600' : 'border-b-transparent text-slate-500 hover:text-blue-600'"
       (click)="setMainTab('logs')"
     >
       <i class="pi pi-history"></i>
@@ -99,31 +69,32 @@
   <!-- ======================================================================= -->
   <!-- TAB 1: ARTICLES DASHBOARD                                               -->
   <!-- ======================================================================= -->
-  <div *ngIf="mainTab === 'articles'" class="tab-content">
+  <div *ngIf="mainTab === 'articles'">
     <!-- Active Daily Automation Schedule Strip -->
-    <div class="active-schedule-strip" (click)="setMainTab('settings')">
-      <div class="strip-left">
+    <div
+      class="flex justify-between items-center bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-xl px-5 py-3.5 mb-6 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md flex-wrap gap-3"
+      (click)="setMainTab('settings')"
+    >
+      <div class="flex items-center gap-3 text-sm text-emerald-800 flex-wrap">
         <span
-          class="pulse-dot"
-          [class.paused]="!settings.is_auto_blog_enabled"
+          class="w-2.5 h-2.5 rounded-full"
+          [ngClass]="settings.is_auto_blog_enabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"
         ></span>
-        <span class="strip-status">
+        <span>
           <strong>Daily Auto-Blog:</strong>
           {{ settings.is_auto_blog_enabled ? "Active & Scheduled" : "Paused" }}
         </span>
-        <span class="strip-divider" *ngIf="settings.is_auto_blog_enabled"
-          >•</span
-        >
-        <span class="strip-time" *ngIf="settings.is_auto_blog_enabled">
-          <i class="pi pi-clock"></i>
+        <span class="text-emerald-300" *ngIf="settings.is_auto_blog_enabled">•</span>
+        <span class="font-medium inline-flex items-center gap-1.5" *ngIf="settings.is_auto_blog_enabled">
+          <i class="pi pi-clock text-xs"></i>
           Runs daily at
           <strong>{{ settings.schedule_time || "09:00" }} UTC</strong> ({{
             getLocalTimeFromUtc(settings.schedule_time || "09:00")
           }}
           Local)
         </span>
-        <span class="strip-divider">•</span>
-        <span class="strip-mode">
+        <span class="text-emerald-300">•</span>
+        <span class="font-medium inline-flex items-center gap-1.5">
           <i
             class="pi"
             [ngClass]="
@@ -137,120 +108,121 @@
           }}
         </span>
       </div>
-      <div class="strip-right">
-        <span class="strip-link">Manage Schedule &rarr;</span>
+      <div>
+        <span class="text-xs font-bold text-emerald-700 whitespace-nowrap hover:underline">Manage Schedule &rarr;</span>
       </div>
     </div>
 
     <!-- Stat Counter Cards -->
-    <div class="stats-grid">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-7">
       <div
-        class="stat-card"
+        class="border rounded-2xl p-5 flex items-center gap-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
         (click)="filterByStatus('all')"
-        [class.selected]="activeStatusFilter === 'all'"
+        [ngClass]="activeStatusFilter === 'all' ? 'border-blue-600 bg-slate-50 shadow-xs' : 'bg-white border-slate-200 hover:border-blue-300'"
       >
-        <div class="stat-icon total-icon"><i class="pi pi-list"></i></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ stats.total }}</div>
-          <div class="stat-label">Total Articles</div>
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-blue-50 text-blue-600"><i class="pi pi-list"></i></div>
+        <div class="flex flex-col">
+          <div class="text-2xl font-bold text-slate-900 leading-none mb-1">{{ stats.total }}</div>
+          <div class="text-xs text-slate-500 font-medium">Total Articles</div>
         </div>
       </div>
 
       <div
-        class="stat-card"
+        class="border rounded-2xl p-5 flex items-center gap-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
         (click)="filterByStatus('pending_approval')"
-        [class.selected]="activeStatusFilter === 'pending_approval'"
+        [ngClass]="activeStatusFilter === 'pending_approval' ? 'border-blue-600 bg-slate-50 shadow-xs' : 'bg-white border-slate-200 hover:border-blue-300'"
       >
-        <div class="stat-icon pending-icon"><i class="pi pi-clock"></i></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ stats.pending_approval }}</div>
-          <div class="stat-label">Pending Review</div>
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-amber-50 text-amber-600"><i class="pi pi-clock"></i></div>
+        <div class="flex flex-col">
+          <div class="text-2xl font-bold text-slate-900 leading-none mb-1">{{ stats.pending_approval }}</div>
+          <div class="text-xs text-slate-500 font-medium">Pending Review</div>
         </div>
       </div>
 
       <div
-        class="stat-card"
+        class="border rounded-2xl p-5 flex items-center gap-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
         (click)="filterByStatus('approved')"
-        [class.selected]="activeStatusFilter === 'approved'"
+        [ngClass]="activeStatusFilter === 'approved' ? 'border-blue-600 bg-slate-50 shadow-xs' : 'bg-white border-slate-200 hover:border-blue-300'"
       >
-        <div class="stat-icon approved-icon">
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-emerald-50 text-emerald-600">
           <i class="pi pi-check-circle"></i>
         </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ stats.approved }}</div>
-          <div class="stat-label">Approved</div>
+        <div class="flex flex-col">
+          <div class="text-2xl font-bold text-slate-900 leading-none mb-1">{{ stats.approved }}</div>
+          <div class="text-xs text-slate-500 font-medium">Approved</div>
         </div>
       </div>
 
       <div
-        class="stat-card"
+        class="border rounded-2xl p-5 flex items-center gap-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
         (click)="filterByStatus('published')"
-        [class.selected]="activeStatusFilter === 'published'"
+        [ngClass]="activeStatusFilter === 'published' ? 'border-blue-600 bg-slate-50 shadow-xs' : 'bg-white border-slate-200 hover:border-blue-300'"
       >
-        <div class="stat-icon published-icon"><i class="pi pi-send"></i></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ stats.published }}</div>
-          <div class="stat-label">Published Live</div>
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-purple-50 text-purple-600"><i class="pi pi-send"></i></div>
+        <div class="flex flex-col">
+          <div class="text-2xl font-bold text-slate-900 leading-none mb-1">{{ stats.published }}</div>
+          <div class="text-xs text-slate-500 font-medium">Published Live</div>
         </div>
       </div>
 
       <div
-        class="stat-card"
+        class="border rounded-2xl p-5 flex items-center gap-4 cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md"
         (click)="filterByStatus('changes_requested')"
-        [class.selected]="activeStatusFilter === 'changes_requested'"
+        [ngClass]="activeStatusFilter === 'changes_requested' ? 'border-blue-600 bg-slate-50 shadow-xs' : 'bg-white border-slate-200 hover:border-blue-300'"
       >
-        <div class="stat-icon changes-icon"><i class="pi pi-replay"></i></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ stats.changes_requested }}</div>
-          <div class="stat-label">Changes / Revision</div>
+        <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 bg-red-50 text-red-600"><i class="pi pi-replay"></i></div>
+        <div class="flex flex-col">
+          <div class="text-2xl font-bold text-slate-900 leading-none mb-1">{{ stats.changes_requested }}</div>
+          <div class="text-xs text-slate-500 font-medium">Changes / Revision</div>
         </div>
       </div>
     </div>
 
     <!-- Filter & Search Toolbar -->
-    <div class="toolbar-section">
-      <div class="status-filters">
+    <div class="flex justify-between items-center gap-4 mb-6 flex-wrap">
+      <div class="flex gap-2 flex-wrap">
         <button
-          class="filter-chip"
-          [class.active]="activeStatusFilter === 'all'"
+          class="px-3.5 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition"
+          [ngClass]="activeStatusFilter === 'all' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'"
           (click)="filterByStatus('all')"
         >
           All ({{ stats.total }})
         </button>
         <button
-          class="filter-chip"
-          [class.active]="activeStatusFilter === 'pending_approval'"
+          class="px-3.5 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition"
+          [ngClass]="activeStatusFilter === 'pending_approval' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'"
           (click)="filterByStatus('pending_approval')"
         >
           Pending Review ({{ stats.pending_approval }})
         </button>
         <button
-          class="filter-chip"
-          [class.active]="activeStatusFilter === 'approved'"
+          class="px-3.5 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition"
+          [ngClass]="activeStatusFilter === 'approved' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'"
           (click)="filterByStatus('approved')"
         >
           Approved ({{ stats.approved }})
         </button>
         <button
-          class="filter-chip"
-          [class.active]="activeStatusFilter === 'published'"
+          class="px-3.5 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition"
+          [ngClass]="activeStatusFilter === 'published' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'"
           (click)="filterByStatus('published')"
         >
           Published ({{ stats.published }})
         </button>
         <button
-          class="filter-chip"
-          [class.active]="activeStatusFilter === 'draft'"
+          class="px-3.5 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition"
+          [ngClass]="activeStatusFilter === 'draft' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'"
           (click)="filterByStatus('draft')"
         >
           Drafts ({{ stats.draft }})
         </button>
       </div>
 
-      <div class="search-box">
-        <i class="pi pi-search search-icon"></i>
+      <div class="relative min-w-[280px]">
+        <i class="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
         <input
           type="text"
+          class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
           placeholder="Search by title, topic, or keyword..."
           [(ngModel)]="searchQuery"
           (keyup.enter)="onSearch()"
@@ -259,52 +231,52 @@
     </div>
 
     <!-- Articles List / Grid -->
-    <div *ngIf="loadingArticles" class="loading-state">
-      <i class="pi pi-spin pi-spinner loading-spinner"></i>
-      <p>Loading articles and editorial queue...</p>
+    <div *ngIf="loadingArticles" class="text-center py-14 px-5 bg-white rounded-2xl border border-dashed border-slate-300">
+      <i class="pi pi-spin pi-spinner text-4xl text-blue-600 mb-4"></i>
+      <p class="text-sm text-slate-500">Loading articles and editorial queue...</p>
     </div>
 
-    <div *ngIf="!loadingArticles && articles.length === 0" class="empty-state">
-      <div class="empty-icon"><i class="pi pi-book"></i></div>
-      <h3>No articles found</h3>
-      <p>
+    <div *ngIf="!loadingArticles && articles.length === 0" class="text-center py-14 px-5 bg-white rounded-2xl border border-dashed border-slate-300">
+      <div class="text-4xl text-slate-400 mb-4"><i class="pi pi-book"></i></div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">No articles found</h3>
+      <p class="text-sm text-slate-500 mb-5 max-w-md mx-auto">
         Generate your first AI blog post or configure daily automatic creation
         in settings.
       </p>
-      <button class="btn btn-primary" (click)="triggerDailyRun()">
+      <button class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-blue-800 transition cursor-pointer" (click)="triggerDailyRun()">
         <i class="pi pi-sparkles"></i>
         <span>Generate Daily Topic Now</span>
       </button>
     </div>
 
-    <div *ngIf="!loadingArticles && articles.length > 0" class="articles-grid">
+    <div *ngIf="!loadingArticles && articles.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div
         *ngFor="let article of articles"
-        class="article-card"
+        class="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col cursor-pointer transition hover:-translate-y-1 hover:shadow-lg hover:border-blue-300 shadow-sm"
         (click)="openArticleModal(article)"
       >
         <!-- Card Header Image / Placeholder -->
         <div
-          class="card-cover"
+          class="h-44 bg-cover bg-center bg-slate-800 relative"
           [style.background-image]="
             article.cover_image ? 'url(' + article.cover_image + ')' : ''
           "
         >
-          <div class="cover-overlay">
+          <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent p-3.5 flex justify-between items-start">
             <span
-              class="status-badge"
+              class="inline-block px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider shadow-2xs"
               [ngClass]="getStatusClass(article.status)"
             >
               {{ getStatusLabel(article.status) }}
             </span>
-            <span class="version-badge">v{{ article.current_version }}</span>
+            <span class="bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded-md text-xs font-bold">v{{ article.current_version }}</span>
           </div>
         </div>
 
         <!-- Card Body -->
-        <div class="card-content">
-          <h3 class="article-title">{{ article.title }}</h3>
-          <p class="article-summary">
+        <div class="p-5 flex flex-col flex-grow">
+          <h3 class="text-base font-bold text-slate-900 mb-2.5 leading-snug line-clamp-2">{{ article.title }}</h3>
+          <p class="text-xs text-slate-500 mb-3.5 leading-relaxed line-clamp-2">
             {{
               article.summary ||
                 "Click to review content and inspect version outline..."
@@ -313,45 +285,45 @@
 
           <!-- Tags -->
           <div
-            class="article-tags"
+            class="flex gap-1.5 flex-wrap mb-3.5"
             *ngIf="article.tags && article.tags.length > 0"
           >
             <span
               *ngFor="let tag of article.tags | slice: 0 : 3"
-              class="tag-chip"
+              class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-semibold"
               >#{{ tag }}</span
             >
           </div>
 
           <!-- Channel Indicators -->
-          <div class="channels-row">
-            <div class="channels-list">
-              <span class="channel-icon wp" title="WordPress / Website"
+          <div class="flex justify-between items-center border-t border-slate-100 pt-3 mt-auto mb-4">
+            <div class="flex gap-1.5">
+              <span class="w-6 h-6 rounded-md inline-flex items-center justify-center text-xs bg-blue-50 text-blue-600" title="WordPress / Website"
                 ><i class="pi pi-globe"></i
               ></span>
-              <span class="channel-icon li" title="LinkedIn"
+              <span class="w-6 h-6 rounded-md inline-flex items-center justify-center text-xs bg-sky-50 text-sky-600" title="LinkedIn"
                 ><i class="pi pi-linkedin"></i
               ></span>
-              <span class="channel-icon fb" title="Facebook"
+              <span class="w-6 h-6 rounded-md inline-flex items-center justify-center text-xs bg-indigo-50 text-indigo-600" title="Facebook"
                 ><i class="pi pi-facebook"></i
               ></span>
-              <span class="channel-icon ig" title="Instagram"
+              <span class="w-6 h-6 rounded-md inline-flex items-center justify-center text-xs bg-pink-50 text-pink-600" title="Instagram"
                 ><i class="pi pi-instagram"></i
               ></span>
             </div>
-            <span class="article-date">{{
+            <span class="text-xs text-slate-400">{{
               article.created_at | date: "mediumDate"
             }}</span>
           </div>
 
           <!-- Card Actions Footer -->
-          <div class="card-footer" (click)="$event.stopPropagation()">
+          <div class="flex gap-2 items-center" (click)="$event.stopPropagation()">
             <button
               *ngIf="
                 article.status === 'pending_approval' ||
                 article.status === 'changes_requested'
               "
-              class="btn-action review-btn"
+              class="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer border-none no-underline transition bg-blue-600 text-white hover:bg-blue-700 shadow-2xs"
               (click)="openReviewModal(article, 'approved')"
             >
               <i class="pi pi-check"></i>
@@ -362,12 +334,20 @@
               *ngIf="
                 article.status === 'approved' || article.status === 'draft'
               "
-              class="btn-action publish-btn"
+              class="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer border-none no-underline transition bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs"
               (click)="openPublishModal(article)"
             >
               <i class="pi pi-send"></i>
               <span>Publish Now</span>
             </button>
+
+            <span
+              *ngIf="article.status === 'published'"
+              class="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 cursor-default"
+            >
+              <i class="pi pi-check-circle"></i>
+              <span>Published Live</span>
+            </span>
 
             <a
               *ngIf="
@@ -375,14 +355,14 @@
               "
               [href]="article.wordpress_post_url"
               target="_blank"
-              class="btn-action view-btn"
+              class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
             >
               <i class="pi pi-external-link"></i>
               <span>View Live</span>
             </a>
 
             <button
-              class="btn-icon delete-btn"
+              class="w-8 h-8 rounded-lg border border-slate-200 bg-white inline-flex items-center justify-center cursor-pointer text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition"
               (click)="deleteArticle(article, $event)"
               title="Delete Article"
             >
@@ -395,172 +375,216 @@
   </div>
 
   <!-- ======================================================================= -->
-  <!-- TAB 2: PUBLISHING & UPLOAD HISTORY                                      -->
+  <!-- TAB 2: UPLOAD & PUBLISHING HISTORY                                      -->
   <!-- ======================================================================= -->
   <div
     *ngIf="mainTab === 'history' && loadedTabs.has('history')"
-    class="tab-content history-tab-content"
+    class="flex flex-col gap-6"
   >
     <!-- History KPI Metrics Strip -->
-    <div class="history-metrics-grid">
-      <div class="metric-card total-metric">
-        <div class="metric-icon-wrap">
-          <i class="pi pi-send"></i>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-md hover:border-slate-300 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Published</span>
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center text-sm bg-blue-50 text-blue-600 border border-blue-100">
+            <i class="pi pi-send"></i>
+          </div>
         </div>
-        <div class="metric-info">
-          <span class="metric-label">Total Published Blogs</span>
-          <span class="metric-value">{{ publishedHistoryStats.total }}</span>
+        <div class="mt-3">
+          <div class="text-3xl font-black text-slate-900 tracking-tight leading-none">{{ publishedHistoryStats.total }}</div>
+          <div class="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+            <i class="pi pi-check-circle text-emerald-500 text-xs"></i>
+            <span>Across all connected channels</span>
+          </div>
         </div>
-        <span class="metric-subtext">Across all connected channels</span>
       </div>
 
-      <div class="metric-card linkedin-metric">
-        <div class="metric-icon-wrap li-icon">
-          <i class="pi pi-linkedin"></i>
+      <div class="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-md hover:border-slate-300 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">LinkedIn Posts</span>
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center text-sm bg-sky-50 text-sky-600 border border-sky-100">
+            <i class="pi pi-linkedin"></i>
+          </div>
         </div>
-        <div class="metric-info">
-          <span class="metric-label">LinkedIn Distributions</span>
-          <span class="metric-value">{{ publishedHistoryStats.linkedin }}</span>
+        <div class="mt-3">
+          <div class="text-3xl font-black text-slate-900 tracking-tight leading-none">{{ publishedHistoryStats.linkedin }}</div>
+          <div class="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+            <i class="pi pi-arrow-up-right text-sky-500 text-xs"></i>
+            <span>Long-form thought leadership</span>
+          </div>
         </div>
-        <span class="metric-subtext">Long-form thought leadership</span>
       </div>
 
-      <div class="metric-card wp-metric">
-        <div class="metric-icon-wrap wp-icon">
-          <i class="pi pi-globe"></i>
+      <div class="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-md hover:border-slate-300 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">WordPress Articles</span>
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center text-sm bg-emerald-50 text-emerald-600 border border-emerald-100">
+            <i class="pi pi-globe"></i>
+          </div>
         </div>
-        <div class="metric-info">
-          <span class="metric-label">WordPress / Web Articles</span>
-          <span class="metric-value">{{
-            publishedHistoryStats.wordpress
-          }}</span>
+        <div class="mt-3">
+          <div class="text-3xl font-black text-slate-900 tracking-tight leading-none">{{ publishedHistoryStats.wordpress }}</div>
+          <div class="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+            <i class="pi pi-link text-emerald-500 text-xs"></i>
+            <span>Live on website blog</span>
+          </div>
         </div>
-        <span class="metric-subtext">Live on company website</span>
       </div>
 
-      <div class="metric-card scheduler-metric">
-        <div class="metric-icon-wrap auto-icon">
-          <i class="pi pi-bolt"></i>
+      <div class="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs hover:shadow-md hover:border-slate-300 transition duration-200 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Autonomous Runs</span>
+          <div class="w-9 h-9 rounded-xl flex items-center justify-center text-sm bg-purple-50 text-purple-600 border border-purple-100">
+            <i class="pi pi-bolt"></i>
+          </div>
         </div>
-        <div class="metric-info">
-          <span class="metric-label">Autonomous Daily Scheduler</span>
-          <span class="metric-value">{{
-            publishedHistoryStats.autonomous
-          }}</span>
+        <div class="mt-3">
+          <div class="text-3xl font-black text-slate-900 tracking-tight leading-none">{{ publishedHistoryStats.autonomous }}</div>
+          <div class="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+            <i class="pi pi-clock text-purple-500 text-xs"></i>
+            <span>Automated Daily Scheduler</span>
+          </div>
         </div>
-        <span class="metric-subtext">Automated trending topic runs</span>
       </div>
     </div>
 
     <!-- History Filter & Search Bar -->
-    <div class="history-filter-bar">
-      <div class="filter-left">
-        <div class="filter-pill-group">
-          <span class="filter-group-label">Channel:</span>
+    <div class="bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-col gap-4">
+      <!-- Search + Counter + Refresh Bar -->
+      <div class="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+        <div class="relative flex-1 min-w-[260px]">
+          <i class="pi pi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+          <input
+            type="text"
+            class="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-sm text-slate-800 placeholder-slate-400 outline-none focus:bg-white focus:border-blue-500 focus:ring-3 focus:ring-blue-100 transition"
+            placeholder="Search published history by title, summary, post ID, or URL..."
+            [(ngModel)]="historySearchQuery"
+          />
           <button
-            class="filter-pill"
-            [class.active]="historyChannelFilter === 'all'"
-            (click)="historyChannelFilter = 'all'"
+            *ngIf="historySearchQuery"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 border-none bg-transparent cursor-pointer p-0 text-xs"
+            (click)="historySearchQuery = ''"
+            title="Clear search"
           >
-            All Channels
-          </button>
-          <button
-            class="filter-pill li-pill"
-            [class.active]="historyChannelFilter === 'linkedin'"
-            (click)="historyChannelFilter = 'linkedin'"
-          >
-            <i class="pi pi-linkedin"></i> LinkedIn ({{
-              publishedHistoryStats.linkedin
-            }})
-          </button>
-          <button
-            class="filter-pill wp-pill"
-            [class.active]="historyChannelFilter === 'wordpress'"
-            (click)="historyChannelFilter = 'wordpress'"
-          >
-            <i class="pi pi-globe"></i> WordPress ({{
-              publishedHistoryStats.wordpress
-            }})
-          </button>
-          <button
-            class="filter-pill fb-pill"
-            [class.active]="historyChannelFilter === 'facebook'"
-            (click)="historyChannelFilter = 'facebook'"
-          >
-            <i class="pi pi-facebook"></i> Facebook
-          </button>
-          <button
-            class="filter-pill ig-pill"
-            [class.active]="historyChannelFilter === 'instagram'"
-            (click)="historyChannelFilter = 'instagram'"
-          >
-            <i class="pi pi-instagram"></i> Instagram
+            <i class="pi pi-times-circle"></i>
           </button>
         </div>
 
-        <div class="filter-pill-group mode-group">
-          <span class="filter-group-label">Source:</span>
+        <div class="flex items-center gap-3 shrink-0">
+          <span class="text-xs font-semibold text-slate-500 hidden md:inline">
+            Showing <strong class="text-slate-900">{{ filteredHistoryArticles.length }}</strong> of {{ publishedArticles.length }}
+          </span>
           <button
-            class="filter-pill"
-            [class.active]="historyModeFilter === 'all'"
-            (click)="historyModeFilter = 'all'"
+            class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 text-xs font-semibold cursor-pointer transition shadow-2xs"
+            (click)="loadArticles()"
+            title="Refresh Upload History"
           >
-            All
-          </button>
-          <button
-            class="filter-pill auto-pill"
-            [class.active]="historyModeFilter === 'daily_scheduler'"
-            (click)="historyModeFilter = 'daily_scheduler'"
-          >
-            <i class="pi pi-bolt"></i> Daily Scheduler
-          </button>
-          <button
-            class="filter-pill manual-pill"
-            [class.active]="historyModeFilter === 'manual'"
-            (click)="historyModeFilter = 'manual'"
-          >
-            <i class="pi pi-check-circle"></i> Manual / Review
+            <i class="pi pi-refresh text-xs" [class.pi-spin]="loadingArticles"></i>
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      <div class="filter-right">
-        <div class="search-box history-search">
-          <i class="pi pi-search search-icon"></i>
-          <input
-            type="text"
-            placeholder="Search upload history by title, keywords, or post ID..."
-            [(ngModel)]="historySearchQuery"
-          />
+      <!-- Segmented Filter Controls -->
+      <div class="flex items-center justify-between gap-4 pt-3.5 border-t border-slate-100 flex-wrap">
+        <!-- Channel Filters -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Channel:</span>
+          <div class="inline-flex p-1 bg-slate-100/90 rounded-xl gap-1 flex-wrap">
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyChannelFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyChannelFilter = 'all'"
+            >
+              All Channels
+            </button>
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyChannelFilter === 'linkedin' ? 'bg-[#0077b5] text-white shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyChannelFilter = 'linkedin'"
+            >
+              <i class="pi pi-linkedin"></i>
+              LinkedIn ({{ publishedHistoryStats.linkedin }})
+            </button>
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyChannelFilter === 'wordpress' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyChannelFilter = 'wordpress'"
+            >
+              <i class="pi pi-globe"></i>
+              WordPress ({{ publishedHistoryStats.wordpress }})
+            </button>
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyChannelFilter === 'facebook' ? 'bg-[#1877f2] text-white shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyChannelFilter = 'facebook'"
+            >
+              <i class="pi pi-facebook"></i>
+              Facebook
+            </button>
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyChannelFilter === 'instagram' ? 'bg-[#e1306c] text-white shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyChannelFilter = 'instagram'"
+            >
+              <i class="pi pi-instagram"></i>
+              Instagram
+            </button>
+          </div>
         </div>
-        <button
-          class="btn btn-secondary btn-icon-only"
-          (click)="loadArticles()"
-          title="Refresh Upload History"
-        >
-          <i class="pi pi-refresh" [class.pi-spin]="loadingArticles"></i>
-        </button>
+
+        <!-- Source Filters -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Source:</span>
+          <div class="inline-flex p-1 bg-slate-100/90 rounded-xl gap-1 flex-wrap">
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyModeFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyModeFilter = 'all'"
+            >
+              All Sources
+            </button>
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyModeFilter === 'daily_scheduler' ? 'bg-purple-600 text-white shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyModeFilter = 'daily_scheduler'"
+            >
+              <i class="pi pi-bolt"></i>
+              Daily Scheduler
+            </button>
+            <button
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition cursor-pointer border-none"
+              [ngClass]="historyModeFilter === 'manual' ? 'bg-sky-600 text-white shadow-2xs' : 'bg-transparent text-slate-600 hover:text-slate-900'"
+              (click)="historyModeFilter = 'manual'"
+            >
+              <i class="pi pi-check-circle"></i>
+              Manual / Review
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Empty State -->
     <div
       *ngIf="filteredHistoryArticles.length === 0"
-      class="empty-state history-empty"
+      class="py-16 px-6 bg-white border border-dashed border-slate-300 rounded-2xl text-center"
     >
-      <div class="empty-icon"><i class="pi pi-cloud-upload"></i></div>
-      <h3>No upload history matches your filter</h3>
-      <p *ngIf="publishedArticles.length === 0">
+      <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center text-3xl text-slate-400">
+        <i class="pi pi-cloud-upload"></i>
+      </div>
+      <h3 class="text-lg font-bold text-slate-900 mb-2">No upload history matches your filter</h3>
+      <p class="text-sm text-slate-500 max-w-md mx-auto mb-6" *ngIf="publishedArticles.length === 0">
         No articles have been uploaded yet. Articles generated by the Daily
         Scheduler or approved in your Editorial Queue will automatically appear
         here with live URLs.
       </p>
-      <p *ngIf="publishedArticles.length > 0">
+      <p class="text-sm text-slate-500 max-w-md mx-auto mb-6" *ngIf="publishedArticles.length > 0">
         No published blogs match the selected channel or source filter.
       </p>
-      <div class="empty-actions">
+      <div class="flex gap-3 justify-center">
         <button
-          class="btn btn-secondary"
+          class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition cursor-pointer shadow-2xs"
           (click)="
             historyChannelFilter = 'all';
             historyModeFilter = 'all';
@@ -570,7 +594,7 @@
           <i class="pi pi-filter-slash"></i>
           <span>Clear Filters</span>
         </button>
-        <button class="btn btn-primary" (click)="setMainTab('articles')">
+        <button class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition cursor-pointer shadow-2xs" (click)="setMainTab('articles')">
           <i class="pi pi-list"></i>
           <span>Go to Editorial Queue</span>
         </button>
@@ -578,449 +602,441 @@
     </div>
 
     <!-- Upload History Cards List -->
-    <div *ngIf="filteredHistoryArticles.length > 0" class="history-list">
-      <div *ngFor="let article of filteredHistoryArticles" class="history-card">
-        <!-- Card Header: Title, Timestamp, Status & Mechanism -->
-        <div class="history-card-header">
-          <div class="article-meta-left">
+    <div *ngIf="filteredHistoryArticles.length > 0" class="flex flex-col gap-5">
+      <div
+        *ngFor="let article of filteredHistoryArticles"
+        class="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs hover:shadow-md hover:border-slate-300 transition duration-200"
+      >
+        <!-- Card Header: Title, Timestamp, Status & Action Buttons -->
+        <div class="p-5 sm:p-6 bg-white flex justify-between items-start gap-4 flex-wrap">
+          <div class="flex gap-4 items-start flex-1 min-w-[300px]">
+            <!-- Thumbnail / Cover Image -->
             <div
-              class="thumb-cover"
+              class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-cover bg-center border border-slate-200 shrink-0 shadow-2xs"
               *ngIf="article.cover_image"
               [style.background-image]="'url(' + article.cover_image + ')'"
             ></div>
-            <div class="thumb-cover-placeholder" *ngIf="!article.cover_image">
+            <div
+              class="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200/70 flex items-center justify-center text-blue-600 text-xl sm:text-2xl shrink-0 shadow-2xs"
+              *ngIf="!article.cover_image"
+            >
               <i class="pi pi-file-edit"></i>
             </div>
 
-            <div class="title-and-meta">
-              <div class="top-row">
-                <span class="status-live-badge">
-                  <span class="live-dot"></span> Live & Published
+            <!-- Title & Metadata -->
+            <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500 animate-pulse"></span>
+                  Live & Published
                 </span>
-                <span class="version-tag"
-                  >Version {{ article.current_version }}</span
-                >
+                <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                  v{{ article.current_version }}
+                </span>
                 <span
-                  class="mechanism-badge"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold"
                   [ngClass]="getPublishingMechanism(article).badgeClass"
                 >
                   <i [class]="getPublishingMechanism(article).icon"></i>
                   {{ getPublishingMechanism(article).label }}
                 </span>
               </div>
+
               <h3
-                class="history-article-title"
+                class="text-base sm:text-lg font-bold text-slate-900 mt-0.5 leading-snug cursor-pointer transition hover:text-blue-600"
                 (click)="openArticleModal(article)"
               >
                 {{ article.title }}
               </h3>
-              <div class="upload-timestamp">
-                <i class="pi pi-calendar-plus"></i>
-                <span
-                  ><strong>Uploaded:</strong>
-                  {{
-                    article.published_at || article.created_at | date: "medium"
-                  }}</span
-                >
-                <span class="bullet-sep">•</span>
-                <i class="pi pi-clock"></i>
-                <span
-                  >Created {{ article.created_at | date: "shortTime" }}</span
-                >
+
+              <div class="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                <span class="inline-flex items-center gap-1">
+                  <i class="pi pi-calendar-plus text-slate-400"></i>
+                  <strong>Uploaded:</strong>
+                  {{ article.published_at || article.created_at | date: "medium" }}
+                </span>
+                <span class="text-slate-300">•</span>
+                <span class="inline-flex items-center gap-1">
+                  <i class="pi pi-clock text-slate-400"></i>
+                  Created {{ article.created_at | date: "shortTime" }}
+                </span>
               </div>
             </div>
           </div>
 
-          <div class="header-quick-actions">
+          <!-- Top-Right Actions -->
+          <div class="flex gap-2 items-center shrink-0">
             <button
-              class="btn btn-secondary btn-sm"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 hover:border-slate-300 transition cursor-pointer shadow-2xs"
               (click)="openArticleModal(article)"
             >
-              <i class="pi pi-eye"></i>
+              <i class="pi pi-eye text-xs"></i>
               <span>Inspect Content</span>
             </button>
             <button
-              class="btn btn-secondary btn-sm"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-xs font-semibold transition cursor-pointer shadow-2xs"
               (click)="openPublishModal(article)"
               title="Publish or Re-distribute to more channels"
             >
-              <i class="pi pi-share-alt"></i>
+              <i class="pi pi-share-alt text-xs"></i>
               <span>Re-publish</span>
             </button>
           </div>
         </div>
 
-        <!-- Where Uploaded: Destination Channels & Live Links Grid -->
-        <div class="history-channels-section">
-          <div class="section-label">
-            <i class="pi pi-send"></i>
-            <span>Distribution Channels & Live Destination:</span>
+        <!-- Distribution Channels & Live Destination Section -->
+        <div class="px-5 sm:px-6 py-4 bg-slate-50/70 border-t border-slate-100">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+            <i class="pi pi-send text-blue-600"></i>
+            <span>Distribution Channels & Live Destinations</span>
           </div>
 
-          <div class="channel-destinations-grid">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             <!-- LinkedIn Destination Box -->
             <div
-              class="channel-box linkedin-box"
-              [class.is-active]="
-                getChannelStatus(article, 'linkedin') === 'published'
-              "
-              [class.is-failed]="
-                getChannelStatus(article, 'linkedin') === 'failed'
-              "
+              class="rounded-xl p-3.5 flex flex-col justify-between transition min-h-[120px]"
+              [ngClass]="getChannelStatus(article, 'linkedin') === 'published' ? 'bg-white border-l-4 border-l-[#0077b5] border border-slate-200 shadow-2xs' : 'bg-slate-50/50 border border-dashed border-slate-200'"
             >
-              <div class="channel-box-header">
-                <div class="channel-brand">
-                  <i class="pi pi-linkedin"></i>
-                  <span class="channel-name">LinkedIn</span>
-                </div>
-                <span
-                  class="channel-status-pill"
-                  [class.success]="
-                    getChannelStatus(article, 'linkedin') === 'published'
-                  "
-                  [class.failed]="
-                    getChannelStatus(article, 'linkedin') === 'failed'
-                  "
-                  [class.skipped]="
-                    getChannelStatus(article, 'linkedin') === 'skipped'
-                  "
-                >
-                  {{
-                    getChannelStatus(article, "linkedin") === "published"
-                      ? "Live on LinkedIn"
-                      : getChannelStatus(article, "linkedin") === "failed"
-                        ? "Failed"
-                        : "Not Targeted"
-                  }}
-                </span>
-              </div>
-
-              <div
-                class="channel-box-body"
-                *ngIf="getChannelStatus(article, 'linkedin') === 'published'"
-              >
-                <div class="post-id-row" *ngIf="article.linkedin_post_id">
-                  <span class="id-label">Post ID:</span>
-                  <code class="id-code" [title]="article.linkedin_post_id">{{
-                    article.linkedin_post_id
-                  }}</code>
-                </div>
-                <div class="channel-actions">
-                  <a
-                    *ngIf="getLiveUrl(article, 'linkedin')"
-                    [href]="getLiveUrl(article, 'linkedin')"
-                    target="_blank"
-                    class="live-link-btn"
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <div class="flex items-center gap-1.5 text-xs font-bold" [ngClass]="getChannelStatus(article, 'linkedin') === 'published' ? 'text-slate-900' : 'text-slate-400'">
+                    <i class="pi pi-linkedin" [ngClass]="getChannelStatus(article, 'linkedin') === 'published' ? 'text-[#0077b5]' : 'text-slate-400'"></i>
+                    <span>LinkedIn</span>
+                  </div>
+                  <span
+                    class="text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                    [ngClass]="getChannelStatus(article, 'linkedin') === 'published' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : getChannelStatus(article, 'linkedin') === 'failed' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-400'"
                   >
-                    <i class="pi pi-external-link"></i>
-                    <span>Open Post on LinkedIn</span>
-                  </a>
-                  <button
-                    *ngIf="getLiveUrl(article, 'linkedin')"
-                    class="copy-btn"
-                    (click)="
-                      copyLink(
-                        getLiveUrl(article, 'linkedin'),
-                        'LinkedIn Post Link'
-                      )
-                    "
-                    title="Copy LinkedIn Post URL"
-                  >
-                    <i class="pi pi-copy"></i>
-                  </button>
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" *ngIf="getChannelStatus(article, 'linkedin') === 'published'"></span>
+                    {{
+                      getChannelStatus(article, "linkedin") === "published"
+                        ? "Live on LinkedIn"
+                        : getChannelStatus(article, "linkedin") === "failed"
+                          ? "Failed"
+                          : "Not Targeted"
+                    }}
+                  </span>
                 </div>
-              </div>
 
-              <div
-                class="channel-box-body empty-channel"
-                *ngIf="getChannelStatus(article, 'linkedin') !== 'published'"
-              >
-                <span class="channel-msg">
+                <div *ngIf="getChannelStatus(article, 'linkedin') === 'published'" class="flex flex-col gap-1 text-xs">
+                  <div class="flex items-center gap-1" *ngIf="article.linkedin_post_id">
+                    <span class="text-slate-400 font-medium">Post ID:</span>
+                    <code class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 text-[11px] truncate max-w-[140px]" [title]="article.linkedin_post_id">
+                      {{ article.linkedin_post_id }}
+                    </code>
+                  </div>
+                </div>
+
+                <div *ngIf="getChannelStatus(article, 'linkedin') !== 'published'" class="text-xs text-slate-400 italic">
                   {{
                     getChannelStatus(article, "linkedin") === "failed"
                       ? "Failed to post on LinkedIn account."
                       : "Not distributed to LinkedIn."
                   }}
-                </span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="mt-3 pt-2 border-t border-slate-100 flex items-center gap-1.5" *ngIf="getChannelStatus(article, 'linkedin') === 'published'">
+                <a
+                  *ngIf="getLiveUrl(article, 'linkedin')"
+                  [href]="getLiveUrl(article, 'linkedin')"
+                  target="_blank"
+                  class="inline-flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition no-underline"
+                >
+                  <i class="pi pi-external-link text-xs"></i>
+                  <span>Open Post</span>
+                </a>
+                <button
+                  *ngIf="getLiveUrl(article, 'linkedin')"
+                  class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer transition shrink-0"
+                  (click)="copyLink(getLiveUrl(article, 'linkedin'), 'LinkedIn Post Link')"
+                  title="Copy LinkedIn Post URL"
+                >
+                  <i class="pi pi-copy text-xs"></i>
+                </button>
+              </div>
+
+              <div class="mt-2" *ngIf="getChannelStatus(article, 'linkedin') !== 'published'">
+                <button
+                  (click)="openPublishModal(article)"
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline bg-transparent border-none cursor-pointer p-0"
+                >
+                  <i class="pi pi-plus-circle text-xs"></i>
+                  <span>Distribute now</span>
+                </button>
               </div>
             </div>
 
             <!-- WordPress Destination Box -->
             <div
-              class="channel-box wordpress-box"
-              [class.is-active]="
-                getChannelStatus(article, 'wordpress') === 'published'
-              "
-              [class.is-failed]="
-                getChannelStatus(article, 'wordpress') === 'failed'
-              "
+              class="rounded-xl p-3.5 flex flex-col justify-between transition min-h-[120px]"
+              [ngClass]="getChannelStatus(article, 'wordpress') === 'published' ? 'bg-white border-l-4 border-l-emerald-600 border border-slate-200 shadow-2xs' : 'bg-slate-50/50 border border-dashed border-slate-200'"
             >
-              <div class="channel-box-header">
-                <div class="channel-brand">
-                  <i class="pi pi-globe"></i>
-                  <span class="channel-name">WordPress / Website</span>
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <div class="flex items-center gap-1.5 text-xs font-bold" [ngClass]="getChannelStatus(article, 'wordpress') === 'published' ? 'text-slate-900' : 'text-slate-400'">
+                    <i class="pi pi-globe" [ngClass]="getChannelStatus(article, 'wordpress') === 'published' ? 'text-emerald-600' : 'text-slate-400'"></i>
+                    <span>WordPress / Website</span>
+                  </div>
+                  <span
+                    class="text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                    [ngClass]="getChannelStatus(article, 'wordpress') === 'published' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : getChannelStatus(article, 'wordpress') === 'failed' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-400'"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" *ngIf="getChannelStatus(article, 'wordpress') === 'published'"></span>
+                    {{
+                      getChannelStatus(article, "wordpress") === "published"
+                        ? "Live on Website"
+                        : getChannelStatus(article, "wordpress") === "failed"
+                          ? "Failed"
+                          : "Not Targeted"
+                    }}
+                  </span>
                 </div>
-                <span
-                  class="channel-status-pill"
-                  [class.success]="
-                    getChannelStatus(article, 'wordpress') === 'published'
-                  "
-                  [class.failed]="
-                    getChannelStatus(article, 'wordpress') === 'failed'
-                  "
-                  [class.skipped]="
-                    getChannelStatus(article, 'wordpress') === 'skipped'
-                  "
-                >
-                  {{
-                    getChannelStatus(article, "wordpress") === "published"
-                      ? "Live on Website"
-                      : getChannelStatus(article, "wordpress") === "failed"
-                        ? "Failed"
-                        : "Not Targeted"
-                  }}
-                </span>
-              </div>
 
-              <div
-                class="channel-box-body"
-                *ngIf="getChannelStatus(article, 'wordpress') === 'published'"
-              >
-                <div class="post-id-row" *ngIf="article.wordpress_post_url">
-                  <span class="id-label">Live URL:</span>
-                  <a
-                    [href]="article.wordpress_post_url"
-                    target="_blank"
-                    class="url-code"
-                    [title]="article.wordpress_post_url"
-                  >
-                    {{ article.wordpress_post_url }}
-                  </a>
+                <div *ngIf="getChannelStatus(article, 'wordpress') === 'published'" class="flex flex-col gap-1 text-xs">
+                  <div class="flex items-center gap-1" *ngIf="article.wordpress_post_url">
+                    <span class="text-slate-400 font-medium">URL:</span>
+                    <a
+                      [href]="article.wordpress_post_url"
+                      target="_blank"
+                      class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-blue-600 text-[11px] truncate max-w-[140px] hover:underline"
+                      [title]="article.wordpress_post_url"
+                    >
+                      {{ article.wordpress_post_url }}
+                    </a>
+                  </div>
                 </div>
-                <div class="channel-actions">
-                  <a
-                    *ngIf="article.wordpress_post_url"
-                    [href]="article.wordpress_post_url"
-                    target="_blank"
-                    class="live-link-btn"
-                  >
-                    <i class="pi pi-external-link"></i>
-                    <span>View Article on Website</span>
-                  </a>
-                  <button
-                    *ngIf="article.wordpress_post_url"
-                    class="copy-btn"
-                    (click)="
-                      copyLink(
-                        article.wordpress_post_url,
-                        'WordPress Article URL'
-                      )
-                    "
-                    title="Copy Article URL"
-                  >
-                    <i class="pi pi-copy"></i>
-                  </button>
-                </div>
-              </div>
 
-              <div
-                class="channel-box-body empty-channel"
-                *ngIf="getChannelStatus(article, 'wordpress') !== 'published'"
-              >
-                <span class="channel-msg">
+                <div *ngIf="getChannelStatus(article, 'wordpress') !== 'published'" class="text-xs text-slate-400 italic">
                   {{
                     getChannelStatus(article, "wordpress") === "failed"
                       ? "Failed to upload to WordPress REST API."
                       : "Not distributed to WordPress."
                   }}
-                </span>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="mt-3 pt-2 border-t border-slate-100 flex items-center gap-1.5" *ngIf="getChannelStatus(article, 'wordpress') === 'published'">
+                <a
+                  *ngIf="article.wordpress_post_url"
+                  [href]="article.wordpress_post_url"
+                  target="_blank"
+                  class="inline-flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition no-underline"
+                >
+                  <i class="pi pi-external-link text-xs"></i>
+                  <span>View Post</span>
+                </a>
+                <button
+                  *ngIf="article.wordpress_post_url"
+                  class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 cursor-pointer transition shrink-0"
+                  (click)="copyLink(article.wordpress_post_url, 'WordPress Article URL')"
+                  title="Copy Article URL"
+                >
+                  <i class="pi pi-copy text-xs"></i>
+                </button>
+              </div>
+
+              <div class="mt-2" *ngIf="getChannelStatus(article, 'wordpress') !== 'published'">
+                <button
+                  (click)="openPublishModal(article)"
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline bg-transparent border-none cursor-pointer p-0"
+                >
+                  <i class="pi pi-plus-circle text-xs"></i>
+                  <span>Distribute now</span>
+                </button>
               </div>
             </div>
 
             <!-- Facebook Destination Box -->
             <div
-              class="channel-box facebook-box"
-              [class.is-active]="
-                getChannelStatus(article, 'facebook') === 'published'
-              "
-              [class.is-failed]="
-                getChannelStatus(article, 'facebook') === 'failed'
-              "
+              class="rounded-xl p-3.5 flex flex-col justify-between transition min-h-[120px]"
+              [ngClass]="getChannelStatus(article, 'facebook') === 'published' ? 'bg-white border-l-4 border-l-[#1877f2] border border-slate-200 shadow-2xs' : 'bg-slate-50/50 border border-dashed border-slate-200'"
             >
-              <div class="channel-box-header">
-                <div class="channel-brand">
-                  <i class="pi pi-facebook"></i>
-                  <span class="channel-name">Facebook</span>
-                </div>
-                <span
-                  class="channel-status-pill"
-                  [class.success]="
-                    getChannelStatus(article, 'facebook') === 'published'
-                  "
-                  [class.failed]="
-                    getChannelStatus(article, 'facebook') === 'failed'
-                  "
-                  [class.skipped]="
-                    getChannelStatus(article, 'facebook') === 'skipped'
-                  "
-                >
-                  {{
-                    getChannelStatus(article, "facebook") === "published"
-                      ? "Live on Facebook"
-                      : "Not Targeted"
-                  }}
-                </span>
-              </div>
-              <div
-                class="channel-box-body"
-                *ngIf="getChannelStatus(article, 'facebook') === 'published'"
-              >
-                <div class="post-id-row" *ngIf="article.facebook_post_id">
-                  <span class="id-label">Post ID:</span>
-                  <code class="id-code">{{ article.facebook_post_id }}</code>
-                </div>
-                <div
-                  class="channel-actions"
-                  *ngIf="getLiveUrl(article, 'facebook')"
-                >
-                  <a
-                    [href]="getLiveUrl(article, 'facebook')"
-                    target="_blank"
-                    class="live-link-btn"
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <div class="flex items-center gap-1.5 text-xs font-bold" [ngClass]="getChannelStatus(article, 'facebook') === 'published' ? 'text-slate-900' : 'text-slate-400'">
+                    <i class="pi pi-facebook" [ngClass]="getChannelStatus(article, 'facebook') === 'published' ? 'text-[#1877f2]' : 'text-slate-400'"></i>
+                    <span>Facebook</span>
+                  </div>
+                  <span
+                    class="text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                    [ngClass]="getChannelStatus(article, 'facebook') === 'published' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400'"
                   >
-                    <i class="pi pi-external-link"></i>
-                    <span>Open on Facebook</span>
-                  </a>
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" *ngIf="getChannelStatus(article, 'facebook') === 'published'"></span>
+                    {{
+                      getChannelStatus(article, "facebook") === "published"
+                        ? "Live on Facebook"
+                        : "Not Targeted"
+                    }}
+                  </span>
+                </div>
+
+                <div *ngIf="getChannelStatus(article, 'facebook') === 'published'" class="flex flex-col gap-1 text-xs">
+                  <div class="flex items-center gap-1" *ngIf="article.facebook_post_id">
+                    <span class="text-slate-400 font-medium">Post ID:</span>
+                    <code class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 text-[11px] truncate max-w-[140px]">{{ article.facebook_post_id }}</code>
+                  </div>
+                </div>
+
+                <div *ngIf="getChannelStatus(article, 'facebook') !== 'published'" class="text-xs text-slate-400 italic">
+                  Not distributed to Facebook.
                 </div>
               </div>
-              <div
-                class="channel-box-body empty-channel"
-                *ngIf="getChannelStatus(article, 'facebook') !== 'published'"
-              >
-                <span class="channel-msg">Not distributed to Facebook.</span>
+
+              <!-- Actions -->
+              <div class="mt-3 pt-2 border-t border-slate-100 flex items-center gap-1.5" *ngIf="getChannelStatus(article, 'facebook') === 'published'">
+                <a
+                  *ngIf="getLiveUrl(article, 'facebook')"
+                  [href]="getLiveUrl(article, 'facebook')"
+                  target="_blank"
+                  class="inline-flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition no-underline"
+                >
+                  <i class="pi pi-external-link text-xs"></i>
+                  <span>Open Post</span>
+                </a>
+              </div>
+
+              <div class="mt-2" *ngIf="getChannelStatus(article, 'facebook') !== 'published'">
+                <button
+                  (click)="openPublishModal(article)"
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline bg-transparent border-none cursor-pointer p-0"
+                >
+                  <i class="pi pi-plus-circle text-xs"></i>
+                  <span>Distribute now</span>
+                </button>
               </div>
             </div>
 
             <!-- Instagram Destination Box -->
             <div
-              class="channel-box instagram-box"
-              [class.is-active]="
-                getChannelStatus(article, 'instagram') === 'published'
-              "
-              [class.is-failed]="
-                getChannelStatus(article, 'instagram') === 'failed'
-              "
+              class="rounded-xl p-3.5 flex flex-col justify-between transition min-h-[120px]"
+              [ngClass]="getChannelStatus(article, 'instagram') === 'published' ? 'bg-white border-l-4 border-l-[#e1306c] border border-slate-200 shadow-2xs' : 'bg-slate-50/50 border border-dashed border-slate-200'"
             >
-              <div class="channel-box-header">
-                <div class="channel-brand">
-                  <i class="pi pi-instagram"></i>
-                  <span class="channel-name">Instagram</span>
-                </div>
-                <span
-                  class="channel-status-pill"
-                  [class.success]="
-                    getChannelStatus(article, 'instagram') === 'published'
-                  "
-                  [class.failed]="
-                    getChannelStatus(article, 'instagram') === 'failed'
-                  "
-                  [class.skipped]="
-                    getChannelStatus(article, 'instagram') === 'skipped'
-                  "
-                >
-                  {{
-                    getChannelStatus(article, "instagram") === "published"
-                      ? "Live on Instagram"
-                      : "Not Targeted"
-                  }}
-                </span>
-              </div>
-              <div
-                class="channel-box-body"
-                *ngIf="getChannelStatus(article, 'instagram') === 'published'"
-              >
-                <div class="post-id-row" *ngIf="article.instagram_media_id">
-                  <span class="id-label">Media ID:</span>
-                  <code class="id-code">{{ article.instagram_media_id }}</code>
-                </div>
-                <div
-                  class="channel-actions"
-                  *ngIf="getLiveUrl(article, 'instagram')"
-                >
-                  <a
-                    [href]="getLiveUrl(article, 'instagram')"
-                    target="_blank"
-                    class="live-link-btn"
+              <div>
+                <div class="flex justify-between items-center mb-2">
+                  <div class="flex items-center gap-1.5 text-xs font-bold" [ngClass]="getChannelStatus(article, 'instagram') === 'published' ? 'text-slate-900' : 'text-slate-400'">
+                    <i class="pi pi-instagram" [ngClass]="getChannelStatus(article, 'instagram') === 'published' ? 'text-[#e1306c]' : 'text-slate-400'"></i>
+                    <span>Instagram</span>
+                  </div>
+                  <span
+                    class="text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                    [ngClass]="getChannelStatus(article, 'instagram') === 'published' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400'"
                   >
-                    <i class="pi pi-external-link"></i>
-                    <span>Open on Instagram</span>
-                  </a>
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" *ngIf="getChannelStatus(article, 'instagram') === 'published'"></span>
+                    {{
+                      getChannelStatus(article, "instagram") === "published"
+                        ? "Live on Instagram"
+                        : "Not Targeted"
+                    }}
+                  </span>
+                </div>
+
+                <div *ngIf="getChannelStatus(article, 'instagram') === 'published'" class="flex flex-col gap-1 text-xs">
+                  <div class="flex items-center gap-1" *ngIf="article.instagram_media_id">
+                    <span class="text-slate-400 font-medium">Media ID:</span>
+                    <code class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 text-[11px] truncate max-w-[140px]">{{ article.instagram_media_id }}</code>
+                  </div>
+                </div>
+
+                <div *ngIf="getChannelStatus(article, 'instagram') !== 'published'" class="text-xs text-slate-400 italic">
+                  Not distributed to Instagram.
                 </div>
               </div>
-              <div
-                class="channel-box-body empty-channel"
-                *ngIf="getChannelStatus(article, 'instagram') !== 'published'"
-              >
-                <span class="channel-msg">Not distributed to Instagram.</span>
+
+              <!-- Actions -->
+              <div class="mt-3 pt-2 border-t border-slate-100 flex items-center gap-1.5" *ngIf="getChannelStatus(article, 'instagram') === 'published'">
+                <a
+                  *ngIf="getLiveUrl(article, 'instagram')"
+                  [href]="getLiveUrl(article, 'instagram')"
+                  target="_blank"
+                  class="inline-flex items-center justify-center gap-1.5 flex-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-pink-50 text-pink-700 border border-pink-200 hover:bg-pink-100 transition no-underline"
+                >
+                  <i class="pi pi-external-link text-xs"></i>
+                  <span>Open Post</span>
+                </a>
+              </div>
+
+              <div class="mt-2" *ngIf="getChannelStatus(article, 'instagram') !== 'published'">
+                <button
+                  (click)="openPublishModal(article)"
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline bg-transparent border-none cursor-pointer p-0"
+                >
+                  <i class="pi pi-plus-circle text-xs"></i>
+                  <span>Distribute now</span>
+                </button>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Summary & Tags Footer -->
-        <div class="history-card-footer">
-          <p class="history-summary" *ngIf="article.summary">
-            <strong>Executive Summary:</strong> {{ article.summary }}
-          </p>
+        <div class="p-5 sm:p-6 bg-white border-t border-slate-100 flex flex-col gap-3">
+          <!-- Executive Summary Callout Box -->
+          <div *ngIf="article.summary" class="bg-slate-50/80 rounded-xl p-4 border border-slate-200/70">
+            <div class="flex items-start gap-2.5">
+              <i class="pi pi-align-left text-blue-600 text-xs mt-1 shrink-0"></i>
+              <div class="text-xs text-slate-700 leading-relaxed">
+                <strong class="text-slate-900 font-bold mr-1">Executive Summary:</strong>
+                {{ article.summary }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Tags -->
           <div
-            class="history-tags"
+            class="flex items-center gap-2 flex-wrap"
             *ngIf="article.tags && article.tags.length > 0"
           >
-            <span *ngFor="let tag of article.tags" class="tag-chip"
-              >#{{ tag }}</span
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tags:</span>
+            <span
+              *ngFor="let tag of article.tags"
+              class="inline-flex items-center text-xs font-semibold text-blue-700 bg-blue-50/80 border border-blue-100 px-2.5 py-0.5 rounded-md hover:bg-blue-100 transition"
             >
-          </div>
+              #{{ tag }}
+            </span>
         </div>
       </div>
     </div>
   </div>
+</div>
 
   <!-- ======================================================================= -->
   <!-- TAB 3: AI GENERATOR STUDIO                                              -->
   <!-- ======================================================================= -->
   <div
     *ngIf="mainTab === 'generator' && loadedTabs.has('generator')"
-    class="tab-content"
   >
-    <div class="custom-generator-card">
-      <div class="card-header">
-        <h2>✨ AI Blog Generator Studio</h2>
-        <p>
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto shadow-sm">
+      <div class="mb-7 border-b border-slate-100 pb-4">
+        <h2 class="text-xl font-bold text-slate-900 mb-1.5">✨ AI Blog Generator Studio</h2>
+        <p class="text-sm text-slate-500 m-0">
           Craft bespoke, research-backed blogs with automated image generation
           and multi-channel publishing.
         </p>
       </div>
 
-      <div class="generator-form">
-        <div class="form-row">
-          <div class="form-group full-width">
-            <label
-              >Article Topic / Title Idea <span class="required">*</span></label
+      <div class="flex flex-col gap-5">
+        <div class="mb-1">
+          <div class="flex flex-col gap-1.5 w-full">
+            <label class="text-xs font-semibold text-slate-700"
+              >Article Topic / Title Idea <span class="text-red-500">*</span></label
             >
             <input
               type="text"
-              class="input-field"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
               placeholder="e.g. 5 AI Breakthroughs Transforming B2B Lead Qualification in 2026"
               [(ngModel)]="customGenForm.topic"
             />
           </div>
         </div>
 
-        <div class="form-row two-cols">
-          <div class="form-group">
-            <label>Tone of Voice</label>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold text-slate-700">Tone of Voice</label>
             <select
-              class="input-field select-field"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit bg-white cursor-pointer focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
               [(ngModel)]="customGenForm.tone"
             >
               <option value="thought_leadership">
@@ -1032,86 +1048,254 @@
             </select>
           </div>
 
-          <div class="form-group">
-            <label>Target Audience</label>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold text-slate-700">Target Audience</label>
             <input
               type="text"
-              class="input-field"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
               placeholder="e.g. Sales Directors, Founders, Tech Leaders"
               [(ngModel)]="customGenForm.target_audience"
             />
           </div>
         </div>
 
-        <div class="form-row two-cols">
-          <div class="form-group">
-            <label>Target Word Count</label>
-            <select
-              class="input-field select-field"
-              [(ngModel)]="customGenForm.target_words"
-            >
-              <option [ngValue]="600">Short & Punchy (~600 words)</option>
-              <option [ngValue]="1000">Standard Article (~1000 words)</option>
-              <option [ngValue]="1500">
-                In-Depth Strategic Guide (~1500 words)
-              </option>
-              <option [ngValue]="2200">
-                Comprehensive Deep Dive (~2200 words)
-              </option>
-            </select>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold text-slate-700">Target Word Count <span class="text-red-500">*</span></label>
+            <div class="relative flex items-center">
+              <input
+                type="number"
+                class="w-full px-3.5 py-2.5 pr-16 rounded-xl border border-slate-300 text-sm outline-none font-semibold text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
+                min="300"
+                max="5000"
+                step="50"
+                placeholder="e.g. 1000"
+                [(ngModel)]="customGenForm.target_words"
+              />
+              <span class="absolute right-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider pointer-events-none">words</span>
+            </div>
+            <!-- Quick preset pills -->
+            <div class="flex items-center gap-2 flex-wrap mt-1.5">
+              <span class="text-xs text-slate-500 font-semibold">Quick Presets:</span>
+              <button
+                type="button"
+                class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.target_words === 600 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                (click)="setTargetWords(600)"
+              >
+                600w
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.target_words === 1000 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                (click)="setTargetWords(1000)"
+              >
+                1000w
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.target_words === 1500 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                (click)="setTargetWords(1500)"
+              >
+                1500w
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.target_words === 2200 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                (click)="setTargetWords(2200)"
+              >
+                2200w
+              </button>
+              <button
+                type="button"
+                class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.target_words === 3000 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                (click)="setTargetWords(3000)"
+              >
+                3000w
+              </button>
+            </div>
           </div>
 
-          <div class="form-group">
-            <label>Focus Keywords / Hashtags (Comma separated)</label>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold text-slate-700">Focus Keywords / Hashtags (Comma separated)</label>
             <input
               type="text"
-              class="input-field"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
               placeholder="e.g. AI Agents, Cold Calling, Pipeline Velocity"
               [(ngModel)]="customKeywordsInput"
             />
+            <span class="text-xs text-slate-500">Keywords are naturally woven into headings, arguments, and metadata.</span>
           </div>
         </div>
 
-        <div class="form-row two-cols">
-          <div class="form-group">
-            <label>Call To Action (CTA) Button Text</label>
+        <!-- Blog Format Mode Selection -->
+        <div class="mb-1">
+          <div class="flex flex-col gap-1.5 w-full">
+            <label class="text-xs font-semibold text-slate-700">Blog Content Format <span class="text-red-500">*</span></label>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
+              <!-- Card 1: Text-Based Blog Only -->
+              <div
+                class="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer relative"
+                [ngClass]="customGenForm.blog_type === 'text_only'
+                  ? 'border-blue-600 bg-gradient-to-br from-white to-blue-50/60 shadow-md ring-1 ring-blue-500/20'
+                  : 'border-slate-200 bg-white hover:border-blue-300 hover:-translate-y-0.5 hover:shadow-sm'"
+                (click)="setBlogType('text_only')"
+              >
+                <div
+                  class="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-all duration-200"
+                  [ngClass]="customGenForm.blog_type === 'text_only' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'"
+                >
+                  <i class="pi pi-align-left"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <h4 class="m-0 text-sm font-bold text-slate-900">Text-Based Blog Only</h4>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">Fast & Clean</span>
+                  </div>
+                  <p class="m-0 text-xs text-slate-500 leading-relaxed">
+                    Pure high-density text, formatted tables, key frameworks & zero image generation wait time. Ideal for text-first blogs & thought leadership.
+                  </p>
+                </div>
+                <div class="text-lg pt-0.5" [ngClass]="customGenForm.blog_type === 'text_only' ? 'text-blue-600' : 'text-slate-300'">
+                  <i class="pi" [ngClass]="customGenForm.blog_type === 'text_only' ? 'pi-check-circle' : 'pi-circle'"></i>
+                </div>
+              </div>
+
+              <!-- Card 2: Text & Image Based -->
+              <div
+                class="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer relative"
+                [ngClass]="customGenForm.blog_type === 'text_and_image'
+                  ? 'border-blue-600 bg-gradient-to-br from-white to-blue-50/60 shadow-md ring-1 ring-blue-500/20'
+                  : 'border-slate-200 bg-white hover:border-blue-300 hover:-translate-y-0.5 hover:shadow-sm'"
+                (click)="setBlogType('text_and_image')"
+              >
+                <div
+                  class="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-all duration-200"
+                  [ngClass]="customGenForm.blog_type === 'text_and_image' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-600'"
+                >
+                  <i class="pi pi-images"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1 flex-wrap">
+                    <h4 class="m-0 text-sm font-bold text-slate-900">Text & Image Based</h4>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">Visual Storytelling</span>
+                  </div>
+                  <p class="m-0 text-xs text-slate-500 leading-relaxed">
+                    Comprehensive article paired with bespoke AI visual illustrations, architecture diagrams, and high-impact cover graphics embedded inline.
+                  </p>
+                </div>
+                <div class="text-lg pt-0.5" [ngClass]="customGenForm.blog_type === 'text_and_image' ? 'text-blue-600' : 'text-slate-300'">
+                  <i class="pi" [ngClass]="customGenForm.blog_type === 'text_and_image' ? 'pi-check-circle' : 'pi-circle'"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dynamic Image Count Selector (Rendered ONLY if Text & Image Based) -->
+        <div class="mb-1" *ngIf="customGenForm.blog_type === 'text_and_image'">
+          <div class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="flex items-center gap-2">
+                <i class="pi pi-image text-blue-600 text-base"></i>
+                <label class="text-sm font-bold text-slate-900 m-0">Number of Images Required (n) <span class="text-red-500">*</span></label>
+              </div>
+              <span class="text-xs text-slate-500">Specify how many AI illustrations & diagrams to generate and embed across the article</span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+              <button
+                type="button"
+                class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.num_images === 1
+                  ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                  : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                (click)="setNumImages(1)"
+              >
+                <span class="text-sm font-bold mb-0.5" [ngClass]="customGenForm.num_images === 1 ? 'text-blue-600' : 'text-slate-800'">1 Image</span>
+                <span class="text-[11px] leading-tight" [ngClass]="customGenForm.num_images === 1 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover Graphic Only</span>
+              </button>
+
+              <button
+                type="button"
+                class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.num_images === 2
+                  ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                  : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                (click)="setNumImages(2)"
+              >
+                <span class="text-sm font-bold mb-0.5" [ngClass]="customGenForm.num_images === 2 ? 'text-blue-600' : 'text-slate-800'">2 Images</span>
+                <span class="text-[11px] leading-tight" [ngClass]="customGenForm.num_images === 2 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover + 1 In-Article Diagram</span>
+              </button>
+
+              <button
+                type="button"
+                class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.num_images === 3
+                  ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                  : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                (click)="setNumImages(3)"
+              >
+                <span class="text-sm font-bold mb-0.5" [ngClass]="customGenForm.num_images === 3 ? 'text-blue-600' : 'text-slate-800'">3 Images</span>
+                <span class="text-[11px] leading-tight" [ngClass]="customGenForm.num_images === 3 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover + 2 Context Visuals</span>
+              </button>
+
+              <button
+                type="button"
+                class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.num_images === 4
+                  ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                  : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                (click)="setNumImages(4)"
+              >
+                <span class="text-sm font-bold mb-0.5" [ngClass]="customGenForm.num_images === 4 ? 'text-blue-600' : 'text-slate-800'">4 Images</span>
+                <span class="text-[11px] leading-tight" [ngClass]="customGenForm.num_images === 4 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover + 3 Framework Visuals</span>
+              </button>
+
+              <button
+                type="button"
+                class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                [ngClass]="customGenForm.num_images === 5
+                  ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                  : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                (click)="setNumImages(5)"
+              >
+                <span class="text-sm font-bold mb-0.5" [ngClass]="customGenForm.num_images === 5 ? 'text-blue-600' : 'text-slate-800'">5 Images</span>
+                <span class="text-[11px] leading-tight" [ngClass]="customGenForm.num_images === 5 ? 'text-blue-700 font-medium' : 'text-slate-500'">Deep Visual Guide (Max)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold text-slate-700">Call To Action (CTA) Button Text</label>
             <input
               type="text"
-              class="input-field"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
               placeholder="e.g. Book Free Strategy Session Today"
               [(ngModel)]="customGenForm.cta_text"
             />
           </div>
 
-          <div class="form-group">
-            <label>CTA Button URL / Anchor</label>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold text-slate-700">CTA Button URL / Anchor</label>
             <input
               type="text"
-              class="input-field"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
               placeholder="e.g. #strategy-session or https://yourcompany.com/book"
               [(ngModel)]="customGenForm.cta_url"
             />
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group checkbox-group">
-            <label class="toggle-container">
-              <input
-                type="checkbox"
-                [(ngModel)]="customGenForm.include_images"
-              />
-              <span class="toggle-slider"></span>
-              <span class="toggle-text"
-                >Generate AI Visual Illustrations / Diagrams</span
-              >
-            </label>
-          </div>
-        </div>
-
-        <div class="form-actions">
+        <div class="mt-4 flex justify-end">
           <button
-            class="btn btn-primary lg glow-btn"
+            class="inline-flex items-center gap-2 px-7 py-3.5 text-base font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-500/30 hover:from-blue-700 hover:to-blue-800 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             (click)="generateCustomArticle()"
             [disabled]="isGeneratingCustom"
           >
@@ -1137,54 +1321,53 @@
   <!-- ======================================================================= -->
   <div
     *ngIf="mainTab === 'settings' && loadedTabs.has('settings')"
-    class="tab-content"
   >
-    <div class="settings-card">
-      <div class="card-header">
-        <h2>⚙️ Company Automated Daily Blog Configuration</h2>
-        <p>
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 max-w-4xl mx-auto shadow-sm">
+      <div class="mb-7 border-b border-slate-100 pb-4">
+        <h2 class="text-xl font-bold text-slate-900 mb-1.5">⚙️ Company Automated Daily Blog Configuration</h2>
+        <p class="text-sm text-slate-500 m-0">
           Automate your brand's content pipeline with daily trending topic
           selection, AI generation, and multi-channel publishing.
         </p>
       </div>
 
-      <div *ngIf="loadingSettings" class="loading-state">
-        <i class="pi pi-spin pi-spinner loading-spinner"></i>
-        <p>Loading company settings...</p>
+      <div *ngIf="loadingSettings" class="text-center py-14 px-5 bg-white rounded-2xl border border-dashed border-slate-300">
+        <i class="pi pi-spin pi-spinner text-4xl text-blue-600 mb-4"></i>
+        <p class="text-sm text-slate-500">Loading company settings...</p>
       </div>
 
-      <div *ngIf="!loadingSettings" class="settings-form">
+      <div *ngIf="!loadingSettings" class="flex flex-col gap-6">
         <!-- Currently Active Configuration Overview Banner -->
         <div
-          class="active-config-banner"
-          [class.enabled]="settings.is_auto_blog_enabled"
+          class="border rounded-2xl p-5 mb-2 transition"
+          [ngClass]="settings.is_auto_blog_enabled ? 'bg-gradient-to-r from-emerald-50/50 to-teal-50/50 border-emerald-300 shadow-sm' : 'bg-gradient-to-r from-slate-50 to-slate-100 border-slate-200'"
         >
-          <div class="config-banner-header">
+          <div class="flex justify-between items-center mb-4 flex-wrap gap-2.5">
             <div
-              class="banner-status-tag"
-              [class.active]="settings.is_auto_blog_enabled"
+              class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold"
+              [ngClass]="settings.is_auto_blog_enabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'"
             >
-              <span class="pulse-dot"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
               {{
                 settings.is_auto_blog_enabled
                   ? "Auto-Blogging Active"
                   : "Auto-Blogging Paused"
               }}
             </div>
-            <div class="banner-last-run" *ngIf="settings.last_run_at">
+            <div class="text-xs text-slate-500 flex items-center gap-1.5" *ngIf="settings.last_run_at">
               <i class="pi pi-history"></i> Last Generated:
               {{ settings.last_run_at | date: "medium" }}
             </div>
           </div>
 
-          <div class="config-banner-grid">
-            <div class="config-item">
-              <span class="item-label"
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"
                 ><i class="pi pi-clock"></i> Daily Trigger Time</span
               >
-              <span class="item-val">
+              <span class="text-sm font-semibold text-slate-900">
                 <strong>{{ settings.schedule_time || "09:00" }} UTC</strong>
-                <small class="local-time-tag"
+                <small class="block text-xs text-emerald-600 font-semibold mt-0.5"
                   >({{
                     getLocalTimeFromUtc(settings.schedule_time || "09:00")
                   }}
@@ -1193,11 +1376,11 @@
               </span>
             </div>
 
-            <div class="config-item">
-              <span class="item-label"
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"
                 ><i class="pi pi-sliders-v"></i> Workflow Mode</span
               >
-              <span class="item-val">
+              <span class="text-sm font-semibold text-slate-900">
                 {{
                   settings.mode === "automatic"
                     ? "⚡ Direct Auto-Publish"
@@ -1206,34 +1389,34 @@
               </span>
             </div>
 
-            <div class="config-item">
-              <span class="item-label"
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"
                 ><i class="pi pi-envelope"></i> Reviewer Email</span
               >
-              <span class="item-val">{{
+              <span class="text-sm font-semibold text-slate-900">{{
                 settings.admin_notification_email || "Not configured"
               }}</span>
             </div>
 
-            <div class="config-item">
-              <span class="item-label"
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"
                 ><i class="pi pi-share-alt"></i> Publishing Channels</span
               >
-              <div class="banner-channels-list">
+              <div class="flex flex-wrap gap-1.5 mt-0.5">
                 <span
                   *ngFor="let ch of settings.target_channels"
-                  class="channel-pill"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-slate-300 text-xs font-bold text-slate-700"
                 >
                   <i
                     class="pi"
                     [ngClass]="
                       ch === 'linkedin'
-                        ? 'pi-linkedin'
+                        ? 'pi-linkedin text-[#0077b5]'
                         : ch === 'wordpress'
-                          ? 'pi-globe'
+                          ? 'pi-globe text-emerald-600'
                           : ch === 'facebook'
-                            ? 'pi-facebook'
-                            : 'pi-instagram'
+                            ? 'pi-facebook text-[#1877f2]'
+                            : 'pi-instagram text-[#e1306c]'
                     "
                   ></i>
                   {{ ch | uppercase }}
@@ -1243,7 +1426,7 @@
                     !settings.target_channels ||
                     settings.target_channels.length === 0
                   "
-                  class="muted-text"
+                  class="text-xs text-slate-400"
                   >None selected</span
                 >
               </div>
@@ -1252,62 +1435,63 @@
         </div>
 
         <!-- Enable Auto-Blog Master Toggle -->
-        <div class="setting-toggle-box">
-          <div class="toggle-info">
-            <h3>Daily Automated Blog Creation</h3>
-            <p>
+        <div class="bg-gradient-to-r from-blue-50 to-sky-50 border border-blue-200 rounded-xl p-6 flex justify-between items-center mb-2 flex-wrap gap-4">
+          <div class="max-w-xl">
+            <h3 class="text-lg font-bold text-blue-900 mb-1">Daily Automated Blog Creation</h3>
+            <p class="text-xs text-blue-700 m-0">
               When enabled, LeadAI's daily background worker will pick a
               trending topic every day and execute content generation.
             </p>
           </div>
-          <label class="toggle-container">
+          <label class="relative inline-flex items-center cursor-pointer select-none">
             <input
               type="checkbox"
               [(ngModel)]="settings.is_auto_blog_enabled"
+              class="sr-only peer"
             />
-            <span class="toggle-slider"></span>
+            <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
           </label>
         </div>
 
         <!-- Publishing Mode Selector: Automatic vs Manual Confirmation -->
-        <div class="form-section">
-          <h3 class="section-title">Workflow Mode</h3>
-          <div class="mode-cards-grid">
+        <div class="border-b border-slate-100 pb-6">
+          <h3 class="text-base font-bold text-slate-900 mb-2">Workflow Mode</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div
-              class="mode-card"
-              [class.active]="settings.mode === 'manual_confirmation'"
+              class="border-2 rounded-xl p-5 flex items-start gap-3.5 cursor-pointer relative transition hover:border-blue-300 hover:bg-slate-50"
+              [ngClass]="settings.mode === 'manual_confirmation' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
               (click)="settings.mode = 'manual_confirmation'"
             >
-              <div class="mode-icon"><i class="pi pi-envelope"></i></div>
-              <div class="mode-info">
-                <h4>Manual Admin Confirmation (Recommended)</h4>
-                <p>
+              <div class="text-xl text-blue-600"><i class="pi pi-envelope"></i></div>
+              <div class="flex-1">
+                <h4 class="text-sm font-bold mb-1 text-slate-900">Manual Admin Confirmation (Recommended)</h4>
+                <p class="text-xs text-slate-500 m-0 leading-relaxed">
                   Generates draft and emails the Admin with a one-click review
                   link. Publishes to channels only upon confirmation.
                 </p>
               </div>
               <i
                 *ngIf="settings.mode === 'manual_confirmation'"
-                class="pi pi-check-circle check-active"
+                class="pi pi-check-circle absolute top-3.5 right-3.5 text-blue-600 text-lg"
               ></i>
             </div>
 
             <div
-              class="mode-card"
-              [class.active]="settings.mode === 'automatic'"
+              class="border-2 rounded-xl p-5 flex items-start gap-3.5 cursor-pointer relative transition hover:border-blue-300 hover:bg-slate-50"
+              [ngClass]="settings.mode === 'automatic' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
               (click)="settings.mode = 'automatic'"
             >
-              <div class="mode-icon auto-icon"><i class="pi pi-bolt"></i></div>
-              <div class="mode-info">
-                <h4>Fully Automatic Publishing</h4>
-                <p>
+              <div class="text-xl text-amber-500"><i class="pi pi-bolt"></i></div>
+              <div class="flex-1">
+                <h4 class="text-sm font-bold mb-1 text-slate-900">Fully Automatic Publishing</h4>
+                <p class="text-xs text-slate-500 m-0 leading-relaxed">
                   Generates the daily article and immediately publishes to all
                   configured connected channels (LinkedIn, Facebook, WordPress).
                 </p>
               </div>
               <i
                 *ngIf="settings.mode === 'automatic'"
-                class="pi pi-check-circle check-active"
+                class="pi pi-check-circle absolute top-3.5 right-3.5 text-blue-600 text-lg"
               ></i>
             </div>
           </div>
@@ -1315,19 +1499,19 @@
 
         <!-- Admin Notification Email -->
         <div
-          class="form-section"
+          class="border-b border-slate-100 pb-6"
           *ngIf="settings.mode === 'manual_confirmation'"
         >
-          <h3 class="section-title">Admin Review Email</h3>
-          <div class="form-group">
-            <label>Organization Admin / Editor Email Recipient</label>
+          <h3 class="text-base font-bold text-slate-900 mb-2">Admin Review Email</h3>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-semibold text-slate-700">Organization Admin / Editor Email Recipient</label>
             <input
               type="email"
-              class="input-field"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
               placeholder="e.g. admin@yourcompany.com"
               [(ngModel)]="settings.admin_notification_email"
             />
-            <span class="helper-text"
+            <span class="text-xs text-slate-500"
               >Draft preview and 1-click approval/regeneration buttons will be
               sent to this email address.</span
             >
@@ -1335,109 +1519,113 @@
         </div>
 
         <!-- Target Channels Multi-Select -->
-        <div class="form-section">
-          <h3 class="section-title">Target Publishing Channels</h3>
-          <p class="section-subtitle">
+        <div class="border-b border-slate-100 pb-6">
+          <h3 class="text-base font-bold text-slate-900 mb-1">Target Publishing Channels</h3>
+          <p class="text-xs text-slate-500 mb-3.5">
             Select which platforms should receive the blog post upon approval or
             auto-publish:
           </p>
-          <div class="channels-checkboxes">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <label
-              class="channel-check-box"
-              [class.checked]="settingsChannels['linkedin']"
+              class="border rounded-xl p-3.5 flex items-center gap-2.5 cursor-pointer text-sm font-semibold transition hover:border-slate-300"
+              [ngClass]="settingsChannels['linkedin'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
             >
               <input
                 type="checkbox"
                 [(ngModel)]="settingsChannels['linkedin']"
+                class="cursor-pointer accent-blue-600"
               />
-              <i class="pi pi-linkedin"></i>
+              <i class="pi pi-linkedin text-lg text-[#0077b5]"></i>
               <span>LinkedIn</span>
             </label>
 
             <label
-              class="channel-check-box"
-              [class.checked]="settingsChannels['wordpress']"
+              class="border rounded-xl p-3.5 flex items-center gap-2.5 cursor-pointer text-sm font-semibold transition hover:border-slate-300"
+              [ngClass]="settingsChannels['wordpress'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
             >
               <input
                 type="checkbox"
                 [(ngModel)]="settingsChannels['wordpress']"
+                class="cursor-pointer accent-blue-600"
               />
-              <i class="pi pi-globe"></i>
+              <i class="pi pi-globe text-lg text-emerald-600"></i>
               <span>WordPress / Website</span>
             </label>
 
             <label
-              class="channel-check-box"
-              [class.checked]="settingsChannels['facebook']"
+              class="border rounded-xl p-3.5 flex items-center gap-2.5 cursor-pointer text-sm font-semibold transition hover:border-slate-300"
+              [ngClass]="settingsChannels['facebook'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
             >
               <input
                 type="checkbox"
                 [(ngModel)]="settingsChannels['facebook']"
+                class="cursor-pointer accent-blue-600"
               />
-              <i class="pi pi-facebook"></i>
+              <i class="pi pi-facebook text-lg text-[#1877f2]"></i>
               <span>Facebook Pages</span>
             </label>
 
             <label
-              class="channel-check-box"
-              [class.checked]="settingsChannels['instagram']"
+              class="border rounded-xl p-3.5 flex items-center gap-2.5 cursor-pointer text-sm font-semibold transition hover:border-slate-300"
+              [ngClass]="settingsChannels['instagram'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
             >
               <input
                 type="checkbox"
                 [(ngModel)]="settingsChannels['instagram']"
+                class="cursor-pointer accent-blue-600"
               />
-              <i class="pi pi-instagram"></i>
+              <i class="pi pi-instagram text-lg text-[#e1306c]"></i>
               <span>Instagram</span>
             </label>
           </div>
         </div>
 
         <!-- Content & Topic Niche Preferences -->
-        <div class="form-section">
-          <h3 class="section-title">Content & Niche Preferences</h3>
-          <div class="form-row">
-            <div class="form-group full-width">
-              <label>Company Industry & Topic Niche</label>
+        <div class="border-b border-slate-100 pb-6">
+          <h3 class="text-base font-bold text-slate-900 mb-2">Content & Niche Preferences</h3>
+          <div class="mb-4">
+            <div class="flex flex-col gap-1.5 w-full">
+              <label class="text-xs font-semibold text-slate-700">Company Industry & Topic Niche</label>
               <input
                 type="text"
-                class="input-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 placeholder="e.g. B2B SaaS, AI Voice Agents, CRM Workflow Automation"
                 [(ngModel)]="settings.topic_niche"
               />
-              <span class="helper-text"
+              <span class="text-xs text-slate-500"
                 >The automated trending topic picker will find timely angles
                 inside this niche.</span
               >
             </div>
           </div>
 
-          <div class="form-row two-cols">
-            <div class="form-group">
-              <label>Focus Keywords & Hashtags</label>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700">Focus Keywords & Hashtags</label>
               <input
                 type="text"
-                class="input-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 placeholder="e.g. AI Automation, Lead Gen, Tech Strategy"
                 [(ngModel)]="settingsKeywordsInput"
               />
             </div>
 
-            <div class="form-group">
-              <label>Target Audience</label>
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700">Target Audience</label>
               <input
                 type="text"
-                class="input-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 placeholder="e.g. B2B Executives, Sales Leaders, Tech Founders"
                 [(ngModel)]="settings.target_audience"
               />
             </div>
           </div>
 
-          <div class="form-row two-cols">
-            <div class="form-group">
-              <label>Tone of Voice</label>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700">Tone of Voice</label>
               <select
-                class="input-field select-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit bg-white cursor-pointer focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 [(ngModel)]="settings.tone"
               >
                 <option value="thought_leadership">
@@ -1449,16 +1637,16 @@
               </select>
             </div>
 
-            <div class="form-group">
-              <label>Daily Schedule Time (UTC)</label>
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700">Daily Schedule Time (UTC)</label>
               <input
                 type="text"
-                class="input-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 placeholder="09:00"
                 [(ngModel)]="settings.schedule_time"
               />
               <span
-                class="schedule-converted-preview"
+                class="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-semibold mt-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-md"
                 *ngIf="settings.schedule_time"
               >
                 <i class="pi pi-clock"></i>
@@ -1470,38 +1658,230 @@
               </span>
             </div>
           </div>
+
+          <!-- Settings Target Word Count -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700">Automated Article Word Count</label>
+              <div class="relative flex items-center">
+                <input
+                  type="number"
+                  class="w-full px-3.5 py-2.5 pr-16 rounded-xl border border-slate-300 text-sm outline-none font-semibold text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
+                  min="300"
+                  max="5000"
+                  step="50"
+                  placeholder="e.g. 1000"
+                  [(ngModel)]="settings.target_words"
+                />
+                <span class="absolute right-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider pointer-events-none">words</span>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap mt-1.5">
+                <span class="text-xs text-slate-500 font-semibold">Presets:</span>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.target_words === 600 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                  (click)="setSettingsTargetWords(600)"
+                >
+                  600w
+                </button>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.target_words === 1000 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                  (click)="setSettingsTargetWords(1000)"
+                >
+                  1000w
+                </button>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.target_words === 1500 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                  (click)="setSettingsTargetWords(1500)"
+                >
+                  1500w
+                </button>
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs font-semibold rounded-full border transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.target_words === 2200 ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 hover:text-slate-800'"
+                  (click)="setSettingsTargetWords(2200)"
+                >
+                  2200w
+                </button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700">Default Call To Action (CTA)</label>
+              <input
+                type="text"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
+                placeholder="e.g. Book Free Strategy Session Today"
+                [(ngModel)]="settings.cta_text"
+              />
+            </div>
+          </div>
+
+          <!-- Settings Blog Format Mode -->
+          <div class="mb-4">
+            <div class="flex flex-col gap-1.5 w-full">
+              <label class="text-xs font-semibold text-slate-700">Automated Content Format</label>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
+                <div
+                  class="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer relative"
+                  [ngClass]="settingsBlogType === 'text_only'
+                    ? 'border-blue-600 bg-gradient-to-br from-white to-blue-50/60 shadow-md ring-1 ring-blue-500/20'
+                    : 'border-slate-200 bg-white hover:border-blue-300 hover:-translate-y-0.5 hover:shadow-sm'"
+                  (click)="setSettingsBlogType('text_only')"
+                >
+                  <div
+                    class="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-all duration-200"
+                    [ngClass]="settingsBlogType === 'text_only' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600'"
+                  >
+                    <i class="pi pi-align-left"></i>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
+                      <h4 class="m-0 text-sm font-bold text-slate-900">Text-Based Blog Only</h4>
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">Fastest Run</span>
+                    </div>
+                    <p class="m-0 text-xs text-slate-500 leading-relaxed">Articles are generated with pure rich text, tables, and frameworks without DALL-E image generation overhead.</p>
+                  </div>
+                  <div class="text-lg pt-0.5" [ngClass]="settingsBlogType === 'text_only' ? 'text-blue-600' : 'text-slate-300'">
+                    <i class="pi" [ngClass]="settingsBlogType === 'text_only' ? 'pi-check-circle' : 'pi-circle'"></i>
+                  </div>
+                </div>
+
+                <div
+                  class="flex items-start gap-3.5 p-4 sm:p-5 rounded-2xl border-2 transition-all duration-200 cursor-pointer relative"
+                  [ngClass]="settingsBlogType === 'text_and_image'
+                    ? 'border-blue-600 bg-gradient-to-br from-white to-blue-50/60 shadow-md ring-1 ring-blue-500/20'
+                    : 'border-slate-200 bg-white hover:border-blue-300 hover:-translate-y-0.5 hover:shadow-sm'"
+                  (click)="setSettingsBlogType('text_and_image')"
+                >
+                  <div
+                    class="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-all duration-200"
+                    [ngClass]="settingsBlogType === 'text_and_image' ? 'bg-blue-600 text-white shadow-sm' : 'bg-blue-50 text-blue-600'"
+                  >
+                    <i class="pi pi-images"></i>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
+                      <h4 class="m-0 text-sm font-bold text-slate-900">Text & Image Based</h4>
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">Visual</span>
+                    </div>
+                    <p class="m-0 text-xs text-slate-500 leading-relaxed">Articles automatically generate and embed custom AI graphics, architecture diagrams, and cover visuals.</p>
+                  </div>
+                  <div class="text-lg pt-0.5" [ngClass]="settingsBlogType === 'text_and_image' ? 'text-blue-600' : 'text-slate-300'">
+                    <i class="pi" [ngClass]="settingsBlogType === 'text_and_image' ? 'pi-check-circle' : 'pi-circle'"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Settings Dynamic Image Count -->
+          <div class="mb-4" *ngIf="settingsBlogType === 'text_and_image'">
+            <div class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <i class="pi pi-image text-blue-600 text-base"></i>
+                  <label class="text-sm font-bold text-slate-900 m-0">Automated Image Count (n)</label>
+                </div>
+                <span class="text-xs text-slate-500">Number of AI images embedded per scheduled post</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+                <button
+                  type="button"
+                  class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.num_images === 1
+                    ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                    : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                  (click)="setSettingsNumImages(1)"
+                >
+                  <span class="text-sm font-bold mb-0.5" [ngClass]="settings.num_images === 1 ? 'text-blue-600' : 'text-slate-800'">1 Image</span>
+                  <span class="text-[11px] leading-tight" [ngClass]="settings.num_images === 1 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover Only</span>
+                </button>
+                <button
+                  type="button"
+                  class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.num_images === 2
+                    ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                    : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                  (click)="setSettingsNumImages(2)"
+                >
+                  <span class="text-sm font-bold mb-0.5" [ngClass]="settings.num_images === 2 ? 'text-blue-600' : 'text-slate-800'">2 Images</span>
+                  <span class="text-[11px] leading-tight" [ngClass]="settings.num_images === 2 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover + 1 Diagram</span>
+                </button>
+                <button
+                  type="button"
+                  class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.num_images === 3
+                    ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                    : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                  (click)="setSettingsNumImages(3)"
+                >
+                  <span class="text-sm font-bold mb-0.5" [ngClass]="settings.num_images === 3 ? 'text-blue-600' : 'text-slate-800'">3 Images</span>
+                  <span class="text-[11px] leading-tight" [ngClass]="settings.num_images === 3 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover + 2 Visuals</span>
+                </button>
+                <button
+                  type="button"
+                  class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.num_images === 4
+                    ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                    : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                  (click)="setSettingsNumImages(4)"
+                >
+                  <span class="text-sm font-bold mb-0.5" [ngClass]="settings.num_images === 4 ? 'text-blue-600' : 'text-slate-800'">4 Images</span>
+                  <span class="text-[11px] leading-tight" [ngClass]="settings.num_images === 4 ? 'text-blue-700 font-medium' : 'text-slate-500'">Cover + 3 Visuals</span>
+                </button>
+                <button
+                  type="button"
+                  class="flex flex-col items-center justify-center py-3 px-2 rounded-xl border text-center transition-all duration-200 cursor-pointer"
+                  [ngClass]="settings.num_images === 5
+                    ? 'bg-blue-50 border-blue-600 shadow-sm ring-1 ring-blue-500/20'
+                    : 'bg-white border-slate-300 hover:border-blue-300 hover:bg-blue-50/50'"
+                  (click)="setSettingsNumImages(5)"
+                >
+                  <span class="text-sm font-bold mb-0.5" [ngClass]="settings.num_images === 5 ? 'text-blue-600' : 'text-slate-800'">5 Images</span>
+                  <span class="text-[11px] leading-tight" [ngClass]="settings.num_images === 5 ? 'text-blue-700 font-medium' : 'text-slate-500'">5 Visuals (Max)</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- WordPress Connection (Optional) -->
-        <div class="form-section" *ngIf="settingsChannels['wordpress']">
-          <h3 class="section-title">
+        <div class="border-b border-slate-100 pb-6" *ngIf="settingsChannels['wordpress']">
+          <h3 class="text-base font-bold text-slate-900 mb-2">
             WordPress REST API Credentials (Optional)
           </h3>
-          <div class="form-row">
-            <div class="form-group full-width">
-              <label>Website / WordPress URL</label>
+          <div class="mb-4">
+            <div class="flex flex-col gap-1.5 w-full">
+              <label class="text-xs font-semibold text-slate-700">Website / WordPress URL</label>
               <input
                 type="url"
-                class="input-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 placeholder="https://yourwebsite.com"
                 [(ngModel)]="settings.wordpress_url"
               />
             </div>
           </div>
 
-          <div class="form-row two-cols">
-            <div class="form-group">
-              <label>WordPress Username</label>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700">WordPress Username</label>
               <input
                 type="text"
-                class="input-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 placeholder="admin"
                 [(ngModel)]="settings.wordpress_username"
               />
             </div>
 
-            <div class="form-group">
-              <label
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-700"
                 >Application Password
                 {{
                   settings.has_wordpress_password
@@ -1511,7 +1891,7 @@
               >
               <input
                 type="password"
-                class="input-field"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
                 placeholder="xxxx xxxx xxxx xxxx"
                 [(ngModel)]="wordpressPasswordInput"
               />
@@ -1520,9 +1900,9 @@
         </div>
 
         <!-- Save Button -->
-        <div class="form-actions">
+        <div class="mt-4 flex justify-end">
           <button
-            class="btn btn-primary lg glow-btn"
+            class="inline-flex items-center gap-2 px-7 py-3.5 text-base font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-500/30 hover:from-blue-700 hover:to-blue-800 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             (click)="saveSettings()"
             [disabled]="savingSettings"
           >
@@ -1542,7 +1922,7 @@
   <!-- ======================================================================= -->
   <!-- TAB 5: AUTOMATION & AUDIT LOGS                                          -->
   <!-- ======================================================================= -->
-  <div *ngIf="mainTab === 'logs'" class="tab-content">
+  <div *ngIf="mainTab === 'logs'">
     <app-module-activity-logs
       entityType="blog"
       actionPrefix="blog."
@@ -1556,23 +1936,23 @@
   <!-- ======================================================================= -->
   <div
     *ngIf="showArticleModal && selectedArticle"
-    class="modal-backdrop"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-5"
     (click)="showArticleModal = false"
   >
     <div
-      class="modal-dialog article-detail-modal"
+      class="bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden w-[900px] max-w-[95vw]"
       (click)="$event.stopPropagation()"
     >
-      <div class="modal-header">
-        <div class="modal-title-area">
+      <div class="px-7 py-5 border-b border-slate-200 flex justify-between items-start">
+        <div class="flex-1">
           <span
-            class="status-badge"
+            class="inline-block px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider mb-2"
             [ngClass]="getStatusClass(selectedArticle.status)"
           >
             {{ getStatusLabel(selectedArticle.status) }}
           </span>
-          <h2>{{ selectedArticle.title }}</h2>
-          <div class="meta-row">
+          <h2 class="text-xl font-bold text-slate-900 mb-1.5">{{ selectedArticle.title }}</h2>
+          <div class="flex gap-4 text-xs text-slate-500 flex-wrap">
             <span
               >Version:
               <strong>v{{ selectedArticle.current_version }}</strong></span
@@ -1586,67 +1966,68 @@
           </div>
         </div>
 
-        <button class="close-btn" (click)="showArticleModal = false">
+        <button class="bg-transparent border-none text-lg text-slate-400 cursor-pointer hover:text-slate-900 transition p-1" (click)="showArticleModal = false">
           <i class="pi pi-times"></i>
         </button>
       </div>
 
       <!-- Modal Tabs -->
-      <div class="modal-tabs-nav">
+      <div class="flex gap-2 px-7 py-2.5 bg-slate-50 border-b border-slate-200 overflow-x-auto">
         <button
-          class="modal-tab-btn"
-          [class.active]="activeArticleTab === 'preview'"
+          class="px-4 py-2 bg-transparent border border-transparent rounded-lg text-xs font-semibold text-slate-500 cursor-pointer transition hover:text-slate-700"
+          [ngClass]="activeArticleTab === 'preview' ? 'bg-white text-blue-600 border-slate-200 shadow-xs' : ''"
           (click)="activeArticleTab = 'preview'"
         >
-          <i class="pi pi-eye"></i> Formatted Preview
+          <i class="pi pi-eye mr-1"></i> Formatted Preview
         </button>
 
         <button
-          class="modal-tab-btn"
-          [class.active]="activeArticleTab === 'versions'"
+          class="px-4 py-2 bg-transparent border border-transparent rounded-lg text-xs font-semibold text-slate-500 cursor-pointer transition hover:text-slate-700"
+          [ngClass]="activeArticleTab === 'versions' ? 'bg-white text-blue-600 border-slate-200 shadow-xs' : ''"
           (click)="activeArticleTab = 'versions'"
         >
-          <i class="pi pi-history"></i> Version History ({{
+          <i class="pi pi-history mr-1"></i> Version History ({{
             selectedArticle.versions?.length || 1
           }})
         </button>
 
         <button
-          class="modal-tab-btn"
-          [class.active]="activeArticleTab === 'history'"
+          class="px-4 py-2 bg-transparent border border-transparent rounded-lg text-xs font-semibold text-slate-500 cursor-pointer transition hover:text-slate-700"
+          [ngClass]="activeArticleTab === 'history' ? 'bg-white text-blue-600 border-slate-200 shadow-xs' : ''"
           (click)="activeArticleTab = 'history'"
         >
-          <i class="pi pi-comments"></i> Review Notes ({{
+          <i class="pi pi-comments mr-1"></i> Review Notes ({{
             selectedArticle.review_notes?.length || 0
           }})
         </button>
       </div>
 
       <!-- Modal Body -->
-      <div class="modal-body">
+      <div class="p-6 sm:p-7 overflow-y-auto flex-grow">
         <!-- 1. Formatted Preview -->
-        <div *ngIf="activeArticleTab === 'preview'" class="preview-container">
-          <div *ngIf="selectedArticle.cover_image" class="article-banner-img">
+        <div *ngIf="activeArticleTab === 'preview'">
+          <div *ngIf="selectedArticle.cover_image" class="mb-6">
             <img
               [src]="selectedArticle.cover_image"
               alt="Cover Image"
+              class="w-full max-h-80 object-cover rounded-xl"
               loading="lazy"
               decoding="async"
             />
           </div>
 
           <div
-            class="rendered-article-html"
+            class="prose max-w-none text-slate-800 leading-relaxed"
             [innerHTML]="selectedArticle.content"
           ></div>
         </div>
 
         <!-- 2. Version Comparison -->
-        <div *ngIf="activeArticleTab === 'versions'" class="versions-container">
-          <div class="version-select-bar">
-            <div class="version-select">
-              <label>Compare Left:</label>
-              <select [(ngModel)]="compareVersion1">
+        <div *ngIf="activeArticleTab === 'versions'">
+          <div class="flex gap-5 mb-5 bg-slate-50 p-3.5 rounded-xl flex-wrap">
+            <div class="flex-1 flex items-center gap-2.5 min-w-[240px]">
+              <label class="text-xs font-bold text-slate-700">Compare Left:</label>
+              <select [(ngModel)]="compareVersion1" class="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm outline-none bg-white">
                 <option
                   *ngFor="let v of selectedArticle.versions"
                   [ngValue]="v"
@@ -1658,9 +2039,9 @@
               </select>
             </div>
 
-            <div class="version-select">
-              <label>Compare Right:</label>
-              <select [(ngModel)]="compareVersion2">
+            <div class="flex-1 flex items-center gap-2.5 min-w-[240px]">
+              <label class="text-xs font-bold text-slate-700">Compare Right:</label>
+              <select [(ngModel)]="compareVersion2" class="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm outline-none bg-white">
                 <option
                   *ngFor="let v of selectedArticle.versions"
                   [ngValue]="v"
@@ -1673,29 +2054,29 @@
             </div>
           </div>
 
-          <div class="side-by-side-grid">
-            <div class="version-column" *ngIf="compareVersion1">
-              <div class="version-col-header">
-                <h3>Version {{ compareVersion1.version_number }}</h3>
-                <span class="prompt-hint">{{
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="border border-slate-200 rounded-xl p-4.5 bg-white" *ngIf="compareVersion1">
+              <div class="border-b border-slate-100 pb-2.5 mb-3.5">
+                <h3 class="text-base font-bold text-slate-900 m-0 mb-1">Version {{ compareVersion1.version_number }}</h3>
+                <span class="text-xs text-slate-500 italic">{{
                   compareVersion1.regeneration_prompt || "Initial Generation"
                 }}</span>
               </div>
               <div
-                class="version-content-box"
+                class="max-h-[480px] overflow-y-auto text-sm leading-relaxed prose max-w-none"
                 [innerHTML]="compareVersion1.content"
               ></div>
             </div>
 
-            <div class="version-column" *ngIf="compareVersion2">
-              <div class="version-col-header">
-                <h3>Version {{ compareVersion2.version_number }}</h3>
-                <span class="prompt-hint">{{
+            <div class="border border-slate-200 rounded-xl p-4.5 bg-white" *ngIf="compareVersion2">
+              <div class="border-b border-slate-100 pb-2.5 mb-3.5">
+                <h3 class="text-base font-bold text-slate-900 m-0 mb-1">Version {{ compareVersion2.version_number }}</h3>
+                <span class="text-xs text-slate-500 italic">{{
                   compareVersion2.regeneration_prompt || "Initial Generation"
                 }}</span>
               </div>
               <div
-                class="version-content-box"
+                class="max-h-[480px] overflow-y-auto text-sm leading-relaxed prose max-w-none"
                 [innerHTML]="compareVersion2.content"
               ></div>
             </div>
@@ -1703,49 +2084,68 @@
         </div>
 
         <!-- 3. Review Notes History -->
-        <div *ngIf="activeArticleTab === 'history'" class="history-container">
+        <div *ngIf="activeArticleTab === 'history'" class="flex flex-col gap-3.5">
           <div
             *ngIf="
               !selectedArticle.review_notes ||
               selectedArticle.review_notes.length === 0
             "
-            class="empty-notes"
+            class="text-center py-8 text-slate-400 text-sm italic"
           >
             <p>No editorial review notes recorded yet.</p>
           </div>
 
           <div
             *ngFor="let note of selectedArticle.review_notes"
-            class="note-card"
+            class="bg-slate-50 border border-slate-200 rounded-xl p-4"
           >
-            <div class="note-header">
-              <span class="note-author"
-                ><strong>{{ note.author_name }}</strong> ({{
-                  note.author_role
-                }})</span
-              >
-              <span class="note-action-tag">{{ note.action_taken }}</span>
-              <span class="note-time">{{
+            <div class="flex justify-between items-center mb-2 text-xs flex-wrap gap-2">
+              <span><strong>{{ note.author_name }}</strong> ({{
+                note.author_role
+              }})</span>
+              <span class="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-bold text-xs">{{ note.action_taken }}</span>
+              <span class="text-slate-400 text-xs">{{
                 note.created_at | date: "medium"
               }}</span>
             </div>
-            <div class="note-body">{{ note.content }}</div>
+            <div class="text-sm text-slate-700 leading-relaxed">{{ note.content }}</div>
           </div>
         </div>
       </div>
 
       <!-- Modal Footer Action Buttons -->
-      <div class="modal-footer">
-        <button class="btn btn-secondary" (click)="showArticleModal = false">
+      <div class="px-7 py-4.5 border-t border-slate-200 flex justify-end items-center gap-3 bg-slate-50 flex-wrap">
+        <button class="px-4 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition cursor-pointer" (click)="showArticleModal = false">
           Close
         </button>
+
+        <span
+          *ngIf="selectedArticle.status === 'published'"
+          class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold"
+        >
+          <i class="pi pi-check-circle"></i>
+          <span>Published Live</span>
+        </span>
+
+        <a
+          *ngIf="
+            selectedArticle.status === 'published' &&
+            selectedArticle.wordpress_post_url
+          "
+          [href]="selectedArticle.wordpress_post_url"
+          target="_blank"
+          class="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition cursor-pointer"
+        >
+          <i class="pi pi-external-link"></i>
+          <span>View on Site</span>
+        </a>
 
         <button
           *ngIf="
             selectedArticle.status === 'pending_approval' ||
             selectedArticle.status === 'changes_requested'
           "
-          class="btn btn-warning"
+          class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-amber-500 text-white hover:bg-amber-600 transition cursor-pointer shadow-sm"
           (click)="openReviewModal(selectedArticle, 'regenerate')"
         >
           <i class="pi pi-refresh"></i>
@@ -1757,7 +2157,7 @@
             selectedArticle.status === 'pending_approval' ||
             selectedArticle.status === 'changes_requested'
           "
-          class="btn btn-primary glow-btn"
+          class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 transition cursor-pointer shadow-md shadow-blue-500/20"
           (click)="openReviewModal(selectedArticle, 'approved')"
         >
           <i class="pi pi-check"></i>
@@ -1769,7 +2169,7 @@
             selectedArticle.status === 'approved' ||
             selectedArticle.status === 'draft'
           "
-          class="btn btn-primary"
+          class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 transition cursor-pointer shadow-md shadow-emerald-500/20"
           (click)="openPublishModal(selectedArticle)"
         >
           <i class="pi pi-send"></i>
@@ -1784,100 +2184,99 @@
   <!-- ======================================================================= -->
   <div
     *ngIf="showReviewModal && selectedArticle"
-    class="modal-backdrop"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-5"
     (click)="showReviewModal = false"
   >
-    <div class="modal-dialog review-modal" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h2>Editorial Review Action</h2>
-        <button class="close-btn" (click)="showReviewModal = false">
+    <div class="bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden w-[600px] max-w-[95vw]" (click)="$event.stopPropagation()">
+      <div class="px-7 py-5 border-b border-slate-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-slate-900 m-0">Editorial Review Action</h2>
+        <button class="bg-transparent border-none text-lg text-slate-400 cursor-pointer hover:text-slate-900 transition p-1" (click)="showReviewModal = false">
           <i class="pi pi-times"></i>
         </button>
       </div>
 
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Select Review Decision</label>
-          <div class="action-selector-grid">
+      <div class="p-6 sm:p-7 overflow-y-auto flex-grow flex flex-col gap-5">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-semibold text-slate-700 mb-1">Select Review Decision</label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
-              class="decision-card approve-card"
-              [class.active]="reviewAction === 'approved'"
+              class="border-2 rounded-xl p-4 text-left cursor-pointer transition hover:border-slate-300"
+              [ngClass]="reviewAction === 'approved' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
               (click)="reviewAction = 'approved'"
             >
-              <i class="pi pi-check-circle"></i>
-              <h4>Approve</h4>
-              <p>Approve article for release</p>
+              <i class="pi pi-check-circle text-xl text-emerald-600 mb-1.5 block"></i>
+              <h4 class="m-0 mb-0.5 text-sm font-bold text-slate-900">Approve</h4>
+              <p class="m-0 text-xs text-slate-500">Approve article for release</p>
             </button>
 
             <button
-              class="decision-card regen-card"
-              [class.active]="reviewAction === 'regenerate'"
+              class="border-2 rounded-xl p-4 text-left cursor-pointer transition hover:border-slate-300"
+              [ngClass]="reviewAction === 'regenerate' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
               (click)="reviewAction = 'regenerate'"
             >
-              <i class="pi pi-refresh"></i>
-              <h4>Regenerate (AI)</h4>
-              <p>Re-write with new prompt</p>
+              <i class="pi pi-refresh text-xl text-amber-500 mb-1.5 block"></i>
+              <h4 class="m-0 mb-0.5 text-sm font-bold text-slate-900">Regenerate (AI)</h4>
+              <p class="m-0 text-xs text-slate-500">Re-write with new prompt</p>
             </button>
 
             <button
-              class="decision-card changes-card"
-              [class.active]="reviewAction === 'changes_requested'"
+              class="border-2 rounded-xl p-4 text-left cursor-pointer transition hover:border-slate-300"
+              [ngClass]="reviewAction === 'changes_requested' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
               (click)="reviewAction = 'changes_requested'"
             >
-              <i class="pi pi-pencil"></i>
-              <h4>Request Changes</h4>
-              <p>Provide feedback note</p>
+              <i class="pi pi-pencil text-xl text-blue-600 mb-1.5 block"></i>
+              <h4 class="m-0 mb-0.5 text-sm font-bold text-slate-900">Request Changes</h4>
+              <p class="m-0 text-xs text-slate-500">Provide feedback note</p>
             </button>
 
             <button
-              class="decision-card reject-card"
-              [class.active]="reviewAction === 'rejected'"
+              class="border-2 rounded-xl p-4 text-left cursor-pointer transition hover:border-slate-300"
+              [ngClass]="reviewAction === 'rejected' ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
               (click)="reviewAction = 'rejected'"
             >
-              <i class="pi pi-times-circle"></i>
-              <h4>Reject</h4>
-              <p>Discard draft</p>
+              <i class="pi pi-times-circle text-xl text-red-600 mb-1.5 block"></i>
+              <h4 class="m-0 mb-0.5 text-sm font-bold text-slate-900">Reject</h4>
+              <p class="m-0 text-xs text-slate-500">Discard draft</p>
             </button>
           </div>
         </div>
 
-        <div class="form-group" *ngIf="reviewAction === 'regenerate'">
-          <label>AI Regeneration Guidance / Prompt (Optional)</label>
+        <div class="flex flex-col gap-1.5" *ngIf="reviewAction === 'regenerate'">
+          <label class="text-xs font-semibold text-slate-700">AI Regeneration Guidance / Prompt (Optional)</label>
           <textarea
-            class="input-field textarea-field"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit resize-y leading-relaxed focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
             rows="3"
             placeholder="e.g. Focus more on ROI metrics, reduce introduction length, and add case study examples..."
             [(ngModel)]="regenerationPrompt"
           ></textarea>
         </div>
 
-        <div class="form-group" *ngIf="reviewAction !== 'regenerate'">
-          <label>Review Notes / Comments</label>
+        <div class="flex flex-col gap-1.5" *ngIf="reviewAction !== 'regenerate'">
+          <label class="text-xs font-semibold text-slate-700">Review Notes / Comments</label>
           <textarea
-            class="input-field textarea-field"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm outline-none font-inherit resize-y leading-relaxed focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition"
             rows="3"
             placeholder="Add internal feedback note for the author or audit log..."
             [(ngModel)]="reviewNotes"
           ></textarea>
         </div>
 
-        <div class="form-group" *ngIf="reviewAction === 'approved'">
-          <label class="toggle-container">
-            <input type="checkbox" [(ngModel)]="publishNowOnApprove" />
-            <span class="toggle-slider"></span>
-            <span class="toggle-text"
+        <div class="flex flex-col gap-1.5" *ngIf="reviewAction === 'approved'">
+          <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" [(ngModel)]="publishNowOnApprove" class="cursor-pointer accent-blue-600" />
+            <span class="text-sm font-semibold text-slate-700"
               >Publish immediately to connected channels upon approval</span
             >
           </label>
         </div>
       </div>
 
-      <div class="modal-footer">
-        <button class="btn btn-secondary" (click)="showReviewModal = false">
+      <div class="px-7 py-4.5 border-t border-slate-200 flex justify-end items-center gap-3 bg-slate-50">
+        <button class="px-4 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition cursor-pointer" (click)="showReviewModal = false">
           Cancel
         </button>
         <button
-          class="btn btn-primary"
+          class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
           (click)="submitReview()"
           [disabled]="submittingReview"
         >
@@ -1898,80 +2297,80 @@
   <!-- ======================================================================= -->
   <div
     *ngIf="showPublishModal && publishingArticle"
-    class="modal-backdrop"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-5"
     (click)="showPublishModal = false"
   >
-    <div class="modal-dialog publish-dialog" (click)="$event.stopPropagation()">
-      <div class="modal-header">
-        <h2>Publish Article to Live Channels</h2>
-        <button class="close-btn" (click)="showPublishModal = false">
+    <div class="bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden w-[600px] max-w-[95vw]" (click)="$event.stopPropagation()">
+      <div class="px-7 py-5 border-b border-slate-200 flex justify-between items-center">
+        <h2 class="text-lg font-bold text-slate-900 m-0">Publish Article to Live Channels</h2>
+        <button class="bg-transparent border-none text-lg text-slate-400 cursor-pointer hover:text-slate-900 transition p-1" (click)="showPublishModal = false">
           <i class="pi pi-times"></i>
         </button>
       </div>
 
-      <div class="modal-body">
-        <p>
+      <div class="p-6 sm:p-7 overflow-y-auto flex-grow flex flex-col gap-4">
+        <p class="text-sm text-slate-600 m-0 leading-relaxed">
           Select the connected platforms to publish
-          <strong>"{{ publishingArticle.title }}"</strong>:
+          <strong class="text-slate-900">"{{ publishingArticle.title }}"</strong>:
         </p>
 
-        <div class="publish-channels-list">
+        <div class="flex flex-col gap-2.5 mt-2">
           <label
-            class="channel-publish-item"
-            [class.checked]="publishChannels['linkedin']"
+            class="flex items-center gap-3.5 p-3.5 border rounded-xl cursor-pointer transition hover:border-slate-300"
+            [ngClass]="publishChannels['linkedin'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
           >
-            <input type="checkbox" [(ngModel)]="publishChannels['linkedin']" />
-            <i class="pi pi-linkedin"></i>
-            <div>
-              <strong>LinkedIn</strong>
-              <span>Publishes executive summary & link</span>
+            <input type="checkbox" [(ngModel)]="publishChannels['linkedin']" class="cursor-pointer accent-blue-600" />
+            <i class="pi pi-linkedin text-2xl text-[#0077b5]"></i>
+            <div class="flex flex-col">
+              <strong class="text-sm text-slate-900">LinkedIn</strong>
+              <span class="text-xs text-slate-500">Publishes executive summary & link</span>
             </div>
           </label>
 
           <label
-            class="channel-publish-item"
-            [class.checked]="publishChannels['wordpress']"
+            class="flex items-center gap-3.5 p-3.5 border rounded-xl cursor-pointer transition hover:border-slate-300"
+            [ngClass]="publishChannels['wordpress'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
           >
-            <input type="checkbox" [(ngModel)]="publishChannels['wordpress']" />
-            <i class="pi pi-globe"></i>
-            <div>
-              <strong>WordPress / Website</strong>
-              <span>Publishes full styled HTML article & images</span>
+            <input type="checkbox" [(ngModel)]="publishChannels['wordpress']" class="cursor-pointer accent-blue-600" />
+            <i class="pi pi-globe text-2xl text-emerald-600"></i>
+            <div class="flex flex-col">
+              <strong class="text-sm text-slate-900">WordPress / Website</strong>
+              <span class="text-xs text-slate-500">Publishes full styled HTML article & images</span>
             </div>
           </label>
 
           <label
-            class="channel-publish-item"
-            [class.checked]="publishChannels['facebook']"
+            class="flex items-center gap-3.5 p-3.5 border rounded-xl cursor-pointer transition hover:border-slate-300"
+            [ngClass]="publishChannels['facebook'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
           >
-            <input type="checkbox" [(ngModel)]="publishChannels['facebook']" />
-            <i class="pi pi-facebook"></i>
-            <div>
-              <strong>Facebook Pages</strong>
-              <span>Publishes photo post with summary</span>
+            <input type="checkbox" [(ngModel)]="publishChannels['facebook']" class="cursor-pointer accent-blue-600" />
+            <i class="pi pi-facebook text-2xl text-[#1877f2]"></i>
+            <div class="flex flex-col">
+              <strong class="text-sm text-slate-900">Facebook Pages</strong>
+              <span class="text-xs text-slate-500">Publishes photo post with summary</span>
             </div>
           </label>
 
           <label
-            class="channel-publish-item"
-            [class.checked]="publishChannels['instagram']"
+            class="flex items-center gap-3.5 p-3.5 border rounded-xl cursor-pointer transition hover:border-slate-300"
+            [ngClass]="publishChannels['instagram'] ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 bg-white'"
           >
-            <input type="checkbox" [(ngModel)]="publishChannels['instagram']" />
-            <i class="pi pi-instagram"></i>
-            <div>
-              <strong>Instagram</strong>
-              <span>Publishes carousel/photo post</span>
+            <input type="checkbox" [(ngModel)]="publishChannels['instagram']" class="cursor-pointer accent-blue-600" />
+            <i class="pi pi-instagram text-2xl text-[#e1306c]"></i>
+            <div class="flex flex-col">
+              <strong class="text-sm text-slate-900">Instagram</strong>
+              <span class="text-xs text-slate-500">Publishes carousel/photo post</span>
             </div>
           </label>
         </div>
       </div>
 
-      <div class="modal-footer">
-        <button class="btn btn-secondary" (click)="showPublishModal = false">
+      <div class="px-7 py-4.5 border-t border-slate-200 flex justify-end items-center gap-3 bg-slate-50">
+        <button class="px-4 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 transition cursor-pointer" (click)="showPublishModal = false">
           Cancel
         </button>
         <button
-          class="btn btn-primary glow-btn"
+          class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md shadow-blue-500/25 hover:from-blue-700 hover:to-blue-800 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           (click)="confirmPublish()"
           [disabled]="isPublishing"
         >

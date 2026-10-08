@@ -168,23 +168,26 @@ def create_account(
     elif channel_lower == "whatsapp":
         principal.require("social.whatsapp")
 
-    # The (channel, external_id) pair is globally unique — the same WhatsApp
-    # number cannot be claimed by two companies, or inbound routing would be
-    # ambiguous and one tenant would read another's leads.
-    clash = (
+    # The (channel, external_id) pair is globally unique at the DB level
+    # (uq_leadai_channel_external) regardless of IsDeleted — a soft-deleted
+    # row still occupies that slot. So this lookup must NOT filter IsDeleted,
+    # or reconnecting a previously-disconnected account tries to INSERT a
+    # second row with the same key and hits a duplicate-entry IntegrityError
+    # instead of reviving the old one. A clash only actually blocks the
+    # request when the found row is still live.
+    existing = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.Channel == payload.channel,
             LeadChannelAccount.ExternalId == payload.external_id,
-            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .first()
     )
-    if clash is not None:
+    if existing is not None and not existing.IsDeleted:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "That account is already connected"
-            + (" to this company." if clash.ClientId == client_id else " to another company."),
+            + (" to this company." if existing.ClientId == client_id else " to another company."),
         )
     _assert_single_account_per_channel(db, client_id, payload.channel, payload.external_id)
 
@@ -192,7 +195,11 @@ def create_account(
         ClientId=client_id,
         Channel=payload.channel,
         Provider="linkedin" if payload.channel == "linkedin" else "meta",
-        LoginType="linkedin" if payload.channel == "linkedin" else "facebook",
+        LoginType=(
+            "linkedin" if payload.channel == "linkedin"
+            else "instagram" if payload.channel == "instagram"
+            else "facebook"
+        ),
         Name=payload.name,
         ExternalId=payload.external_id,
         BusinessAccountId=payload.business_account_id,
@@ -236,11 +243,15 @@ def update_account(
 
     data = payload.model_dump(exclude_unset=True)
     if "access_token" in data and data["access_token"]:
-        row.AccessTokenEnc = encrypt_pii(data.pop("access_token"))
+        token_val = data.pop("access_token")
+        row.AccessTokenEnc = encrypt_pii(token_val)
+        if row.Channel == "instagram" and token_val.startswith("IG"):
+            row.LoginType = "instagram"
     if "app_secret" in data and data["app_secret"]:
         row.AppSecretEnc = encrypt_pii(data.pop("app_secret"))
     mapping = {
         "name": "Name",
+        "external_id": "ExternalId",
         "verify_token": "VerifyToken",
         "display_number": "DisplayNumber",
         "api_version": "ApiVersion",
@@ -347,7 +358,7 @@ def test_send(
 )
 def instagram_connect(
     request: Request,
-    publishing: bool = False,
+    publishing: bool = True,
     scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
     _: Principal = Depends(require("social.instagram")),
     db: Session = Depends(get_leadai_db),
@@ -516,22 +527,33 @@ def facebook_select(
         # addressed at graph.facebook.com with the Page token and signed with
         # the Meta app secret — which is what makes it different from a
         # standalone LoginType=instagram account. See facebook_login's docstring.
-        created.append(
-            _upsert_fb_account(
-                db,
-                client_id=client_id,
-                channel="instagram",
-                external_id=ig["id"],
-                name=f"@{ig.get('username') or ig['id']}",
-                page_token=page["access_token"],
-                meta={
-                    "username": ig.get("username"),
-                    "profile_picture_url": ig.get("profile_picture_url"),
-                    "page_id": page["page_id"],
-                    "login": "facebook",
-                },
+        try:
+            created.append(
+                _upsert_fb_account(
+                    db,
+                    client_id=client_id,
+                    channel="instagram",
+                    external_id=ig["id"],
+                    name=f"@{ig.get('username') or ig['id']}",
+                    page_token=page["access_token"],
+                    meta={
+                        "username": ig.get("username"),
+                        "profile_picture_url": ig.get("profile_picture_url"),
+                        "page_id": page["page_id"],
+                        "login": "facebook",
+                    },
+                )
             )
-        )
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_409_CONFLICT:
+                logger.warning(
+                    "[LeadAI fb-login] Skipping linked Instagram %s for client %s: %s",
+                    ig.get("id"),
+                    client_id,
+                    exc.detail,
+                )
+            else:
+                raise
 
     db.flush()
 
@@ -574,16 +596,19 @@ def _upsert_fb_account(
     meta: dict,
 ) -> LeadChannelAccount:
     """Create or update one channel row from a Facebook Page connection."""
+    # Not filtering IsDeleted here: the (Channel, ExternalId) pair is unique at
+    # the DB level regardless of soft-delete status, so a previously
+    # disconnected Page must be found and revived, not left invisible to this
+    # query only to collide with its own row on INSERT (uq_leadai_channel_external).
     existing = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.Channel == channel,
             LeadChannelAccount.ExternalId == external_id,
-            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .first()
     )
-    if existing is not None and existing.ClientId != client_id:
+    if existing is not None and existing.ClientId != client_id and not existing.IsDeleted:
         # Inbound webhooks route by ExternalId, so one Page serving two tenants
         # would deliver one company's messages into another company's inbox.
         raise HTTPException(
@@ -600,6 +625,8 @@ def _upsert_fb_account(
         ExternalId=external_id,
         CreatedBy="facebook-login",
     )
+    account.ClientId = client_id
+    account.IsDeleted = False
     account.LoginType = fb_login.LOGIN_TYPE_FACEBOOK
     account.AppId = settings.meta_app_id
     account.Name = name
@@ -687,17 +714,22 @@ def instagram_callback(
     external_id = result["external_id"]
     username = result.get("username") or external_id
 
+    # Not filtering IsDeleted here: the (Channel, ExternalId) pair is unique at
+    # the DB level regardless of soft-delete status, so a previously
+    # disconnected account must be found and revived, not left invisible to
+    # this query only to collide with its own row on INSERT
+    # (uq_leadai_channel_external) — this is exactly the "Duplicate entry"
+    # IntegrityError that disconnect-then-reconnect used to hit.
     existing = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.Channel == "instagram",
             LeadChannelAccount.ExternalId == external_id,
-            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .one_or_none()
     )
 
-    if existing is not None and existing.ClientId != client_id:
+    if existing is not None and existing.ClientId != client_id and not existing.IsDeleted:
         # One Instagram account cannot serve two tenants: inbound webhooks are
         # routed by ExternalId, so allowing this would send one company's DMs to
         # another company's inbox.
@@ -715,6 +747,8 @@ def instagram_callback(
         ExternalId=external_id,
         CreatedBy="instagram-login",
     )
+    account.ClientId = client_id
+    account.IsDeleted = False
 
     account.LoginType = ig_login.LOGIN_TYPE_INSTAGRAM
     account.AppId = settings.instagram_app_id

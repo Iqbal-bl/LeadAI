@@ -179,8 +179,11 @@
         <th pSortableColumn="name" style="min-width: 14rem">
           Lead <p-sortIcon field="name"></p-sortIcon>
         </th>
-        <th pSortableColumn="source" style="min-width: 10rem">
+        <th pSortableColumn="source" style="min-width: 9rem">
           Channel <p-sortIcon field="source"></p-sortIcon>
+        </th>
+        <th style="min-width: 13rem">
+          Origin / Source
         </th>
         <th pSortableColumn="status" style="min-width: 8rem">
           Status <p-sortIcon field="status"></p-sortIcon>
@@ -238,6 +241,29 @@
               >{{ lead.source }}</span
             >
           </div>
+        </td>
+
+        <!-- Origin / Source -->
+        <td>
+          <div class="flex items-center gap-2 max-w-[200px]" *ngIf="lead.originAttribution; else defaultOrigin">
+            <span
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border"
+              [ngClass]="{
+                'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800': lead.originAttribution.origin_type === 'post_comment',
+                'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800': lead.originAttribution.origin_type === 'campaign',
+                'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800': lead.originAttribution.origin_type === 'ad',
+                'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/40 dark:text-slate-300 dark:border-slate-700': lead.originAttribution.origin_type === 'direct' || lead.originAttribution.origin_type === 'website' || lead.originAttribution.origin_type === 'voice_call'
+              }"
+              [pTooltip]="getOriginTooltip(lead.originAttribution)"
+              tooltipPosition="top"
+            >
+              <i [class]="getOriginIcon(lead.originAttribution)" class="text-xs"></i>
+              <span class="truncate max-w-[140px]">{{ lead.originAttribution.title || lead.originAttribution.origin_type }}</span>
+            </span>
+          </div>
+          <ng-template #defaultOrigin>
+            <span class="text-xs" style="color: var(--app-text-muted)">Direct Inbound</span>
+          </ng-template>
         </td>
 
         <!-- Status -->
@@ -317,7 +343,7 @@
     <!-- Empty State -->
     <ng-template pTemplate="emptymessage">
       <tr>
-        <td colspan="9">
+        <td colspan="10">
           <div class="flex flex-col items-center justify-center py-12">
             <i
               class="pi pi-users text-4xl mb-3 block"

@@ -770,10 +770,10 @@
                     class="text-sm font-semibold block"
                     style="color: var(--app-text)"
                   >
-                    Auto-Convert Inbound Commercial DMs to CRM Leads
+                    Auto-Capture Inbound Commercial DMs as Leads
                   </span>
                   <span class="text-xs" style="color: var(--app-text-muted)">
-                    Automatically detect commercial buying intent (pricing, demo requests, quotes, consultations) in direct messages and convert them directly to Leads on the Customers page.
+                    Automatically detect commercial buying intent (pricing, demo requests, quotes, consultations) in direct messages and capture them into your Leads pipeline for review and conversion.
                   </span>
                 </div>
                 <p-inputSwitch
@@ -949,7 +949,7 @@
                             *ngIf="invitation.is_crm_lead"
                             class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                           >
-                            <i class="pi pi-user-check text-[9px]"></i> CRM Lead
+                            <i class="pi pi-user-check text-[9px]"></i> Lead Captured
                           </span>
                         </div>
                       </div>
@@ -3252,7 +3252,7 @@
                         label="{{
                           c.isCapturingLead
                             ? 'Saving Lead...'
-                            : 'Capture as CRM Lead'
+                            : 'Capture as Lead'
                         }}"
                         icon="pi pi-user-plus"
                         [outlined]="true"
@@ -3262,13 +3262,13 @@
                         (onClick)="captureCommentLead(c)"
                       ></p-button>
 
-                      <!-- CRM Lead Saved badge + optional LinkedIn profile link -->
+                      <!-- Lead Saved badge + optional LinkedIn profile link -->
                       <span
                         *ngIf="c.customer_id"
                         class="flex items-center gap-2 flex-wrap"
                       >
                         <span class="text-xs text-emerald-400 font-medium flex items-center gap-1">
-                          <i class="pi pi-check-circle"></i> CRM Lead Saved
+                          <i class="pi pi-check-circle"></i> Lead Saved in Pipeline
                         </span>
                         <a
                           *ngIf="c.author_profile_url"

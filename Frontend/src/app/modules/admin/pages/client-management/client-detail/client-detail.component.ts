@@ -9,6 +9,8 @@ import { ConfirmationService } from '../../../../../shared/services/confirmation
 import { SharedModule } from '../../../../../shared/shared.module';
 import {
   DEFAULT_COMPANY_SETTINGS,
+  DEFAULT_SARVAM_FEMALE_VOICE,
+  DEFAULT_SARVAM_MALE_VOICE,
   SARVAM_VOICE_ROSTER,
   SERVICES_STATIC_CONFIG,
   ServiceAccessItem,
@@ -52,21 +54,23 @@ export class ClientDetailComponent implements OnInit {
   isPermissionsLoaded = false;
 
   get isSuperAdmin(): boolean {
-    return this.authService.isSuperAdmin() || this.authService.isPlatformAdmin();
+    return (
+      this.authService.isSuperAdmin() || this.authService.isPlatformAdmin()
+    );
   }
 
   // Superadmin Voice Settings Control
   voiceRoster: VoiceSpeakerOption[] = SARVAM_VOICE_ROSTER;
   voiceGender: 'male' | 'female' = 'female';
   voiceSpeed: number = 1.1;
-  voiceSpeaker: string = 'anushka';
+  voiceSpeaker: string = DEFAULT_SARVAM_FEMALE_VOICE;
   sttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
   savingVoiceSettings = false;
 
   // Baseline state for partial update dirty-tracking
   savedVoiceGender: 'male' | 'female' = 'female';
   savedVoiceSpeed: number = 1.1;
-  savedVoiceSpeaker: string = 'anushka';
+  savedVoiceSpeaker: string = DEFAULT_SARVAM_FEMALE_VOICE;
   savedSttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
 
   ngOnInit(): void {
@@ -170,7 +174,9 @@ export class ClientDetailComponent implements OnInit {
     if (!matching.some((s) => s.value === this.voiceSpeaker)) {
       this.voiceSpeaker =
         matching[0]?.value ||
-        (this.voiceGender === 'male' ? 'shubh' : 'anushka');
+        (this.voiceGender === 'male'
+          ? DEFAULT_SARVAM_MALE_VOICE
+          : DEFAULT_SARVAM_FEMALE_VOICE);
     }
   }
 
@@ -192,9 +198,15 @@ export class ClientDetailComponent implements OnInit {
           settings.voice_speed !== null && settings.voice_speed !== undefined
             ? Math.min(2.0, Math.max(0.5, Number(settings.voice_speed)))
             : 1.1;
-        this.voiceSpeaker =
-          settings.voice_speaker ||
-          (this.voiceGender === 'male' ? 'shubh' : 'anushka');
+
+        const speakerVal = (settings.voice_speaker || '').toLowerCase().trim();
+        const isValid = this.voiceRoster.some((v) => v.value === speakerVal);
+        this.voiceSpeaker = isValid
+          ? speakerVal
+          : (this.voiceGender === 'male'
+              ? DEFAULT_SARVAM_MALE_VOICE
+              : DEFAULT_SARVAM_FEMALE_VOICE);
+
         this.sttTtsProvider = settings.stt_tts_provider || 'sarvam';
 
         this.savedVoiceGender = this.voiceGender;
@@ -208,7 +220,7 @@ export class ClientDetailComponent implements OnInit {
         this.voiceGender = DEFAULT_COMPANY_SETTINGS.voice_gender || 'female';
         this.voiceSpeed = DEFAULT_COMPANY_SETTINGS.voice_speed || 1.1;
         this.voiceSpeaker =
-          DEFAULT_COMPANY_SETTINGS.voice_speaker || 'anushka';
+          DEFAULT_COMPANY_SETTINGS.voice_speaker || DEFAULT_SARVAM_FEMALE_VOICE;
         this.sttTtsProvider =
           DEFAULT_COMPANY_SETTINGS.stt_tts_provider || 'sarvam';
 
@@ -248,7 +260,7 @@ export class ClientDetailComponent implements OnInit {
     }
 
     if (this.voiceSpeaker !== this.savedVoiceSpeaker) {
-      payload.voice_speaker = this.voiceSpeaker;
+      payload.voice_speaker = (this.voiceSpeaker || '').toLowerCase().trim();
       hasChanges = true;
     }
 
@@ -344,7 +356,11 @@ export class ClientDetailComponent implements OnInit {
           return {
             ...item,
             isEnabled,
-            status: !isEnabled ? 'disabled' : autoCall ? 'active' : 'configured',
+            status: !isEnabled
+              ? 'disabled'
+              : autoCall
+                ? 'active'
+                : 'configured',
             statusLabel: !isEnabled
               ? 'Disabled'
               : autoCall

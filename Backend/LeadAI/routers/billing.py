@@ -79,7 +79,25 @@ def _serialize_template(t: LeadRechargePlanTemplate) -> RechargePlanTemplateOut:
     )
 
 
-def _serialize_recharge(r: LeadClientRecharge) -> ClientRechargeOut:
+def _serialize_recharge(r: LeadClientRecharge, db: Session | None = None) -> ClientRechargeOut:
+    booster_mins = float(getattr(r, "BoosterMinutes", 0.0) or 0.0)
+    if booster_mins <= 0.0 and db is not None and getattr(r, "Id", None):
+        try:
+            from sqlalchemy import func
+            from ..models import LeadUsageLog
+            topup_sum = (
+                db.query(func.coalesce(func.sum(-LeadUsageLog.MinutesDeducted), 0.0))
+                .filter(
+                    LeadUsageLog.RechargeId == r.Id,
+                    LeadUsageLog.CallSid == "BOOSTER_TOPUP",
+                )
+                .scalar()
+            )
+            if topup_sum and float(topup_sum) > 0.0:
+                booster_mins = float(topup_sum)
+        except Exception:
+            pass
+
     return ClientRechargeOut(
         id=r.Id,
         client_id=r.ClientId,
@@ -87,6 +105,7 @@ def _serialize_recharge(r: LeadClientRecharge) -> ClientRechargeOut:
         plan_name_snapshot=r.PlanNameSnapshot,
         purchased_minutes=r.PurchasedMinutes,
         remaining_minutes=r.RemainingMinutes,
+        booster_minutes=booster_mins,
         rollover_minutes_carried=float(getattr(r, "RolloverMinutesCarried", 0.0) or 0.0),
         validity_days_snapshot=r.ValidityDaysSnapshot,
         price_paid=r.PricePaid,
@@ -140,7 +159,7 @@ def get_current_plan(
 
     return BillingSummaryOut(
         client_id=client_id,
-        active_recharge=_serialize_recharge(active) if active else None,
+        active_recharge=_serialize_recharge(active, db=db) if active else None,
         pending_recharges=[],
         total_remaining_minutes=rem_mins,
         is_quota_active=has_quota,
@@ -221,7 +240,7 @@ def verify_payment(
             payload=payload.model_dump(),
             user_email=principal.email,
         )
-        return _serialize_recharge(recharge)
+        return _serialize_recharge(recharge, db=db)
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
 
@@ -279,7 +298,7 @@ def verify_subscription(
             payload=payload.model_dump(),
             user_email=principal.email,
         )
-        return _serialize_recharge(recharge)
+        return _serialize_recharge(recharge, db=db)
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
 
@@ -363,7 +382,7 @@ def verify_channel_addon_payment(
             payload=payload.model_dump(),
             user_email=principal.email,
         )
-        return _serialize_recharge(recharge)
+        return _serialize_recharge(recharge, db=db)
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
 
@@ -446,7 +465,7 @@ def get_payment_history(
         .all()
     )
 
-    return [_serialize_recharge(r) for r in rows]
+    return [_serialize_recharge(r, db=db) for r in rows]
 
 
 @router.get("/invoices/{recharge_id}/download", summary="Download custom invoice PDF")
@@ -552,7 +571,7 @@ def self_recharge(
             payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
             created_by=principal.email,
         )
-        return _serialize_recharge(recharge)
+        return _serialize_recharge(recharge, db=db)
     except ValueError as err:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(err)) from err
 
@@ -780,7 +799,7 @@ def admin_clients_summary(
         summaries.append(
             BillingSummaryOut(
                 client_id=client.Id,
-                active_recharge=_serialize_recharge(active) if active else None,
+                active_recharge=_serialize_recharge(active, db=db) if active else None,
                 pending_recharges=[],
                 total_remaining_minutes=rem_mins,
                 is_quota_active=has_quota,

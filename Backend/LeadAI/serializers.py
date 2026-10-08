@@ -43,6 +43,7 @@ from .schemas import (
     DocumentDetailOut,
     DocumentOut,
     LeadOut,
+    OriginAttributionOut,
     MessageOut,
     PromptOut,
     RoleOut,
@@ -237,6 +238,8 @@ def lead_out(row: Lead | None) -> LeadOut | None:
         score_breakdown=row.ScoreBreakdown,
         qualified_at=row.QualifiedAt,
         data_points=row.DataPointsJson,
+        converted_account_id=row.ConvertedAccountId,
+        converted_at=row.ConvertedAt,
     )
 
 
@@ -309,6 +312,83 @@ def resolve_display_name(
     return decrypt_pii(customer.InstagramEnc) or None
 
 
+def resolve_origin_attribution(
+    db: Session, conversation: LeadConversation, customer: LeadCustomer | None
+) -> OriginAttributionOut | None:
+    """Resolve the specific post, campaign, ad or inbound asset that originated this lead."""
+    # 1. Social post comment attribution
+    if customer:
+        from .models_blog import LeadSocialComment
+
+        comment = (
+            db.query(LeadSocialComment)
+            .filter(
+                LeadSocialComment.CustomerId == customer.Id,
+                LeadSocialComment.IsDeleted == False,
+            )
+            .order_by(LeadSocialComment.CreatedAt.desc())
+            .first()
+        )
+        if comment:
+            title = comment.PostTitle
+            if not title and comment.PostSnippet:
+                title = comment.PostSnippet[:60] + ("..." if len(comment.PostSnippet) > 60 else "")
+            return OriginAttributionOut(
+                origin_type="post_comment",
+                channel=comment.Channel or conversation.Channel or "social",
+                title=title or "Social Post",
+                snippet=comment.CommentText or comment.PostSnippet,
+                reference_id=comment.PostUrn or comment.CommentUrn,
+                url=comment.AuthorProfileUrl,
+                interaction_type="comment_reply" if comment.ParentCommentUrn else "post_comment",
+            )
+
+    # 2. Outbound campaign attribution
+    if conversation.CampaignId:
+        from .models_ext import LeadCampaign
+
+        campaign = db.get(LeadCampaign, conversation.CampaignId)
+        if campaign:
+            return OriginAttributionOut(
+                origin_type="campaign",
+                channel=campaign.Channel or conversation.Channel,
+                title=campaign.Name,
+                snippet=campaign.Purpose,
+                reference_id=campaign.Id,
+                interaction_type="campaign_outreach",
+            )
+
+    # 3. Voice telephony call
+    if conversation.Channel == "voice":
+        return OriginAttributionOut(
+            origin_type="voice_call",
+            channel="voice",
+            title="Voice Call",
+            snippet="Inbound / Outbound Phone Call",
+            interaction_type="phone_call",
+        )
+
+    # 4. Web chat widget
+    if conversation.Channel == "web":
+        return OriginAttributionOut(
+            origin_type="website",
+            channel="web",
+            title="Website Live Chat",
+            snippet="Website Visitor",
+            interaction_type="web_inbound",
+        )
+
+    # 5. Direct 1:1 message
+    channel_name = (conversation.Channel or "Direct").capitalize()
+    return OriginAttributionOut(
+        origin_type="direct",
+        channel=conversation.Channel or "direct",
+        title=f"Direct {channel_name} Message",
+        snippet=f"Direct 1:1 interaction on {channel_name}",
+        interaction_type="direct_dm",
+    )
+
+
 def conversation_out(
     db: Session, conversation: LeadConversation, principal
 ) -> ConversationOut:
@@ -346,6 +426,7 @@ def conversation_out(
         last_message_at=conversation.LastMessageAt,
         created_at=conversation.CreatedAt,
         lead=lead_out(lead),
+        origin_attribution=resolve_origin_attribution(db, conversation, customer),
     )
 
 

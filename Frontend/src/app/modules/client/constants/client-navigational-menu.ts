@@ -70,17 +70,6 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     ],
   },
   {
-    title: 'Audiences',
-    items: [
-      {
-        label: 'Contact Lists',
-        icon: 'pi pi-list',
-        routerLink: '/client/contact-lists',
-        permission: 'campaign.manage',
-      },
-    ],
-  },
-  {
     title: 'Outreach & Campaigns',
     items: [
       {
@@ -127,6 +116,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         label: 'Usage & Invoices',
         icon: 'pi pi-receipt',
         routerLink: '/client/usage',
+      },
+      {
+        label: 'Profile',
+        icon: 'pi pi-user',
+        routerLink: '/client/profile',
+        permission: '',
       },
       {
         label: 'Settings',
