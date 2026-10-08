@@ -115,7 +115,6 @@ def create_script(
         ScriptXml=payload.script_xml,
         SectionsJson=sections,
         IsActive=True,
-        MultiStt=payload.multi_stt,
         CreatedBy=principal.email,
     )
     db.add(row)
@@ -249,7 +248,6 @@ def update_script(
         ("channel", "Channel"),
         ("language", "Language"),
         ("is_active", "IsActive"),
-        ("multi_stt", "MultiStt"),
     ):
         value = getattr(payload, field)
         if value is not None:

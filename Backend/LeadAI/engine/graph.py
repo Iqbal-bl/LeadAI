@@ -82,7 +82,7 @@ def _verify(state: TurnState) -> dict:
     return {"verdict": VERDICT_UNSUPPORTED, "unsupported_figures": check.unsupported_raw}
 
 
-def _make_decide(enforce: bool):
+def _make_decide(enforce: bool, decline_retry_limit: int = 2):
     def _decide(state: TurnState) -> dict:
         result = state.get("result") or {}
         needs_human = bool(result.get("needs_human"))
@@ -93,9 +93,12 @@ def _make_decide(enforce: bool):
             needs_human = True
             reason = reason or UNSUPPORTED_HANDOFF
         if enforce and declined and not needs_human:
-            # The reply tells the customer a specialist will help; make that true.
-            needs_human = True
-            reason = reason or DECLINED_HANDOFF
+            # A misheard word or a real knowledge gap gets a couple of tries — the
+            # reply already invites another question — before this becomes a promise
+            # a specialist will help, which this makes true.
+            if state.get("recent_declines", 0) >= decline_retry_limit:
+                needs_human = True
+                reason = reason or DECLINED_HANDOFF
         return {
             "reply": result.get("reply", ""),
             "needs_human": needs_human,
@@ -110,14 +113,14 @@ def _skip(state: TurnState) -> dict:
     return {"reply": "", "needs_human": False, "handoff_reason": None, "result": {}}
 
 
-def build_graph(answer_fn: AnswerFn, *, enforce: bool = False):
+def build_graph(answer_fn: AnswerFn, *, enforce: bool = False, decline_retry_limit: int = 2):
     """Compile the graph. `answer_fn` is called with the TurnState."""
     g = StateGraph(TurnState)
     g.add_node("guard", _guard)
     g.add_node("skip", _skip)
     g.add_node("answer", _make_answer(answer_fn))
     g.add_node("verify", _verify)
-    g.add_node("decide", _make_decide(enforce))
+    g.add_node("decide", _make_decide(enforce, decline_retry_limit))
 
     g.set_entry_point("guard")
     g.add_conditional_edges("guard", _after_guard, {"skip": "skip", "answer": "answer"})
@@ -128,10 +131,12 @@ def build_graph(answer_fn: AnswerFn, *, enforce: bool = False):
     return g.compile()
 
 
-def run_turn(state: TurnState, answer_fn: AnswerFn, *, enforce: bool = False) -> TurnState:
+def run_turn(
+    state: TurnState, answer_fn: AnswerFn, *, enforce: bool = False, decline_retry_limit: int = 2
+) -> TurnState:
     """Run one turn through the graph and return the final state.
 
     enforce=False records verdicts (grounding, declined) without changing the decision;
     enforce=True lets them escalate to a human.
     """
-    return build_graph(answer_fn, enforce=enforce).invoke(state)
+    return build_graph(answer_fn, enforce=enforce, decline_retry_limit=decline_retry_limit).invoke(state)

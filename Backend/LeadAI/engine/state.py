@@ -35,6 +35,7 @@ class TurnState(TypedDict, total=False):
     text: str                  # what the customer said
     control_status: str        # CONTROL_*; defaults to active
     human_assigned: bool       # a staff member has taken over: the AI stays silent
+    recent_declines: int       # how many of the AI's recent replies already declined in words
 
     # ---- produced by nodes --------------------------------------------------
     skip_reason: str | None    # why the AI did not answer this turn, if it did not

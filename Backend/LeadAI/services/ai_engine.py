@@ -36,6 +36,7 @@ import re
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..engine import monitor
 from ..engine.text import split_sentences
 from ..engine.trace import TurnTrace
 from ..engine.trace import step as trace_step
@@ -87,6 +88,33 @@ SALARY_WORDS = re.compile(r"\b(\d+(?:\.\d+)?)\s?(lakh|lakhs|lpa|l|crore|cr|k)\b"
 
 GREETINGS = ("hi", "hey", "hello", "namaste", "good morning", "good afternoon",
              "good evening", "hola", "yo ")
+
+# "Please speak in Hindi" is not a knowledge question either — same principle
+# as GREETINGS below. A real incident: a caller's entire turn was a request to
+# switch language; it scored confidence 0.256 against the knowledge base (of
+# course — it has nothing to do with the company's products) and the voice
+# pipeline treated that as "not confident in an answer" and ended the call.
+# Checked against both the caller's own words and the English translation
+# (same reason HUMAN_REQUEST is), since the phrase could survive in either.
+LANGUAGE_SWITCH_REQUEST = re.compile(
+    r"\b(speak|talk|repl(?:y|ied)|continue|switch(?:ing)?(?:\s+to)?|answer)\b[^.?!]{0,20}\b"
+    r"(hindi|english|punjabi|bengali|gujarati|kannada|malayalam|marathi|odia|tamil|telugu)\b"
+    r"|\b(hindi|punjabi|bengali|gujarati|kannada|malayalam|marathi|odia|tamil|telugu)\s+(?:mein|me)\s+(?:baat|bol)",
+    re.I,
+)
+
+
+def _is_language_switch_request(question: str, query_override: str | None) -> bool:
+    """A short turn that's ONLY a request to change language, not a real
+    question mixed in with one (a longer message mentioning a language
+    alongside an actual question must still go through retrieval normally)."""
+    longest = max(len(question or ""), len(query_override or ""))
+    if longest >= 60:
+        return False
+    return bool(
+        LANGUAGE_SWITCH_REQUEST.search(question or "")
+        or LANGUAGE_SWITCH_REQUEST.search(query_override or "")
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -272,9 +300,45 @@ def answer(
             "prompt_used": greeting,
         }
 
+    # A bare "please speak in Hindi" is not a knowledge question — see
+    # LANGUAGE_SWITCH_REQUEST above. Acknowledge in whichever language the
+    # caller is now speaking (already resolved by the caller of answer()) and
+    # invite the real question, instead of running it through retrieval where
+    # it has nothing to match and would wrongly end the call.
+    if _is_language_switch_request(question, query_override) and len(history) <= 4:
+        lang_name, _script_desc = language.language_name(reply_language)
+        ack = (
+            f"Of course, I'll continue in {lang_name}. What would you like to know?"
+            if lang_name
+            else "Of course — happy to continue. What would you like to know?"
+        )
+        logger.info(
+            "[LeadAI answer] language-switch request detected — channel=%s reply_language=%s",
+            channel, reply_language,
+        )
+        trace_step(trace, "language_switch", "short-circuit: no retrieval, confidence 1.0",
+                   reply_language=reply_language)
+        return {
+            "reply": ack,
+            "confidence": 1.0,
+            "needs_human": False,
+            "handoff_reason": None,
+            "sources": [],
+            "model": "language-switch-template",
+            "latency_ms": 0,
+            "script_id": getattr(script, "Id", None),
+            "prompt_used": None,
+        }
+
     scoring_q = query_override or question
     wants_human = bool(HUMAN_REQUEST.search(question or "") or HUMAN_REQUEST.search(query_override or ""))
     trace_step(trace, "human_request", "customer asked for a human" if wants_human else "no")
+
+    # Monitor agent: classify in the background, concurrently with retrieval below, whether
+    # this turn is a real knowledge question or general/non-substantive remark (the
+    # generalised catch-all behind _is_greeting/_is_language_switch_request — see
+    # engine/monitor.py). A request for a human is never general chit-chat, so it's excluded.
+    triage_future = None if wants_human else monitor.submit(question, query_override, history, channel)
 
     # Retrieval runs on a HISTORY-AWARE query, not the raw utterance.
     #
@@ -309,6 +373,77 @@ def answer(
     trace_step(trace, "confidence", f"{confidence}", top_score=top_score,
                sentence_coverage=coverage, formula="0.45*min(top_score/0.6,1)+0.55*coverage",
                threshold=threshold, meets_threshold=confidence >= threshold)
+
+    triage_verdict = monitor.resolve(triage_future)
+    if triage_verdict:
+        triage_mode = monitor.current_mode()
+        trace_step(trace, "triage", f"{triage_verdict['category']} ({triage_verdict['confidence']})",
+                   mode=triage_mode, reason=triage_verdict["reason"])
+        if (
+            triage_mode == "enforce"
+            and triage_verdict["category"] == "general"
+            and triage_verdict["confidence"] >= settings.triage_confidence_threshold
+        ):
+            ack, ack_meta = (
+                f"No problem! Feel free to ask me anything about {company_name}'s "
+                "products whenever you're ready.",
+                {"model": "triage-template", "latency_ms": 0},
+            )
+            if settings.llm_enabled:
+                # Not a product question is NOT the same as "needs no real answer" — a
+                # caller asking "what did we agree on earlier" is general (no KB lookup
+                # needed) but the model still has the actual history/carryover/session_note
+                # to answer it from. A real incident: this short-circuit used to see only
+                # the bare utterance, so it told a caller "I can't recall our earlier
+                # conversation" when the carryover note it was never shown said exactly
+                # that. Same context the KB-grounded path gets, minus company knowledge.
+                triage_chat: list[dict] = memory.llm_window(history)
+                if reply_language:
+                    triage_chat = language.drop_other_language_replies(triage_chat, reply_language)
+                if carryover:
+                    triage_chat.insert(0, {
+                        "role": "system",
+                        "content": (
+                            "Background on this returning customer, from earlier "
+                            "conversations across other channels. Use it naturally if it "
+                            f"answers what they just asked.\n{carryover}"
+                        ),
+                    })
+                if session_note:
+                    triage_chat.insert(0, {"role": "system", "content": session_note})
+                triage_chat.append({
+                    "role": "user",
+                    "content": question + (
+                        f"\n\n{language.reply_instruction(reply_language)}" if reply_language else ""
+                    ),
+                })
+                generated, llm_meta = llm.complete(
+                    f"You are a friendly assistant for {company_name}. The customer's message "
+                    "is not a product question. If the conversation history or background "
+                    "above answers it (for example recalling what was already discussed or "
+                    "agreed), answer briefly from that. Otherwise, reply briefly and "
+                    f"naturally, then gently invite them to ask about {company_name}'s "
+                    "products. One or two short sentences.",
+                    triage_chat,
+                    max_tokens=80,
+                    profile="voice" if channel == "voice" else "chat",
+                )
+                generated = reply_cleanup.strip_control_tokens((generated or "").strip())
+                if generated:
+                    ack, ack_meta = generated, llm_meta
+            trace_step(trace, "triage_answer", "short-circuit: no retrieval, confidence 1.0",
+                       llm_used=ack_meta.get("model") != "triage-template")
+            return {
+                "reply": ack,
+                "confidence": 1.0,
+                "needs_human": False,
+                "handoff_reason": None,
+                "sources": [],
+                "model": ack_meta.get("model", "triage-template"),
+                "latency_ms": ack_meta.get("latency_ms", 0),
+                "script_id": getattr(script, "Id", None),
+                "prompt_used": None,
+            }
 
     system_prompt, script = script_engine.build_system_prompt(
         db, client_id, company_name, channel=channel, script=script, wants_human=wants_human
@@ -645,11 +780,21 @@ def _data_points_instruction(data_points: list[LeadCompanyDataPoint]) -> str:
     # "next Monday" get resolved against whatever date is common in its training
     # data instead of the real one. Seen in production: a customer said "I'll
     # visit the site today" and the stored date came back as 2023.
+    #
+    # Also seen in production: a customer said just "Sunday" (no date), and it
+    # came back as a Thursday. Giving only the ISO date ("today is 2026-10-07")
+    # forces the model to work out what WEEKDAY that is before it can count
+    # forward to "next Sunday" — exactly the kind of calendar arithmetic a
+    # model gets wrong. Naming the weekday removes that step entirely.
     today_note = ""
     if has_date:
         today_note = (
-            f'\nToday\'s actual date is {_today_in(settings.default_timezone)}. Resolve '
-            '"today", "tomorrow", "next Monday" etc. against THIS date, never a guess.\n'
+            f"\nToday's actual date is {_today_in(settings.default_timezone)}. Resolve "
+            '"today", "tomorrow", "next Monday" etc. against THIS date, never a guess. '
+            "When the customer names a day of the week with no date (e.g. just \"Sunday\"), "
+            "resolve it to the NEXT upcoming occurrence of that day — never one that has "
+            "already passed, and never today itself unless the customer actually said "
+            '"today".\n'
         )
     return (
         today_note
@@ -660,14 +805,20 @@ def _data_points_instruction(data_points: list[LeadCompanyDataPoint]) -> str:
 
 
 def _today_in(tz_name: str) -> str:
+    """ISO date AND its weekday name (e.g. "2026-10-07 (Wednesday)") — the
+    weekday matters as much as the date itself here: resolving a bare day
+    name like "Sunday" into a real date means counting forward from whatever
+    weekday today is, and a model left to work that out from the ISO date
+    alone gets it wrong (see _data_points_instruction's docstring)."""
     from datetime import datetime, timedelta, timezone as _tz
 
     try:
         from zoneinfo import ZoneInfo
 
-        return datetime.now(ZoneInfo(tz_name)).strftime("%Y-%m-%d")
+        now = datetime.now(ZoneInfo(tz_name))
     except Exception:  # noqa: BLE001 — no tzdata: approximate IST rather than fail the turn
-        return (datetime.now(_tz.utc) + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
+        now = datetime.now(_tz.utc) + timedelta(hours=5, minutes=30)
+    return now.strftime("%Y-%m-%d (%A)")
 
 
 def _validate_data_point_value(value, dp: LeadCompanyDataPoint):

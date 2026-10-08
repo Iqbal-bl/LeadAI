@@ -20,6 +20,7 @@ What is new:
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -52,6 +53,10 @@ PROFILES: dict[str, Profile] = {
     "voice": Profile("voice", max_tokens=220, timeout=15.0, retries=0),
     # Structured extraction, lead scoring, monitor verdicts.
     "analysis": Profile("analysis", temperature=0.0, max_tokens=500),
+    # Monitor agent triage classification: runs concurrently with retrieval, so it must
+    # never be the slow thing a turn waits on. No retry — a retry would only add a
+    # second multi-second round trip to a call that already fell open once.
+    "triage": Profile("triage", temperature=0.0, max_tokens=120, timeout=4.0, retries=0),
 }
 
 # A trace hook receives (meta, system, messages, reply). It sees message content, so
@@ -220,3 +225,29 @@ def complete(
     meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
     _emit_trace(meta, system, messages, reply)
     return reply, meta
+
+
+def complete_json(
+    system: str,
+    messages: list[dict],
+    *,
+    profile: str = "chat",
+    temperature: float = 0.0,
+    max_tokens: int = 500,
+) -> tuple[dict | None, dict]:
+    """JSON-mode completion. Lives here (not services/llm.py) so engine/ code — the
+    monitor agent included — can use it without importing the services layer."""
+    raw, meta = complete(system, messages, profile=profile, temperature=temperature,
+                          max_tokens=max_tokens, json_mode=True)
+    if not raw:
+        return None, meta
+    try:
+        return json.loads(raw), meta
+    except json.JSONDecodeError:
+        # Models occasionally wrap JSON in prose or a code fence.
+        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
+        try:
+            return json.loads(cleaned.strip()), meta
+        except json.JSONDecodeError:
+            meta["error"] = "unparseable json"
+            return None, meta

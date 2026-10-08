@@ -5,7 +5,7 @@ Run: python tests/test_engine_graph.py
 """
 import conftest_stub  # noqa: F401
 
-from LeadAI.engine.graph import UNSUPPORTED_HANDOFF, run_turn
+from LeadAI.engine.graph import DECLINED_HANDOFF, UNSUPPORTED_HANDOFF, run_turn
 from LeadAI.engine.state import VERDICT_SUPPORTED, VERDICT_UNCHECKED, VERDICT_UNSUPPORTED
 
 CONTEXT = ["The processing fee is Rs. 25,000. The rate starts at 8.5%."]
@@ -86,6 +86,20 @@ def test_number_the_customer_said_is_not_flagged():
     a = Answerer(reply="A budget of 50 lakh is fine.", context=CONTEXT)
     out = _turn(a, text="my budget is 50 lakh")
     assert out["verdict"] == VERDICT_SUPPORTED
+
+
+def test_a_decline_below_the_retry_limit_is_not_escalated():
+    a = Answerer(reply="I don't have that information.")
+    out = run_turn({"text": "fee?", "client_id": "c1", "conversation_id": "v1", "recent_declines": 0},
+                    a, enforce=True, decline_retry_limit=2)
+    assert out["needs_human"] is False
+
+
+def test_a_decline_at_the_retry_limit_is_escalated():
+    a = Answerer(reply="I don't have that information.")
+    out = run_turn({"text": "fee?", "client_id": "c1", "conversation_id": "v1", "recent_declines": 2},
+                    a, enforce=True, decline_retry_limit=2)
+    assert out["needs_human"] is True and out["handoff_reason"] == DECLINED_HANDOFF
 
 
 def test_engine_keeps_no_state_between_turns():

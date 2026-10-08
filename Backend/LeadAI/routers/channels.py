@@ -191,29 +191,34 @@ def create_account(
         )
     _assert_single_account_per_channel(db, client_id, payload.channel, payload.external_id)
 
-    row = LeadChannelAccount(
-        ClientId=client_id,
-        Channel=payload.channel,
-        Provider="linkedin" if payload.channel == "linkedin" else "meta",
-        LoginType=(
-            "linkedin" if payload.channel == "linkedin"
-            else "instagram" if payload.channel == "instagram"
-            else "facebook"
-        ),
-        Name=payload.name,
-        ExternalId=payload.external_id,
-        BusinessAccountId=payload.business_account_id,
-        DisplayNumber=payload.display_number,
-        AccessTokenEnc=encrypt_pii(payload.access_token) if payload.access_token else None,
-        AppSecretEnc=encrypt_pii(payload.app_secret) if payload.app_secret else None,
-        VerifyToken=payload.verify_token or settings.meta_verify_token,
-        ApiVersion=payload.api_version,
-        AutoReply=payload.auto_reply,
-        ScriptId=payload.script_id,
-        DefaultLanguage=payload.default_language,
-        CreatedBy=principal.email,
+    # Reuse the soft-deleted row if one was found above — creating a fresh one
+    # here instead would hit uq_leadai_channel_external (same bug the comment
+    # above this function explains).
+    row = existing or LeadChannelAccount(Channel=payload.channel, ExternalId=payload.external_id)
+    row.ClientId = client_id
+    row.IsDeleted = False
+    row.Provider = "linkedin" if payload.channel == "linkedin" else "meta"
+    row.LoginType = (
+        "linkedin" if payload.channel == "linkedin"
+        else "instagram" if payload.channel == "instagram"
+        else "facebook"
     )
-    db.add(row)
+    row.Name = payload.name
+    row.BusinessAccountId = payload.business_account_id
+    row.DisplayNumber = payload.display_number
+    row.AccessTokenEnc = encrypt_pii(payload.access_token) if payload.access_token else None
+    row.AppSecretEnc = encrypt_pii(payload.app_secret) if payload.app_secret else None
+    row.VerifyToken = payload.verify_token or settings.meta_verify_token
+    row.ApiVersion = payload.api_version
+    row.AutoReply = payload.auto_reply
+    row.ScriptId = payload.script_id
+    row.DefaultLanguage = payload.default_language
+    if existing is None:
+        row.CreatedBy = principal.email
+        db.add(row)
+    else:
+        row.UpdatedBy = principal.email
+        row.UpdatedAt = utcnow()
     db.flush()
     activity.log_principal(
         db,

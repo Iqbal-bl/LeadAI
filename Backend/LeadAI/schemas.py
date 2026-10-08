@@ -145,6 +145,8 @@ class CompanySettingsOut(CompanySettingsIn):
     voice_speed: float | None = None
     voice_speaker: str | None = None
     stt_tts_provider: str | None = None
+    # None here means "platform default (True)" — see LeadCompanySettings.MultiStt.
+    multi_stt: bool | None = None
 
 
 class VoiceSettingsIn(BaseModel):
@@ -157,6 +159,10 @@ class VoiceSettingsIn(BaseModel):
     # voice_gender/voice_speed/voice_speaker only ever apply to "sarvam" — see
     # LeadCompanySettings.SttTtsProvider's comment in models.py.
     stt_tts_provider: str | None = Field(default=None, pattern="^(sarvam|deepgram)$")
+    # Auto-detect the caller's language per utterance (Hinglish code-switching).
+    # True (the platform default) unless a company genuinely wants one pinned
+    # language for the whole call — see LeadCompanySettings.MultiStt in models.py.
+    multi_stt: bool | None = None
 
 
 class PermissionItemOut(BaseModel):
@@ -382,14 +388,11 @@ class ScriptCreate(BaseModel):
     language: str = "en-IN"
     script_xml: str = Field(min_length=10)
     is_default: bool = False
-    # Most Indian callers code-switch (Hinglish) rather than speaking one language
-    # throughout. With this off, Sarvam's STT is pinned to `language` for the
-    # whole call and never actually detects anything else — every utterance
-    # comes back tagged as that one language regardless of what was said, so
-    # the AI has no signal to ever reply in anything but that language. On by
-    # default so a newly created script auto-detects per utterance unless an
-    # admin deliberately wants a single pinned language.
-    multi_stt: bool = True
+    # Whether the AI auto-detects the caller's language per utterance (Hinglish
+    # code-switching) used to be set here; it is platform-level now, super-admin
+    # only — see LeadCompanySettings.MultiStt and VoiceSettingsIn below. A company
+    # admin left this off on a live script with no one noticing until every Hindi
+    # caller's speech was forced through Sarvam's STT as English.
 
 
 class ScriptUpdate(BaseModel):
@@ -400,7 +403,6 @@ class ScriptUpdate(BaseModel):
     script_xml: str | None = None
     is_default: bool | None = None
     is_active: bool | None = None
-    multi_stt: bool | None = None
 
 
 class ScriptOut(BaseModel):
@@ -413,7 +415,6 @@ class ScriptOut(BaseModel):
     version: int
     is_default: bool
     is_active: bool
-    multi_stt: bool
     section_count: int = 0
     created_at: datetime | None = None
     updated_at: datetime | None = None

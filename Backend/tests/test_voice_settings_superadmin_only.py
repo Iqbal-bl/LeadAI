@@ -68,7 +68,7 @@ def test_prepare_agent_context_reads_the_companys_voice_settings_not_the_script(
     db.add(client)
     db.flush()
     db.add(models.LeadCompanySettings(ClientId=client.Id, VoiceGender="male", VoiceSpeed=0.8, VoiceSpeaker="ritu",
-                                      SttTtsProvider="deepgram"))
+                                      SttTtsProvider="deepgram", MultiStt=False))
     db.commit()
 
     _sections, _script, voice = call_bridge.prepare_agent_context(
@@ -78,6 +78,7 @@ def test_prepare_agent_context_reads_the_companys_voice_settings_not_the_script(
     assert voice["pace"] == 0.8
     assert voice["speaker"] == "ritu"
     assert voice["provider"] == "deepgram"
+    assert voice["multi_stt"] is False
 
 
 def test_a_company_admin_cannot_set_voice_speaker_via_the_script_payload():
@@ -86,6 +87,11 @@ def test_a_company_admin_cannot_set_voice_speaker_via_the_script_payload():
     assert "voice_speaker" not in schemas.ScriptCreate.model_fields
     assert "voice_speaker" not in schemas.ScriptUpdate.model_fields
     assert "voice_speaker" not in schemas.ScriptOut.model_fields
+    # Same incident class, same fix shape: a company admin left this off on a live
+    # script with nobody noticing until every Hindi caller's speech was forced
+    # through Sarvam's STT as English (see LeadCompanySettings.MultiStt in models.py).
+    assert "multi_stt" not in schemas.ScriptCreate.model_fields
+    assert "multi_stt" not in schemas.ScriptUpdate.model_fields
 
 
 def test_prepare_agent_context_falls_back_to_platform_defaults_with_no_settings_row():
@@ -101,6 +107,23 @@ def test_prepare_agent_context_falls_back_to_platform_defaults_with_no_settings_
     assert voice["pace"] == 1.1
     assert voice["speaker"] == "ritu"
     assert voice["provider"] == "sarvam"
+    assert voice["multi_stt"] is True
+
+
+def test_the_endpoint_writes_multi_stt_and_it_comes_back_on_read():
+    db = SessionLocalAdmin()
+    client = Client(Name="Kestrel Voice 5")
+    db.add(client)
+    db.commit()
+
+    out = companies.update_voice_settings(
+        client.Id, VoiceSettingsIn(multi_stt=False),
+        request=None, principal=_superadmin(), db=db,
+    )
+    assert out.multi_stt is False
+
+    read_back = companies.get_settings(client.Id, principal=_superadmin(), db=db)
+    assert read_back.multi_stt is False
 
 
 def test_the_endpoint_writes_stt_tts_provider_and_it_comes_back_on_read():
@@ -249,19 +272,23 @@ def test_build_services_stays_on_sarvam_when_no_provider_is_set():
     _with_fake_deepgram_modules(_run)
 
 
-def test_multi_stt_defaults_on_so_a_new_script_can_detect_hinglish():
-    """A real call: a company's script was left at whatever ScriptCreate
-    defaults to, and the caller code-switched (English sentences with Hindi
-    words mixed in). With multi_stt off, Sarvam's STT is pinned to one
-    language for the whole call and reports that SAME language for every
-    utterance regardless of what was actually said — which the system prompt
-    then takes at face value ("The caller is speaking en-IN. Reply in
-    en-IN."), so the AI never has a reason to answer in anything but English.
-    A script a company admin creates without touching this checkbox must
-    default to detecting per utterance, not pinning."""
-    from LeadAI import schemas
+def test_multi_stt_defaults_on_so_a_new_company_can_detect_hinglish():
+    """A real incident: a company's settings row had no MultiStt override (the
+    column was never touched), and the caller code-switched (Hindi mixed with
+    English). With multi_stt off, Sarvam's STT is pinned to one language for
+    the whole call and reports that SAME language for every utterance
+    regardless of what was actually said — which the system prompt then takes
+    at face value ("The caller is speaking en-IN. Reply in en-IN."), so the AI
+    never has a reason to answer in anything but English. A company with no
+    explicit override must default to detecting per utterance, not pinning."""
+    from LeadAI.services import script_engine
 
-    assert schemas.ScriptCreate(name="my script", script_xml="<script></script>").multi_stt is True
+    db = SessionLocalAdmin()
+    client = Client(Name="Kestrel Voice 6")
+    db.add(client)
+    db.commit()
+
+    assert script_engine.company_voice_settings(db, client.Id)["multi_stt"] is True
 
 
 def test_multi_stt_off_pins_sarvam_stt_but_on_leaves_it_to_detect():

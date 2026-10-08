@@ -238,7 +238,14 @@ def _build_sarvam_services(context: dict) -> Services:
         return TTSUpdateSettingsFrame(delta=SarvamTTSService.Settings(language=lang)) if lang else None
 
     return Services(
-        stt=SarvamSTTService(api_key=api_key, settings=stt_settings),
+        # mode="transcribe" is NOT the library's claimed default here — the SDK only sends a
+        # `mode` at all when one is explicitly given (self._mode is None by default and the
+        # connect payload skips the field entirely), so Sarvam's own server-side default
+        # applied, which turned out to be translate-to-English: a Hindi caller's "kya hum
+        # hindi mein baat kar sakte hain" came back as the English transcript "Can we talk
+        # in Hindi?" with language_code en-IN. Explicit "transcribe" asks for the reply in
+        # the language actually spoken, in its own script, instead of an English gloss.
+        stt=SarvamSTTService(api_key=api_key, mode="transcribe", settings=stt_settings),
         tts=SarvamTTSService(api_key=api_key, settings=SarvamTTSService.Settings(**tts_kwargs)),
         language_frame=language_frame,
     )

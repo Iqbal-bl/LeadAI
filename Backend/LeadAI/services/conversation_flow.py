@@ -1067,7 +1067,7 @@ def _run_customer_turn(
         # Judge (observe) or decide (enforce) the reply; a no-op unless ENGINE_MODE is set.
         result = engine_bridge.apply(
             result, text=text, client_id=client_id, conversation_id=conversation.Id,
-            channel=conversation.Channel,
+            channel=conversation.Channel, history=history,
         )
         note = result.get("engine")
         trace_step(

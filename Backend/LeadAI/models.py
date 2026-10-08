@@ -273,15 +273,12 @@ class LeadCompanyScript(LeadAIBase):
     IsActive = Column(Boolean, default=True)
     ScriptXml = Column(Text, nullable=True)
     SectionsJson = Column(JSON, nullable=True)
-    # VoiceGender/VoiceSpeaker: UNUSED. Both moved to LeadCompanySettings
-    # (super-admin only, see routers/companies.py's /voice-settings) — kept
-    # here only because additive-only migrations never drop a column.
+    # VoiceGender/VoiceSpeaker/MultiStt: UNUSED. All three moved to
+    # LeadCompanySettings (super-admin only, see routers/companies.py's
+    # /voice-settings) — kept here only because additive-only migrations
+    # never drop a column.
     VoiceGender = Column(String(20), nullable=True)
     VoiceSpeaker = Column(String(60), nullable=True)
-    # Column-level default only matters for a raw insert that skips the API
-    # layer; routers/scripts.py always passes MultiStt explicitly, so the
-    # real default a company admin gets is ScriptCreate.multi_stt in
-    # schemas.py (True) — kept in sync here so the two don't drift apart.
     MultiStt = Column(Boolean, default=True)
 
 
@@ -392,6 +389,14 @@ class LeadCompanySettings(LeadAIBase):
     # Deepgram's API (same failure mode the "anushka" bug already taught us).
     # None = platform default ("sarvam").
     SttTtsProvider = Column(String(20), nullable=True)  # sarvam|deepgram
+    # Moved here for the same reason VoiceGender/VoiceSpeed/VoiceSpeaker were: a
+    # company admin left LeadCompanyScript.MultiStt=False on a live script and every
+    # Hindi caller's speech got forced through Sarvam's STT as if the call were
+    # English-only (pinned, not auto-detecting), with no one noticing until a real
+    # call mistranslated "Hindi mein baat kar sakte" into English. Moving the switch
+    # here puts it where a super admin reviews it alongside the other voice knobs.
+    # None = platform default (True — auto-detect per utterance).
+    MultiStt = Column(Boolean, nullable=True)
 
     # ---- Outbound / campaign defaults --------------------------------------
     DefaultCampaignChannel = Column(String(20), nullable=True)

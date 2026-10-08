@@ -2,8 +2,11 @@
 
 Run: python tests/test_engine_bridge.py
 """
+from types import SimpleNamespace
+
 import conftest_stub  # noqa: F401
 
+from LeadAI.config import settings as real_settings
 from LeadAI.engine import bridge, graph
 from LeadAI.engine.graph import DECLINED_HANDOFF, UNSUPPORTED_HANDOFF
 
@@ -30,8 +33,19 @@ def test_observe_records_but_never_changes_the_decision():
     assert r == _result("I'm sorry, I don't have information on that.")  # input untouched
 
 
-def test_enforce_escalates_a_decline_that_production_left_unflagged():
+def test_a_first_decline_gets_a_chance_instead_of_escalating_immediately():
+    """A misheard word or a real knowledge gap gets a couple of tries — the reply
+    already invites another question — before this becomes a forced handoff."""
     out = bridge.apply(_result("I don't have information on car loans."), mode="enforce", **KW)
+    assert out["needs_human"] is False
+    assert out["engine"]["declined"] is True       # still recorded, just not acted on yet
+
+
+def test_enforce_escalates_a_decline_that_production_left_unflagged():
+    history = [SimpleNamespace(Sender="ai", Content="I don't have information on car loans.")
+               for _ in range(real_settings.decline_retry_limit)]
+    out = bridge.apply(_result("I don't have information on car loans."), mode="enforce",
+                        history=history, **KW)
     assert out["needs_human"] is True and out["handoff_reason"] == DECLINED_HANDOFF
     assert out["engine"]["escalation"] is True
 

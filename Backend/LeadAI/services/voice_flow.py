@@ -340,7 +340,7 @@ def handle_voice_turn(
         # The same judge chat uses (grounding + "declined in words"); a no-op unless ENGINE_MODE.
         result = engine_bridge.apply(
             result, text=utterance, client_id=client_id, conversation_id=conversation.Id,
-            channel="voice",
+            channel="voice", history=history,
         )
         note = result.get("engine")
         trace_step(

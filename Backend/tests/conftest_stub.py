@@ -1,7 +1,19 @@
 """Minimal stubs so the LeadAI social router can be imported and exercised
 without MySQL or the identity server. Only stands in for infrastructure —
 the social code under test is the real thing."""
+import os
 import sys, types
+
+# The local .env is shared with the live dev server, and gets flipped to
+# ENGINE_MODE=enforce / TRIAGE_MODE=enforce for real-call testing. Set before
+# LeadAI.config's load_dotenv() runs (override=False, so a value already in
+# os.environ wins) so the suite stays hermetic regardless of what the running
+# server was last configured to. A test that wants enforce mode on purpose
+# sets its own fake settings object, same as it already does for every other
+# config value.
+os.environ["ENGINE_MODE"] = "off"
+os.environ["TRIAGE_MODE"] = "off"
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
