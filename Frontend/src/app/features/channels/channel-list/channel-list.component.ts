@@ -257,7 +257,6 @@ export class ChannelListComponent implements OnInit, OnDestroy {
     });
   }
 
-
   // --- Disconnect / Delete Channel ---
   deleteChannel(channel: Channel): void {
     this.confirmationService.confirm({
