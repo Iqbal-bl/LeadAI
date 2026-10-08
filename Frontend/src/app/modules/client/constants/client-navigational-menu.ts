@@ -11,12 +11,6 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'analytics.read',
       },
       {
-        label: 'Leads',
-        icon: 'pi pi-users',
-        routerLink: '/client/leads',
-        permission: 'lead.read.all',
-      },
-      {
         label: 'Customers',
         icon: 'pi pi-id-card',
         routerLink: '/client/customers',
@@ -27,6 +21,23 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         icon: 'pi pi-users',
         routerLink: '/client/team',
         permission: 'role.read',
+      },
+    ],
+  },
+  {
+    title: 'Leads',
+    items: [
+      {
+        label: 'Leads List',
+        icon: 'pi pi-users',
+        routerLink: '/client/leads/list',
+        permission: 'lead.read.all',
+      },
+      {
+        label: 'Lead Batches',
+        icon: 'pi pi-users',
+        routerLink: '/client/leads/batches',
+        permission: 'lead.read.all',
       },
     ],
   },
@@ -59,21 +70,10 @@ export const ClientNavigationalMenu: SidebarSection[] = [
     ],
   },
   {
-    title: 'Audiences',
-    items: [
-      {
-        label: 'Contact Lists',
-        icon: 'pi pi-list',
-        routerLink: '/client/contact-lists',
-        permission: 'campaign.manage',
-      },
-    ],
-  },
-  {
     title: 'Outreach & Campaigns',
     items: [
       {
-        label: 'Campaigns',
+        label: 'BroadCasts',
         icon: 'pi pi-megaphone',
         routerLink: '/client/campaigns',
         permission: 'campaign.read',
@@ -96,6 +96,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         permission: 'kb.read',
       },
       {
+        label: 'Products',
+        icon: 'pi pi-box',
+        routerLink: '/client/products',
+        permission: 'kb.read',
+      },
+      {
         label: 'Prompts',
         icon: 'pi pi-file-edit',
         routerLink: '/client/prompts',
@@ -110,6 +116,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         label: 'Usage & Invoices',
         icon: 'pi pi-receipt',
         routerLink: '/client/usage',
+      },
+      {
+        label: 'Profile',
+        icon: 'pi pi-user',
+        routerLink: '/client/profile',
+        permission: '',
       },
       {
         label: 'Settings',

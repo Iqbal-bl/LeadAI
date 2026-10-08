@@ -10,10 +10,14 @@ from __future__ import annotations
 
 from .config import settings
 from .models import (
+    Lead,
     LeadAccount,
     LeadAccountNote,
+    LeadCall,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
     LeadContactList,
     LeadContactListItem,
@@ -22,13 +26,16 @@ from .models import (
 from .schemas_ext import (
     AccountNoteOut,
     AccountOut,
+    CampaignExecutionOut,
     CampaignOut,
+    CampaignRecipientAttemptOut,
     ChannelAccountOut,
     ContactListItemOut,
     ContactListOut,
     FileOut,
     RecipientOut,
 )
+from .security import mask_linkedin
 
 
 def channel_account_out(row: LeadChannelAccount, public_base: str | None = None) -> ChannelAccountOut:
@@ -138,14 +145,21 @@ def campaign_out(row: LeadCampaign) -> CampaignOut:
         leads_created=row.LeadsCreated or 0,
         created_at=row.CreatedAt,
         created_by=row.CreatedBy,
+        product_id=row.ProductId,
+        created_via=row.CreatedVia or "manual",
+        campaign_type="lead_campaign" if row.CreatedVia == "import" else "broadcast",
+        call_escalation_enabled=bool(row.CallEscalationEnabled),
+        output_file_id=row.OutputFileId,
+        output_generated_at=row.OutputGeneratedAt,
     )
 
 
-def recipient_out(row: LeadCampaignRecipient) -> RecipientOut:
+def recipient_out(row: LeadCampaignRecipient, lead: Lead | None = None) -> RecipientOut:
     return RecipientOut(
         id=row.Id,
         name=row.Name,
         phone_masked=row.PhoneMasked,
+        email_masked=row.EmailMasked,
         status=row.Status,
         attempts=row.Attempts or 0,
         external_message_id=row.ExternalMessageId,
@@ -157,10 +171,56 @@ def recipient_out(row: LeadCampaignRecipient) -> RecipientOut:
         read_at=row.ReadAt,
         replied_at=row.RepliedAt,
         failure_reason=row.FailureReason,
+        product=(lead.Product or "unknown") if lead else None,
+    )
+
+
+def campaign_execution_out(row: LeadCampaignExecution) -> CampaignExecutionOut:
+    return CampaignExecutionOut(
+        id=row.Id,
+        campaign_id=row.CampaignId,
+        status=row.Status,
+        restart_mode=row.RestartMode,
+        total_count=row.TotalCount or 0,
+        completed_count=row.CompletedCount or 0,
+        failed_count=row.FailedCount or 0,
+        skipped_count=row.SkippedCount or 0,
+        started_at=row.StartedAt,
+        completed_at=row.CompletedAt,
+    )
+
+
+def campaign_recipient_attempt_out(
+    row: LeadCampaignRecipientAttempt,
+    recipient: LeadCampaignRecipient | None,
+    lead: Lead | None = None,
+    call: LeadCall | None = None,
+) -> CampaignRecipientAttemptOut:
+    return CampaignRecipientAttemptOut(
+        id=row.Id,
+        recipient_id=row.RecipientId,
+        name=recipient.Name if recipient else None,
+        phone_masked=recipient.PhoneMasked if recipient else None,
+        email_masked=recipient.EmailMasked if recipient else None,
+        status=row.Status,
+        external_message_id=row.ExternalMessageId,
+        sent_at=row.SentAt,
+        delivered_at=row.DeliveredAt,
+        read_at=row.ReadAt,
+        replied_at=row.RepliedAt,
+        failure_reason=row.FailureReason,
+        lead_score=lead.Score if lead else None,
+        lead_status=lead.Status if lead else None,
+        product=(lead.Product or "unknown") if lead else None,
+        data_points=lead.DataPointsJson if lead else None,
+        call_status=call.Status if call else None,
+        call_duration_sec=call.DurationSec if call else None,
     )
 
 
 def account_out(row: LeadAccount) -> AccountOut:
+    raw_linkedin = getattr(row, "LinkedinProfileUrl", None)
+    masked_linkedin = mask_linkedin(raw_linkedin)
     return AccountOut(
         id=row.Id,
         client_id=row.ClientId,
@@ -168,6 +228,8 @@ def account_out(row: LeadAccount) -> AccountOut:
         company_name=row.CompanyName,
         phone_masked=row.PhoneMasked,
         email_masked=row.EmailMasked,
+        linkedin_masked=masked_linkedin,
+        linkedin_profile_url=masked_linkedin,
         stage=row.Stage,
         status=row.Status,
         owner_email=row.OwnerEmail,

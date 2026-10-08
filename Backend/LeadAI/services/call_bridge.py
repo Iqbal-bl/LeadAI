@@ -111,7 +111,7 @@ def prepare_agent_context(
                 "type": "text",
                 "content": (
                     "Confirm the customer's interest, capture budget and timeline, and "
-                    "offer to connect a specialist if anything is outside your knowledge."
+                    "say a representative will follow up if anything is outside your knowledge."
                 ),
             },
         ]
@@ -127,11 +127,14 @@ def prepare_agent_context(
                 conversation.Id,
             )
 
+    voice_cfg = script_engine.company_voice_settings(db, client_id)
     voice = {
         "language": (getattr(script, "Language", None) or settings.default_language),
-        "gender": getattr(script, "VoiceGender", None) or "female",
-        "speaker": getattr(script, "VoiceSpeaker", None) or "anushka",
-        "multi_stt": bool(getattr(script, "MultiStt", False)),
+        "gender": voice_cfg["gender"],
+        "speaker": voice_cfg["speaker"],
+        "pace": voice_cfg["speed"],
+        "multi_stt": voice_cfg["multi_stt"],
+        "provider": voice_cfg["provider"],
     }
     return sections, script, voice
 
@@ -152,7 +155,9 @@ def register_call_context(call_sid: str, phone_number: str, sections: list[dict]
         "language": voice.get("language"),
         "gender": voice.get("gender"),
         "speaker": voice.get("speaker"),
+        "pace": voice.get("pace"),
         "multi_stt": voice.get("multi_stt", False),
+        "provider": voice.get("provider"),
         "xml_sections": sections,
         # Marker so anything inspecting active_calls can tell this call came from
         # LeadAI and which company/conversation it belongs to.
@@ -318,6 +323,37 @@ _RESPONSE_TYPE_TO_SENDER = {
     "answer": "customer",
     "hangup": "system",
 }
+
+
+def sync_call_outcome(db: Session, call_sid: str, status: str, duration_sec: int) -> bool:
+    """Write the carrier's own terminal status + measured duration onto the
+    matching leadai_calls row. Returns False if no row matches this CallSid.
+
+    Before this, LeadCall.Status/DurationSec were only ever touched by
+    voice/session.py's call-ends-no-matter-what fallback, which has no access
+    to what actually happened on the line — it marked every call "completed"
+    (even a busy/no-answer/failed one) and measured duration from when the
+    row was CREATED (dial time, including ringing) rather than from when the
+    call was actually answered. The carrier's own status callback (Twilio's
+    /call-status, Exotel's /voice/exotel/status) is the one place that truth
+    is available, which is why this takes it as plain arguments rather than
+    deriving it — the caller already received it from the carrier.
+
+    Deliberately unconditional — no "only if not already set" guard. The
+    carrier's own report always outranks the pipecat-side fallback guess,
+    whichever of the two happens to run first.
+    """
+    call = (
+        db.query(LeadCall)
+        .filter(LeadCall.CallSid == call_sid, LeadCall.IsDeleted == False)  # noqa: E712
+        .one_or_none()
+    )
+    if call is None:
+        return False
+    call.Status = status
+    call.DurationSec = duration_sec
+    call.UpdatedAt = utcnow()
+    return True
 
 
 def sync_call_transcript(

@@ -15,7 +15,7 @@ from domain.models import Client  # noqa: E402
 from LeadAI import models, models_ext  # noqa: E402
 from LeadAI.config import settings as real_settings  # noqa: E402
 from LeadAI.engine import control, outbox  # noqa: E402
-from LeadAI.services import ai_engine, conversation_flow  # noqa: E402
+from LeadAI.services import ai_engine, conversation_flow, scoring_queue  # noqa: E402
 
 for _table in Base.metadata.sorted_tables:
     try:
@@ -70,6 +70,8 @@ def setup():
 
 def say(db, client, conv, text, **kw):
     result = conversation_flow.handle_customer_turn(db, client, conv, text, **kw)
+    scoring_queue.wait_idle()   # scoring runs after the reply, in the background
+    db.expire_all()
     db.refresh(conv)
     return result
 

@@ -148,7 +148,7 @@ def _require_config() -> tuple[str, str, str]:
 # =========================================================================== #
 # step 1 — send the company to Instagram
 # =========================================================================== #
-def authorize_url(state: str | None = None, *, publishing: bool = False) -> tuple[str, str]:
+def authorize_url(state: str | None = None, *, publishing: bool = True) -> tuple[str, str]:
     """Build the consent URL. Returns (url, state).
 
     `state` is CSRF protection and is echoed back to the callback. Generate it

@@ -39,7 +39,7 @@
         *ngIf="lead?.customerRef"
         class="text-xs font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500"
       >
-        {{ lead.customerRef }}
+        {{ lead?.customerRef }}
       </span>
     </div>
     <div
@@ -250,6 +250,46 @@
         ></p-button>
       </div>
 
+      <!-- LinkedIn (if channel is LinkedIn or revealed has LinkedIn / profile URL) -->
+      <div
+        *ngIf="
+          lead?.source === 'linkedin' ||
+          lead?.channel === 'linkedin' ||
+          revealedContact?.linkedin ||
+          lead?.linkedinProfileUrl
+        "
+        class="flex items-center justify-between text-sm"
+      >
+        <div class="flex items-center gap-3 min-w-0">
+          <i class="pi pi-linkedin w-4 text-center" style="color: #0A66C2"></i>
+          <span
+            class="truncate font-mono"
+            [style.color]="
+              isContactRevealed && (revealedContact?.linkedin || lead?.linkedinProfileUrl)
+                ? 'var(--app-text)'
+                : 'var(--app-text-secondary)'
+            "
+          >
+            {{
+              isContactRevealed
+                ? (revealedContact?.linkedin || lead?.linkedinProfileUrl || "N/A")
+                : "*********"
+            }}
+          </span>
+        </div>
+        <p-button
+          *ngIf="isContactRevealed && (revealedContact?.linkedin || lead?.linkedinProfileUrl)"
+          icon="pi pi-copy"
+          [rounded]="true"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          pTooltip="Copy LinkedIn"
+          tooltipPosition="left"
+          (onClick)="copyToClipboard(revealedContact?.linkedin || lead?.linkedinProfileUrl, 'LinkedIn')"
+        ></p-button>
+      </div>
+
       <!-- Industry -->
       <!-- <div class="flex items-center gap-3 text-sm">
         <i class="pi pi-building w-4 text-center" style="color: var(--app-text-muted);"></i>
@@ -316,7 +356,7 @@
         >Lead Score</span
       >
       <p-knob
-        [(ngModel)]="lead.leadScore"
+        [ngModel]="leadScore"
         [readonly]="true"
         [size]="60"
         [strokeWidth]="8"

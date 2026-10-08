@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 
 from ..config import settings
-from . import graph
+from . import decline, graph
 from .state import VERDICT_UNSUPPORTED
 
 logger = logging.getLogger(__name__)
@@ -64,8 +64,15 @@ def apply(
     conversation_id: str,
     channel: str,
     mode: str | None = None,
+    history: list | None = None,
 ) -> dict:
-    """Return `result`, judged (observe) or decided (enforce) by the engine graph."""
+    """Return `result`, judged (observe) or decided (enforce) by the engine graph.
+
+    `history` (the AI's own recent messages) is used only to count how many times in a
+    row it has already declined in words — see decline.recent_decline_count() — so a
+    misheard word or a real knowledge gap gets a couple of tries before this forces a
+    handoff rather than on the very first "I don't know".
+    """
     mode = mode or current_mode()
     if mode == "off":
         return result
@@ -77,9 +84,11 @@ def apply(
                 "client_id": client_id,
                 "conversation_id": conversation_id,
                 "channel": channel,
+                "recent_declines": decline.recent_decline_count(history),
             },
             lambda _state: result,
             enforce=(mode == "enforce"),
+            decline_retry_limit=settings.decline_retry_limit,
         )
     except Exception:  # noqa: BLE001 — never let the engine break a customer reply
         logger.exception("[LeadAI engine] graph failed; using the original reply")

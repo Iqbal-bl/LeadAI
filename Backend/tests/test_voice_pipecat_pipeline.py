@@ -256,6 +256,20 @@ def test_a_finished_sentence_reaches_the_brain_and_the_reply_reaches_the_speech_
     assert session.scored == ["m1"]                 # the after-reply hook (scoring) ran for the reply
 
 
+def test_a_setup_timeout_hangs_up_the_call_instead_of_leaving_it_silent():
+    """The real incident this guards against: Sarvam's STT connect hung mid-
+    handshake and never raised, so the caller heard total silence — the
+    pre-composed opener never even got synthesized — until THEY gave up and
+    hung up, ~57 s in. pipecat's own setup-timeout event must now trigger an
+    active hangup on our side rather than just quietly tearing down."""
+    calls = []
+    pipeline.telephony.hangup = lambda call_sid, provider: calls.append((call_sid, provider))
+
+    asyncio.run(pipeline.handle_pipeline_setup_timeout("CA999", "twilio"))
+
+    assert calls == [("CA999", "twilio")]
+
+
 def test_speech_language_mapping_and_auto_detect():
     from pipecat.transcriptions.language import Language
 

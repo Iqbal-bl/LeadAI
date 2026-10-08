@@ -69,7 +69,7 @@
 </div>
 
 <!-- Tabs Navigation -->
-<p-tabs [(value)]="activeTab" [lazy]="true">
+<p-tabs [value]="activeTab" (valueChange)="onTabChange($event)">
   <p-tablist>
     <p-tab value="connection">
       <i class="pi pi-shield mr-2"></i> Connection & Bot Auth
@@ -113,16 +113,18 @@
         {{ pendingReviewCommentsCount }}
       </span>
     </p-tab>
+    <p-tab value="logs">
+      <i class="pi pi-history mr-2"></i> Activity & Audit Logs
+    </p-tab>
   </p-tablist>
 
   <p-tabpanels>
     <!-- TAB 1: CONNECTION & BOT AUTH -->
     <p-tabpanel value="connection">
-      <ng-template [ngIf]="activeTab === 'connection'">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
           <!-- Left: OAuth & Bot Setup -->
           <div class="lg:col-span-7 space-y-6">
-            <!-- 1. Company Page & Official LinkedIn OAuth Card -->
+            <!-- 1. Multi-Account LinkedIn OAuth Management Card -->
             <div
               class="card-base p-6 border transition-all duration-200"
               [style.border-color]="
@@ -132,19 +134,16 @@
               "
               [style.background]="
                 status?.connected
-                  ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.06), rgba(0, 65, 130, 0.02))'
+                  ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.04), rgba(0, 65, 130, 0.02))'
                   : 'var(--app-surface)'
               "
             >
-              <div class="flex items-start justify-between gap-4">
-                <div class="flex items-start gap-4">
+              <!-- Card Header -->
+              <div class="flex items-start justify-between gap-4 pb-4 border-b border-black/5 dark:border-white/5">
+                <div class="flex items-start gap-3.5">
                   <div
                     class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                    [style.background]="
-                      status?.connected
-                        ? 'linear-gradient(135deg, #0A66C2, #004182)'
-                        : 'linear-gradient(135deg, #64748b, #475569)'
-                    "
+                    style="background: linear-gradient(135deg, #0A66C2, #004182)"
                   >
                     <i class="pi pi-linkedin text-xl"></i>
                   </div>
@@ -154,18 +153,18 @@
                         class="text-base font-semibold"
                         style="color: var(--app-text)"
                       >
-                        Company Page & Official LinkedIn OAuth
+                        Connected LinkedIn Profiles & Channels
                       </h3>
                       <p-tag
                         *ngIf="status?.connected"
-                        value="Authorized"
+                        [value]="(status?.accounts?.length || 1) + ' Connected'"
                         severity="success"
                         [rounded]="true"
                       ></p-tag>
                       <p-tag
-                        *ngIf="status && !status.connected"
-                        value="1-Click OAuth"
-                        severity="info"
+                        *ngIf="!status?.connected"
+                        value="Not Connected"
+                        severity="secondary"
                         [rounded]="true"
                       ></p-tag>
                     </div>
@@ -173,68 +172,138 @@
                       class="text-xs mt-1"
                       style="color: var(--app-text-muted)"
                     >
-                      Official 1-Click integration for blog/article publishing,
-                      page updates, and Company Page inboxes. Zero passwords or
-                      cookies needed.
+                      Connect multiple LinkedIn profiles for your company. Whenever blogs are generated, tailored variants are created and published for each connected profile.
                     </p>
-
-                    <div
-                      *ngIf="status?.connected"
-                      class="mt-3 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 space-y-1"
-                    >
-                      <div
-                        class="text-xs font-mono"
-                        style="color: var(--app-text)"
-                      >
-                        <span class="text-muted">Member URN:</span>
-                        <span class="font-semibold text-brand-500">{{
-                          status?.person_urn || "urn:li:person:connected"
-                        }}</span>
-                      </div>
-                      <div class="flex items-center gap-3 text-xs">
-                        <span
-                          *ngIf="status?.access_token_valid"
-                          class="text-emerald-500 font-medium"
-                          >● OAuth Token Active</span
-                        >
-                        <span
-                          *ngIf="status?.has_refresh_token"
-                          class="text-blue-500 font-medium"
-                          >● Auto-Refresh Enabled</span
-                        >
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 <div class="shrink-0">
                   <p-button
-                    *ngIf="!status?.connected"
-                    label="{{
-                      oauthLoading ? 'Connecting...' : 'Connect OAuth'
-                    }}"
+                    label="{{ oauthLoading ? 'Connecting...' : (status?.connected ? '+ Connect Another Account' : 'Connect LinkedIn (OAuth)') }}"
                     icon="{{
                       oauthLoading
                         ? 'pi pi-spin pi-spinner'
-                        : 'pi pi-external-link'
+                        : 'pi pi-plus-circle'
                     }}"
-                    iconPos="right"
+                    iconPos="left"
                     [loading]="oauthLoading"
                     (onClick)="connectOAuth()"
                     [rounded]="true"
-                    [style]="{ background: '#0A66C2', border: 'none' }"
-                  ></p-button>
-
-                  <p-button
-                    *ngIf="status?.connected"
-                    label="Disconnect"
-                    icon="pi pi-power-off"
-                    severity="danger"
-                    [outlined]="true"
-                    [rounded]="true"
                     size="small"
-                    (onClick)="disconnectProfile()"
+                    [style]="{ background: '#0A66C2', border: 'none', color: '#ffffff' }"
                   ></p-button>
+                </div>
+              </div>
+
+              <!-- Empty State: No Accounts -->
+              <div
+                *ngIf="!status?.connected || connectedAccounts.length === 0"
+                class="py-8 text-center"
+              >
+                <div class="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center mb-3 text-2xl">
+                  <i class="pi pi-link"></i>
+                </div>
+                <h4 class="text-sm font-semibold mb-1" style="color: var(--app-text)">No LinkedIn Accounts Connected</h4>
+                <p class="text-xs max-w-md mx-auto mb-4" style="color: var(--app-text-muted)">
+                  Authorize one or multiple LinkedIn accounts with 1-click OAuth to unlock automated multi-account blog publishing and network growth.
+                </p>
+                <p-button
+                  label="Connect LinkedIn Account"
+                  icon="pi pi-external-link"
+                  iconPos="right"
+                  [loading]="oauthLoading"
+                  (onClick)="connectOAuth()"
+                  [rounded]="true"
+                  [style]="{ background: '#0A66C2', border: 'none' }"
+                ></p-button>
+              </div>
+
+              <!-- List of Connected LinkedIn Profiles -->
+              <div
+                *ngIf="status?.connected && connectedAccounts.length > 0"
+                class="mt-4 space-y-3"
+              >
+                <div
+                  *ngFor="let acc of connectedAccounts; let i = index"
+                  class="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all hover:border-blue-400/50 bg-white/60 dark:bg-black/20"
+                  style="border-color: var(--app-border)"
+                >
+                  <div class="flex items-center gap-3.5 min-w-0">
+                    <!-- Profile Picture or Initials -->
+                    <div class="relative shrink-0">
+                      <img
+                        *ngIf="acc.profile_picture_url"
+                        [src]="acc.profile_picture_url"
+                        [alt]="acc.name"
+                        class="w-11 h-11 rounded-full object-cover border-2 border-blue-500/30"
+                      />
+                      <div
+                        *ngIf="!acc.profile_picture_url"
+                        class="w-11 h-11 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-sm"
+                      >
+                        {{ acc.name ? acc.name.charAt(0).toUpperCase() : 'L' }}
+                      </div>
+                      <span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-zinc-900"></span>
+                    </div>
+
+                    <!-- Profile Info -->
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-semibold text-sm truncate" style="color: var(--app-text)">
+                          {{ acc.name || 'LinkedIn Member' }}
+                        </span>
+                        <span class="text-xs px-2 py-0.5 rounded font-mono bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50">
+                          Account #{{ i + 1 }}
+                        </span>
+                      </div>
+                      <div class="text-xs font-mono mt-0.5 truncate" style="color: var(--app-text-muted)">
+                        {{ acc.person_urn || 'urn:li:person' }}
+                        <span *ngIf="acc.email" class="font-sans ml-1 text-slate-400">({{ acc.email }})</span>
+                      </div>
+                      <div class="flex items-center gap-3 mt-1.5 text-xs">
+                        <span
+                          *ngIf="acc.access_token_valid"
+                          class="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1"
+                        >
+                          <i class="pi pi-check-circle text-[10px]"></i> Token Active
+                        </span>
+                        <span
+                          *ngIf="acc.has_refresh_token"
+                          class="text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1"
+                        >
+                          <i class="pi pi-sync text-[10px]"></i> Auto-Refresh
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="shrink-0 flex items-center gap-2 self-end sm:self-center">
+                    <p-button
+                      label="Disconnect"
+                      icon="pi pi-power-off"
+                      severity="danger"
+                      [text]="true"
+                      size="small"
+                      pTooltip="Disconnect this LinkedIn account"
+                      (onClick)="disconnectSpecificAccount(acc)"
+                    ></p-button>
+                  </div>
+                </div>
+
+                <!-- Footer Summary info -->
+                <div class="pt-2 flex items-center justify-between text-xs" style="color: var(--app-text-muted)">
+                  <span>
+                    <i class="pi pi-info-circle mr-1 text-blue-500"></i>
+                    All connected accounts automatically receive distinct daily blog variants.
+                  </span>
+                  <button
+                    type="button"
+                    class="text-xs text-red-500 hover:underline"
+                    (click)="disconnectProfile()"
+                  >
+                    Disconnect All Accounts
+                  </button>
                 </div>
               </div>
             </div>
@@ -301,6 +370,29 @@
                     pTooltip="Clear saved session token & credentials"
                     (onClick)="disconnectBotCredentials()"
                   ></p-button>
+                </div>
+              </div>
+
+              <!-- Active Connected Badge Banner -->
+              <div
+                *ngIf="status?.['has_cookie_credentials']"
+                class="mb-4 p-3.5 rounded-xl border flex items-center justify-between"
+                style="
+                  background: rgba(16, 185, 129, 0.08);
+                  border-color: rgba(16, 185, 129, 0.25);
+                "
+              >
+                <div class="flex items-center gap-2.5">
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                  <div>
+                    <div class="text-xs font-semibold text-emerald-400 flex items-center gap-2">
+                      <span>Personal Automation Active</span>
+                      <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">Active Session Configured</span>
+                    </div>
+                    <div class="text-[11px] text-muted mt-0.5">
+                      Direct Messaging sync, candidate discovery, and comment replies are operational.
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -469,143 +561,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- Auto-Accept & Automation Rules Card -->
-            <div
-              class="card-base p-6 border"
-              style="border-color: var(--app-border)"
-            >
-              <div class="flex items-start justify-between gap-4 mb-4">
-                <div class="flex items-start gap-3">
-                  <div
-                    class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                    style="
-                      background: linear-gradient(135deg, #10b981, #059669);
-                    "
-                  >
-                    <i class="pi pi-user-plus text-lg"></i>
-                  </div>
-                  <div>
-                    <h3
-                      class="text-base font-semibold"
-                      style="color: var(--app-text)"
-                    >
-                      Auto-Accept & Welcome Automation
-                    </h3>
-                    <p
-                      class="text-xs mt-0.5"
-                      style="color: var(--app-text-muted)"
-                    >
-                      Automatically accept incoming LinkedIn connection
-                      requests, convert them to CRM leads, and send a
-                      personalized welcome message.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div class="space-y-4">
-                <!-- Toggle Auto Accept -->
-                <div
-                  class="flex items-center justify-between p-3.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10"
-                >
-                  <div>
-                    <span
-                      class="text-sm font-semibold block"
-                      style="color: var(--app-text)"
-                    >
-                      Auto-Accept Incoming Connection Requests
-                    </span>
-                    <span class="text-xs" style="color: var(--app-text-muted)">
-                      Automatically accept pending connection invitations
-                      received on your LinkedIn account during periodic syncs.
-                    </span>
-                  </div>
-                  <p-inputSwitch
-                    [(ngModel)]="autoAcceptEnabled"
-                  ></p-inputSwitch>
-                </div>
-
-                <!-- Automated Welcome Message -->
-                <div>
-                  <div class="flex items-center justify-between mb-1.5">
-                    <label
-                      class="text-xs font-medium block"
-                      style="color: var(--app-text-muted)"
-                    >
-                      Automated Welcome Message (Sent after accepting)
-                    </label>
-                    <div class="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        (click)="insertTag('name', 'welcome')"
-                        class="px-2 py-0.5 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-emerald-500 hover:text-white transition-colors"
-                      >
-                        + {{ "{name}" }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <textarea
-                    pInputText
-                    rows="3"
-                    [(ngModel)]="welcomeMessage"
-                    class="w-full text-sm font-sans"
-                    placeholder="Hi {name}, thanks for connecting! Looking forward to staying in touch."
-                  ></textarea>
-                  <div
-                    class="flex justify-between items-center text-xs mt-1"
-                    style="color: var(--app-text-muted)"
-                  >
-                    <span
-                      >Leave blank if you prefer not to send a message
-                      automatically.</span
-                    >
-                    <span>{{ welcomeMessage.length }} chars</span>
-                  </div>
-                </div>
-
-                <div
-                  class="pt-3 border-t flex items-center justify-between"
-                  style="border-color: var(--app-border)"
-                >
-                  <p-button
-                    label="{{
-                      syncingInvitations
-                        ? 'Syncing...'
-                        : 'Sync Connection Requests Now'
-                    }}"
-                    icon="{{
-                      syncingInvitations
-                        ? 'pi pi-spin pi-spinner'
-                        : 'pi pi-sync'
-                    }}"
-                    [outlined]="true"
-                    [loading]="syncingInvitations"
-                    [disabled]="
-                      !status?.connected || !status?.['has_cookie_credentials']
-                    "
-                    (onClick)="triggerSync()"
-                    size="small"
-                    [rounded]="true"
-                  ></p-button>
-
-                  <p-button
-                    label="{{
-                      savingSettings ? 'Saving...' : 'Save Automation Rules'
-                    }}"
-                    icon="{{
-                      savingSettings ? 'pi pi-spin pi-spinner' : 'pi pi-check'
-                    }}"
-                    [loading]="savingSettings"
-                    (onClick)="saveAutomationSettings()"
-                    [rounded]="true"
-                    [style]="{ background: '#10b981', border: 'none' }"
-                    size="small"
-                  ></p-button>
-                </div>
-              </div>
-            </div>
           </div>
 
           <!-- Right: Helper Guidelines -->
@@ -663,12 +618,10 @@
             </div>
           </div>
         </div>
-      </ng-template>
     </p-tabpanel>
 
     <!-- TAB 2: RECEIVED REQUESTS (ACCEPTING) -->
     <p-tabpanel value="received">
-      <ng-template [ngIf]="activeTab === 'received'">
         <div class="mt-4 space-y-6">
           <!-- Banner / Quick Actions Card -->
           <div class="card-base p-6">
@@ -736,6 +689,174 @@
                   [rounded]="true"
                   [style]="{ background: '#10b981', border: 'none' }"
                   (onClick)="acceptAllInvitations()"
+                ></p-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Auto-Accept & Welcome Automation Card (Integrated in Received Requests) -->
+          <div
+            class="card-base p-6 border transition-all"
+            [style.border-color]="
+              autoAcceptEnabled
+                ? 'rgba(16, 185, 129, 0.4)'
+                : 'var(--app-border)'
+            "
+            style="
+              background: linear-gradient(
+                180deg,
+                rgba(16, 185, 129, 0.03) 0%,
+                transparent 100%
+              );
+            "
+          >
+            <div class="flex items-start justify-between gap-4 mb-4">
+              <div class="flex items-start gap-3">
+                <div
+                  class="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm shadow-emerald-500/20"
+                  style="
+                    background: linear-gradient(135deg, #10b981, #059669);
+                  "
+                >
+                  <i class="pi pi-user-plus text-lg"></i>
+                </div>
+                <div>
+                  <h3
+                    class="text-base font-semibold"
+                    style="color: var(--app-text)"
+                  >
+                    Auto-Accept & Welcome Automation
+                  </h3>
+                  <p
+                    class="text-xs mt-0.5"
+                    style="color: var(--app-text-muted)"
+                  >
+                    Automatically accept incoming LinkedIn connection
+                    requests, convert them to CRM leads, and send a
+                    personalized welcome message.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <!-- Toggle Auto Accept -->
+              <div
+                class="flex items-center justify-between p-3.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10"
+              >
+                <div>
+                  <span
+                    class="text-sm font-semibold block"
+                    style="color: var(--app-text)"
+                  >
+                    Auto-Accept Incoming Connection Requests
+                  </span>
+                  <span class="text-xs" style="color: var(--app-text-muted)">
+                    Automatically accept pending connection invitations
+                    received on your LinkedIn account during periodic syncs.
+                  </span>
+                </div>
+                <p-inputSwitch
+                  [(ngModel)]="autoAcceptEnabled"
+                ></p-inputSwitch>
+              </div>
+
+              <!-- Toggle Auto Convert Inbound DMs to CRM Leads -->
+              <div
+                class="flex items-center justify-between p-3.5 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10"
+              >
+                <div class="pr-4">
+                  <span
+                    class="text-sm font-semibold block"
+                    style="color: var(--app-text)"
+                  >
+                    Auto-Capture Inbound Commercial DMs as Leads
+                  </span>
+                  <span class="text-xs" style="color: var(--app-text-muted)">
+                    Automatically detect commercial buying intent (pricing, demo requests, quotes, consultations) in direct messages and capture them into your Leads pipeline for review and conversion.
+                  </span>
+                </div>
+                <p-inputSwitch
+                  [(ngModel)]="autoDmLeadsEnabled"
+                ></p-inputSwitch>
+              </div>
+
+              <!-- Automated Welcome Message -->
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label
+                    class="text-xs font-medium block"
+                    style="color: var(--app-text-muted)"
+                  >
+                    Automated Welcome Message (Sent after accepting)
+                  </label>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      (click)="insertTag('name', 'welcome')"
+                      class="px-2 py-0.5 text-xs rounded bg-black/10 dark:bg-white/10 hover:bg-emerald-500 hover:text-white transition-colors"
+                    >
+                      + {{ "{name}" }}
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  pInputText
+                  rows="3"
+                  [(ngModel)]="welcomeMessage"
+                  class="w-full text-sm font-sans"
+                  placeholder="Hi {name}, thanks for connecting! Looking forward to staying in touch."
+                ></textarea>
+                <div
+                  class="flex justify-between items-center text-xs mt-1"
+                  style="color: var(--app-text-muted)"
+                >
+                  <span
+                    >Leave blank if you prefer not to send a message
+                    automatically.</span
+                  >
+                  <span>{{ welcomeMessage.length }} chars</span>
+                </div>
+              </div>
+
+              <div
+                class="pt-3 border-t flex items-center justify-between"
+                style="border-color: var(--app-border)"
+              >
+                <p-button
+                  label="{{
+                    syncingInvitations
+                      ? 'Syncing...'
+                      : 'Sync Connection Requests Now'
+                  }}"
+                  icon="{{
+                    syncingInvitations
+                      ? 'pi pi-spin pi-spinner'
+                      : 'pi pi-sync'
+                  }}"
+                  [outlined]="true"
+                  [loading]="syncingInvitations"
+                  [disabled]="
+                    !status?.connected || !status?.['has_cookie_credentials']
+                  "
+                  (onClick)="triggerSync()"
+                  size="small"
+                  [rounded]="true"
+                ></p-button>
+
+                <p-button
+                  label="{{
+                    savingSettings ? 'Saving...' : 'Save Automation Rules'
+                  }}"
+                  icon="{{
+                    savingSettings ? 'pi pi-spin pi-spinner' : 'pi pi-check'
+                  }}"
+                  [loading]="savingSettings"
+                  (onClick)="saveAutomationSettings()"
+                  [rounded]="true"
+                  [style]="{ background: '#10b981', border: 'none' }"
+                  size="small"
                 ></p-button>
               </div>
             </div>
@@ -817,12 +938,20 @@
                         >
                           {{ invitation.name }}
                         </span>
-                        <span
-                          *ngIf="invitation.public_id"
-                          class="text-xs font-mono text-muted"
-                        >
-                          {{ invitation.public_id }}
-                        </span>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                          <span
+                            *ngIf="invitation.public_id"
+                            class="text-xs font-mono text-muted"
+                          >
+                            {{ invitation.public_id }}
+                          </span>
+                          <span
+                            *ngIf="invitation.is_crm_lead"
+                            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          >
+                            <i class="pi pi-user-check text-[9px]"></i> Lead Captured
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -882,14 +1011,544 @@
             </p-table>
           </div>
         </div>
-      </ng-template>
     </p-tabpanel>
 
     <!-- TAB 3: AI CANDIDATE DISCOVERY & SEARCH -->
     <p-tabpanel value="search">
-      <ng-template [ngIf]="activeTab === 'search'">
         <div class="mt-4 space-y-6">
-          <!-- Search Controls -->
+          <!-- Auto-Pilot Scheduled Discovery & Outreach Card -->
+          <div
+            class="card-base p-6 border-2 transition-all"
+            [style.border-color]="
+              autoConnectSettings.enabled
+                ? 'rgba(10, 102, 194, 0.4)'
+                : 'var(--app-border)'
+            "
+            style="
+              background: linear-gradient(
+                180deg,
+                rgba(10, 102, 194, 0.04) 0%,
+                transparent 100%
+              );
+            "
+          >
+            <div
+              class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b"
+              style="border-color: var(--app-border)"
+            >
+              <div class="flex items-center gap-3">
+                <div
+                  class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md shadow-blue-500/20"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #0a66c2 0%,
+                      #0284c7 100%
+                    );
+                  "
+                >
+                  <i class="pi pi-bolt text-lg"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3
+                      class="text-base font-bold"
+                      style="color: var(--app-text)"
+                    >
+                      Auto-Pilot Scheduled Outreach & Discovery
+                    </h3>
+                    <span
+                      class="px-2.5 py-0.5 text-[11px] font-semibold rounded-full uppercase tracking-wider"
+                      [ngClass]="
+                        autoConnectSettings.enabled
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                          : 'bg-gray-500/15 text-gray-500 border border-gray-500/20'
+                      "
+                    >
+                      <i
+                        class="pi pi-circle-fill text-[8px] mr-1"
+                        [ngClass]="
+                          autoConnectSettings.enabled
+                            ? 'text-emerald-500'
+                            : 'text-gray-400'
+                        "
+                      ></i>
+                      {{
+                        autoConnectSettings.enabled
+                          ? 'Active (' +
+                            autoConnectSettings.runs_per_day +
+                            ' runs/day)'
+                          : 'Paused'
+                      }}
+                    </span>
+                  </div>
+                  <p class="text-xs" style="color: var(--app-text-muted)">
+                    Automatically search target LinkedIn prospects and send connection requests randomly throughout active business hours.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Enable Switch -->
+              <div
+                class="flex items-center gap-3 bg-black/5 dark:bg-white/5 px-4 py-2 rounded-xl border"
+                style="border-color: var(--app-border)"
+              >
+                <label
+                  class="text-xs font-semibold cursor-pointer select-none"
+                  style="color: var(--app-text)"
+                  for="autopilot-toggle"
+                >
+                  Auto-Pilot Outreach
+                </label>
+                <input
+                  type="checkbox"
+                  id="autopilot-toggle"
+                  [(ngModel)]="autoConnectSettings.enabled"
+                  (change)="saveAutoConnectSettings()"
+                  class="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 my-4">
+              <div
+                class="p-3.5 rounded-xl border bg-black/[0.02] dark:bg-white/[0.02]"
+                style="border-color: var(--app-border)"
+              >
+                <p
+                  class="text-[11px] font-medium"
+                  style="color: var(--app-text-muted)"
+                >
+                  Daily Frequency
+                </p>
+                <p
+                  class="text-sm font-bold mt-0.5"
+                  style="color: var(--app-text)"
+                >
+                  {{ autoConnectSettings.runs_per_day }} runs / day
+                </p>
+                <span class="text-[10px] text-blue-500 font-medium"
+                  >{{ autoConnectSettings.profiles_per_run }} per run (~{{
+                    autoConnectSettings.runs_per_day *
+                      autoConnectSettings.profiles_per_run
+                  }}/day)</span
+                >
+              </div>
+
+              <div
+                class="p-3.5 rounded-xl border bg-black/[0.02] dark:bg-white/[0.02]"
+                style="border-color: var(--app-border)"
+              >
+                <p
+                  class="text-[11px] font-medium"
+                  style="color: var(--app-text-muted)"
+                >
+                  Next Scheduled Run
+                </p>
+                <p
+                  class="text-xs font-semibold mt-0.5 truncate"
+                  style="color: var(--app-text)"
+                >
+                  <span
+                    *ngIf="
+                      autoConnectSettings.enabled &&
+                      autoConnectSettings.next_run_at
+                    "
+                    class="text-emerald-600 dark:text-emerald-400"
+                  >
+                    {{
+                      autoConnectSettings.next_run_at | date: 'shortTime'
+                    }}
+                    ({{
+                      autoConnectSettings.next_run_at | date: 'shortDate'
+                    }})
+                  </span>
+                  <span
+                    *ngIf="!autoConnectSettings.enabled"
+                    class="text-gray-400"
+                  >
+                    Schedule Paused
+                  </span>
+                  <span
+                    *ngIf="
+                      autoConnectSettings.enabled &&
+                      !autoConnectSettings.next_run_at
+                    "
+                    class="text-amber-500"
+                  >
+                    Calculating slot...
+                  </span>
+                </p>
+                <span class="text-[10px] text-muted"
+                  >Smart Business Hours (09:00–19:00)</span
+                >
+              </div>
+
+              <div
+                class="p-3.5 rounded-xl border bg-black/[0.02] dark:bg-white/[0.02]"
+                style="border-color: var(--app-border)"
+              >
+                <p
+                  class="text-[11px] font-medium"
+                  style="color: var(--app-text-muted)"
+                >
+                  Sent Today
+                </p>
+                <p
+                  class="text-sm font-bold mt-0.5 text-blue-600 dark:text-blue-400"
+                >
+                  {{ autoConnectSettings.total_sent_today || 0 }} invitations
+                </p>
+                <span class="text-[10px] text-emerald-500 font-medium"
+                  >Safe human pacing</span
+                >
+              </div>
+
+              <div
+                class="p-3.5 rounded-xl border bg-black/[0.02] dark:bg-white/[0.02]"
+                style="border-color: var(--app-border)"
+              >
+                <p
+                  class="text-[11px] font-medium"
+                  style="color: var(--app-text-muted)"
+                >
+                  All-Time Auto Invites
+                </p>
+                <p
+                  class="text-sm font-bold mt-0.5"
+                  style="color: var(--app-text)"
+                >
+                  {{ autoConnectSettings.total_sent_all_time || 0 }} total
+                </p>
+                <span class="text-[10px] text-purple-500 font-medium"
+                  >Duplication protected</span
+                >
+              </div>
+            </div>
+
+            <!-- Configuration Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-4">
+              <!-- Left Col: Targeting & Frequency -->
+              <div class="lg:col-span-6 space-y-4">
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label
+                      class="text-xs font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      Target Candidate Description / Audience
+                    </label>
+                    <button
+                      type="button"
+                      (click)="generateAutoKeywords()"
+                      [disabled]="
+                        isGeneratingAutoKeywords ||
+                        !autoConnectSettings.target_prompt
+                      "
+                      class="text-[11px] text-purple-600 dark:text-purple-400 hover:underline font-medium flex items-center gap-1"
+                    >
+                      <i
+                        class="pi"
+                        [ngClass]="
+                          isGeneratingAutoKeywords
+                            ? 'pi-spin pi-spinner'
+                            : 'pi-sparkles'
+                        "
+                      ></i>
+                      AI Generate Keywords
+                    </button>
+                  </div>
+                  <input
+                    pInputText
+                    type="text"
+                    [(ngModel)]="autoConnectSettings.target_prompt"
+                    placeholder="e.g. Founders, CTOs, and HR Directors in California or London"
+                    class="w-full text-xs"
+                  />
+                </div>
+
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label
+                      class="text-xs font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      Target Boolean Keywords
+                    </label>
+                    <button
+                      type="button"
+                      (click)="copyAutoKeywordsToSearch()"
+                      class="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-medium flex items-center gap-1"
+                    >
+                      <i class="pi pi-copy"></i>
+                      Copy to Manual Search
+                    </button>
+                  </div>
+                  <input
+                    pInputText
+                    type="text"
+                    [(ngModel)]="autoConnectSettings.target_keywords"
+                    placeholder='"Founder" OR "CEO" AND "Tech"'
+                    class="w-full text-xs font-mono"
+                  />
+                  <p class="text-[10px] text-muted mt-1">
+                    The bot will search LinkedIn with this exact query each scheduled run.
+                  </p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label
+                      class="text-xs font-semibold block mb-1"
+                      style="color: var(--app-text)"
+                    >
+                      Daily Frequency
+                    </label>
+                    <p-dropdown
+                      [options]="[
+                        { label: '1 Run / Day (Conservative)', value: 1 },
+                        { label: '2 Runs / Day', value: 2 },
+                        { label: '3 Runs / Day (Recommended)', value: 3 },
+                        { label: '4 Runs / Day', value: 4 },
+                        { label: '5 Runs / Day', value: 5 },
+                        { label: '6 Runs / Day', value: 6 },
+                        { label: '8 Runs / Day', value: 8 },
+                        { label: '10 Runs / Day (Max)', value: 10 },
+                      ]"
+                      [(ngModel)]="autoConnectSettings.runs_per_day"
+                      optionLabel="label"
+                      optionValue="value"
+                      [style]="{ width: '100%' }"
+                    ></p-dropdown>
+                  </div>
+
+                  <div>
+                    <label
+                      class="text-xs font-semibold block mb-1"
+                      style="color: var(--app-text)"
+                    >
+                      Profiles per Run
+                    </label>
+                    <p-dropdown
+                      [options]="[
+                        { label: '3 Profiles / Run', value: 3 },
+                        {
+                          label: '5 Profiles / Run (Recommended)',
+                          value: 5,
+                        },
+                        { label: '8 Profiles / Run', value: 8 },
+                        { label: '10 Profiles / Run', value: 10 },
+                        { label: '15 Profiles / Run (Max)', value: 15 },
+                      ]"
+                      [(ngModel)]="autoConnectSettings.profiles_per_run"
+                      optionLabel="label"
+                      optionValue="value"
+                      [style]="{ width: '100%' }"
+                    ></p-dropdown>
+                  </div>
+                </div>
+
+                <div
+                  class="p-2.5 rounded-lg bg-blue-500/5 border border-blue-500/20 text-[11px] text-muted flex items-start gap-2"
+                >
+                  <i class="pi pi-shield text-blue-500 mt-0.5"></i>
+                  <span>
+                    <strong>Anti-Bot Jitter:</strong> Runs are randomly distributed between 9:00 AM – 7:00 PM with random intervals (±25%) so LinkedIn never detects a mechanical pattern.
+                  </span>
+                </div>
+              </div>
+
+              <!-- Right Col: Invitation Note Template -->
+              <div
+                class="lg:col-span-6 flex flex-col justify-between space-y-3"
+              >
+                <div>
+                  <div class="flex items-center justify-between mb-1">
+                    <label
+                      class="text-xs font-semibold"
+                      style="color: var(--app-text)"
+                    >
+                      Custom Invitation Note (Optional)
+                    </label>
+                    <span
+                      class="text-[11px] font-mono"
+                      [ngClass]="
+                        (autoConnectSettings.custom_message.length || 0) > 300
+                          ? 'text-red-500 font-bold'
+                          : 'text-muted'
+                      "
+                    >
+                      {{ autoConnectSettings.custom_message.length || 0 }} / 300
+                    </span>
+                  </div>
+
+                  <textarea
+                    pInputTextarea
+                    [(ngModel)]="autoConnectSettings.custom_message"
+                    rows="4"
+                    maxlength="300"
+                    placeholder="Leave blank for standard connection request, or write a note with {firstName}..."
+                    class="w-full text-xs rounded-lg resize-none p-2.5 border"
+                    style="
+                      background: var(--app-surface);
+                      border-color: var(--app-border);
+                      color: var(--app-text);
+                    "
+                  ></textarea>
+
+                  <div class="flex items-center gap-1.5 flex-wrap mt-2">
+                    <span class="text-[10px] font-medium text-muted mr-1"
+                      >Placeholders:</span
+                    >
+                    <button
+                      type="button"
+                      (click)="
+                        autoConnectSettings.custom_message =
+                          (autoConnectSettings.custom_message || '') +
+                          '{firstName}'
+                      "
+                      class="px-2 py-0.5 text-[10px] rounded bg-black/5 dark:bg-white/5 hover:bg-black/10 font-mono text-blue-600 dark:text-blue-400"
+                    >
+                      &#123;firstName&#125;
+                    </button>
+                    <button
+                      type="button"
+                      (click)="
+                        autoConnectSettings.custom_message =
+                          (autoConnectSettings.custom_message || '') +
+                          '{name}'
+                      "
+                      class="px-2 py-0.5 text-[10px] rounded bg-black/5 dark:bg-white/5 hover:bg-black/10 font-mono text-blue-600 dark:text-blue-400"
+                    >
+                      &#123;name&#125;
+                    </button>
+                  </div>
+
+                  <!-- Quick Presets -->
+                  <div class="mt-2.5">
+                    <p class="text-[10px] font-medium text-muted mb-1.5">
+                      Quick Note Templates:
+                    </p>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        (click)="
+                          applyAutoConnectPreset(
+                            'Hi {firstName}, I came across your profile and was really impressed by your background. Would love to connect!'
+                          )
+                        "
+                        class="px-2.5 py-1 text-[10px] rounded-lg border bg-black/5 dark:bg-white/5 hover:bg-blue-500/10 hover:border-blue-500/30 transition-all text-xs"
+                      >
+                        🤝 Networking
+                      </button>
+                      <button
+                        type="button"
+                        (click)="
+                          applyAutoConnectPreset(
+                            'Hi {firstName}, noticed your impressive work in the industry. Looking forward to connecting and sharing insights!'
+                          )
+                        "
+                        class="px-2.5 py-1 text-[10px] rounded-lg border bg-black/5 dark:bg-white/5 hover:bg-purple-500/10 hover:border-purple-500/30 transition-all text-xs"
+                      >
+                        🚀 Industry Insights
+                      </button>
+                      <button
+                        type="button"
+                        (click)="applyAutoConnectPreset('')"
+                        class="px-2.5 py-1 text-[10px] rounded-lg border bg-black/5 dark:bg-white/5 hover:bg-amber-500/10 hover:border-amber-500/30 transition-all text-xs"
+                      >
+                        ✨ Blank Request (No Note)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Last Execution Alert if present -->
+                <div
+                  *ngIf="autoConnectSettings.last_run_at"
+                  class="p-2.5 rounded-lg border text-xs"
+                  [ngClass]="
+                    autoConnectSettings.last_run_status === 'error'
+                      ? 'bg-red-500/5 border-red-500/30 text-red-600 dark:text-red-400'
+                      : 'bg-emerald-500/5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  "
+                >
+                  <div class="flex items-center justify-between">
+                    <span class="font-semibold flex items-center gap-1.5">
+                      <i
+                        class="pi"
+                        [ngClass]="
+                          autoConnectSettings.last_run_status === 'error'
+                            ? 'pi-exclamation-triangle'
+                            : 'pi-check-circle'
+                        "
+                      ></i>
+                      Last Run:
+                      {{
+                        autoConnectSettings.last_run_at | date: 'medium'
+                      }}
+                    </span>
+                  </div>
+                  <p class="text-[11px] mt-0.5 opacity-90 truncate">
+                    {{
+                      autoConnectSettings.last_run_detail ||
+                        'Completed successfully'
+                    }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Footer Action Buttons -->
+            <div
+              class="mt-6 pt-4 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
+              style="border-color: var(--app-border)"
+            >
+              <div class="text-xs text-muted flex items-center gap-1.5">
+                <i class="pi pi-info-circle text-blue-500"></i>
+                <span>Changes will take effect on the next scheduled slot.</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <p-button
+                  label="{{
+                    triggeringAutoConnect
+                      ? 'Dispatching...'
+                      : 'Trigger Run Now'
+                  }}"
+                  icon="{{
+                    triggeringAutoConnect
+                      ? 'pi pi-spin pi-spinner'
+                      : 'pi pi-play'
+                  }}"
+                  [loading]="triggeringAutoConnect"
+                  [outlined]="true"
+                  severity="secondary"
+                  (onClick)="triggerAutoConnectNow()"
+                  pTooltip="Execute one automated search & invite cycle right now in the background"
+                ></p-button>
+
+                <p-button
+                  label="{{
+                    savingAutoConnect
+                      ? 'Saving Schedule...'
+                      : 'Save Auto-Pilot Schedule'
+                  }}"
+                  icon="{{
+                    savingAutoConnect
+                      ? 'pi pi-spin pi-spinner'
+                      : 'pi pi-check'
+                  }}"
+                  [loading]="savingAutoConnect"
+                  (onClick)="saveAutoConnectSettings()"
+                  [style]="{ background: '#0A66C2', border: 'none' }"
+                ></p-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manual Search Controls -->
           <div class="card-base p-6">
             <div class="flex items-center gap-2 mb-4">
               <div
@@ -1176,12 +1835,10 @@
             </p-table>
           </div>
         </div>
-      </ng-template>
     </p-tabpanel>
 
     <!-- TAB 4: OUTREACH & INVITATIONS -->
     <p-tabpanel value="invitations">
-      <ng-template [ngIf]="activeTab === 'invitations'">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
           <!-- Message Editor -->
           <div class="lg:col-span-7 space-y-6">
@@ -1354,12 +2011,10 @@
             </div>
           </div>
         </div>
-      </ng-template>
     </p-tabpanel>
 
     <!-- TAB 5: DIRECT MESSAGES & INMAIL -->
     <p-tabpanel value="messages">
-      <ng-template [ngIf]="activeTab === 'messages'">
         <div class="mt-4 space-y-6">
           <!-- Top Toolbar / Info Banner -->
           <div class="card-base p-6">
@@ -1391,6 +2046,13 @@
                       [value]="unreadConversationsCount + ' Unread'"
                       severity="warning"
                       [rounded]="true"
+                    ></p-tag>
+                    <p-tag
+                      *ngIf="loadingConversations"
+                      value="Loading conversations..."
+                      severity="info"
+                      [rounded]="true"
+                      icon="pi pi-spin pi-spinner"
                     ></p-tag>
                     <p-tag
                       value="Safe Periodic Retrieval"
@@ -1482,12 +2144,23 @@
                 </div>
               </div>
 
+              <!-- Top progress bar for conversation list loading -->
+              <p-progressBar
+                *ngIf="loadingConversations"
+                mode="indeterminate"
+                [style]="{ height: '3px' }"
+              ></p-progressBar>
+
               <!-- Thread Items List -->
               <div
                 class="flex-1 overflow-y-auto max-h-[540px] divide-y divide-black/5 dark:divide-white/5"
               >
                 <!-- Loading Skeleton -->
                 <div *ngIf="loadingConversations" class="p-4 space-y-4">
+                  <div class="flex items-center gap-2 text-xs font-medium text-brand-600 dark:text-brand-400 p-2.5 bg-brand-500/10 rounded-lg">
+                    <i class="pi pi-spin pi-spinner text-sm"></i>
+                    <span>Loading conversations...</span>
+                  </div>
                   <div
                     *ngFor="let i of [1, 2, 3, 4]"
                     class="flex items-center gap-3"
@@ -1580,7 +2253,28 @@
                         {{ conv.contact_name }}
                       </span>
                       <span
-                        *ngIf="conv.last_activity_at"
+                        *ngIf="
+                          loadingMessages &&
+                          (selectedConversation?.conversation_id ===
+                            conv.conversation_id ||
+                            selectedConversation?.conversation_urn ===
+                              conv.conversation_urn)
+                        "
+                        class="text-[10px] shrink-0 text-brand-600 font-semibold flex items-center gap-1"
+                      >
+                        <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                        Loading...
+                      </span>
+                      <span
+                        *ngIf="
+                          !(
+                            loadingMessages &&
+                            (selectedConversation?.conversation_id ===
+                              conv.conversation_id ||
+                              selectedConversation?.conversation_urn ===
+                                conv.conversation_urn)
+                          ) && conv.last_activity_at
+                        "
                         class="text-[10px] shrink-0 text-muted"
                       >
                         {{ conv.last_activity_at | date: "MMM d, h:mm a" }}
@@ -1589,10 +2283,19 @@
 
                     <p
                       *ngIf="conv.contact_headline"
-                      class="text-[11px] truncate text-muted mb-1"
+                      class="text-[11px] truncate text-muted mb-0.5"
                     >
                       {{ conv.contact_headline }}
                     </p>
+
+                    <!-- Lead Candidate Indicator Badge -->
+                    <div *ngIf="conv.is_lead_candidate" class="flex items-center gap-1.5 my-1">
+                      <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                        <i class="pi pi-bolt text-[9px]"></i>
+                        {{ getLeadIntentLabel(conv.lead_intent) }}
+                      </span>
+                      <span *ngIf="conv.lead_score" class="text-[10px] font-mono text-emerald-500/80">{{ conv.lead_score }}% intent</span>
+                    </div>
 
                     <p
                       class="text-xs truncate"
@@ -1650,12 +2353,21 @@
                     }"
                   ></p-avatar>
                   <div class="truncate">
-                    <h4
-                      class="text-sm font-semibold truncate"
-                      style="color: var(--app-text)"
-                    >
-                      {{ selectedConversation.contact_name }}
-                    </h4>
+                    <div class="flex items-center gap-2">
+                      <h4
+                        class="text-sm font-semibold truncate"
+                        style="color: var(--app-text)"
+                      >
+                        {{ selectedConversation.contact_name }}
+                      </h4>
+                      <span
+                        *ngIf="selectedConversation.is_lead_candidate"
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shrink-0"
+                      >
+                        <i class="pi pi-bolt text-[9px]"></i>
+                        {{ getLeadIntentLabel(selectedConversation.lead_intent) }}
+                      </span>
+                    </div>
                     <p class="text-xs truncate text-muted">
                       {{
                         selectedConversation.contact_headline ||
@@ -1667,6 +2379,14 @@
                 </div>
 
                 <div class="flex items-center gap-2 shrink-0">
+                  <span
+                    *ngIf="loadingMessages || syncingThreadMessages"
+                    class="px-2.5 py-0.5 text-[11px] font-medium rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1.5"
+                  >
+                    <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                    {{ loadingMessages ? 'Loading messages...' : 'Updating...' }}
+                  </span>
+
                   <p-button
                     icon="pi pi-refresh"
                     [rounded]="true"
@@ -1674,11 +2394,18 @@
                     severity="secondary"
                     size="small"
                     pTooltip="Refresh Thread"
-                    [loading]="loadingMessages"
+                    [loading]="loadingMessages || syncingThreadMessages"
                     (onClick)="selectConversation(selectedConversation)"
                   ></p-button>
                 </div>
               </div>
+
+              <!-- Top progress bar for active message loading -->
+              <p-progressBar
+                *ngIf="loadingMessages"
+                mode="indeterminate"
+                [style]="{ height: '3px' }"
+              ></p-progressBar>
 
               <!-- Messages Stream Area -->
               <div
@@ -1711,15 +2438,83 @@
                   </p>
                 </div>
 
-                <!-- Loading Messages Spinner -->
+                <!-- Loading Messages Skeleton Chat State -->
+                <div *ngIf="loadingMessages" class="p-4 space-y-4">
+                  <!-- Incoming message skeleton -->
+                  <div class="flex items-start gap-2.5 max-w-[75%]">
+                    <p-skeleton shape="circle" size="2rem"></p-skeleton>
+                    <div class="space-y-1.5 flex-1">
+                      <p-skeleton width="30%" height="0.75rem"></p-skeleton>
+                      <p-skeleton width="80%" height="2.2rem" borderRadius="1rem"></p-skeleton>
+                    </div>
+                  </div>
+
+                  <!-- Outgoing message skeleton -->
+                  <div class="flex items-end justify-end gap-2 ml-auto max-w-[75%]">
+                    <div class="space-y-1.5 flex-1 flex flex-col items-end">
+                      <p-skeleton width="65%" height="2rem" borderRadius="1rem"></p-skeleton>
+                    </div>
+                  </div>
+
+                  <!-- Another incoming skeleton -->
+                  <div class="flex items-start gap-2.5 max-w-[75%]">
+                    <p-skeleton shape="circle" size="2rem"></p-skeleton>
+                    <div class="space-y-1.5 flex-1">
+                      <p-skeleton width="25%" height="0.75rem"></p-skeleton>
+                      <p-skeleton width="90%" height="2.4rem" borderRadius="1rem"></p-skeleton>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-center gap-2 pt-3 text-xs text-muted">
+                    <i class="pi pi-spin pi-spinner text-brand-500"></i>
+                    <span>Loading conversation history...</span>
+                  </div>
+                </div>
+
+                <!-- Updating Indicator Banner when thread already has messages -->
                 <div
-                  *ngIf="loadingMessages"
-                  class="h-full flex flex-col items-center justify-center p-8"
+                  *ngIf="syncingThreadMessages && messages.length > 0"
+                  class="sticky top-0 z-10 flex items-center justify-center py-1"
                 >
-                  <i
-                    class="pi pi-spin pi-spinner text-2xl text-brand-500 mb-2"
-                  ></i>
-                  <p class="text-xs text-muted">Loading message history...</p>
+                  <div class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[11px] font-medium shadow-sm backdrop-blur-sm">
+                    <i class="pi pi-spin pi-spinner text-[10px]"></i>
+                    <span>Checking for new messages...</span>
+                  </div>
+                </div>
+
+                <!-- Previous Messages Loading Indicator & Trigger -->
+                <div
+                  *ngIf="selectedConversation && !loadingMessages && messages.length > 0"
+                  class="flex flex-col items-center justify-center pt-1 pb-3 gap-1.5"
+                >
+                  <!-- Active Fetching Previous Messages Indicator -->
+                  <div
+                    *ngIf="loadingPreviousMessages"
+                    class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-medium shadow-sm animate-pulse"
+                  >
+                    <i class="pi pi-spin pi-spinner text-xs"></i>
+                    <span>Fetching previous messages...</span>
+                  </div>
+
+                  <!-- Button to load earlier messages -->
+                  <button
+                    *ngIf="!loadingPreviousMessages && !hasNoEarlierMessages"
+                    pButton
+                    type="button"
+                    label="Load previous messages"
+                    icon="pi pi-history"
+                    class="p-button-text p-button-sm p-button-secondary text-xs rounded-full hover:bg-black/5 dark:hover:bg-white/5"
+                    (click)="loadPreviousMessages()"
+                  ></button>
+
+                  <!-- Clear indication when all messages are fetched / beginning reached -->
+                  <div
+                    *ngIf="hasNoEarlierMessages"
+                    class="flex items-center gap-1.5 text-[11px] text-muted py-1.5 border-b border-black/5 dark:border-white/5 w-full justify-center"
+                  >
+                    <i class="pi pi-check-circle text-emerald-500 text-[10px]"></i>
+                    <span>Beginning of conversation with {{ selectedConversation.contact_name }}</span>
+                  </div>
                 </div>
 
                 <!-- Empty Messages in Thread -->
@@ -1860,12 +2655,10 @@
             </div>
           </div>
         </div>
-      </ng-template>
     </p-tabpanel>
 
     <!-- TAB 6: COMMENTS & AI REPLIES AUTOMATION -->
     <p-tabpanel value="comments">
-      <ng-template [ngIf]="activeTab === 'comments'">
         <div class="mt-4 space-y-6">
           <!-- Top Toolbar / Info Banner -->
           <div class="card-base p-6">
@@ -1948,6 +2741,8 @@
                   [rounded]="true"
                   (onClick)="showCommentSettingsModal = true"
                 ></p-button>
+
+
 
                 <p-button
                   icon="pi pi-refresh"
@@ -2033,7 +2828,7 @@
                   class="text-xs font-semibold capitalize"
                   style="color: var(--app-text)"
                 >
-                  {{ commentSettings.reply_tone.replace("_", " ") }}
+                  {{ (commentSettings.reply_tone || 'professional').replace("_", " ") }}
                 </h4>
               </div>
             </div>
@@ -2457,7 +3252,7 @@
                         label="{{
                           c.isCapturingLead
                             ? 'Saving Lead...'
-                            : 'Capture as CRM Lead'
+                            : 'Capture as Lead'
                         }}"
                         icon="pi pi-user-plus"
                         [outlined]="true"
@@ -2467,11 +3262,30 @@
                         (onClick)="captureCommentLead(c)"
                       ></p-button>
 
+                      <!-- Lead Saved badge + optional LinkedIn profile link -->
                       <span
                         *ngIf="c.customer_id"
-                        class="text-xs text-emerald-400 font-medium flex items-center gap-1"
+                        class="flex items-center gap-2 flex-wrap"
                       >
-                        <i class="pi pi-check"></i> CRM Lead Saved
+                        <span class="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                          <i class="pi pi-check-circle"></i> Lead Saved in Pipeline
+                        </span>
+                        <a
+                          *ngIf="c.author_profile_url"
+                          [href]="c.author_profile_url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
+                          style="background: rgba(10,102,194,0.12); color: #0A66C2; border: 1px solid rgba(10,102,194,0.25);"
+                          onmouseover="this.style.background='rgba(10,102,194,0.22)'"
+                          onmouseout="this.style.background='rgba(10,102,194,0.12)'"
+                          pTooltip="View LinkedIn Profile"
+                          tooltipPosition="top"
+                        >
+                          <i class="pi pi-linkedin" style="font-size:11px"></i>
+                          <span>View Profile</span>
+                          <i class="pi pi-external-link" style="font-size:9px"></i>
+                        </a>
                       </span>
 
                       <p-button
@@ -2508,7 +3322,18 @@
             </div>
           </div>
         </div>
-      </ng-template>
+    </p-tabpanel>
+
+    <!-- TAB 7: ACTIVITY & AUDIT LOGS -->
+    <p-tabpanel value="logs">
+      <div class="mt-4">
+        <app-module-activity-logs
+          entityType="linkedin"
+          actionPrefix="linkedin."
+          title="LinkedIn Automation & Scheduler Logs"
+          subtitle="Real-time chronological execution history of auto-pilot discovery, connection invites, message syncs, and background schedulers."
+        ></app-module-activity-logs>
+      </div>
     </p-tabpanel>
   </p-tabpanels>
 </p-tabs>
@@ -2719,3 +3544,211 @@
     ></p-button>
   </ng-template>
 </p-dialog>
+
+<!-- Interactive LinkedIn CAPTCHA & Security Checkpoint Solver Modal -->
+<p-dialog
+  [(visible)]="showCaptchaModal"
+  [modal]="true"
+  [closable]="false"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: '56rem', maxWidth: '96vw', maxHeight: '92vh' }"
+  styleClass="linkedin-captcha-dialog"
+>
+  <ng-template pTemplate="header">
+    <div class="flex items-center justify-between w-full pr-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <i class="pi pi-shield text-base"></i>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+            LinkedIn Security Verification
+            <span
+              *ngIf="is2faOrPinChallenge"
+              class="px-2 py-0.5 text-[10px] rounded-full font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1"
+            >
+              <i class="pi pi-lock text-[9px]"></i>
+              2FA Authenticator Challenge
+            </span>
+            <span
+              *ngIf="!is2faOrPinChallenge"
+              class="px-2 py-0.5 text-[10px] rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30"
+            >
+              Interactive Solver
+            </span>
+          </h3>
+          <p class="text-[11px] text-muted">Complete the challenge below to establish your secure session</p>
+        </div>
+      </div>
+      <p-button
+        icon="pi pi-times"
+        [text]="true"
+        [rounded]="true"
+        severity="secondary"
+        (onClick)="cancelCaptchaModal()"
+      ></p-button>
+    </div>
+  </ng-template>
+
+  <div class="flex flex-col gap-3 min-h-0">
+    <!-- PROMINENT 2FA / OTP / PIN INPUT BAR (Top Placement - Always Visible) -->
+    <div
+      class="p-3 rounded-xl border transition-all duration-200"
+      [ngClass]="{
+        'bg-indigo-950/60 border-indigo-500/40 shadow-lg shadow-indigo-950/40': is2faOrPinChallenge,
+        'bg-slate-900/60 border-slate-800': !is2faOrPinChallenge
+      }"
+    >
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+            <i class="pi pi-key text-sm"></i>
+          </div>
+          <div class="min-w-0">
+            <h4 class="text-xs font-semibold text-white flex items-center gap-1.5 truncate">
+              <span>Enter 6-Digit Authenticator / Security Code</span>
+              <span *ngIf="is2faOrPinChallenge" class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            </h4>
+            <p class="text-[11px] text-slate-400 truncate">
+              From your Authenticator App, SMS, or Email code
+            </p>
+          </div>
+        </div>
+
+        <!-- 6 Individual Square Digit Boxes & Submit Button -->
+        <div class="flex items-center gap-3 w-full sm:w-auto justify-center sm:justify-end">
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <input
+              *ngFor="let digit of otpDigits; let i = index; trackBy: trackByIndex"
+              #digitInput
+              type="text"
+              inputmode="numeric"
+              maxlength="1"
+              [value]="otpDigits[i]"
+              (input)="onDigitInput(i, $event)"
+              (keydown)="onDigitKeyDown(i, $event)"
+              (paste)="onDigitPaste($event)"
+              class="w-8 h-10 sm:w-10 sm:h-11 text-center text-lg font-mono font-bold rounded-lg border bg-slate-950/90 text-white transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              [ngClass]="{
+                'border-indigo-400 shadow-md shadow-indigo-500/20 bg-indigo-950/50 text-indigo-100': otpDigits[i],
+                'border-slate-700 hover:border-slate-600': !otpDigits[i]
+              }"
+            />
+          </div>
+
+          <p-button
+            label="Submit"
+            icon="pi pi-send"
+            [loading]="submittingCaptchaPinCode"
+            [disabled]="captchaPinCode.trim().length < 6 || submittingCaptchaPinCode"
+            (onClick)="submitCaptchaPin()"
+            [rounded]="true"
+            size="small"
+            [style]="{ background: '#6366f1', border: 'none' }"
+            class="shrink-0"
+          ></p-button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Browser Screen Stream Viewport -->
+    <div class="relative rounded-xl overflow-hidden border border-slate-700/60 bg-slate-950 shadow-2xl flex items-center justify-center min-h-[260px] max-h-[48vh]">
+      <!-- Click Ripple indicator -->
+      <div
+        *ngIf="lastClickRipple"
+        class="absolute z-20 pointer-events-none w-6 h-6 rounded-full border-2 border-indigo-400 bg-indigo-400/40 animate-ping -translate-x-1/2 -translate-y-1/2"
+        [style.left.px]="lastClickRipple.x"
+        [style.top.px]="lastClickRipple.y"
+      ></div>
+
+      <!-- Relaying Click Badge (Floating non-blocking pill in top-right) -->
+      <div
+        *ngIf="relayingClick"
+        class="absolute top-2.5 right-2.5 z-30 px-2.5 py-1 rounded-md bg-slate-900/95 border border-indigo-500/40 text-indigo-300 text-[11px] font-medium flex items-center gap-1.5 shadow-lg backdrop-blur-sm pointer-events-none"
+      >
+        <i class="pi pi-spin pi-spinner text-indigo-400 text-xs"></i>
+        <span>Relaying click...</span>
+      </div>
+
+      <!-- Screenshot Image -->
+      <img
+        #viewportImg
+        *ngIf="captchaScreenshotUrl"
+        [src]="captchaScreenshotUrl"
+        alt="LinkedIn Security Challenge"
+        (click)="onChallengeViewportClick($event, viewportImg)"
+        class="max-w-full max-h-[48vh] w-auto h-auto object-contain block select-none cursor-crosshair transition-opacity duration-200"
+        [class.opacity-60]="loadingCaptchaScreenshot"
+        title="Click anywhere on the screen to interact or solve challenge"
+      />
+
+      <!-- Loading / Placeholder Screen -->
+      <div
+        *ngIf="!captchaScreenshotUrl && loadingCaptchaScreenshot"
+        class="flex flex-col items-center justify-center py-20 gap-3 text-slate-400"
+      >
+        <i class="pi pi-spin pi-spinner text-3xl text-indigo-400"></i>
+        <span class="text-xs">Loading live security challenge view...</span>
+      </div>
+
+      <!-- Submitting Code Verification Overlay (only while submitting PIN) -->
+      <div
+        *ngIf="submittingCaptchaPinCode"
+        class="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center gap-2.5"
+      >
+        <div class="w-10 h-10 rounded-full bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center">
+          <i class="pi pi-spin pi-spinner text-lg text-indigo-400"></i>
+        </div>
+        <span class="text-xs font-medium text-white shadow-sm">Verifying code with LinkedIn...</span>
+      </div>
+    </div>
+
+    <!-- Quick Action / Helper Bar (Always Visible) -->
+    <div class="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
+      <div class="flex items-center gap-1.5 text-slate-400 text-[11px]">
+        <i class="pi pi-info-circle text-indigo-400"></i>
+        <span *ngIf="is2faOrPinChallenge">Enter your 6-digit code in the boxes above, paste it, or type anywhere on your keyboard.</span>
+        <span *ngIf="!is2faOrPinChallenge">Click directly on puzzle tiles or arrows on the image to solve CAPTCHA.</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <p-button
+          label="Reload Page"
+          icon="pi pi-refresh"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          [loading]="submittingCaptchaInteraction"
+          (onClick)="refreshCaptchaPage()"
+          pTooltip="Reload LinkedIn page if challenge got stuck"
+        ></p-button>
+        <p-button
+          label="Check Status"
+          icon="pi pi-check-circle"
+          severity="success"
+          size="small"
+          [loading]="submittingCaptchaInteraction"
+          (onClick)="checkCaptchaStatusManually()"
+          pTooltip="Check if verification has been solved"
+        ></p-button>
+      </div>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-between w-full pt-1">
+      <span class="text-[11px] text-muted flex items-center gap-1.5">
+        <i class="pi pi-lock text-indigo-400"></i> Encrypted end-to-end browser session
+      </span>
+      <p-button
+        label="Cancel Connection"
+        icon="pi pi-times"
+        severity="danger"
+        [text]="true"
+        (onClick)="cancelCaptchaModal()"
+      ></p-button>
+    </div>
+  </ng-template>
+</p-dialog>
+

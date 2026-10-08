@@ -129,20 +129,29 @@ class GeneratorService:
     @classmethod
     def generate_blog(cls, req: GenerateBlogRequest) -> GenerateBlogResponse:
         """Executes LangGraph blog workflow and returns styled HTML with images & tags."""
-        blog_type = req.blog_type.lower() if req.blog_type else "text_and_image"
-        include_images = req.include_images if req.include_images is not None else (blog_type != "text_only")
-        effective_num_images = 0 if not include_images else (req.num_images or 1)
+        req_blog_type = (req.blog_type or "").strip().lower()
+        if req_blog_type in ("text_only", "text-only", "text"):
+            blog_type = "text_only"
+            include_images = False
+            effective_num_images = 0
+        else:
+            include_images = req.include_images if req.include_images is not None else True
+            blog_type = "text_and_image" if include_images else "text_only"
+            effective_num_images = (req.num_images if req.num_images and req.num_images > 0 else 1) if include_images else 0
+
+        target_words = int(req.target_words) if req.target_words and int(req.target_words) > 0 else 1000
 
         state = {
             "topic": req.topic.strip(),
+            "variant_angle": req.variant_angle,
             "tone": req.tone or "professional",
             "target_audience": req.target_audience or "Business leaders, practitioners, and modern professionals",
             "keywords": req.keywords or [],
-            "blog_type": "text_only" if not include_images else "text_and_image",
+            "blog_type": blog_type,
             "include_images": include_images,
             "num_images": effective_num_images,
-            "target_words": req.target_words or 1000,
-            "target_length": req.target_length or f"~{req.target_words or 1000} words",
+            "target_words": target_words,
+            "target_length": f"~{target_words} words",
             "language": req.language or "English",
             "cta_text": req.cta_text,
             "cta_url": req.cta_url,

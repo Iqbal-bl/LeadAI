@@ -12,6 +12,41 @@
   background-color: var(--app-surface, #0f172a);
 }
 
+/* Pricing Cards Base & Dark Card Theme */
+.pricing-card-dark {
+  background-color: #0b0f19 !important;
+  border-color: #1e293b !important;
+  color: #ffffff !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+
+  h2 {
+    color: #ffffff !important;
+  }
+
+  p {
+    color: #94a3b8 !important;
+  }
+}
+
+.pricing-card-light {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+
+  &:hover {
+    border-color: #cbd5e1 !important;
+  }
+}
+
+:host-context(.dark) .pricing-card-light {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+
+  &:hover {
+    border-color: #334155 !important;
+  }
+}
+
 /* Custom subtle animations */
 .animate-fade-in {
   animation: fadeIn 0.25s ease-out forwards;
@@ -51,7 +86,7 @@
     border-radius: 9999px;
 
     .p-slider-range {
-      background: #6366f1;
+      background: #3b82f6;
       border-radius: 9999px;
     }
 
@@ -59,9 +94,9 @@
       width: 18px;
       height: 18px;
       background: #ffffff;
-      border: 2px solid #6366f1;
+      border: 2px solid #3b82f6;
       border-radius: 50%;
-      box-shadow: 0 2px 4px rgba(99, 102, 241, 0.25);
+      box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
       transition: transform 0.15s ease;
 
       &:hover {

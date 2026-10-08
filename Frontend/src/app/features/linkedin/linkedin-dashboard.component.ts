@@ -1,8 +1,10 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ViewChild, ViewChildren, ElementRef, QueryList } from '@angular/core';
+import { Subscription } from 'rxjs';
 import { SharedModule } from '../../shared/shared.module';
 import { LinkedinService } from '../../services/linkedin.service';
 import {
   LinkedInStatus,
+  LinkedInAccount,
   LinkedInProfile,
   LinkedInCredentialsPayload,
   LinkedInInvitationItem,
@@ -10,6 +12,7 @@ import {
   LinkedInMessage,
   LinkedInSocialComment,
   LinkedInCommentSettings,
+  LinkedInAutoConnectSettings,
 } from '../../models/linkedin.models';
 import { MessageService } from 'primeng/api';
 import { ConfirmationService } from '../../shared/services/confirmation.service';
@@ -31,6 +34,8 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   oauthLoading = false;
   private pollingInterval: any = null;
   private messageListener: any = null;
+  private chatPollingInterval: any = null;
+  private activeMessageSub?: Subscription;
 
   // Bot Session Credentials (Cookie or Email & Password)
   authMode: 'cookie' | 'credentials' = 'cookie';
@@ -42,8 +47,207 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   savingCredentials = false;
   showCredentialsSuccess = false;
 
+  // Remote Interactive Login & CAPTCHA / 2FA Solver State
+  showCaptchaModal = false;
+  activeCaptchaSessionId: string | null = null;
+  captchaChallengeType: string = 'captcha';
+  captchaMessage: string = '';
+  captchaScreenshotUrl: string | null = null;
+  loadingCaptchaScreenshot = false;
+  captchaPinCode: string = '';
+  otpDigits: string[] = ['', '', '', '', '', ''];
+  submittingCaptchaInteraction = false;
+  submittingCaptchaPinCode = false;
+  relayingClick = false;
+  captchaPollingInterval: any = null;
+  lastClickRipple: { x: number; y: number } | null = null;
+  @ViewChild('pinInput') pinInputElement?: ElementRef<HTMLInputElement>;
+  @ViewChildren('digitInput') digitInputs?: QueryList<ElementRef<HTMLInputElement>>;
+
+  get is2faOrPinChallenge(): boolean {
+    const type = (this.captchaChallengeType || '').toLowerCase();
+    const msg = (this.captchaMessage || '').toLowerCase();
+    return (
+      type === '2fa' ||
+      type === 'email_pin' ||
+      type === 'sms_pin' ||
+      msg.includes('authenticator') ||
+      msg.includes('code') ||
+      msg.includes('pin') ||
+      msg.includes('two-step') ||
+      msg.includes('verification')
+    );
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
+
+  focusDigitInput(index: number): void {
+    setTimeout(() => {
+      const inputs = this.digitInputs?.toArray();
+      if (inputs && inputs[index]) {
+        inputs[index].nativeElement.focus();
+        inputs[index].nativeElement.select();
+      }
+    }, 40);
+  }
+
+  focusPinInput(): void {
+    const emptyIndex = this.otpDigits.findIndex((d) => !d);
+    this.focusDigitInput(emptyIndex !== -1 ? emptyIndex : 0);
+  }
+
+  onDigitInput(index: number, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const rawVal = input.value || '';
+    const digitsOnly = rawVal.replace(/[^0-9]/g, '');
+
+    if (digitsOnly.length > 1) {
+      // If user typed multiple digits or pasted into a box
+      const chars = digitsOnly.split('');
+      for (let i = 0; i < chars.length && index + i < 6; i++) {
+        this.otpDigits[index + i] = chars[i];
+      }
+      this.captchaPinCode = this.otpDigits.join('');
+      const nextFocus = Math.min(index + chars.length, 5);
+      this.focusDigitInput(nextFocus);
+      if (this.captchaPinCode.length === 6) {
+        this.submitCaptchaPin();
+      }
+      return;
+    }
+
+    if (digitsOnly.length === 1) {
+      this.otpDigits[index] = digitsOnly;
+      input.value = digitsOnly;
+      this.captchaPinCode = this.otpDigits.join('');
+
+      if (index < 5) {
+        this.focusDigitInput(index + 1);
+      } else if (this.captchaPinCode.length === 6) {
+        // Automatically submit when all 6 digits are completed!
+        this.submitCaptchaPin();
+      }
+    } else {
+      this.otpDigits[index] = '';
+      input.value = '';
+      this.captchaPinCode = this.otpDigits.join('');
+    }
+  }
+
+  onDigitKeyDown(index: number, event: KeyboardEvent): void {
+    if (event.key === 'Backspace') {
+      if (!this.otpDigits[index] && index > 0) {
+        this.otpDigits[index - 1] = '';
+        this.captchaPinCode = this.otpDigits.join('');
+        this.focusDigitInput(index - 1);
+        event.preventDefault();
+      } else {
+        this.otpDigits[index] = '';
+        this.captchaPinCode = this.otpDigits.join('');
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowLeft' && index > 0) {
+      this.focusDigitInput(index - 1);
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'ArrowRight' && index < 5) {
+      this.focusDigitInput(index + 1);
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      if (this.captchaPinCode.trim().length >= 6 && !this.submittingCaptchaPinCode) {
+        event.preventDefault();
+        this.submitCaptchaPin();
+      }
+    }
+  }
+
+  onDigitPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const pastedData = event.clipboardData?.getData('text') || '';
+    const digits = pastedData.replace(/[^0-9]/g, '').slice(0, 6);
+    if (!digits) return;
+
+    for (let i = 0; i < 6; i++) {
+      this.otpDigits[i] = digits[i] || '';
+    }
+    this.captchaPinCode = this.otpDigits.join('');
+
+    if (digits.length === 6) {
+      this.focusDigitInput(5);
+      this.submitCaptchaPin();
+    } else {
+      this.focusDigitInput(Math.min(digits.length, 5));
+    }
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleCaptchaKeydown(event: KeyboardEvent): void {
+    if (!this.showCaptchaModal || !this.activeCaptchaSessionId) return;
+
+    const activeEl = document.activeElement;
+    const isInsideDigitInput = this.digitInputs?.some((el) => el.nativeElement === activeEl);
+
+    if (event.key === 'Enter') {
+      if (this.captchaPinCode.trim().length >= 6 && !this.submittingCaptchaPinCode) {
+        event.preventDefault();
+        this.submitCaptchaPin();
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      return;
+    }
+
+    // If focus is already in one of the 6 digit inputs, let onDigitKeyDown handle it
+    if (isInsideDigitInput) {
+      return;
+    }
+
+    // Capture digits 0-9 typed anywhere
+    if (/^[0-9]$/.test(event.key)) {
+      const nextIdx = this.otpDigits.findIndex((d) => !d);
+      const targetIdx = nextIdx !== -1 ? nextIdx : 0;
+      this.otpDigits[targetIdx] = event.key;
+      this.captchaPinCode = this.otpDigits.join('');
+      event.preventDefault();
+
+      if (targetIdx < 5) {
+        this.focusDigitInput(targetIdx + 1);
+      } else if (this.captchaPinCode.length === 6) {
+        this.submitCaptchaPin();
+      }
+      return;
+    }
+
+    // Capture backspace typed anywhere
+    if (event.key === 'Backspace') {
+      for (let i = 5; i >= 0; i--) {
+        if (this.otpDigits[i]) {
+          this.otpDigits[i] = '';
+          this.captchaPinCode = this.otpDigits.join('');
+          this.focusDigitInput(i);
+          event.preventDefault();
+          break;
+        }
+      }
+      return;
+    }
+  }
+
+
   // Auto-Accept & Automation Settings
   autoAcceptEnabled = false;
+  autoDmLeadsEnabled = true;
   welcomeMessage =
     'Hi {name},\n\nThanks for connecting! Looking forward to staying in touch and exploring potential collaborations.';
   savingSettings = false;
@@ -53,6 +257,28 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   invitations: LinkedInInvitationItem[] = [];
   loadingInvitations = false;
   acceptingAll = false;
+
+  // Auto-Pilot Outreach & Randomized Connection Scheduler
+  autoConnectSettings: LinkedInAutoConnectSettings = {
+    enabled: false,
+    runs_per_day: 3,
+    profiles_per_run: 5,
+    target_prompt: 'Senior React & Node.js Developers in Bengaluru',
+    target_keywords: '',
+    custom_message: 'Hi {firstName}, I came across your profile and was really impressed by your background. Would love to connect!',
+    active_hours_start: 9,
+    active_hours_end: 19,
+    last_run_at: null,
+    next_run_at: null,
+    total_sent_today: 0,
+    total_sent_all_time: 0,
+    last_run_status: null,
+    last_run_detail: null,
+  };
+  loadingAutoConnect = false;
+  savingAutoConnect = false;
+  triggeringAutoConnect = false;
+  isGeneratingAutoKeywords = false;
 
   // AI Boolean Keyword Search
   aiPrompt = 'Senior React & Node.js Developers in Bengaluru';
@@ -79,6 +305,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   messages: LinkedInMessage[] = [];
   loadingConversations = false;
   loadingMessages = false;
+  syncingThreadMessages = false;
+  loadingPreviousMessages = false;
+  hasNoEarlierMessages = false;
   sendingMessage = false;
   replyMessageText = '';
   syncingMessages = false;
@@ -88,6 +317,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   selectedCount = 0;
   selectedProfiles: LinkedInProfile[] = [];
   unreadConversationsCount = 0;
+
+  get connectedAccounts(): LinkedInAccount[] {
+    return this.status?.accounts || [];
+  }
   filteredConversations: LinkedInConversation[] = [];
   canSendReply = false;
 
@@ -130,8 +363,44 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.clearPolling();
+    this.stopChatPolling();
+    this.stopCaptchaPolling();
+    if (this.captchaScreenshotUrl) {
+      URL.revokeObjectURL(this.captchaScreenshotUrl);
+      this.captchaScreenshotUrl = null;
+    }
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     if (this.messageListener) {
       window.removeEventListener('message', this.messageListener);
+    }
+  }
+
+  onTabChange(tab: any): void {
+    this.activeTab = tab;
+    if (tab !== 'messages') {
+      this.stopChatPolling();
+      if (this.activeMessageSub) {
+        this.activeMessageSub.unsubscribe();
+        this.activeMessageSub = undefined;
+        this.loadingMessages = false;
+        this.syncingThreadMessages = false;
+      }
+    } else {
+      if (this.conversations.length === 0) {
+        this.loadConversations();
+      } else if (this.selectedConversation) {
+        const hasLoadedMessages = this.messages && this.messages.length > 0;
+        this.selectConversation(this.selectedConversation, hasLoadedMessages);
+      }
+    }
+    if (tab === 'comments' && this.comments.length === 0 && !this.loadingComments) {
+      this.loadComments();
+    }
+    if (tab === 'search') {
+      this.loadAutoConnectSettings();
     }
   }
 
@@ -144,6 +413,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.statusLoading = false;
         if (res) {
           this.autoAcceptEnabled = !!res['auto_accept'];
+          this.autoDmLeadsEnabled = res['auto_dm_leads'] !== false;
           if (res['welcome_message']) {
             this.welcomeMessage = res['welcome_message'];
           }
@@ -152,6 +422,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.loadConversations();
             this.loadCommentSettings();
             this.loadComments();
+            this.loadAutoConnectSettings();
           }
         }
       },
@@ -181,9 +452,12 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     window.addEventListener('message', this.messageListener);
   }
 
-  connectOAuth(): void {
+  connectOAuth(forceLogin: boolean = false): void {
     this.oauthLoading = true;
-    this.linkedinService.getConnectUrl().subscribe({
+    const initialCount = this.status?.accounts?.length || 0;
+    const promptParam = (this.status?.connected || forceLogin || initialCount > 0) ? 'login' : undefined;
+
+    this.linkedinService.getConnectUrl(promptParam).subscribe({
       next: (res) => {
         if (res?.authorize_url) {
           const width = 600;
@@ -200,17 +474,19 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.pollingInterval = setInterval(() => {
             this.linkedinService.getStatus().subscribe({
               next: (status) => {
-                if (status?.connected) {
+                const currentCount = status?.accounts?.length || 0;
+                if (status?.connected && (currentCount > initialCount || (initialCount === 0 && status.connected))) {
                   this.clearPolling();
                   this.oauthLoading = false;
                   this.status = status;
                   if (popup && !popup.closed) {
                     popup.close();
                   }
+                  const newestAccount = status.accounts?.[status.accounts.length - 1];
                   this.messageService.add({
                     severity: 'success',
-                    summary: 'Connected to LinkedIn',
-                    detail: `Account linked successfully (${status.person_urn || 'Profile'}).`,
+                    summary: 'LinkedIn Account Linked',
+                    detail: `Account "${newestAccount?.name || status.person_urn || 'Profile'}" added successfully.`,
                   });
                   this.loadStatus();
                 }
@@ -272,6 +548,34 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  disconnectSpecificAccount(account: LinkedInAccount): void {
+    this.confirmationService.confirm({
+      message: `Are you sure you want to disconnect LinkedIn account "${account.name || account.person_urn}"?`,
+      header: 'Disconnect Account',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.linkedinService.disconnectAccount(account.id).subscribe({
+          next: () => {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Account Disconnected',
+              detail: `Disconnected ${account.name || 'account'} successfully.`,
+            });
+            this.loadStatus();
+          },
+          error: (err) => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: err?.error?.detail || 'Failed to disconnect account.',
+            });
+          },
+        });
+      },
+    });
+  }
+
   private clearPolling(): void {
     if (this.pollingInterval) {
       clearInterval(this.pollingInterval);
@@ -279,18 +583,75 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  // --- Bot Automation Credentials ---
+  // --- Bot Automation Credentials & Interactive Remote Solver ---
   saveBotCredentials(): void {
-    const hasCookie = !!this.credentialsForm.cookie_li_at?.trim();
-    const hasCreds =
-      !!this.credentialsForm.username?.trim() &&
-      !!this.credentialsForm.password?.trim();
+    if (this.authMode === 'credentials') {
+      const username = this.credentialsForm.username?.trim();
+      const password = this.credentialsForm.password?.trim();
 
-    if (!hasCookie && !hasCreds) {
+      if (!username || !password) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Missing Credentials',
+          detail: 'Please enter both your LinkedIn email and password.',
+        });
+        return;
+      }
+
+      this.savingCredentials = true;
+      this.linkedinService.startRemoteLogin({ username, password }).subscribe({
+        next: (res) => {
+          if (res.status === 'success' || res.completed) {
+            this.savingCredentials = false;
+            this.showCredentialsSuccess = true;
+            this.credentialsForm.password = '';
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Connected Successfully',
+              detail: 'LinkedIn session credentials configured successfully.',
+            });
+            this.loadStatus();
+            this.loadConversations();
+            this.loadInvitations();
+            this.loadComments();
+          } else if (res.status === 'checkpoint_required') {
+            this.activeCaptchaSessionId = res.session_id;
+            this.captchaChallengeType = res.challenge_type || 'captcha';
+            this.captchaMessage =
+              res.message ||
+              'LinkedIn security checkpoint required. Please complete the verification below.';
+            this.showCaptchaModal = true;
+            this.refreshCaptchaScreenshot();
+            this.startCaptchaPolling();
+            this.focusPinInput();
+          } else {
+            this.savingCredentials = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Login Failed',
+              detail: res.message || 'LinkedIn authentication failed. Check credentials.',
+            });
+          }
+        },
+        error: (err) => {
+          this.savingCredentials = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Connection Error',
+            detail: err?.error?.detail || err?.error?.message || 'Error connecting to LinkedIn.',
+          });
+        },
+      });
+      return;
+    }
+
+    // Direct Session Token (Mode B)
+    const hasCookie = !!this.credentialsForm.cookie_li_at?.trim();
+    if (!hasCookie) {
       this.messageService.add({
         severity: 'warn',
-        summary: 'Missing Credentials',
-        detail: 'Please enter your LinkedIn email and password.',
+        summary: 'Missing Token',
+        detail: "Please paste your personal 'li_at' session token.",
       });
       return;
     }
@@ -306,9 +667,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       next: () => {
         this.savingCredentials = false;
         this.showCredentialsSuccess = true;
+        this.credentialsForm.password = '';
         this.messageService.add({
           severity: 'success',
-          summary: 'Credentials Saved',
+          summary: 'Token Saved',
           detail: 'LinkedIn session credentials configured successfully.',
         });
         this.loadStatus();
@@ -320,12 +682,240 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.savingCredentials = false;
         this.messageService.add({
           severity: 'error',
-          summary: 'Failed to Save Credentials',
+          summary: 'Failed to Save Token',
           detail: err?.error?.detail || 'Error saving LinkedIn credentials.',
         });
       },
     });
   }
+
+  startCaptchaPolling(): void {
+    this.stopCaptchaPolling();
+    this.captchaPollingInterval = setInterval(() => {
+      if (!this.activeCaptchaSessionId || !this.showCaptchaModal) {
+        this.stopCaptchaPolling();
+        return;
+      }
+
+      this.linkedinService.checkRemoteLoginStatus(this.activeCaptchaSessionId).subscribe({
+        next: (res) => {
+          if (res.status === 'success' || res.completed) {
+            this.handleCaptchaSuccess();
+          } else if (res.status === 'failed' || res.status === 'expired') {
+            this.stopCaptchaPolling();
+            this.showCaptchaModal = false;
+            this.savingCredentials = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Verification Failed',
+              detail: res.message || 'Verification session expired or failed.',
+            });
+          } else if (res.status === 'checkpoint_required') {
+            if (res.challenge_type && res.challenge_type !== this.captchaChallengeType) {
+              this.captchaChallengeType = res.challenge_type;
+            }
+            if (res.message && res.message !== this.captchaMessage) {
+              this.captchaMessage = res.message;
+            }
+          }
+        },
+      });
+    }, 2000);
+  }
+
+  stopCaptchaPolling(): void {
+    if (this.captchaPollingInterval) {
+      clearInterval(this.captchaPollingInterval);
+      this.captchaPollingInterval = null;
+    }
+  }
+
+  handleCaptchaSuccess(): void {
+    this.stopCaptchaPolling();
+    this.showCaptchaModal = false;
+    this.savingCredentials = false;
+    this.credentialsForm.password = '';
+    this.showCredentialsSuccess = true;
+    this.activeCaptchaSessionId = null;
+
+    if (this.captchaScreenshotUrl) {
+      URL.revokeObjectURL(this.captchaScreenshotUrl);
+      this.captchaScreenshotUrl = null;
+    }
+
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Verification Completed!',
+      detail: 'LinkedIn account connected successfully.',
+    });
+
+    this.loadStatus();
+    this.loadConversations();
+    this.loadInvitations();
+    this.loadComments();
+  }
+
+  refreshCaptchaScreenshot(): void {
+    if (!this.activeCaptchaSessionId) return;
+    this.loadingCaptchaScreenshot = true;
+    this.linkedinService.getRemoteLoginScreenshotBlob(this.activeCaptchaSessionId).subscribe({
+      next: (blob) => {
+        if (this.captchaScreenshotUrl) {
+          URL.revokeObjectURL(this.captchaScreenshotUrl);
+        }
+        this.captchaScreenshotUrl = URL.createObjectURL(blob);
+        this.loadingCaptchaScreenshot = false;
+      },
+      error: () => {
+        this.loadingCaptchaScreenshot = false;
+      },
+    });
+  }
+
+  onChallengeViewportClick(event: MouseEvent, imgEl: HTMLImageElement): void {
+    if (!this.activeCaptchaSessionId || this.submittingCaptchaInteraction || this.relayingClick) return;
+
+    const rect = imgEl.getBoundingClientRect();
+    const scaleX = 1024 / rect.width;
+    const scaleY = 720 / rect.height;
+    const clickX = Math.round((event.clientX - rect.left) * scaleX);
+    const clickY = Math.round((event.clientY - rect.top) * scaleY);
+
+    this.lastClickRipple = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    setTimeout(() => {
+      this.lastClickRipple = null;
+    }, 800);
+
+    // If on a 2FA / PIN screen, clicking anywhere on the screen also focuses the PIN input box
+    if (this.is2faOrPinChallenge) {
+      this.focusPinInput();
+    }
+
+    this.relayingClick = true;
+    this.linkedinService
+      .interactRemoteLogin(this.activeCaptchaSessionId, {
+        action: 'click',
+        x: clickX,
+        y: clickY,
+      })
+      .subscribe({
+        next: (res) => {
+          this.relayingClick = false;
+          if (res.status === 'success' || res.completed) {
+            this.handleCaptchaSuccess();
+          } else {
+            if (res.challenge_type) {
+              this.captchaChallengeType = res.challenge_type;
+            }
+            if (res.message) {
+              this.captchaMessage = res.message;
+            }
+            this.refreshCaptchaScreenshot();
+          }
+        },
+        error: () => {
+          this.relayingClick = false;
+        },
+      });
+  }
+
+  submitCaptchaPin(): void {
+    const pin = this.captchaPinCode.trim();
+    if (!pin || !this.activeCaptchaSessionId || this.submittingCaptchaPinCode) return;
+
+    this.submittingCaptchaPinCode = true;
+    this.submittingCaptchaInteraction = true;
+    this.linkedinService
+      .interactRemoteLogin(this.activeCaptchaSessionId, {
+        action: 'submit_pin',
+        text: pin,
+      })
+      .subscribe({
+        next: (res) => {
+          this.submittingCaptchaPinCode = false;
+          this.submittingCaptchaInteraction = false;
+          if (res.status === 'success' || res.completed) {
+            this.otpDigits = ['', '', '', '', '', ''];
+            this.captchaPinCode = '';
+            this.handleCaptchaSuccess();
+          } else {
+            if (res.challenge_type) {
+              this.captchaChallengeType = res.challenge_type;
+            }
+            if (res.message) {
+              this.captchaMessage = res.message;
+            }
+            this.refreshCaptchaScreenshot();
+            this.focusPinInput();
+          }
+        },
+        error: () => {
+          this.submittingCaptchaPinCode = false;
+          this.submittingCaptchaInteraction = false;
+        },
+      });
+  }
+
+  refreshCaptchaPage(): void {
+    if (!this.activeCaptchaSessionId) return;
+    this.submittingCaptchaInteraction = true;
+    this.linkedinService
+      .interactRemoteLogin(this.activeCaptchaSessionId, {
+        action: 'refresh',
+      })
+      .subscribe({
+        next: () => {
+          this.submittingCaptchaInteraction = false;
+          this.refreshCaptchaScreenshot();
+        },
+        error: () => {
+          this.submittingCaptchaInteraction = false;
+        },
+      });
+  }
+
+  checkCaptchaStatusManually(): void {
+    if (!this.activeCaptchaSessionId) return;
+    this.submittingCaptchaInteraction = true;
+    this.linkedinService
+      .checkRemoteLoginStatus(this.activeCaptchaSessionId)
+      .subscribe({
+        next: (res) => {
+          this.submittingCaptchaInteraction = false;
+          if (res.status === 'success' || res.completed) {
+            this.handleCaptchaSuccess();
+          } else {
+            this.refreshCaptchaScreenshot();
+            this.messageService.add({
+              severity: 'info',
+              summary: 'Verification Pending',
+              detail: res.message || 'Challenge is still active. Please continue on screen.',
+            });
+          }
+        },
+        error: () => {
+          this.submittingCaptchaInteraction = false;
+        },
+      });
+  }
+
+  cancelCaptchaModal(): void {
+    if (this.activeCaptchaSessionId) {
+      this.linkedinService.cancelRemoteLogin(this.activeCaptchaSessionId).subscribe();
+      this.activeCaptchaSessionId = null;
+    }
+    this.stopCaptchaPolling();
+    this.showCaptchaModal = false;
+    this.savingCredentials = false;
+    if (this.captchaScreenshotUrl) {
+      URL.revokeObjectURL(this.captchaScreenshotUrl);
+      this.captchaScreenshotUrl = null;
+    }
+  }
+
 
   disconnectBotCredentials(): void {
     this.confirmationService.confirm({
@@ -376,6 +966,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       .saveSettings({
         auto_accept: this.autoAcceptEnabled,
         welcome_message: this.welcomeMessage.trim() || null,
+        auto_dm_leads: this.autoDmLeadsEnabled,
       })
       .subscribe({
         next: () => {
@@ -383,7 +974,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Settings Saved',
-            detail: 'LinkedIn auto-accept and welcome messaging rules updated.',
+            detail: 'LinkedIn automation rules and CRM lead settings updated.',
           });
           this.loadStatus();
         },
@@ -466,7 +1057,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.messageService.add({
             severity: 'success',
             summary: 'Invitation Accepted',
-            detail: `Accepted connection request from ${item.name}. Lead created in CRM.`,
+            detail: `Accepted connection request from ${item.name}. Captured as a Lead in the Leads pipeline.`,
           });
         },
         error: (err) => {
@@ -580,6 +1171,163 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  // --- Auto-Pilot Scheduler ---
+  loadAutoConnectSettings(): void {
+    this.loadingAutoConnect = true;
+    this.linkedinService.getAutoConnectSettings().subscribe({
+      next: (res) => {
+        this.loadingAutoConnect = false;
+        if (res?.settings) {
+          this.autoConnectSettings = {
+            ...this.autoConnectSettings,
+            ...res.settings,
+          };
+          if (!this.autoConnectSettings.custom_message && this.autoConnectSettings.custom_message !== '') {
+            this.autoConnectSettings.custom_message =
+              'Hi {firstName}, I came across your profile and was really impressed by your background. Would love to connect!';
+          }
+        }
+      },
+      error: (err) => {
+        this.loadingAutoConnect = false;
+        console.error('Failed to load auto-connect settings:', err);
+      },
+    });
+  }
+
+  saveAutoConnectSettings(): void {
+    if (
+      this.autoConnectSettings.enabled &&
+      !this.autoConnectSettings.target_keywords?.trim() &&
+      !this.autoConnectSettings.target_prompt?.trim()
+    ) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Target Criteria Required',
+        detail:
+          'Please specify a target candidate description or boolean search keywords before enabling Auto-Pilot.',
+      });
+      return;
+    }
+
+    this.savingAutoConnect = true;
+    this.linkedinService
+      .saveAutoConnectSettings(this.autoConnectSettings)
+      .subscribe({
+        next: (res) => {
+          this.savingAutoConnect = false;
+          if (res?.settings) {
+            this.autoConnectSettings = {
+              ...this.autoConnectSettings,
+              ...res.settings,
+            };
+          }
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Auto-Pilot Schedule Saved',
+            detail: this.autoConnectSettings.enabled
+              ? `Auto-Pilot is ACTIVE: ${this.autoConnectSettings.runs_per_day} randomized runs/day scheduled.`
+              : 'Auto-Pilot schedule settings saved (Paused).',
+          });
+        },
+        error: (err) => {
+          this.savingAutoConnect = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Save Failed',
+            detail:
+              err?.error?.detail ||
+              'Could not save Auto-Pilot schedule settings.',
+          });
+        },
+      });
+  }
+
+  triggerAutoConnectNow(): void {
+    if (
+      !this.autoConnectSettings.target_keywords?.trim() &&
+      !this.autoConnectSettings.target_prompt?.trim()
+    ) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Target Criteria Missing',
+        detail:
+          'Please provide target keywords or a prompt before triggering a run.',
+      });
+      return;
+    }
+
+    this.triggeringAutoConnect = true;
+    this.linkedinService.triggerAutoConnectNow().subscribe({
+      next: (res) => {
+        this.triggeringAutoConnect = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Auto-Pilot Run Dispatched',
+          detail:
+            'Candidate search and connection dispatch started in background.',
+        });
+        setTimeout(() => this.loadAutoConnectSettings(), 4000);
+      },
+      error: (err) => {
+        this.triggeringAutoConnect = false;
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Dispatch Failed',
+          detail:
+            err?.error?.detail ||
+            'Could not trigger immediate auto-connect run.',
+        });
+      },
+    });
+  }
+
+  generateAutoKeywords(): void {
+    if (!this.autoConnectSettings.target_prompt?.trim()) return;
+
+    this.isGeneratingAutoKeywords = true;
+    this.linkedinService
+      .generateKeywords(this.autoConnectSettings.target_prompt.trim())
+      .subscribe({
+        next: (res) => {
+          this.isGeneratingAutoKeywords = false;
+          this.autoConnectSettings.target_keywords = res.keywords || '';
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Keywords Generated',
+            detail: 'Auto-Pilot boolean search keywords updated.',
+          });
+        },
+        error: (err) => {
+          this.isGeneratingAutoKeywords = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Keyword Generation Failed',
+            detail:
+              err?.error?.detail || 'Could not generate boolean search keywords.',
+          });
+        },
+      });
+  }
+
+  applyAutoConnectPreset(templateText: string): void {
+    this.autoConnectSettings.custom_message = templateText;
+  }
+
+  copyAutoKeywordsToSearch(): void {
+    if (this.autoConnectSettings.target_keywords) {
+      this.generatedKeywords = this.autoConnectSettings.target_keywords;
+    }
+    if (this.autoConnectSettings.target_prompt) {
+      this.aiPrompt = this.autoConnectSettings.target_prompt;
+    }
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Copied to Search Bar',
+      detail: 'Target keywords copied to manual search controls above.',
+    });
+  }
+
   // --- Candidate Search ---
   searchCandidates(): void {
     const query = this.generatedKeywords.trim() || this.aiPrompt.trim();
@@ -597,7 +1345,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     this.linkedinService.searchProfiles(query, this.searchLimit).subscribe({
       next: (res) => {
         this.isSearchingProfiles = false;
-        this.profiles = (res.profiles || []).map((p) => ({
+        const raw = res.profiles || [];
+        const limited = this.searchLimit > 0 ? raw.slice(0, this.searchLimit) : raw;
+        this.profiles = limited.map((p) => ({
           ...p,
           selected: false,
         }));
@@ -727,7 +1477,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.applyConversationFilter();
         if (this.conversations.length > 0) {
           if (!this.selectedConversation) {
-            this.selectConversation(this.conversations[0]);
+            this.selectedConversation = this.conversations[0];
+            if (this.activeTab === 'messages') {
+              this.selectConversation(this.conversations[0]);
+            }
           } else {
             const found = this.conversations.find(
               (c) =>
@@ -755,33 +1508,102 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  selectConversation(conv: LinkedInConversation): void {
+  selectConversation(conv: LinkedInConversation, isBackgroundRefresh = false): void {
+    if (this.activeTab !== 'messages') {
+      this.stopChatPolling();
+      return;
+    }
     this.selectedConversation = conv;
     if (!conv.is_read || (conv.unread_count && conv.unread_count > 0)) {
       conv.is_read = true;
       conv.unread_count = 0;
       this.updateUnreadCount();
     }
-    this.messages = [];
-    this.loadingMessages = true;
+    if (!isBackgroundRefresh) {
+      this.messages = [];
+      this.loadingMessages = true;
+      this.syncingThreadMessages = false;
+      this.hasNoEarlierMessages = false;
+    } else {
+      this.syncingThreadMessages = true;
+    }
+    if (this.activeMessageSub) {
+      this.activeMessageSub.unsubscribe();
+      this.activeMessageSub = undefined;
+    }
     const convId = conv.conversation_id || conv.conversation_urn;
-    this.linkedinService.getConversationMessages(convId).subscribe({
+    this.activeMessageSub = this.linkedinService.getConversationMessages(convId).subscribe({
       next: (res) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
-        this.messages = res.messages || [];
-        this.scrollToBottom();
+        this.syncingThreadMessages = false;
+        if (this.activeTab !== 'messages') {
+          this.stopChatPolling();
+          return;
+        }
+        const incoming = res.messages || [];
+        if (!isBackgroundRefresh || incoming.length !== this.messages.length) {
+          const hadMessages = this.messages.length > 0;
+          this.messages = incoming;
+          if (!hadMessages || incoming.length > this.messages.length) {
+            this.scrollToBottom();
+          }
+          if (incoming.length > 0) {
+            conv.last_message = incoming[incoming.length - 1].text;
+          }
+        }
+        if (!isBackgroundRefresh && this.activeTab === 'messages') {
+          this.startChatPolling();
+          // Quick follow-up sync after 2.5s to capture remaining streamed messages without waiting 15s
+          setTimeout(() => {
+            if (this.activeTab === 'messages' && this.selectedConversation === conv) {
+              this.selectConversation(conv, true);
+            }
+          }, 2500);
+        }
       },
       error: (err) => {
+        this.activeMessageSub = undefined;
         this.loadingMessages = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Message Fetch Failed',
-          detail:
-            err?.error?.detail ||
-            'Could not load conversation thread messages.',
-        });
+        this.syncingThreadMessages = false;
+        if (!isBackgroundRefresh && this.activeTab === 'messages') {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Message Fetch Failed',
+            detail:
+              err?.error?.detail ||
+              'Could not load conversation thread messages.',
+          });
+        }
       },
     });
+  }
+
+  private startChatPolling(): void {
+    this.stopChatPolling();
+    if (this.activeTab !== 'messages') return;
+    this.chatPollingInterval = setInterval(() => {
+      // Pause polling if tab is not messages or browser window is hidden/minimized
+      if (this.activeTab !== 'messages' || typeof document !== 'undefined' && document.hidden) {
+        if (this.activeTab !== 'messages') this.stopChatPolling();
+        return;
+      }
+      if (
+        this.selectedConversation &&
+        !this.loadingMessages &&
+        !this.syncingThreadMessages &&
+        !this.sendingMessage
+      ) {
+        this.selectConversation(this.selectedConversation, true);
+      }
+    }, 20000);
+  }
+
+  private stopChatPolling(): void {
+    if (this.chatPollingInterval) {
+      clearInterval(this.chatPollingInterval);
+      this.chatPollingInterval = null;
+    }
   }
 
   sendDirectReply(): void {
@@ -835,7 +1657,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'Messages Synced',
-          detail: `Synced ${res.synced_conversations || 0} conversations and ${res.synced_messages || 0} messages to CRM.`,
+          detail: `Synced ${res.synced_conversations || 0} conversations and ${res.synced_messages || 0} messages to Leads pipeline.`,
         });
         this.loadConversations();
       },
@@ -884,15 +1706,69 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     return this.unreadConversationsCount;
   }
 
+  getLeadIntentLabel(intent?: string): string {
+    if (!intent) return 'CRM Lead';
+    if (intent === 'demo_request') return 'Demo Inquiry';
+    if (intent === 'pricing_inquiry') return 'Pricing Inquiry';
+    if (intent === 'consultation_request') return 'Consultation Request';
+    return 'CRM Lead';
+  }
+
+  loadPreviousMessages(): void {
+    if (
+      !this.selectedConversation ||
+      this.loadingPreviousMessages ||
+      this.loadingMessages ||
+      this.hasNoEarlierMessages
+    ) {
+      return;
+    }
+    this.loadingPreviousMessages = true;
+    const conv = this.selectedConversation;
+    const convId = conv.conversation_id || conv.conversation_urn;
+    this.linkedinService.getConversationMessages(convId, true).subscribe({
+      next: (res) => {
+        this.loadingPreviousMessages = false;
+        const incoming = res.messages || [];
+        if (incoming.length > this.messages.length) {
+          const chatContainer = document.getElementById(
+            'linkedin-chat-messages-container',
+          );
+          const oldScrollHeight = chatContainer ? chatContainer.scrollHeight : 0;
+          this.messages = incoming;
+          setTimeout(() => {
+            if (chatContainer) {
+              chatContainer.scrollTop =
+                chatContainer.scrollHeight - oldScrollHeight;
+            }
+          }, 60);
+        } else {
+          // All earlier messages are already loaded
+          this.hasNoEarlierMessages = true;
+        }
+      },
+      error: () => {
+        this.loadingPreviousMessages = false;
+      },
+    });
+  }
+
   private scrollToBottom(): void {
-    setTimeout(() => {
+    const doScroll = () => {
+      const anchor = document.getElementById('chat-bottom-anchor');
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: 'auto', block: 'end' });
+      }
       const chatContainer = document.getElementById(
         'linkedin-chat-messages-container',
       );
       if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
-    }, 60);
+    };
+    setTimeout(doScroll, 50);
+    setTimeout(doScroll, 180);
+    setTimeout(doScroll, 400);
   }
 
   // =========================================================================
@@ -1112,7 +1988,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.messageService.add({
           severity: 'success',
           summary: 'Lead Captured',
-          detail: `${res.display_name || comment.author_name} logged as a CRM Lead.`,
+          detail: `${res.display_name || comment.author_name} captured as a Lead in the Leads pipeline.`,
         });
       },
       error: (err) => {

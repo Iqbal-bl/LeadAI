@@ -30,3 +30,31 @@
 textarea {
   resize: vertical;
 }
+
+:host ::ng-deep .linkedin-captcha-dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: 94vh;
+
+  .p-dialog-header {
+    background: #0f172a;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+    padding: 1rem 1.25rem;
+    flex-shrink: 0;
+  }
+  .p-dialog-content {
+    background: #0b0f19;
+    padding: 1rem 1.25rem;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .p-dialog-footer {
+    background: #0f172a;
+    border-top: 1px solid rgba(51, 65, 85, 0.6);
+    padding: 0.65rem 1.25rem;
+    flex-shrink: 0;
+  }
+}
+

@@ -18,27 +18,13 @@ export class CustomerDetailComponent implements OnInit {
   loading = true;
 
   // Reveal state
+  isRevealed = false;
   revealedPhone: string | null = null;
   revealedEmail: string | null = null;
+  revealedWhatsApp: string | null = null;
+  revealedLinkedIn: string | null = null;
+  revealedSocials: any[] = [];
   revealLoading = false;
-
-  // Message form
-  showMessageForm = false;
-  messageChannel: 'whatsapp' | 'sms' | 'email' | 'voice' = 'whatsapp';
-  messageText = '';
-  sendingMessage = false;
-
-  channelOptions: {
-    label: string;
-    value: 'whatsapp' | 'sms' | 'email' | 'voice';
-    icon: string;
-    key: 'opt_in_whatsapp' | 'opt_in_sms' | 'opt_in_email' | 'opt_in_call';
-  }[] = [
-    { label: 'WhatsApp', value: 'whatsapp', icon: 'pi pi-whatsapp', key: 'opt_in_whatsapp' },
-    { label: 'SMS', value: 'sms', icon: 'pi pi-mobile', key: 'opt_in_sms' },
-    { label: 'Email', value: 'email', icon: 'pi pi-envelope', key: 'opt_in_email' },
-    { label: 'Call', value: 'voice', icon: 'pi pi-phone', key: 'opt_in_call' },
-  ];
 
   constructor(
     private route: ActivatedRoute,
@@ -46,7 +32,7 @@ export class CustomerDetailComponent implements OnInit {
     private customerService: CustomerService,
     private authService: AuthService,
     private messageService: MessageService,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
@@ -73,8 +59,12 @@ export class CustomerDetailComponent implements OnInit {
     this.revealLoading = true;
     this.customerService.revealContact(this.customer.id).subscribe({
       next: (res: CustomerRevealResponse) => {
+        this.isRevealed = true;
         this.revealedPhone = res.phone;
         this.revealedEmail = res.email;
+        this.revealedWhatsApp = res.whatsapp ?? null;
+        this.revealedLinkedIn = res.linkedin ?? res.linkedin_profile_url ?? null;
+        this.revealedSocials = res.social_identities ?? [];
         this.revealLoading = false;
         this.messageService.add({
           severity: 'info',
@@ -83,25 +73,15 @@ export class CustomerDetailComponent implements OnInit {
           life: 3000,
         });
       },
-      error: () => {
+      error: (err) => {
         this.revealLoading = false;
         this.messageService.add({
           severity: 'error',
           summary: 'Error',
-          detail: 'Failed to reveal contact information.',
+          detail: err?.error?.detail || 'Failed to reveal contact information.',
         });
       },
     });
-  }
-
-  hasConsent(channel: string): boolean {
-    if (!this.customer) return false;
-    if (this.customer.do_not_disturb) return false;
-    if (channel === 'whatsapp') return Boolean(this.customer.opt_in_whatsapp);
-    if (channel === 'sms') return Boolean(this.customer.opt_in_sms);
-    if (channel === 'email') return Boolean(this.customer.opt_in_email);
-    if (channel === 'voice' || channel === 'call') return Boolean(this.customer.opt_in_call);
-    return false;
   }
 
   getStageSeverity(stage: string | null | undefined): 'success' | 'info' | 'warn' | 'danger' | 'secondary' {
@@ -143,33 +123,28 @@ export class CustomerDetailComponent implements OnInit {
     return `${amount} ${currency}`;
   }
 
-  sendMessage(): void {
-    if (!this.customer || !this.messageText.trim()) return;
+  getLinkedInDisplay(url: string | null | undefined): string {
+    if (!url) return 'View Profile';
+    const match = url.match(/\/in\/([^\/\?#]+)/);
+    if (match && match[1]) {
+      const slug = match[1];
+      if (slug.includes('ACoAA') || slug.length > 30) {
+        return this.customer?.display_name ? `${this.customer.display_name} (LinkedIn)` : 'View LinkedIn Profile';
+      }
+      return `linkedin.com/in/${slug}`;
+    }
+    return 'View LinkedIn Profile';
+  }
 
-    this.sendingMessage = true;
-    this.customerService.sendMessage(this.customer.id, {
-      channel: this.messageChannel,
-      message: this.messageText,
-    }).subscribe({
-      next: () => {
-        this.sendingMessage = false;
-        this.showMessageForm = false;
-        this.messageText = '';
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Message Sent',
-          detail: `Message sent via ${this.messageChannel}.`,
-        });
-      },
-      error: (err) => {
-        this.sendingMessage = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Send Failed',
-          detail: err.error?.detail || 'Failed to send message.',
-        });
-      },
-    });
+  formatSocialLabel(s: any): string {
+    if (!s) return '';
+    if (s.channel === 'linkedin') {
+      return s.profile_name || s.handle || 'LinkedIn Profile';
+    }
+    if (s.handle) {
+      return s.handle.startsWith('@') ? s.handle : `@${s.handle}`;
+    }
+    return s.profile_name || s.channel;
   }
 
   goBack(): void {

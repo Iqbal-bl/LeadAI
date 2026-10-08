@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator, model_validator
 
 # ===========================================================================
 # generic
@@ -103,6 +103,7 @@ class CompanyOut(BaseModel):
     chunk_count: int = 0
     script_count: int = 0
     conversation_count: int = 0
+    has_active_subscription: bool | None = None
 
     @field_serializer('created_at')
     def serialize_created_at(self, dt: datetime | None, _info):
@@ -121,12 +122,47 @@ class CompanySettingsIn(BaseModel):
     auto_call_on_hot_lead: bool | None = None
     widget_enabled: bool | None = None
     widget_greeting: str | None = Field(default=None, max_length=500)
+    # The persona's name — branding, not a voice parameter, so (unlike
+    # voice_gender/speed/speaker below) a company admin sets this directly.
+    # Usable as {agent} in any script or prompt; see script_engine.py.
+    agent_name: str | None = Field(default=None, max_length=80)
 
 
 class CompanySettingsOut(CompanySettingsIn):
     client_id: str
     effective_handoff_threshold: float
     effective_retrieval_top_k: int
+    # Read-only here on purpose: all three are set via PUT
+    # /companies/{id}/voice-settings, which only a super admin may call — see
+    # rbac.super_admin(). CompanySettingsIn (what a company admin can PUT
+    # through /companies/{id}/settings) deliberately does not carry them —
+    # a company admin used to be able to set voice_speaker per-script; that
+    # ability was removed, not just hidden, when this moved here.
+    # (Pitch was considered too — dropped: Sarvam's current TTS model,
+    # bulbul:v3, ignores it entirely; only the deprecated, API-rejected v2
+    # honours it, so a pitch knob would visibly do nothing on a real call.)
+    voice_gender: str | None = None
+    voice_speed: float | None = None
+    voice_speaker: str | None = None
+    stt_tts_provider: str | None = None
+    # None here means "platform default (True)" — see LeadCompanySettings.MultiStt.
+    multi_stt: bool | None = None
+
+
+class VoiceSettingsIn(BaseModel):
+    """Super-admin-only AI call voice tuning for one company. Never reachable
+    by a company admin — see routers/companies.py's update_voice_settings."""
+
+    voice_gender: str | None = Field(default=None, pattern="^(male|female)$")
+    voice_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    voice_speaker: str | None = Field(default=None, min_length=1, max_length=60)
+    # voice_gender/voice_speed/voice_speaker only ever apply to "sarvam" — see
+    # LeadCompanySettings.SttTtsProvider's comment in models.py.
+    stt_tts_provider: str | None = Field(default=None, pattern="^(sarvam|deepgram)$")
+    # Auto-detect the caller's language per utterance (Hinglish code-switching).
+    # True (the platform default) unless a company genuinely wants one pinned
+    # language for the whole call — see LeadCompanySettings.MultiStt in models.py.
+    multi_stt: bool | None = None
 
 
 class PermissionItemOut(BaseModel):
@@ -198,6 +234,10 @@ class MeOut(BaseModel):
     client_name: str | None = None
     permissions: list[str]
     accessible_companies: list[CompanyOut] = []
+    has_active_subscription: bool = False
+    active_subscription_plan: str | None = None
+    active_channels: list[str] = []
+    active_features: list[str] = []
 
 
 class UserProfileUpdate(BaseModel):
@@ -257,6 +297,7 @@ class DocumentOut(BaseModel):
     file_name: str | None = None
     content_type: str
     source_type: str
+    source_url: str | None = None
     status: str
     status_message: str | None = None
     chunk_count: int
@@ -288,6 +329,13 @@ class FaqCreate(BaseModel):
 class TextCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     content: str = Field(min_length=3)
+    tags: str | None = None
+
+
+class CloudLinkCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    url: str = Field(min_length=5, max_length=1000)
+    notes: str | None = None
     tags: str | None = None
 
 
@@ -340,9 +388,11 @@ class ScriptCreate(BaseModel):
     language: str = "en-IN"
     script_xml: str = Field(min_length=10)
     is_default: bool = False
-    voice_gender: str | None = None
-    voice_speaker: str | None = None
-    multi_stt: bool = False
+    # Whether the AI auto-detects the caller's language per utterance (Hinglish
+    # code-switching) used to be set here; it is platform-level now, super-admin
+    # only — see LeadCompanySettings.MultiStt and VoiceSettingsIn below. A company
+    # admin left this off on a live script with no one noticing until every Hindi
+    # caller's speech was forced through Sarvam's STT as English.
 
 
 class ScriptUpdate(BaseModel):
@@ -353,9 +403,6 @@ class ScriptUpdate(BaseModel):
     script_xml: str | None = None
     is_default: bool | None = None
     is_active: bool | None = None
-    voice_gender: str | None = None
-    voice_speaker: str | None = None
-    multi_stt: bool | None = None
 
 
 class ScriptOut(BaseModel):
@@ -368,9 +415,6 @@ class ScriptOut(BaseModel):
     version: int
     is_default: bool
     is_active: bool
-    voice_gender: str | None = None
-    voice_speaker: str | None = None
-    multi_stt: bool
     section_count: int = 0
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -388,6 +432,67 @@ class ScriptDetail(ScriptOut):
     script_xml: str | None = None
     sections: list[dict] = []
     rendered_prompt: str | None = None
+
+
+# =========================================================================== #
+# company-defined data points ("what the AI should collect for us")
+# =========================================================================== #
+DataPointType = Literal["text", "number", "boolean", "select", "date", "email"]
+
+
+class DataPointCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=60, pattern=r"^[a-z][a-z0-9_]*$")
+    label: str = Field(min_length=1, max_length=160)
+    data_type: DataPointType = "text"
+    options: list[str] | None = None      # required (2+) when data_type == "select"
+    description: str | None = Field(default=None, max_length=300)
+    required: bool = False
+    display_order: int = 0
+
+    @field_validator("options")
+    @classmethod
+    def _clean_options(cls, v):
+        if not v:
+            return None
+        seen: set[str] = set()
+        out = []
+        for opt in v:
+            opt = str(opt).strip()
+            if opt and opt.lower() not in seen:
+                seen.add(opt.lower())
+                out.append(opt[:80])
+        return out or None
+
+
+class DataPointUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=160)
+    data_type: DataPointType | None = None
+    options: list[str] | None = None
+    description: str | None = None
+    required: bool | None = None
+    display_order: int | None = None
+    is_active: bool | None = None
+
+
+class DataPointOut(BaseModel):
+    id: str
+    key: str
+    label: str
+    data_type: str
+    options: list[str] | None = None
+    description: str | None = None
+    required: bool
+    display_order: int
+    is_active: bool
+    created_at: datetime | None = None
+
+    @field_serializer('created_at')
+    def serialize_created_at(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
 
 
 class ScriptImportRequest(BaseModel):
@@ -498,14 +603,32 @@ class LeadOut(BaseModel):
     sentiment: str
     score_breakdown: dict[str, Any] | None = None
     qualified_at: datetime | None = None
+    # Raw {data_point_key: value} for this company's admin-defined data points
+    # (see /data-points). Deliberately not label/type-resolved here — the
+    # frontend already has that schema from GET /data-points and joins by key,
+    # so this stays a plain read of Lead.DataPointsJson with no extra query.
+    data_points: dict[str, Any] | None = None
+    converted_account_id: str | None = None
+    converted_at: datetime | None = None
 
-    @field_serializer('qualified_at')
-    def serialize_qualified_at(self, dt: datetime | None, _info):
+    @field_serializer('qualified_at', 'converted_at')
+    def serialize_dates(self, dt: datetime | None, _info):
         if dt is None:
             return None
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.isoformat()
+
+
+class OriginAttributionOut(BaseModel):
+    """Origin and contextual attribution of a lead (post, campaign, ad, DM, etc.)."""
+    origin_type: str = "direct"  # post_comment | campaign | ad | direct | website | voice_call
+    channel: str = "web"
+    title: str | None = None
+    snippet: str | None = None
+    reference_id: str | None = None
+    url: str | None = None
+    interaction_type: str | None = None
 
 
 class ConversationOut(BaseModel):
@@ -527,6 +650,7 @@ class ConversationOut(BaseModel):
     last_message_at: datetime | None = None
     created_at: datetime | None = None
     lead: LeadOut | None = None
+    origin_attribution: OriginAttributionOut | None = None
 
     @field_serializer('last_message_at', 'created_at')
     def serialize_dates(self, dt: datetime | None, _info):
@@ -679,6 +803,7 @@ class ContactReveal(BaseModel):
     email: str | None = None
     whatsapp: str | None = None
     instagram: str | None = None
+    linkedin: str | None = None
     # Added so a reveal on a Messenger or Instagram lead shows a person rather
     # than a 16-digit id. Populated from leadai_channel_identities.
     display_name: str | None = None
@@ -829,6 +954,23 @@ class ActivityListOut(Paged):
     items: list[ActivityOut] = []
 
 
+class LeadHistorySourceOut(BaseModel):
+    """Where this lead came from — same taxonomy as the inbox's own
+    ?lead_source= filter (inbound | import | broadcast)."""
+    channel: str
+    kind: str  # inbound | import | broadcast
+    campaign_id: str | None = None
+    campaign_name: str | None = None
+
+
+class LeadHistoryListOut(Paged):
+    """A lead's full timeline: assignment, status changes, calls placed, data
+    points collected, qualification — unioned from every entity an event
+    about this lead could be filed under (lead/conversation/call/customer)."""
+    source: LeadHistorySourceOut
+    items: list[ActivityOut] = []
+
+
 class HealthOut(BaseModel):
     status: str
     llm: str
@@ -893,9 +1035,6 @@ class MemberOut(BaseModel):
     role: str
     client_id: str
     is_active: bool = True
-    # Conversations currently assigned to this person (LeadConversation.AssignedUserEmail),
-    # not a lifetime total — matches what "Team Management" actually needs to show: who's
-    # carrying how much right now.
     assigned_leads: int = 0
     created_at: datetime | None = None
 
@@ -1003,6 +1142,7 @@ class ClientRechargeOut(BaseModel):
     plan_name_snapshot: str
     purchased_minutes: float
     remaining_minutes: float
+    booster_minutes: float = 0.0
     rollover_minutes_carried: float = 0.0
     validity_days_snapshot: int
     price_paid: float
@@ -1179,6 +1319,68 @@ class BillingSummaryOut(BaseModel):
     pending_recharges: list[ClientRechargeOut] = []
     total_remaining_minutes: float = 0.0
     is_quota_active: bool = False
+
+
+# ===========================================================================
+# Product Schemas
+# ===========================================================================
+
+
+class BoundKbDocOut(BaseModel):
+    id: str
+    title: str
+    file_name: str | None = None
+    content_type: str | None = None
+    chunk_count: int = 0
+    status: str = "indexed"
+    is_primary: bool = False
+    created_at: datetime | None = None
+
+    @field_serializer("created_at")
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class ProductOut(BaseModel):
+    id: str
+    client_id: str
+    product_name: str
+    product_description: str | None = None
+    knowledge_base_file: str | None = None
+    kb_document_id: str | None = None
+    bound_kb_document_ids: list[str] = []
+    bound_kb_documents: list[BoundKbDocOut] = []
+    created_at: datetime | None = None
+    created_by: str | None = None
+    updated_at: datetime | None = None
+    updated_by: str | None = None
+    is_deleted: bool = False
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_dt(self, dt: datetime | None, _info):
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+
+class ProductListOut(BaseModel):
+    total: int
+    items: list[ProductOut]
+
+
+class ProductUpdate(BaseModel):
+    product_name: str | None = None
+    product_description: str | None = None
+
+
+class BindExistingKbRequest(BaseModel):
+    kb_document_id: str
 
 
 ConversationDetail.model_rebuild()

@@ -23,6 +23,20 @@ export interface CompanySettings {
   widget_greeting: string;
   effective_handoff_threshold?: number;
   effective_retrieval_top_k?: number;
+  agent_name?: string | null;
+  voice_gender?: 'male' | 'female' | null;
+  voice_speed?: number | null;
+  voice_speaker?: string | null;
+  stt_tts_provider?: 'sarvam' | 'deepgram' | null;
+  multi_stt?: boolean | null;
+}
+
+export interface CompanyVoiceSettingsUpdate {
+  voice_gender?: 'male' | 'female';
+  voice_speed?: number;
+  voice_speaker?: string;
+  stt_tts_provider?: 'sarvam' | 'deepgram';
+  multi_stt?: boolean;
 }
 
 export interface CompanyCreatePayload {

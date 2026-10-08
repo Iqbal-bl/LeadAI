@@ -20,6 +20,8 @@ export interface InboxQueryParams {
   page_size?: number;
   above_threshold?: boolean;
   campaign_id?: string;
+  lead_source?: 'inbound' | 'import' | 'broadcast' | string;
+  product?: string;
 }
 
 @Injectable({
@@ -28,12 +30,17 @@ export interface InboxQueryParams {
 export class InboxService {
   constructor(private apiService: ApiService) {}
 
-  // GET /inbox
+  // GET /inbox (or /inbox/conversations)
   public getInbox(params?: InboxQueryParams): Observable<InboxResponse> {
     return this.apiService.get<InboxResponse>('inbox', {
       params: params as any,
       companyScoped: true,
     });
+  }
+
+  // GET /inbox/conversations
+  public getConversations(params?: InboxQueryParams): Observable<InboxResponse> {
+    return this.getInbox(params);
   }
 
   // GET /inbox/queue

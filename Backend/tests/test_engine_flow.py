@@ -50,7 +50,9 @@ ai_engine.vectorstore.idf_map = lambda *a, **k: ({}, 1.0)
 ai_engine.company_thresholds = lambda db, client_id: (0.05, 5)
 
 
-def run(mode):
+def run(mode, turns=1):
+    """Run the same declining question `turns` times in one conversation — in enforce
+    mode, only a decline repeated past settings.decline_retry_limit forces a handoff."""
     bridge.settings = _Bridge(mode)
     db = SessionLocalAdmin()
     client = Client(Name="Nexa Finserv")
@@ -62,8 +64,9 @@ def run(mode):
     conv = models.LeadConversation(ClientId=client.Id, CustomerId=customer.Id, Channel="web")
     db.add(conv)
     db.commit()
-    result = conversation_flow.handle_customer_turn(
-        db, client, conv, "What is the interest rate on a car loan interest rate?")
+    for _ in range(turns):
+        result = conversation_flow.handle_customer_turn(
+            db, client, conv, "What is the interest rate on a car loan interest rate?")
     db.refresh(conv)
     logs = db.query(models.LeadActivityLog).filter_by(EntityId=conv.Id).all()
     return result, conv, [row for row in logs if "AI replied" in (row.LogMessage or "")]
@@ -83,8 +86,13 @@ def test_observe_changes_nothing_but_records_what_it_saw():
     assert meta["engine_escalation"] is True       # it would have handed this to a human
 
 
+def test_enforce_gives_a_couple_of_tries_before_escalating():
+    result, conv, logs = run("enforce", turns=1)
+    assert conv.Status == "open" and not result.handed_off   # first decline: not escalated yet
+
+
 def test_enforce_hands_the_conversation_to_a_human():
-    result, conv, logs = run("enforce")
+    result, conv, logs = run("enforce", turns=real_settings.decline_retry_limit + 1)
     assert conv.Status == "needs_human" and result.handed_off and result.needs_human
     assert conv.HandoffReason == DECLINED_HANDOFF
 

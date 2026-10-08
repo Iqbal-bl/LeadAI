@@ -16,6 +16,14 @@ export interface RechargePlanTemplate {
   is_active: boolean;
   description?: string | null;
   created_at?: string;
+  tier_label?: string | null;
+  is_popular?: boolean;
+  features?: string[];
+  tax_rate_percent?: number;
+  tax_inclusive?: boolean;
+  base_price_excl_tax?: number;
+  tax_amount?: number;
+  yearly_discount_percent?: number;
 }
 
 export interface ClientRecharge {
@@ -25,12 +33,20 @@ export interface ClientRecharge {
   plan_name_snapshot: string;
   purchased_minutes: number;
   remaining_minutes: number;
+  booster_minutes?: number;
   rollover_minutes_carried?: number;
   validity_days_snapshot: number;
   price_paid: number;
   recharged_at?: string | null;
   expires_at?: string | null;
-  status: 'active' | 'pending' | 'exhausted' | 'expired' | 'superseded' | 'failed' | 'cancelled';
+  status:
+    | 'active'
+    | 'pending'
+    | 'exhausted'
+    | 'expired'
+    | 'superseded'
+    | 'failed'
+    | 'cancelled';
   payment_reference?: string | null;
   razorpay_order_id?: string | null;
   razorpay_subscription_id?: string | null;
@@ -132,6 +148,7 @@ export interface CustomBundlePayload {
   voice_minutes: number;
   channels: string[];
   billing_cycle: 'monthly' | 'yearly';
+  base_plan_template_id?: string | null;
 }
 
 export interface UsageLog {

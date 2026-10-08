@@ -14,7 +14,7 @@ from LeadAI import models  # noqa: E402
 from LeadAI.config import settings as real_settings  # noqa: E402
 from LeadAI.engine import trace as trace_mod  # noqa: E402
 from LeadAI.engine.trace import TurnTrace  # noqa: E402
-from LeadAI.services import ai_engine, conversation_flow  # noqa: E402
+from LeadAI.services import ai_engine, conversation_flow, scoring_queue  # noqa: E402
 
 for _table in Base.metadata.sorted_tables:
     try:
@@ -171,6 +171,8 @@ def turn(text, **wire_kw):
     wire(**wire_kw)
     db, client, conv = setup()
     conversation_flow.handle_customer_turn(db, client, conv, text)
+    scoring_queue.wait_idle()   # scoring runs after the reply, in the background
+    db.expire_all()
     db.refresh(conv)
     ai = db.query(models.LeadMessage).filter_by(ConversationId=conv.Id, Sender="ai").one()
     return db, conv, ai, {s["step"]: s for s in ai.TraceJson["steps"]}
@@ -185,7 +187,7 @@ def test_a_normal_turn_records_every_decision_in_order():
     order = names(ai)
     expected = ["receive", "memory", "phone_capture", "state_note", "thresholds", "human_request",
                 "retrieve", "confidence", "prompt", "generate", "answer_decision", "engine",
-                "handoff", "qualify", "summarize", "threshold", "commit"]
+                "handoff", "commit", "post_turn", "qualify", "summarize", "threshold"]   # scoring runs after the commit
     positions = [order.index(n) for n in expected]
     assert positions == sorted(positions), order
     assert steps["retrieve"]["detail"]["chunk_ids"] == ["k1"]
@@ -227,6 +229,28 @@ def test_llm_off_is_traced_with_its_reason():
 def test_greeting_short_circuit_is_recorded():
     db, conv, ai, steps = turn("hi")
     assert steps["greeting"]["decision"].startswith("short-circuit") and "retrieve" not in steps
+
+
+def test_language_switch_short_circuit_is_recorded():
+    """A real incident: a caller's entire turn was "please speak in Hindi" —
+    not a knowledge question, but nothing recognised that, so it ran through
+    retrieval, scored confidence 0.256 (of course — it has nothing to do with
+    the company's products), and the voice pipeline ended the call as a
+    low-confidence handoff. Same fix shape as the greeting short-circuit
+    above: this must never reach retrieval at all."""
+    db, conv, ai, steps = turn("can we talk in hindi", score=0.0)
+    assert steps["language_switch"]["decision"].startswith("short-circuit") and "retrieve" not in steps
+    assert steps["handoff"]["decision"] == "none needed"
+
+
+def test_a_question_that_merely_mentions_a_language_still_goes_through_retrieval():
+    """Distinguishing case: a longer, genuinely substantive question must not
+    be short-circuited just because it happens to mention a language — only a
+    turn that IS JUST the language request should skip retrieval."""
+    db, conv, ai, steps = turn(
+        "what is the price of a 3 BHK and do your advisors also speak Hindi by the way",
+    )
+    assert "language_switch" not in steps and "retrieve" in steps
 
 
 def test_a_stopped_conversation_records_why_the_ai_stayed_silent():

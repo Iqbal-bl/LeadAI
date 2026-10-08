@@ -24,6 +24,8 @@ should never be one request away from a typo in a form.
 """
 from __future__ import annotations
 
+import csv
+import io
 import logging
 
 from fastapi import (
@@ -37,7 +39,8 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import func
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from .. import activity
@@ -45,10 +48,15 @@ from ..activity import A
 from ..config import settings
 from ..db import get_leadai_db
 from ..models import (
+    Lead,
     LeadActivityLog,
+    LeadCall,
     LeadCampaign,
+    LeadCampaignExecution,
     LeadCampaignRecipient,
+    LeadCampaignRecipientAttempt,
     LeadChannelAccount,
+    LeadCompanyDataPoint,
     LeadContactList,
     LeadContactListItem,
     LeadFile,
@@ -58,9 +66,14 @@ from ..rbac import Principal, assert_owns, scoped
 from ..schemas import ActivityListOut, Ok
 from ..schemas_ext import (
     CampaignCreate,
+    CampaignExecutionListOut,
+    CampaignExecutionOut,
+    CampaignHistoryItemOut,
+    CampaignHistoryListOut,
     CampaignListOut,
     CampaignOut,
     CampaignPreviewOut,
+    CampaignRecipientAttemptListOut,
     CampaignUpdate,
     ContactListFromLeads,
     ContactListItemsOut,
@@ -70,7 +83,9 @@ from ..schemas_ext import (
 )
 from ..serializers import activity_out
 from ..serializers_ext import (
+    campaign_execution_out,
     campaign_out,
+    campaign_recipient_attempt_out,
     contact_list_item_out,
     contact_list_out,
     recipient_out,
@@ -559,6 +574,16 @@ def create_campaign(
     )
     db.add(row)
     db.flush()
+    if scheduled_at is not None:
+        # Nothing actually sends yet — the job queue's own RunAt delay does the
+        # waiting; campaign_runner.fire_scheduled_campaign builds the audience
+        # and starts it when that time arrives. See routers/campaigns.py's
+        # update_campaign for how editing/clearing scheduled_at keeps this in sync.
+        row.Status = "scheduled"
+        jobs.enqueue(
+            db, "campaign.scheduled_start", {"campaign_id": row.Id},
+            client_id=client_id, run_at=scheduled_at, priority=4,
+        )
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_CREATED, client_id=client_id,
         entity_type="campaign", entity_id=row.Id,
@@ -576,6 +601,12 @@ def list_campaigns(
     page_size: int = Query(default=20, ge=1, le=100),
     status_filter: str | None = Query(default=None, alias="status"),
     kind: str | None = None,
+    campaign_type: str | None = Query(
+        default=None,
+        description="broadcast | lead_campaign — same split as CampaignOut.campaign_type, "
+                    "for a frontend that wants the broadcaster list and the batch/lead-campaign "
+                    "list as two separate views without two separate endpoints.",
+    ),
     scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -588,6 +619,14 @@ def list_campaigns(
         query = query.filter(LeadCampaign.Status == status_filter)
     if kind:
         query = query.filter(LeadCampaign.Kind == kind)
+    if campaign_type == "lead_campaign":
+        query = query.filter(LeadCampaign.CreatedVia == "import")
+    elif campaign_type == "broadcast":
+        # CreatedVia is NOT NULL in the schema, so `!= "import"` alone is
+        # correct here — the `is_(None)` arm only guards a raw-SQL edge case
+        # outside normal application writes, kept for symmetry with
+        # campaign_out()'s own `else "broadcast"` fallback for a null value.
+        query = query.filter(or_(LeadCampaign.CreatedVia != "import", LeadCampaign.CreatedVia.is_(None)))
     total = query.count()
     rows = (
         query.order_by(LeadCampaign.CreatedAt.desc())
@@ -643,6 +682,18 @@ def update_campaign(
     if "scheduled_at" in data and data["scheduled_at"] is not None:
         # TimeZone may have just changed above too — convert using the final value.
         row.ScheduledAt = campaign_runner.local_to_utc(row.ScheduledAt, row.TimeZone)
+        # Any previously-queued fire for the OLD time must not also go off.
+        jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
+        # Mirrors /start's own rule: only a permanently-dead campaign can't be
+        # (re)scheduled. A "completed"/"paused"/"queued" campaign picking up a
+        # new scheduled_at is exactly the restart-later case, same as /start
+        # already lets you restart a "completed" campaign on demand.
+        if row.Status not in ("cancelled", "failed"):
+            row.Status = "scheduled"
+            jobs.enqueue(
+                db, "campaign.scheduled_start", {"campaign_id": row.Id},
+                client_id=client_id, run_at=row.ScheduledAt, priority=4,
+            )
     row.UpdatedBy = principal.email
     row.UpdatedAt = utcnow()
     activity.log_principal(
@@ -747,6 +798,11 @@ def preview_campaign(
 def start_campaign(
     campaign_id: str,
     request: Request,
+    restart_mode: str = Query(
+        default="all",
+        description="all | failed_only | pending_only — which recipients this run touches. "
+                    "Only matters when restarting a campaign that already ran once.",
+    ),
     scope: tuple[Principal, str] = Depends(scoped("campaign.send")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -760,8 +816,18 @@ def start_campaign(
     row = _campaign(db, campaign_id, client_id)
     if row.Status == "running":
         raise HTTPException(status.HTTP_409_CONFLICT, "Campaign is already running.")
-    if row.Status in campaign_runner.TERMINAL_STATUSES:
+    # "completed" is deliberately NOT blocked here — restarting a finished
+    # campaign (all/failed_only/pending_only) is the entire point of
+    # restart_mode. Only an explicit operator stop (cancelled) still blocks a
+    # plain Start; "failed" is reserved for a future whole-campaign failure
+    # state and is never actually set today, but is included for when it is.
+    if row.Status in ("cancelled", "failed"):
         raise HTTPException(status.HTTP_409_CONFLICT, f"Campaign is {row.Status}.")
+    if restart_mode not in campaign_runner.RESTART_MODES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"restart_mode must be one of {campaign_runner.RESTART_MODES}.",
+        )
 
     from ..services import billing as billing_svc
     allowed, reason = billing_svc.check_channel_access(db, client_id, row.Channel)
@@ -780,10 +846,20 @@ def start_campaign(
     if built == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No recipients to send to.")
 
+    execution = campaign_runner.start_execution(db, row, restart_mode)
+    if execution.TotalCount == 0:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"No recipients match restart_mode='{restart_mode}'.",
+        )
+
     # /start is the operator pulling the trigger right now — any ScheduledAt was
     # only ever a plan for an automatic fire, and starting manually overrides it.
+    jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
     row.Status = "queued"
     row.StatusMessage = "Queued — starting shortly"
+    row.CompletedAt = None  # stale from a previous run — this one hasn't finished yet
     jobs.enqueue(
         db, "campaign.run", {"campaign_id": row.Id},
         client_id=client_id, run_at=None, priority=3,
@@ -791,11 +867,15 @@ def start_campaign(
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_STARTED, client_id=client_id,
         entity_type="campaign", entity_id=row.Id,
-        message=f"Started campaign '{row.Name}' to {built} recipients",
-        meta={"recipients": built, "channel": row.Channel, "kind": row.Kind},
+        message=f"Started campaign '{row.Name}' ({restart_mode}) to {execution.TotalCount} recipients",
+        meta={
+            "recipients": execution.TotalCount, "channel": row.Channel, "kind": row.Kind,
+            "execution_id": execution.Id, "restart_mode": restart_mode,
+        },
         request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, execution, db=db)
     return campaign_out(row)
 
 
@@ -815,12 +895,14 @@ def pause_campaign(
     row.Status = "paused"
     row.StatusMessage = f"Paused by {principal.email}"
     jobs.cancel_kind(db, "campaign.run", row.Id)
+    jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_PAUSED, client_id=client_id,
         entity_type="campaign", entity_id=row.Id,
         message=f"Paused '{row.Name}' at {row.SentCount} sent", request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, db=db)
     return campaign_out(row)
 
 
@@ -844,6 +926,7 @@ def resume_campaign(
         message=f"Resumed '{row.Name}'", request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, db=db)
     return campaign_out(row)
 
 
@@ -862,16 +945,22 @@ def cancel_campaign(
     row.CompletedAt = utcnow()
     row.StatusMessage = f"Cancelled by {principal.email}"
     jobs.cancel_kind(db, "campaign.run", row.Id)
+    jobs.cancel_kind(db, "campaign.scheduled_start", row.Id)
     db.query(LeadCampaignRecipient).filter(
         LeadCampaignRecipient.CampaignId == row.Id,
         LeadCampaignRecipient.Status == "queued",
     ).update({"Status": "skipped", "FailureReason": "Campaign cancelled"}, synchronize_session=False)
+    db.query(LeadCampaignExecution).filter(
+        LeadCampaignExecution.CampaignId == row.Id,
+        LeadCampaignExecution.Status == "running",
+    ).update({"Status": "stopped", "CompletedAt": utcnow()}, synchronize_session=False)
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_CANCELLED, client_id=client_id,
         entity_type="campaign", entity_id=row.Id,
         message=f"Cancelled '{row.Name}'", log_type="Warning", request=request,
     )
     db.commit()
+    campaign_runner.broadcast_campaign(row, db=db)
     return campaign_out(row)
 
 
@@ -898,33 +987,35 @@ def list_recipients(
         .limit(page_size)
         .all()
     )
+    leads_by_conv: dict[str, Lead] = {}
+    conv_ids = [r.ConversationId for r in rows if r.ConversationId]
+    if conv_ids:
+        for lead in db.query(Lead).filter(Lead.ConversationId.in_(conv_ids)).all():
+            leads_by_conv[lead.ConversationId] = lead
     return RecipientListOut(
         total_items=total, page=page, page_size=page_size,
-        items=[recipient_out(r) for r in rows],
+        items=[recipient_out(r, leads_by_conv.get(r.ConversationId)) for r in rows],
     )
 
 
-@router.get(
-    "/{campaign_id}/history",
-    response_model=ActivityListOut,
-    summary="Full run history — created, built, started, paused/resumed, each batch, completed",
-)
-def campaign_history(
+@router.get("/{campaign_id}/history", response_model=CampaignHistoryListOut, summary="Campaign run history")
+def list_campaign_history(
     campaign_id: str,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
+    page_size: int = Query(default=50, ge=1, le=500),
     scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
     db: Session = Depends(get_leadai_db),
 ):
-    """Every lifecycle event for one campaign, newest first — the same audit
-    trail as GET /activity, pre-filtered so the caller doesn't need to know
-    entity_type/entity_id. Recipient-level detail (who, what failed) lives in
-    /recipients; this is the timeline of the run itself."""
+    """Paginated, newest-first list of run events for a campaign."""
     _, client_id = scope
     _campaign(db, campaign_id, client_id)
-    query = db.query(LeadActivityLog).filter(
-        LeadActivityLog.EntityType == "campaign",
-        LeadActivityLog.EntityId == campaign_id,
+    query = (
+        db.query(LeadActivityLog)
+        .filter(
+            LeadActivityLog.ClientId == client_id,
+            LeadActivityLog.EntityType == "campaign",
+            LeadActivityLog.EntityId == campaign_id,
+        )
     )
     total = query.count()
     rows = (
@@ -933,9 +1024,270 @@ def campaign_history(
         .limit(page_size)
         .all()
     )
-    return ActivityListOut(
+    return CampaignHistoryListOut(
+        total_items=total,
+        page=page,
+        page_size=page_size,
+        items=[
+            CampaignHistoryItemOut(
+                id=r.Id,
+                action=r.Action,
+                message=r.LogMessage,
+                meta=r.MetaJson,
+                created_at=r.CreatedAt,
+                actor_email=r.ActorEmail,
+                log_type=r.LogType,
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.get(
+    "/{campaign_id}/executions",
+    response_model=CampaignExecutionListOut,
+    summary="Per-run history — one row per Start/Restart (BatchExecution counterpart)",
+)
+def list_campaign_executions(
+    campaign_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+    scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    _campaign(db, campaign_id, client_id)
+    query = db.query(LeadCampaignExecution).filter(LeadCampaignExecution.CampaignId == campaign_id)
+    total = query.count()
+    rows = (
+        query.order_by(LeadCampaignExecution.StartedAt.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return CampaignExecutionListOut(
         total_items=total, page=page, page_size=page_size,
-        items=[activity_out(r) for r in rows],
+        items=[campaign_execution_out(r) for r in rows],
+    )
+
+
+def _execution(db: Session, campaign_id: str, execution_id: str) -> LeadCampaignExecution:
+    row = db.get(LeadCampaignExecution, execution_id)
+    if row is None or row.CampaignId != campaign_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Execution not found")
+    return row
+
+
+@router.get(
+    "/{campaign_id}/executions/{execution_id}",
+    response_model=CampaignExecutionOut,
+    summary="One run's own summary (BatchExecution detail)",
+)
+def get_campaign_execution(
+    campaign_id: str,
+    execution_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, client_id = scope
+    _campaign(db, campaign_id, client_id)
+    return campaign_execution_out(_execution(db, campaign_id, execution_id))
+
+
+@router.get(
+    "/{campaign_id}/executions/{execution_id}/attempts",
+    response_model=CampaignRecipientAttemptListOut,
+    summary="Per-recipient outcomes for ONE run (CallNumberExecution detail)",
+)
+def list_campaign_execution_attempts(
+    campaign_id: str,
+    execution_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+    status_filter: str | None = Query(default=None, alias="status"),
+    scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """What THIS run did to each recipient it touched — frozen at the time of
+    the run, so a later retry never rewrites what this listing shows."""
+    _, client_id = scope
+    _campaign(db, campaign_id, client_id)
+    _execution(db, campaign_id, execution_id)
+
+    query = db.query(LeadCampaignRecipientAttempt).filter(
+        LeadCampaignRecipientAttempt.CampaignExecutionId == execution_id
+    )
+    if status_filter:
+        query = query.filter(LeadCampaignRecipientAttempt.Status == status_filter)
+    total = query.count()
+    rows = (
+        query.order_by(LeadCampaignRecipientAttempt.CreatedAt.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    recipients: dict[str, LeadCampaignRecipient] = {}
+    leads: dict[str, Lead] = {}
+    calls: dict[str, LeadCall] = {}
+    if rows:
+        recipient_ids = {r.RecipientId for r in rows}
+        for recipient in (
+            db.query(LeadCampaignRecipient).filter(LeadCampaignRecipient.Id.in_(recipient_ids)).all()
+        ):
+            recipients[recipient.Id] = recipient
+
+        conv_ids = {r.ConversationId for r in recipients.values() if r.ConversationId}
+        if conv_ids:
+            for lead in db.query(Lead).filter(Lead.ConversationId.in_(conv_ids)).all():
+                leads[lead.ConversationId] = lead
+
+        call_ids = {r.CallId for r in recipients.values() if r.CallId}
+        if call_ids:
+            for call in db.query(LeadCall).filter(LeadCall.Id.in_(call_ids)).all():
+                calls[call.Id] = call
+
+    def _attempt_out(attempt: LeadCampaignRecipientAttempt) -> CampaignRecipientAttemptOut:
+        recipient = recipients.get(attempt.RecipientId)
+        lead = leads.get(recipient.ConversationId) if recipient and recipient.ConversationId else None
+        call = calls.get(recipient.CallId) if recipient and recipient.CallId else None
+        return campaign_recipient_attempt_out(attempt, recipient, lead, call)
+
+    return CampaignRecipientAttemptListOut(
+        total_items=total, page=page, page_size=page_size,
+        items=[_attempt_out(r) for r in rows],
+    )
+
+
+@router.get(
+    "/{campaign_id}/export",
+    summary="Export recipients as CSV — status, lead score, and every data point collected",
+)
+def export_campaign(
+    campaign_id: str,
+    request: Request,
+    execution_id: str | None = None,
+    scope: tuple[Principal, str] = Depends(scoped("campaign.read", "campaign.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Always regenerates from current data (a recipient's status/score keeps
+    changing after the campaign runs) — this is not a cached download. The
+    generated file is still archived each time (leadai_files, Purpose="export"),
+    so "what was the output" stays answerable later even if nobody downloads it
+    again (see LeadCampaign.OutputFileId / OutputGeneratedAt).
+    """
+    principal, client_id = scope
+    campaign = _campaign(db, campaign_id, client_id)
+
+    attempts_by_recipient: dict[str, LeadCampaignRecipientAttempt] = {}
+    if execution_id:
+        _execution(db, campaign.Id, execution_id)
+        for attempt in (
+            db.query(LeadCampaignRecipientAttempt)
+            .filter(LeadCampaignRecipientAttempt.CampaignExecutionId == execution_id)
+            .all()
+        ):
+            attempts_by_recipient[attempt.RecipientId] = attempt
+
+    recipients = (
+        db.query(LeadCampaignRecipient)
+        .filter(LeadCampaignRecipient.CampaignId == campaign.Id)
+        .order_by(LeadCampaignRecipient.CreatedAt.asc())
+        .all()
+    )
+    if execution_id:
+        # Only recipients this run actually touched, showing what happened on
+        # THIS run — not whatever their status has since moved on to.
+        recipients = [r for r in recipients if r.Id in attempts_by_recipient]
+    data_points = (
+        db.query(LeadCompanyDataPoint)
+        .filter(LeadCompanyDataPoint.ClientId == client_id, LeadCompanyDataPoint.IsDeleted == False)  # noqa: E712
+        .order_by(LeadCompanyDataPoint.DisplayOrder.asc())
+        .all()
+    )
+    conv_ids = [r.ConversationId for r in recipients if r.ConversationId]
+    leads_by_conv = {}
+    if conv_ids:
+        for lead in db.query(Lead).filter(Lead.ConversationId.in_(conv_ids)).all():
+            leads_by_conv[lead.ConversationId] = lead
+
+    call_ids = [r.CallId for r in recipients if r.CallId]
+    calls_by_id = {}
+    if call_ids:
+        for call in db.query(LeadCall).filter(LeadCall.Id.in_(call_ids)).all():
+            calls_by_id[call.Id] = call
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(
+        ["Name", "Phone", "Email", "Status", "Sent At", "Delivered At", "Read At", "Replied At",
+         "Failure Reason", "Product", "Lead Score", "Lead Status", "Call Status", "Call Duration (s)"]
+        + [dp.Label for dp in data_points]
+    )
+    for r in recipients:
+        # With execution_id set, report what THIS run actually did (the frozen
+        # attempt snapshot) rather than the recipient's current, possibly
+        # since-overwritten state.
+        snapshot = attempts_by_recipient.get(r.Id) if execution_id else None
+        lead = leads_by_conv.get(r.ConversationId)
+        call = calls_by_id.get(r.CallId)
+        values = (lead.DataPointsJson or {}) if lead else {}
+        writer.writerow(
+            [
+                r.Name or "", r.PhoneMasked or "", r.EmailMasked or "",
+                snapshot.Status if snapshot else r.Status,
+                (snapshot or r).SentAt.isoformat() if (snapshot or r).SentAt else "",
+                (snapshot or r).DeliveredAt.isoformat() if (snapshot or r).DeliveredAt else "",
+                (snapshot or r).ReadAt.isoformat() if (snapshot or r).ReadAt else "",
+                (snapshot or r).RepliedAt.isoformat() if (snapshot or r).RepliedAt else "",
+                (snapshot.FailureReason if snapshot else r.FailureReason) or "",
+                (lead.Product or "unknown") if lead else "",
+                lead.Score if lead else "",
+                lead.Status if lead else "",
+                call.Status if call else "",
+                call.DurationSec if call else "",
+            ]
+            + [values.get(dp.Key, "") for dp in data_points]
+        )
+    csv_bytes = buffer.getvalue().encode("utf-8")
+    suffix = f" (run {execution_id[:8]})" if execution_id else ""
+    filename = f"{campaign.Name}{suffix}.csv"
+    # Content-Disposition is a plain HTTP header (Latin-1 only) — a campaign
+    # name with an em dash or any other non-ASCII character would otherwise
+    # crash the response at send time. The archived LeadFile keeps the real
+    # name; only the header gets the sanitised one.
+    ascii_filename = filename.encode("ascii", errors="ignore").decode("ascii").strip() or "campaign-export.csv"
+
+    try:
+        stored = objectstore.put_bytes(
+            csv_bytes, client_id=client_id, purpose="export", filename=filename, content_type="text/csv",
+        )
+        file_row = LeadFile(
+            ClientId=client_id, Purpose="export", FileName=filename, ContentType="text/csv",
+            SizeBytes=stored.size, Bucket=stored.bucket, ObjectKey=stored.key, Checksum=stored.checksum,
+            StorageBackend=stored.backend, UploadedByEmail=principal.email,
+            LinkedEntityType="campaign", LinkedEntityId=campaign.Id, CreatedBy=principal.email,
+        )
+        db.add(file_row)
+        db.flush()
+        if not execution_id:
+            # A run-scoped export is a partial slice — only a full export gets
+            # to be "the" output file an operator finds via the campaign.
+            campaign.OutputFileId = file_row.Id
+            campaign.OutputGeneratedAt = utcnow()
+        activity.log_principal(
+            db, principal, action=A.CAMPAIGN_UPDATED, client_id=client_id,
+            entity_type="campaign", entity_id=campaign.Id,
+            message=f"Exported {len(recipients)} recipients to CSV" + (f" (run {execution_id})" if execution_id else ""),
+            request=request,
+        )
+        db.commit()
+    except objectstore.StorageError as exc:
+        logger.warning("[LeadAI campaigns] export not archived: %s", exc)
+        db.rollback()
+
+    return StreamingResponse(
+        io.BytesIO(csv_bytes), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{ascii_filename}"'},
     )
 
 
@@ -946,28 +1298,27 @@ def retry_failed(
     scope: tuple[Principal, str] = Depends(scoped("campaign.send")),
     db: Session = Depends(get_leadai_db),
 ):
-    """Re-queue only the failed rows. Successful sends are never repeated."""
+    """Re-queue only the failed rows, as a new, separately-tracked run
+    (RestartMode='failed_only'). Successful sends are never repeated."""
     principal, client_id = scope
     row = _campaign(db, campaign_id, client_id)
-    count = (
-        db.query(LeadCampaignRecipient)
-        .filter(
-            LeadCampaignRecipient.CampaignId == row.Id,
-            LeadCampaignRecipient.Status == "failed",
-        )
-        .update(
-            {"Status": "queued", "FailureReason": None, "Attempts": 0},
-            synchronize_session=False,
-        )
-    )
+    execution = campaign_runner.start_execution(db, row, "failed_only")
+    count = execution.TotalCount
     if count:
         row.Status = "queued"
         row.StatusMessage = f"Retrying {count} failed recipients"
         jobs.enqueue(db, "campaign.run", {"campaign_id": row.Id}, client_id=client_id, priority=3)
+    else:
+        # Nothing to retry — don't leave a zero-work execution stuck "running"
+        # forever; it would otherwise be mistaken for the active run later.
+        execution.Status = "completed"
+        execution.CompletedAt = utcnow()
     activity.log_principal(
         db, principal, action=A.CAMPAIGN_RESUMED, client_id=client_id,
         entity_type="campaign", entity_id=row.Id,
-        message=f"Retrying {count} failed recipients", request=request,
+        message=f"Retrying {count} failed recipients",
+        meta={"execution_id": execution.Id, "restart_mode": "failed_only", "count": count},
+        request=request,
     )
     db.commit()
     return campaign_out(row)

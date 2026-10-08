@@ -1,5 +1,5 @@
 import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { Table, TableLazyLoadEvent } from 'primeng/table';
@@ -11,8 +11,10 @@ import {
 import { AuthService } from '../../../services/auth.service';
 import { LeadService } from '../../../services/lead.service';
 import { CustomerService } from '../../../services/customer.service';
+import { ProductService } from '../../../services/product.service';
 import { ToastService } from '../../../shared/services/toast.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { CLIENT_PERMISSIONS } from '../../../modules/client/constants/permission.constants';
 
 @Component({
   selector: 'app-lead-list',
@@ -24,6 +26,7 @@ import { SharedModule } from '../../../shared/shared.module';
 export class LeadListComponent implements OnInit, OnDestroy {
   @ViewChild('dt') dt!: Table;
   @ViewChild('leadActionMenu') leadActionMenu!: Menu;
+  PERMISSIONS = CLIENT_PERMISSIONS;
 
   leads: any[] = [];
   selectedLeads: any[] = [];
@@ -36,8 +39,21 @@ export class LeadListComponent implements OnInit, OnDestroy {
   selectedChannel = '';
   selectedStatus = '';
   selectedPriority = '';
+  selectedLeadSource = '';
+  selectedProduct = '';
   showAllLeads = true;
   searchText = '';
+
+  productOptions: { label: string; value: string }[] = [
+    { label: 'All Products', value: '' },
+  ];
+
+  leadSourceOptions = [
+    { label: 'All sources', value: '' },
+    { label: 'Inbound', value: 'inbound' },
+    { label: 'From import', value: 'import' },
+    { label: 'From broadcast', value: 'broadcast' },
+  ];
 
   private searchSubject = new Subject<string>();
 
@@ -47,6 +63,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
     { label: 'WhatsApp', value: 'whatsapp' },
     { label: 'Facebook Messenger', value: 'messenger' },
     { label: 'Instagram', value: 'instagram' },
+    { label: 'LinkedIn', value: 'linkedin' },
     { label: 'SMS', value: 'sms' },
     { label: 'Email', value: 'email' },
     { label: 'Voice Dialler', value: 'voice' },
@@ -78,17 +95,44 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
   constructor(
     private router: Router,
+    private route: ActivatedRoute,
     private inboxService: InboxService,
     private authService: AuthService,
     private leadService: LeadService,
     private customerService: CustomerService,
+    private productService: ProductService,
     private toastService: ToastService,
   ) {}
 
   ngOnInit(): void {
+    this.route.queryParams.subscribe((params) => {
+      if (params['product']) {
+        this.selectedProduct = params['product'];
+      }
+    });
     this.setupSearchDebounce();
+    this.loadProducts();
     this.loadLeads();
     this.setupWebsocket();
+  }
+
+  loadProducts(): void {
+    this.productService.getProducts().subscribe({
+      next: (res) => {
+        const items = res?.items || [];
+        const options = items.map((p) => ({
+          label: p.product_name,
+          value: p.product_name,
+        }));
+        this.productOptions = [
+          { label: 'All Products', value: '' },
+          ...options,
+        ];
+      },
+      error: (err) => {
+        console.warn('Failed to load products for filter:', err);
+      },
+    });
   }
 
   ngOnDestroy(): void {
@@ -129,6 +173,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
         }
 
         if (clientId) {
+          this.loadProducts();
           this.inboxMsgSub = this.leadService.inboxMessages$.subscribe({
             next: () => {
               this.loadLeads();
@@ -170,6 +215,14 @@ export class LeadListComponent implements OnInit, OnDestroy {
       }
     }
 
+    if (this.selectedLeadSource) {
+      params.lead_source = this.selectedLeadSource;
+    }
+
+    if (this.selectedProduct) {
+      params.product = this.selectedProduct;
+    }
+
     if (this.searchText && this.searchText.trim()) {
       params.search = this.searchText.trim();
     }
@@ -181,8 +234,9 @@ export class LeadListComponent implements OnInit, OnDestroy {
     this.inboxService.getInbox(params).subscribe({
       next: (response: any) => {
         this.totalRecords = response?.total_items || response?.total || 0;
-        this.leads = (response?.items || []).map((item: any) => {
+        let mapped = (response?.items || []).map((item: any) => {
           const score = item.lead?.score || 0;
+          const prod = item.lead?.product || 'N/A';
           return {
             id: item.id,
             name: item.customer_name || item.customer_ref || 'Unknown Lead',
@@ -191,12 +245,20 @@ export class LeadListComponent implements OnInit, OnDestroy {
             customerRef: item.customer_ref || '',
             company: item.client_id || 'N/A',
             address: 'N/A',
-            industry: item.lead?.product || 'N/A',
+            industry: prod,
+            product: prod,
             tags: item.lead?.interest ? [item.lead.interest] : [],
             leadScore: score,
             priority: score > 75 ? 'High' : score > 45 ? 'Medium' : 'Low',
-            status: item.lead?.status ? item.lead.status.toUpperCase() : (item.status ? item.status.toUpperCase() : 'NEW'),
+            status: item.lead?.converted_account_id
+              ? 'CONVERTED'
+              : item.lead?.status
+                ? item.lead.status.toUpperCase()
+                : item.status
+                  ? item.status.toUpperCase()
+                  : 'NEW',
             source: item.channel || 'web',
+            originAttribution: item.origin_attribution || null,
             assignedTo: item.assigned_user_email || 'AI Assistant',
             createdAt: item.created_at || '',
             updatedAt: item.last_message_at || item.created_at || '',
@@ -204,8 +266,25 @@ export class LeadListComponent implements OnInit, OnDestroy {
             avatar: '',
             leadStatus: item.lead?.status || '',
             aboveThreshold: item.above_threshold,
+            convertedAccountId: item.lead?.converted_account_id || null,
+            convertedAt: item.lead?.converted_at || null,
           };
         });
+
+        if (this.selectedProduct) {
+          const target = this.selectedProduct.toLowerCase().trim();
+          if (target === 'unknown') {
+            mapped = mapped.filter(
+              (l: any) => !l.product || l.product === 'N/A' || l.product.toLowerCase() === 'unknown'
+            );
+          } else {
+            mapped = mapped.filter(
+              (l: any) => l.product && l.product.toLowerCase().trim() === target
+            );
+          }
+        }
+
+        this.leads = mapped;
         this.loading = false;
       },
       error: () => {
@@ -228,6 +307,8 @@ export class LeadListComponent implements OnInit, OnDestroy {
     this.selectedChannel = '';
     this.selectedStatus = '';
     this.selectedPriority = '';
+    this.selectedLeadSource = '';
+    this.selectedProduct = '';
     this.searchText = '';
     this.showAllLeads = true;
     this.currentPage = 1;
@@ -238,11 +319,19 @@ export class LeadListComponent implements OnInit, OnDestroy {
   }
 
   hasActiveFilters(): boolean {
-    return !!(this.selectedChannel || this.selectedStatus || this.selectedPriority || this.searchText);
+    return !!(
+      this.selectedChannel ||
+      this.selectedStatus ||
+      this.selectedPriority ||
+      this.selectedLeadSource ||
+      this.selectedProduct ||
+      this.searchText
+    );
   }
 
   onLazyLoad(event: TableLazyLoadEvent): void {
-    const page = Math.floor((event.first || 0) / (event.rows || this.pageSize)) + 1;
+    const page =
+      Math.floor((event.first || 0) / (event.rows || this.pageSize)) + 1;
     this.currentPage = page;
     this.pageSize = event.rows || this.pageSize;
     this.loadLeads();
@@ -265,13 +354,26 @@ export class LeadListComponent implements OnInit, OnDestroy {
       },
     ];
 
-    const isQualified =
-      (lead.leadStatus || lead.status || '').toLowerCase() === 'qualified';
-    if (isQualified) {
+    const canConvert =
+      this.authService.hasPermission('customer.manage') ||
+      ['admin', 'company_admin', 'companyadmin', 'manager', 'platform_admin', 'superadmin'].includes(
+        (this.authService.getUserRole() || '').toLowerCase()
+      );
+    const isUnconverted = !lead.convertedAccountId;
+
+    if (canConvert && isUnconverted) {
       items.push({
         label: 'Convert to Customer',
         icon: 'pi pi-user-plus',
         command: () => this.openConvertDialog(lead),
+      });
+    }
+
+    if (lead.convertedAccountId) {
+      items.push({
+        label: 'View Customer Account',
+        icon: 'pi pi-user',
+        command: () => this.router.navigate(['/client/customers', lead.convertedAccountId]),
       });
     }
 
@@ -317,10 +419,14 @@ export class LeadListComponent implements OnInit, OnDestroy {
       }
     }
 
+    const initialEmail =
+      lead.assigned_user_email ||
+      (lead.assignedTo && lead.assignedTo.includes('@') ? lead.assignedTo : '');
+
     this.convertPayload = {
       conversation_id: convId,
       lead_id: convId,
-      owner_email: lead.assignedTo || lead.assigned_user_email || '',
+      owner_email: initialEmail,
       stage: 'customer',
       value: numericValue,
       notes: lead.summary ? `Summary: ${lead.summary.slice(0, 150)}...` : '',
@@ -333,12 +439,13 @@ export class LeadListComponent implements OnInit, OnDestroy {
     if (!this.convertPayload.conversation_id) return;
     this.converting = true;
 
+    const emailVal = this.convertPayload.owner_email?.trim();
+    const validEmail = emailVal && emailVal.includes('@') ? emailVal : null;
+
     const payload = {
       conversation_id: this.convertPayload.conversation_id,
       lead_id: this.convertPayload.lead_id,
-      owner_email: this.convertPayload.owner_email
-        ? this.convertPayload.owner_email.trim()
-        : null,
+      owner_email: validEmail,
       stage: this.convertPayload.stage || 'customer',
       value:
         this.convertPayload.value != null
@@ -398,6 +505,16 @@ export class LeadListComponent implements OnInit, OnDestroy {
       string,
       'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'
     > = {
+      CONVERTED: 'success',
+      Converted: 'success',
+      QUALIFIED: 'info',
+      Qualified: 'info',
+      HOT: 'danger',
+      Hot: 'danger',
+      WARM: 'warn',
+      Warm: 'warn',
+      COLD: 'secondary',
+      Cold: 'secondary',
       New: 'info',
       Assigned: 'secondary',
       'Follow-up': 'warn',
@@ -432,6 +549,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
       email: 'pi pi-envelope',
       voice: 'pi pi-phone',
       web: 'pi pi-desktop',
+      linkedin: 'pi pi-linkedin',
     };
     return icons[channel?.toLowerCase()] || 'pi pi-comment';
   }
@@ -445,6 +563,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
       email: '#ef4444',
       voice: '#f59e0b',
       web: '#3b82f6',
+      linkedin: '#0A66C2',
     };
     return colors[channel?.toLowerCase()] || '#6b7280';
   }
@@ -478,5 +597,35 @@ export class LeadListComponent implements OnInit, OnDestroy {
 
   exportCSV(): void {
     this.dt.exportCSV();
+  }
+
+  goToImport(): void {
+    this.router.navigate(['/client/leads/import']);
+  }
+
+  getOriginIcon(origin: any): string {
+    if (!origin) return 'pi pi-send';
+    switch (origin.origin_type) {
+      case 'post_comment':
+        return 'pi pi-comment';
+      case 'campaign':
+        return 'pi pi-megaphone';
+      case 'ad':
+        return 'pi pi-tag';
+      case 'website':
+        return 'pi pi-globe';
+      case 'voice_call':
+        return 'pi pi-phone';
+      default:
+        return 'pi pi-send';
+    }
+  }
+
+  getOriginTooltip(origin: any): string {
+    if (!origin) return 'Direct Inbound';
+    const parts: string[] = [];
+    if (origin.title) parts.push(origin.title);
+    if (origin.snippet && origin.snippet !== origin.title) parts.push(origin.snippet);
+    return parts.join(' — ') || origin.origin_type;
   }
 }

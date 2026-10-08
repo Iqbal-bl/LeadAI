@@ -1,9 +1,29 @@
+export interface LinkedInAccount {
+  id: string;
+  name: string;
+  person_urn: string;
+  connected: boolean;
+  access_token_valid: boolean;
+  has_refresh_token: boolean;
+  has_cookie_credentials: boolean;
+  profile_picture_url?: string | null;
+  email?: string | null;
+  is_active: boolean;
+  auto_accept?: boolean;
+  welcome_message?: string | null;
+  auto_dm_leads?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface LinkedInStatus {
   connected: boolean;
   person_urn?: string;
   access_token_valid?: boolean;
   has_refresh_token?: boolean;
   has_cookie_credentials?: boolean;
+  connected_count?: number;
+  accounts?: LinkedInAccount[];
   [key: string]: any;
 }
 
@@ -66,12 +86,15 @@ export interface LinkedInInvitationItem {
   shared_secret: string;
   sender_urn?: string;
   public_id?: string;
+  profile_url?: string;
   name: string;
   headline?: string;
   message?: string;
   sent_time?: number | string;
   avatar_url?: string;
   processing?: boolean;
+  is_crm_lead?: boolean;
+  [key: string]: any;
 }
 
 export interface GetInvitationsResponse {
@@ -90,6 +113,7 @@ export interface LinkedInReplyInvitationPayload {
 export interface LinkedInSettingsPayload {
   auto_accept: boolean;
   welcome_message?: string | null;
+  auto_dm_leads?: boolean;
 }
 
 export interface BatchAcceptResponse {
@@ -121,6 +145,12 @@ export interface LinkedInConversation {
   unread_count?: number;
   is_read?: boolean;
   total_events?: number;
+  is_lead_candidate?: boolean;
+  lead_status?: string;
+  lead_score?: number;
+  lead_intent?: string;
+  crm_account_id?: string;
+  [key: string]: any;
 }
 
 export interface LinkedInMessage {
@@ -214,4 +244,58 @@ export interface SyncCommentsResponse {
   };
 }
 
+export interface LinkedInAutoConnectSettings {
+  enabled: boolean;
+  runs_per_day: number;
+  profiles_per_run: number;
+  target_prompt: string;
+  target_keywords: string;
+  custom_message: string;
+  active_hours_start: number;
+  active_hours_end: number;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  total_sent_today?: number;
+  total_sent_all_time?: number;
+  last_run_status?: string | null;
+  last_run_detail?: string | null;
+}
+
+export interface GetAutoConnectSettingsResponse {
+  settings: LinkedInAutoConnectSettings;
+}
+
+export interface SaveAutoConnectSettingsResponse {
+  ok: boolean;
+  settings: LinkedInAutoConnectSettings;
+}
+
+export interface TriggerAutoConnectResponse {
+  ok: boolean;
+  message: string;
+}
+
+export interface LinkedInRemoteLoginStartRequest {
+  username: string;
+  password: string;
+}
+
+export interface LinkedInRemoteLoginResponse {
+  ok: boolean;
+  status: 'initializing' | 'submitting' | 'checkpoint_required' | 'success' | 'failed' | 'cancelled' | 'expired';
+  session_id: string;
+  challenge_type?: 'captcha' | 'email_pin' | 'sms_pin' | '2fa' | 'general_checkpoint' | 'none';
+  message?: string;
+  has_screenshot?: boolean;
+  completed?: boolean;
+  expires_in?: number;
+}
+
+export interface LinkedInRemoteLoginInteractRequest {
+  action: 'click' | 'type' | 'press_key' | 'submit_pin' | 'refresh';
+  x?: number | null;
+  y?: number | null;
+  text?: string | null;
+  key?: string | null;
+}
 

@@ -19,7 +19,9 @@ import { Subscription } from 'rxjs';
   standalone: true,
   imports: [CommonModule, FormsModule, SharedModule],
   templateUrl: './blog-dashboard.component.html',
-  styleUrl: './blog-dashboard.component.scss',
+  host: {
+    class: 'block w-full',
+  },
   providers: [MessageService],
 })
 export class BlogDashboardComponent implements OnInit, OnDestroy {
@@ -42,9 +44,9 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   activeStatusFilter: string = 'all';
   searchQuery: string = '';
 
-  // Active Tab: 'articles' | 'history' | 'generator' | 'settings'
-  mainTab: 'articles' | 'history' | 'generator' | 'settings' = 'articles';
-  loadedTabs = new Set<'articles' | 'history' | 'generator' | 'settings'>(['articles']);
+  // Active Tab: 'articles' | 'history' | 'generator' | 'settings' | 'logs'
+  mainTab: 'articles' | 'history' | 'generator' | 'settings' | 'logs' = 'articles';
+  loadedTabs = new Set<'articles' | 'history' | 'generator' | 'settings' | 'logs'>(['articles']);
   settingsLoaded = false;
 
   // Upload History Filters & Search
@@ -88,9 +90,10 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     tone: 'thought_leadership',
     target_audience: 'B2B Leaders & Practitioners',
     keywords: [],
+    blog_type: 'text_and_image',
     target_words: 1000,
     include_images: true,
-    num_images: 1,
+    num_images: 2,
     cta_text: 'Book Free Strategy Session Today',
     cta_url: '#strategy-session',
     target_channels: ['linkedin', 'wordpress'],
@@ -107,9 +110,10 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     keywords: [],
     target_words: 1000,
     include_images: true,
-    num_images: 1,
+    num_images: 2,
     target_channels: ['linkedin', 'wordpress'],
   };
+  settingsBlogType: 'text_only' | 'text_and_image' = 'text_and_image';
   loadingSettings = false;
   savingSettings = false;
   settingsKeywordsInput = '';
@@ -124,6 +128,60 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   };
 
   private subs: Subscription = new Subscription();
+
+  setBlogType(type: 'text_only' | 'text_and_image'): void {
+    this.customGenForm.blog_type = type;
+    if (type === 'text_only') {
+      this.customGenForm.include_images = false;
+      this.customGenForm.num_images = 0;
+    } else {
+      this.customGenForm.include_images = true;
+      if (!this.customGenForm.num_images || this.customGenForm.num_images < 1) {
+        this.customGenForm.num_images = 2;
+      }
+    }
+  }
+
+  setNumImages(count: number): void {
+    this.customGenForm.num_images = count;
+    this.customGenForm.include_images = count > 0;
+    if (count > 0) {
+      this.customGenForm.blog_type = 'text_and_image';
+    } else {
+      this.customGenForm.blog_type = 'text_only';
+    }
+  }
+
+  setTargetWords(words: number): void {
+    this.customGenForm.target_words = words;
+  }
+
+  setSettingsBlogType(type: 'text_only' | 'text_and_image'): void {
+    this.settingsBlogType = type;
+    if (type === 'text_only') {
+      this.settings.include_images = false;
+      this.settings.num_images = 0;
+    } else {
+      this.settings.include_images = true;
+      if (!this.settings.num_images || this.settings.num_images < 1) {
+        this.settings.num_images = 2;
+      }
+    }
+  }
+
+  setSettingsNumImages(count: number): void {
+    this.settings.num_images = count;
+    this.settings.include_images = count > 0;
+    if (count > 0) {
+      this.settingsBlogType = 'text_and_image';
+    } else {
+      this.settingsBlogType = 'text_only';
+    }
+  }
+
+  setSettingsTargetWords(words: number): void {
+    this.settings.target_words = words;
+  }
 
   constructor(
     private blogService: BlogService,
@@ -143,7 +201,7 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  setMainTab(tab: 'articles' | 'history' | 'generator' | 'settings'): void {
+  setMainTab(tab: 'articles' | 'history' | 'generator' | 'settings' | 'logs'): void {
     this.mainTab = tab;
     this.loadedTabs.add(tab);
     if (tab === 'settings' && !this.settingsLoaded) {
@@ -196,6 +254,7 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
     this.blogService.getBlogSettings().subscribe({
       next: (res) => {
         this.settings = res;
+        this.settingsBlogType = (res.include_images !== false && (res.num_images || 0) > 0) ? 'text_and_image' : 'text_only';
         this.settingsKeywordsInput = (res.keywords || []).join(', ');
         // Set channels map
         const channels = res.target_channels || [];
@@ -293,6 +352,16 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
         .filter((k) => k.length > 0);
     }
 
+    // Ensure blog_type and image configuration are strictly synced
+    if (this.customGenForm.blog_type === 'text_only') {
+      this.customGenForm.include_images = false;
+      this.customGenForm.num_images = 0;
+    } else {
+      this.customGenForm.include_images = true;
+      this.customGenForm.num_images = Number(this.customGenForm.num_images) || 2;
+    }
+    this.customGenForm.target_words = Number(this.customGenForm.target_words) || 1000;
+
     this.blogService.generateAndSave(this.customGenForm).subscribe({
       next: (article) => {
         this.isGeneratingCustom = false;
@@ -336,6 +405,14 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   openReviewModal(article: Article, defaultAction: 'approved' | 'changes_requested' | 'regenerate' = 'approved'): void {
+    if (article.status === 'published') {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article is already published live. No further review actions are permitted.',
+      });
+      return;
+    }
     this.selectedArticle = article;
     this.reviewAction = defaultAction;
     this.reviewNotes = '';
@@ -345,7 +422,17 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   submitReview(): void {
-    if (!this.selectedArticle) return;
+    if (!this.selectedArticle || this.submittingReview) return;
+
+    if (this.selectedArticle.status === 'published') {
+      this.showReviewModal = false;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article has already been published live. No further actions permitted.',
+      });
+      return;
+    }
 
     this.submittingReview = true;
     const req: ReviewActionRequest = {
@@ -380,6 +467,14 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   openPublishModal(article: Article): void {
+    if (article.status === 'published') {
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article is already published live.',
+      });
+      return;
+    }
     this.publishingArticle = article;
     this.publishChannels = {
       linkedin: true,
@@ -391,7 +486,17 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   }
 
   confirmPublish(): void {
-    if (!this.publishingArticle) return;
+    if (!this.publishingArticle || this.isPublishing) return;
+
+    if (this.publishingArticle.status === 'published') {
+      this.showPublishModal = false;
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Already Published',
+        detail: 'This article has already been published live.',
+      });
+      return;
+    }
 
     const channels = Object.keys(this.publishChannels).filter(
       (k) => this.publishChannels[k]
@@ -488,9 +593,9 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
       target_audience: this.settings.target_audience,
       tone: this.settings.tone,
       language: this.settings.language,
-      target_words: this.settings.target_words,
-      include_images: this.settings.include_images,
-      num_images: this.settings.num_images,
+      target_words: Number(this.settings.target_words) || 1000,
+      include_images: this.settingsBlogType === 'text_and_image',
+      num_images: this.settingsBlogType === 'text_and_image' ? (Number(this.settings.num_images) || 2) : 0,
       cta_text: this.settings.cta_text,
       cta_url: this.settings.cta_url,
       target_channels: target_channels,
@@ -654,7 +759,7 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
       return {
         label: 'LeadAI Daily Scheduler (Autonomous)',
         icon: 'pi pi-bolt',
-        badgeClass: 'mechanism-auto',
+        badgeClass: 'bg-purple-50 border border-purple-200 text-purple-700',
       };
     }
     if (article.reviewed_at || (article.review_notes && article.review_notes.length > 0)) {
@@ -662,13 +767,13 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
       return {
         label: `Admin Approved (${reviewer})`,
         icon: 'pi pi-check-circle',
-        badgeClass: 'mechanism-approval',
+        badgeClass: 'bg-blue-50 border border-blue-200 text-blue-700',
       };
     }
     return {
       label: 'Manual 1-Click Publish',
       icon: 'pi pi-send',
-      badgeClass: 'mechanism-manual',
+      badgeClass: 'bg-slate-50 border border-slate-200 text-slate-700',
     };
   }
 
@@ -691,21 +796,21 @@ export class BlogDashboardComponent implements OnInit, OnDestroy {
   getStatusClass(status: string): string {
     switch (status) {
       case 'published':
-        return 'badge-published';
+        return 'bg-emerald-100 text-emerald-800';
       case 'approved':
-        return 'badge-approved';
+        return 'bg-blue-100 text-blue-800';
       case 'pending_approval':
-        return 'badge-pending';
+        return 'bg-amber-100 text-amber-800';
       case 'changes_requested':
-        return 'badge-changes';
+        return 'bg-red-100 text-red-800';
       case 'scheduled':
-        return 'badge-scheduled';
+        return 'bg-purple-100 text-purple-800';
       case 'rejected':
-        return 'badge-rejected';
+        return 'bg-rose-100 text-rose-800';
       case 'generating':
-        return 'badge-generating';
+        return 'bg-indigo-100 text-indigo-800 animate-pulse';
       default:
-        return 'badge-draft';
+        return 'bg-slate-100 text-slate-600';
     }
   }
 

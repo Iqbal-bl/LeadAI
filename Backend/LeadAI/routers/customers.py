@@ -84,6 +84,8 @@ def list_customers(
     write time. Listing 200 customers therefore costs zero crypto operations.
     """
     principal, client_id = scope
+
+
     query = db.query(LeadAccount).filter(
         LeadAccount.ClientId == client_id,
         LeadAccount.IsDeleted == False,  # noqa: E712
@@ -167,7 +169,7 @@ def create_customer(
 def convert(
     payload: ConvertLeadRequest,
     request: Request,
-    scope: tuple[Principal, str] = Depends(scoped("customer.manage", "lead.status")),
+    scope: tuple[Principal, str] = Depends(scoped("customer.manage")),
     db: Session = Depends(get_leadai_db),
 ):
     """Promote a qualified conversation. Idempotent — safe to double-click."""
@@ -368,6 +370,8 @@ def reveal_contact(
         "phone": decrypt_pii(row.PhoneEnc),
         "email": decrypt_pii(row.EmailEnc),
         "whatsapp": decrypt_pii(row.WhatsAppEnc),
+        "linkedin": getattr(row, "LinkedinProfileUrl", None),
+        "linkedin_profile_url": getattr(row, "LinkedinProfileUrl", None),
         # A customer converted from Instagram/Messenger had no handle/IGSID here at
         # all — this endpoint only ever decrypted phone/email/whatsapp, even though
         # the social identity behind row.CustomerId was one join away the whole time.

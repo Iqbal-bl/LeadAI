@@ -123,15 +123,16 @@ async def receive_webhook(
         return {"received": True, "ignored": "unparseable body"}
 
     try:
-        messages, statuses = channels.normalise(payload)
+        messages, statuses, comments = channels.normalise(payload)
     except Exception:  # noqa: BLE001
         logger.exception("[LeadAI webhook] normalise failed — acknowledging anyway")
         return {"received": True, "ignored": "normalise error"}
-    if not messages and not statuses:
+    if not messages and not statuses and not comments:
         return {"received": True, "ignored": "no actionable events"}
 
     signature = request.headers.get("x-hub-signature-256")
     accepted: list[dict] = []
+    accepted_comments: list[dict] = []
 
     for message in messages:
         account = channels.find_account(db, message.channel, message.account_external_id)
@@ -180,6 +181,38 @@ async def receive_webhook(
             }
         )
 
+    for comment in comments:
+        account = channels.find_account(db, comment.channel, comment.account_external_id)
+        if account is None:
+            logger.warning(
+                "[LeadAI webhook] no account for comment %s/%s — event dropped",
+                comment.channel, comment.account_external_id,
+            )
+            continue
+
+        if not channels.verify_signature(raw, signature, channels.app_secret_for(account)):
+            logger.error("[LeadAI webhook] SIGNATURE MISMATCH for comment on account %s", account.Id)
+            return Response(content="Invalid signature", status_code=403)
+
+        if not _record_event(db, account, comment.comment_id, "comment", payload):
+            continue  # duplicate delivery
+
+        accepted_comments.append(
+            {
+                "account_id": account.Id,
+                "client_id": account.ClientId,
+                "channel": comment.channel,
+                "comment_id": comment.comment_id,
+                "post_id": comment.post_id,
+                "parent_comment_id": comment.parent_comment_id,
+                "author_id": comment.author_id,
+                "author_name": comment.author_name,
+                "text": comment.text,
+                "created_time": comment.created_time,
+                "raw": comment.raw,
+            }
+        )
+
     # Delivery receipts are cheap; handle them inline.
     for status in statuses:
         try:
@@ -196,7 +229,10 @@ async def receive_webhook(
         # LLM takes four seconds.
         background.add_task(_process_messages, accepted)
 
-    return {"received": True, "queued": len(accepted)}
+    if accepted_comments:
+        background.add_task(_process_comments, accepted_comments)
+
+    return {"received": True, "queued": len(accepted), "queued_comments": len(accepted_comments)}
 
 
 def _record_event(
@@ -520,3 +556,116 @@ async def receive_generic(
         ],
     )
     return {"received": True}
+
+
+def _process_comments(items: list[dict]) -> None:
+    """Background pass: process social comments for lead capture and AI reply."""
+    for item in items:
+        db = new_session()
+        try:
+            _process_one_comment(db, item)
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.exception("[LeadAI webhook] comment processing failed: %s", exc)
+        finally:
+            db.close()
+
+
+def _process_one_comment(db: Session, item: dict) -> None:
+    from ..models_blog import LeadSocialComment
+    from ..services.comment_reply_ai import CommentReplyAIService
+
+    account = db.get(LeadChannelAccount, item["account_id"])
+    if account is None or not account.IsActive:
+        return
+
+    comment_urn = item["comment_id"]
+    existing = (
+        db.query(LeadSocialComment)
+        .filter(
+            LeadSocialComment.ClientId == account.ClientId,
+            LeadSocialComment.CommentUrn == comment_urn,
+            LeadSocialComment.IsDeleted == False,
+        )
+        .first()
+    )
+    if existing:
+        return
+
+    post_id = item.get("post_id") or ""
+    post_ctx = channels.fetch_post_context(account, item["channel"], post_id) if post_id else {}
+    post_title = post_ctx.get("post_title") or f"{item['channel'].title()} Post"
+    post_snippet = post_ctx.get("post_snippet") or ""
+    post_url = post_ctx.get("permalink_url") or post_id or f"urn:meta:{item['channel']}:{item['comment_id']}"
+
+    author_name = item.get("author_name") or f"{item['channel'].title()} User"
+    author_url = None
+    if item["channel"] == CHANNEL_INSTAGRAM and item.get("author_name"):
+        author_url = f"https://instagram.com/{item['author_name'].lstrip('@')}"
+
+    soc_comment = LeadSocialComment(
+        ClientId=account.ClientId,
+        AccountId=account.Id,
+        Channel=item["channel"],
+        PostUrn=post_url,
+        PostTitle=post_title,
+        PostSnippet=post_snippet,
+        CommentUrn=comment_urn,
+        ParentCommentUrn=item.get("parent_comment_id"),
+        AuthorUrn=item.get("author_id"),
+        AuthorName=author_name,
+        AuthorProfileUrl=author_url,
+        CommentText=item.get("text") or "",
+        CommentCreatedAt=item.get("created_time") or utcnow(),
+        Status="pending_review",
+        CreatedBy="meta_webhook",
+    )
+    db.add(soc_comment)
+    db.flush()
+
+    try:
+        # Generate AI reply, score intent, and auto-capture lead if qualified or multi-turn
+        CommentReplyAIService.generate_reply_for_comment(db, soc_comment)
+        db.flush()
+
+        settings = CommentReplyAIService.get_or_create_settings(db, account.ClientId, item["channel"])
+        should_auto_reply = bool(account.AutoReply or settings.IsAutoReplyEnabled)
+        if should_auto_reply and soc_comment.SuggestedReply:
+            reply_id = channels.reply_to_comment(
+                account,
+                item["channel"],
+                comment_urn,
+                soc_comment.SuggestedReply,
+            )
+            if reply_id:
+                soc_comment.Status = "auto_replied"
+                soc_comment.ReplyText = soc_comment.SuggestedReply
+                soc_comment.ReplyUrn = reply_id
+                soc_comment.RepliedAt = utcnow()
+                soc_comment.RepliedBy = "ai_auto"
+                db.flush()
+
+        db.commit()
+
+        try:
+            from ..ws_hub import broadcast_to_company
+            broadcast_to_company(
+                account.ClientId,
+                "leadai.social_comment",
+                {
+                    "id": soc_comment.Id,
+                    "channel": soc_comment.Channel,
+                    "author_name": soc_comment.AuthorName,
+                    "post_title": soc_comment.PostTitle,
+                    "comment_text": soc_comment.CommentText,
+                    "is_lead_candidate": soc_comment.IsLeadCandidate,
+                    "customer_id": soc_comment.CustomerId,
+                },
+            )
+        except Exception:
+            pass
+
+    except Exception as exc:
+        db.rollback()
+        logger.exception("[LeadAI webhook] CommentReplyAI processing failed: %s", exc)
+

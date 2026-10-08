@@ -34,6 +34,7 @@
     <!-- Conversations -->
     <app-lead-conversations
       [conversations]="conversations"
+      [recipientName]="lead?.name || ''"
       [sendingReply]="sendingReply"
       (sendReply)="sendReplyMessage($event)"
       (previewTranscript)="openTranscript($event)"
@@ -44,6 +45,9 @@
   <div class="space-y-6">
     <!-- Customer Info -->
     <app-customer-info [lead]="lead"></app-customer-info>
+
+    <!-- Qualification Data Points -->
+    <app-lead-data-points [lead]="lead"></app-lead-data-points>
 
     <!-- Worker Assignment -->
     <app-worker-assignment

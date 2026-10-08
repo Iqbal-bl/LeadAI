@@ -4,6 +4,7 @@ export interface KbDocument {
   file_name: string;
   content_type: string;
   source_type: string;
+  source_url?: string;
   status: 'pending' | 'indexing' | 'indexed' | 'failed' | 'deleted';
   status_message: string | null;
   chunk_count: number;

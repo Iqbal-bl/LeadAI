@@ -15,6 +15,7 @@ from .llm import complete_json
 from ..models import (
     LeadCustomer,
     LeadChannelIdentity,
+    LeadChannelAccount,
     LeadKbChunk,
     LeadActivityLog,
     utcnow,
@@ -26,6 +27,7 @@ from ..models_blog import (
     LeadArticle,
 )
 from ..security import encrypt_pii
+from . import crm as crm_service
 
 logger = logging.getLogger("leadai.services.comment_reply_ai")
 
@@ -68,7 +70,7 @@ class CommentReplyAIService:
         try:
             from domain.models import Client
         except ImportError:
-            from Domain.models import Client
+            pass
         
         client = db.query(Client).filter(Client.Id == client_id, Client.IsDeleted == False).first()
         company_name = client.Name if client else "Our Organization"
@@ -159,7 +161,7 @@ KNOWLEDGE BASE CONTEXT:
 REPLY GUIDELINES:
 1. Tone: {tone.replace('_', ' ').title()}.
 2. Be authentic, professional, and conversational. NEVER sound like a generic AI (Avoid: "Thank you for your valuable insight!", "Indeed!", "Great question!").
-3. Greet the commenter naturally by their first name (or full name if first name is ambiguous).
+3. Do NOT prefix or greet with the commenter's name (e.g., do NOT start with "Hi John," or "John,") because LinkedIn automatically prefixes their @mention tag to the reply. Jump straight into the conversational response.
 4. Connect their comment directly to the specific topic/insights of the post.
 5. If the comment is a question: answer it clearly and accurately using the context provided.
 6. If the comment expresses interest, inquiry, or partnership: provide a helpful answer and gently invite them to connect or send a DM.
@@ -207,6 +209,47 @@ COMMENT DETAILS:
             is_lead = bool(result.get("is_lead_candidate", intent_score >= settings.MinLeadIntentThreshold))
             rationale = result.get("rationale", "")
 
+        # Multi-turn engagement rule:
+        # If the user comments on a post, we reply, and the user replies back (or user has >=2 comments on this post),
+        # they are actively engaged and MUST be captured as a lead regardless of AI intent score cutoff.
+        is_multi_turn_reply = False
+        if comment.ParentCommentUrn:
+            parent = (
+                db.query(LeadSocialComment)
+                .filter(
+                    LeadSocialComment.CommentUrn == comment.ParentCommentUrn,
+                    LeadSocialComment.IsDeleted == False,
+                )
+                .first()
+            )
+            if parent and (parent.RepliedBy or parent.Status in ("approved", "auto_replied", "replied")):
+                is_multi_turn_reply = True
+
+        if not is_multi_turn_reply and (comment.AuthorUrn or comment.AuthorName):
+            author_filter = (
+                LeadSocialComment.AuthorUrn == comment.AuthorUrn
+                if comment.AuthorUrn
+                else LeadSocialComment.AuthorName == comment.AuthorName
+            )
+            prior_count = (
+                db.query(LeadSocialComment)
+                .filter(
+                    LeadSocialComment.ClientId == comment.ClientId,
+                    LeadSocialComment.PostUrn == comment.PostUrn,
+                    LeadSocialComment.Id != comment.Id,
+                    author_filter,
+                    LeadSocialComment.IsDeleted == False,
+                )
+                .count()
+            )
+            if prior_count >= 1:
+                is_multi_turn_reply = True
+
+        if is_multi_turn_reply:
+            is_lead = True
+            intent_score = max(intent_score, 0.75)
+            rationale = (rationale + " [Multi-turn engagement: User actively replied in thread]").strip()
+
         # Save updates to comment row
         comment.Sentiment = sentiment
         comment.IntentScore = intent_score
@@ -238,56 +281,92 @@ COMMENT DETAILS:
 
     @classmethod
     def capture_commenter_as_lead(cls, db: Session, comment: LeadSocialComment) -> Optional[LeadCustomer]:
-        """Convert a LinkedIn commenter into a LeadCustomer and LeadChannelIdentity in CRM."""
+        """Convert a LinkedIn commenter into a LeadCustomer, LeadConversation, and Lead in pipeline."""
+        from ..models import LeadConversation, Lead
+
+        # ------------------------------------------------------------------ #
+        # Path 1: comment is already linked to a customer — backfill URL if  #
+        # missing then return early.                                          #
+        # ------------------------------------------------------------------ #
         if comment.CustomerId:
-            return db.get(LeadCustomer, comment.CustomerId)
+            cust = db.get(LeadCustomer, comment.CustomerId)
+            if cust and not cust.LinkedinProfileUrl and comment.AuthorProfileUrl:
+                cust.LinkedinProfileUrl = comment.AuthorProfileUrl
+                cust.UpdatedAt = utcnow()
+            db.commit()
+            return cust
 
         external_id = comment.AuthorUrn or comment.AuthorProfileUrl or f"linkedin_comment_{comment.AuthorName.replace(' ', '_')}"
-        
-        # Check if identity already exists
-        identity = (
-            db.query(LeadChannelIdentity)
+
+        # ------------------------------------------------------------------ #
+        # Use unified multi-key resolver to find or link existing customer    #
+        # across DMs, Connection Requests, and Comments                      #
+        # ------------------------------------------------------------------ #
+        chan_acct = (
+            db.query(LeadChannelAccount)
             .filter(
-                LeadChannelIdentity.ClientId == comment.ClientId,
-                LeadChannelIdentity.ExternalUserId == str(external_id),
-                LeadChannelIdentity.IsDeleted == False,
+                LeadChannelAccount.ClientId == comment.ClientId,
+                LeadChannelAccount.Channel == (comment.Channel or "linkedin"),
+                LeadChannelAccount.IsDeleted == False,
             )
             .first()
         )
+        channel_account_id = chan_acct.Id if chan_acct else "linkedin-default"
 
-        customer = None
-        if identity:
-            customer = db.get(LeadCustomer, identity.CustomerId)
-            comment.CustomerId = identity.CustomerId
-            comment.IdentityId = identity.Id
-            db.commit()
-            return customer
-
-        # Create new customer
-        display_name = comment.AuthorName or "LinkedIn Member"
-        customer = LeadCustomer(
-            ClientId=comment.ClientId,
-            PublicRef=f"Lead #{random.randint(10000, 99999)}",
-            DisplayName=display_name,
-            PhoneEnc=encrypt_pii(None),
-            CreatedBy="linkedin_comment_ai",
+        from ..social.linkedin_bot import find_or_link_linkedin_customer
+        customer, identity = find_or_link_linkedin_customer(
+            db=db,
+            client_id=comment.ClientId,
+            channel_account_id=channel_account_id,
+            sender_urn=comment.AuthorUrn or external_id,
+            profile_url=comment.AuthorProfileUrl,
+            display_name=comment.AuthorName,
+            created_by="linkedin_comment_ai",
         )
-        db.add(customer)
-        db.flush()
-
-        identity = LeadChannelIdentity(
-            ClientId=comment.ClientId,
-            Channel="linkedin",
-            ExternalUserId=str(external_id),
-            CustomerId=customer.Id,
-            ProfileName=display_name,
-            CreatedBy="linkedin_comment_ai",
-        )
-        db.add(identity)
-        db.flush()
-
         comment.CustomerId = customer.Id
-        comment.IdentityId = identity.Id
+        comment.IdentityId = identity.Id if identity else None
+
+        # Link or create LeadConversation & Lead in pipeline (WITHOUT premature LeadAccount creation)
+        db_conv = db.query(LeadConversation).filter(
+            LeadConversation.ClientId == comment.ClientId,
+            LeadConversation.Channel == "linkedin",
+            LeadConversation.CustomerId == customer.Id,
+            LeadConversation.IsDeleted == False,
+        ).first()
+
+        if not db_conv:
+            db_conv = LeadConversation(
+                ClientId=comment.ClientId,
+                CustomerId=customer.Id,
+                Channel="linkedin",
+                Status="open",
+                ChannelAccountId=channel_account_id if channel_account_id != "linkedin-default" else None,
+                ExternalThreadId=str(comment.CommentUrn or customer.Id),
+                Summary=f"Comment on '{comment.PostTitle}': {comment.CommentText[:300]}",
+                LastMessageAt=utcnow(),
+            )
+            db.add(db_conv)
+            db.flush()
+
+        db_lead = db.query(Lead).filter(
+            Lead.ConversationId == db_conv.Id,
+            Lead.IsDeleted == False,
+        ).first()
+        if not db_lead:
+            score = int((comment.IntentScore or 0.6) * 100)
+            db_lead = Lead(
+                ClientId=comment.ClientId,
+                ConversationId=db_conv.Id,
+                Status="hot" if score >= 85 else "warm",
+                Score=score,
+                Intent="lead_inquiry" if comment.IsLeadCandidate else "engagement",
+                Interest=f"Comment on {comment.PostTitle or 'LinkedIn Post'}",
+                Product=comment.PostTitle or "unknown",
+                CreatedBy="linkedin_comment_ai",
+            )
+            db.add(db_lead)
+
         db.commit()
-        logger.info(f"Captured new LinkedIn commenter as CRM Lead: {display_name} ({customer.Id})")
+        logger.info(f"Captured/linked LinkedIn commenter as Lead in pipeline: {customer.DisplayName} ({customer.Id})")
         return customer
+

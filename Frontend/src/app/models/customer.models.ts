@@ -15,6 +15,9 @@ export interface Customer {
   company?: string | null; // backwards-compatible alias
   phone_masked: string | null;
   email_masked: string | null;
+  linkedin_masked?: string | null;
+  /** LinkedIn profile URL — masked in general responses, unmasked on audited reveal. */
+  linkedin_profile_url?: string | null;
   stage: 'new' | 'active' | 'churned' | 'vip' | 'opportunity' | string;
   status: 'active' | 'inactive' | string;
   owner_email: string | null;
@@ -46,9 +49,21 @@ export interface Customer {
 }
 
 export interface CustomerRevealResponse {
+  id?: string;
+  display_name?: string;
   phone: string | null;
   email: string | null;
-  revealed_at: string;
+  whatsapp?: string | null;
+  linkedin?: string | null;
+  linkedin_profile_url?: string | null;
+  social_identities?: Array<{
+    channel: string;
+    external_user_id?: string;
+    profile_name?: string;
+    handle?: string;
+    profile_url?: string;
+  }>;
+  revealed_at?: string;
 }
 
 export interface CustomerConvertRequest {

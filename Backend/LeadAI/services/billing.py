@@ -45,6 +45,8 @@ ADDON_BENCHMARKS = {
     "instagram": 2000.0,
     "facebook": 2000.0,
     "linkedin": 3000.0,
+    "blog": 2000.0,
+    "voice_facilities": 2500.0,
 }
 
 
@@ -66,6 +68,8 @@ DEFAULT_PLANS = [
     {"name": "Instagram DM Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "instagram", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Turn comments and DMs into high-intent inbound customers instantly."},
     {"name": "Facebook Messenger", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "facebook", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Engage visitors contacting your Facebook business page around the clock."},
     {"name": "LinkedIn Lead Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "linkedin", "included_minutes": 0.0, "validity_days": 30, "price": 3000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Automate connection messaging, B2B lead qualification, and CRM syncing on LinkedIn."},
+    {"name": "AI Blog Automation", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "blog", "included_minutes": 0.0, "validity_days": 30, "price": 2000.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Automated SEO blog generation, Ghost/WordPress publishing, and content marketing funnel."},
+    {"name": "Voice Call Facilities", "plan_type": PLAN_TYPE_STANDARD, "plan_category": PLAN_CATEGORY_CHANNEL_ADDON, "feature_key": "voice_facilities", "included_minutes": 0.0, "validity_days": 30, "price": 2500.0, "rate_per_minute": 0.0, "auto_pay_by_default": True, "description": "Dedicated business virtual DID number, inbound IVR auto-receptionist, and call routing facility."},
 ]
 
 
@@ -78,29 +82,54 @@ def ensure_default_templates(db: Session) -> None:
     try:
         from sqlalchemy import or_
 
-        # Deactivate all legacy templates (Yearly Standard, Monthly Standard)
+        # Deactivate all legacy and yearly templates (as yearly is not offered for now)
         db.query(LeadRechargePlanTemplate).filter(
             or_(
-                LeadRechargePlanTemplate.Name.like("%Yearly Standard%"),
+                LeadRechargePlanTemplate.Name.like("%Yearly%"),
                 LeadRechargePlanTemplate.Name.like("%Monthly Standard%"),
+                LeadRechargePlanTemplate.ValidityDays >= 360,
             )
         ).update({"IsActive": False, "IsDeleted": True}, synchronize_session=False)
 
-        for plan_def in DEFAULT_PLANS:
-            existing = (
-                db.query(LeadRechargePlanTemplate)
-                .filter(
-                    LeadRechargePlanTemplate.Name == plan_def["name"],
-                    LeadRechargePlanTemplate.PlanCategory == plan_def["plan_category"],
-                )
-                .first()
+        # Remove duplicate channel add-on templates in DB so each FeatureKey has at most 1 active template
+        addon_templates = (
+            db.query(LeadRechargePlanTemplate)
+            .filter(
+                LeadRechargePlanTemplate.PlanCategory == PLAN_CATEGORY_CHANNEL_ADDON,
+                LeadRechargePlanTemplate.FeatureKey.isnot(None),
+                LeadRechargePlanTemplate.IsActive == True,
+                LeadRechargePlanTemplate.IsDeleted == False,
             )
+            .order_by(LeadRechargePlanTemplate.Id.asc())
+            .all()
+        )
+        seen_keys = set()
+        for t in addon_templates:
+            k = (t.FeatureKey or "").lower().strip()
+            if k in seen_keys:
+                t.IsActive = False
+                t.IsDeleted = True
+            else:
+                seen_keys.add(k)
+
+        for plan_def in DEFAULT_PLANS:
+            feat_key = plan_def.get("feature_key")
+            query = db.query(LeadRechargePlanTemplate).filter(
+                LeadRechargePlanTemplate.PlanCategory == plan_def["plan_category"],
+                LeadRechargePlanTemplate.IsDeleted == False,
+            )
+            if feat_key:
+                query = query.filter(LeadRechargePlanTemplate.FeatureKey == feat_key)
+            else:
+                query = query.filter(LeadRechargePlanTemplate.Name == plan_def["name"])
+            existing = query.first()
+
             if not existing:
                 template = LeadRechargePlanTemplate(
                     Name=plan_def["name"],
                     PlanType=plan_def["plan_type"],
                     PlanCategory=plan_def["plan_category"],
-                    FeatureKey=plan_def.get("feature_key"),
+                    FeatureKey=feat_key,
                     TargetClientId=None,
                     IncludedMinutes=plan_def["included_minutes"],
                     ValidityDays=plan_def["validity_days"],
@@ -109,6 +138,7 @@ def ensure_default_templates(db: Session) -> None:
                     Description=plan_def["description"],
                     AutoPayByDefault=plan_def.get("auto_pay_by_default", True),
                     IsActive=True,
+                    IsDeleted=False,
                 )
                 db.add(template)
 
@@ -234,6 +264,29 @@ def get_active_recharge(db: Session, client_id: str) -> Optional[LeadClientRecha
                         db.add(active)
                         db.commit()
 
+            # Approach 1: If upgraded mid-cycle, inherit ongoing active channels and anchor date from superseded plan
+            if not active.ActiveChannels:
+                priors = (
+                    db.query(LeadClientRecharge)
+                    .filter(
+                        LeadClientRecharge.ClientId == client_id,
+                        LeadClientRecharge.Status == RECHARGE_STATUS_SUPERSEDED,
+                        LeadClientRecharge.Id != active.Id,
+                    )
+                    .order_by(LeadClientRecharge.CreatedAt.desc())
+                    .all()
+                )
+                for prior in priors:
+                    if prior.ActiveChannels:
+                        active.ActiveChannels = list(prior.ActiveChannels)
+                        active.NextCycleChannels = list(prior.NextCycleChannels or prior.ActiveChannels)
+                        if prior.ExpiresAt and not _is_expired(prior.ExpiresAt, now):
+                            active.ExpiresAt = prior.ExpiresAt
+                        db.add(active)
+                        db.commit()
+                        logger.info(f"[Billing] Restored {active.ActiveChannels} and cycle anchor {active.ExpiresAt} from prior plan {prior.Id}")
+                        break
+
     return active
 
 
@@ -299,19 +352,45 @@ def reserve_minute_pulse(
     # Note: Subscription status remains ACTIVE until ExpiresAt. Zero balance causes
     # check_call_quota to pause subsequent calls and pulse watcher to terminate this call.
 
-    log_entry = LeadUsageLog(
-        ClientId=client_id,
-        RechargeId=recharge.Id,
-        CallSid=call_sid,
-        ConversationId=conversation_id,
-        CallDurationSeconds=minute_number * 60,
-        MinutesDeducted=1.0,
-        PreviousBalance=prev_balance,
-        NewBalance=new_balance,
-        DeductedAt=utcnow(),
+    # Check if a log entry already exists for this call pulse to keep a single consolidated row per call
+    existing_log = (
+        db.query(LeadUsageLog)
+        .filter(
+            LeadUsageLog.ClientId == client_id,
+            LeadUsageLog.CallSid == call_sid,
+        )
+        .order_by(LeadUsageLog.DeductedAt.asc())
+        .first()
     )
+
+    if existing_log:
+        existing_log.MinutesDeducted = float(existing_log.MinutesDeducted or 0.0) + 1.0
+        existing_log.CallDurationSeconds = minute_number * 60
+        existing_log.NewBalance = new_balance
+        existing_log.DeductedAt = utcnow()
+        db.add(existing_log)
+
+        # Remove any legacy duplicate rows for this CallSid
+        db.query(LeadUsageLog).filter(
+            LeadUsageLog.ClientId == client_id,
+            LeadUsageLog.CallSid == call_sid,
+            LeadUsageLog.Id != existing_log.Id,
+        ).delete(synchronize_session=False)
+    else:
+        log_entry = LeadUsageLog(
+            ClientId=client_id,
+            RechargeId=recharge.Id,
+            CallSid=call_sid,
+            ConversationId=conversation_id,
+            CallDurationSeconds=minute_number * 60,
+            MinutesDeducted=1.0,
+            PreviousBalance=prev_balance,
+            NewBalance=new_balance,
+            DeductedAt=utcnow(),
+        )
+        db.add(log_entry)
+
     db.add(recharge)
-    db.add(log_entry)
     db.commit()
 
     logger.info(
@@ -336,79 +415,215 @@ def deduct_call_usage(
     """Reconcile 1-minute pulse deduction against final Twilio call duration.
     
     1s-60s -> 1 min, 61s-120s -> 2 mins (math.ceil(duration / 60)).
-    If minutes were already reserved upfront by live pulse, only deducts any remaining difference.
+    Consolidates deduction into a single LeadUsageLog per call with the exact duration.
     Returns (minutes_deducted, remaining_balance, is_exhausted).
     """
-    if duration_seconds <= 0:
-        active = get_active_recharge(db, client_id)
-        bal = active.RemainingMinutes if active else 0.0
-        return 0.0, bal, False
-
-    required_minutes = float(math.ceil(duration_seconds / 60.0))
-
-    # Check how many minutes were already deducted upfront for this call_sid
-    already_deducted = (
-        db.query(func.sum(LeadUsageLog.MinutesDeducted))
+    # Retrieve all existing pulse logs for this call_sid
+    existing_logs = (
+        db.query(LeadUsageLog)
         .filter(
             LeadUsageLog.ClientId == client_id,
             LeadUsageLog.CallSid == call_sid,
         )
-        .scalar()
-    ) or 0.0
+        .order_by(LeadUsageLog.DeductedAt.asc())
+        .all()
+    )
 
-    needed_minutes = max(0.0, required_minutes - already_deducted)
-    if needed_minutes <= 0.0001:
+    already_deducted = sum(float(l.MinutesDeducted or 0.0) for l in existing_logs)
+
+    # 1. Zero-second / dropped calls: Refund any reserved pulse and suppress from ledger
+    if duration_seconds <= 0:
+        if already_deducted > 0:
+            recharge_id = existing_logs[0].RechargeId if existing_logs else None
+            recharge = None
+            if recharge_id:
+                recharge = (
+                    db.query(LeadClientRecharge)
+                    .filter(LeadClientRecharge.Id == recharge_id)
+                    .with_for_update()
+                    .first()
+                )
+            if not recharge:
+                recharge = (
+                    db.query(LeadClientRecharge)
+                    .filter(
+                        LeadClientRecharge.ClientId == client_id,
+                        LeadClientRecharge.Status.in_([RECHARGE_STATUS_ACTIVE, RECHARGE_STATUS_EXHAUSTED]),
+                    )
+                    .with_for_update()
+                    .first()
+                )
+            if recharge:
+                recharge.RemainingMinutes = round(recharge.RemainingMinutes + already_deducted, 4)
+                if recharge.Status == RECHARGE_STATUS_EXHAUSTED and recharge.RemainingMinutes > 0:
+                    recharge.Status = RECHARGE_STATUS_ACTIVE
+                db.add(recharge)
+
+            for log in existing_logs:
+                db.delete(log)
+            db.commit()
+            logger.info(
+                f"[Billing] Zero-second call {call_sid} for client {client_id}: refunded {already_deducted}m "
+                f"and suppressed from ledger. Balance restored."
+            )
         active = get_active_recharge(db, client_id)
         bal = active.RemainingMinutes if active else 0.0
         return 0.0, bal, False
 
-    # Use SELECT FOR UPDATE to prevent race conditions during concurrent call ends
-    recharge = (
-        db.query(LeadClientRecharge)
-        .filter(
-            LeadClientRecharge.ClientId == client_id,
-            LeadClientRecharge.Status.in_([RECHARGE_STATUS_ACTIVE, RECHARGE_STATUS_EXHAUSTED]),
+    # 2. Duration > 0: Reconcile exact telecom minutes
+    required_minutes = float(math.ceil(duration_seconds / 60.0))
+    needed_minutes = max(0.0, required_minutes - already_deducted)
+    over_deducted = max(0.0, already_deducted - required_minutes)
+
+    recharge_id = existing_logs[0].RechargeId if existing_logs else None
+    recharge = None
+    if recharge_id:
+        recharge = (
+            db.query(LeadClientRecharge)
+            .filter(LeadClientRecharge.Id == recharge_id)
+            .with_for_update()
+            .first()
         )
-        .with_for_update()
-        .first()
-    )
-
     if not recharge:
-        logger.warning(f"[Billing] No active recharge found during deduction for client {client_id}, call {call_sid}")
-        return needed_minutes, 0.0, True
+        recharge = (
+            db.query(LeadClientRecharge)
+            .filter(
+                LeadClientRecharge.ClientId == client_id,
+                LeadClientRecharge.Status.in_([RECHARGE_STATUS_ACTIVE, RECHARGE_STATUS_EXHAUSTED]),
+            )
+            .with_for_update()
+            .first()
+        )
 
-    prev_balance = recharge.RemainingMinutes
-    new_balance = max(0.0, round(prev_balance - needed_minutes, 4))
-    recharge.RemainingMinutes = new_balance
+    prev_balance = recharge.RemainingMinutes if recharge else 0.0
+    new_balance = prev_balance
+    is_exhausted = False
 
-    is_exhausted = new_balance <= 0.0001
-    # Note: Subscription status remains ACTIVE until ExpiresAt. Calls are paused via check_call_quota.
+    if needed_minutes > 0.0001:
+        if recharge:
+            new_balance = max(0.0, round(prev_balance - needed_minutes, 4))
+            recharge.RemainingMinutes = new_balance
+            is_exhausted = new_balance <= 0.0001
+            db.add(recharge)
+        else:
+            logger.warning(f"[Billing] No active recharge found during deduction for client {client_id}, call {call_sid}")
+    elif over_deducted > 0.0001:
+        if recharge:
+            new_balance = round(prev_balance + over_deducted, 4)
+            recharge.RemainingMinutes = new_balance
+            if recharge.Status == RECHARGE_STATUS_EXHAUSTED and new_balance > 0:
+                recharge.Status = RECHARGE_STATUS_ACTIVE
+            db.add(recharge)
 
-    log_entry = LeadUsageLog(
-        ClientId=client_id,
-        RechargeId=recharge.Id,
-        CallSid=call_sid,
-        ConversationId=conversation_id,
-        CallDurationSeconds=duration_seconds,
-        MinutesDeducted=needed_minutes,
-        PreviousBalance=prev_balance,
-        NewBalance=new_balance,
-        DeductedAt=utcnow(),
-    )
-    db.add(recharge)
-    db.add(log_entry)
-    db.commit()
+    if existing_logs:
+        # Consolidate existing pulses into the primary record
+        primary_log = existing_logs[0]
+        primary_log.CallDurationSeconds = duration_seconds
+        primary_log.MinutesDeducted = required_minutes
+        primary_log.NewBalance = new_balance
+        primary_log.DeductedAt = utcnow()
+        db.add(primary_log)
+
+        # Delete any secondary duplicate pulse rows
+        for dup in existing_logs[1:]:
+            db.delete(dup)
+
+        db.commit()
+        final_balance = new_balance
+    else:
+        # No upfront pulse was recorded; deduct and insert a single canonical record
+        if recharge:
+            new_balance = max(0.0, round(prev_balance - required_minutes, 4))
+            recharge.RemainingMinutes = new_balance
+            is_exhausted = new_balance <= 0.0001
+            db.add(recharge)
+
+        recharge_id = recharge.Id if recharge else ""
+        log_entry = LeadUsageLog(
+            ClientId=client_id,
+            RechargeId=recharge_id,
+            CallSid=call_sid,
+            ConversationId=conversation_id,
+            CallDurationSeconds=duration_seconds,
+            MinutesDeducted=required_minutes,
+            PreviousBalance=prev_balance,
+            NewBalance=new_balance,
+            DeductedAt=utcnow(),
+        )
+        db.add(log_entry)
+        db.commit()
+        final_balance = new_balance
 
     logger.info(
-        f"[Billing] Deducted {needed_minutes:.0f} pulse mins ({duration_seconds}s, total {required_minutes:.0f}m) for call {call_sid}. "
-        f"Client {client_id} balance: {prev_balance:.0f} -> {new_balance:.0f} mins."
+        f"[Billing] Reconciled call {call_sid}: duration={duration_seconds}s, "
+        f"total_minutes={required_minutes:.0f}m, diff={needed_minutes - over_deducted:.1f}m, "
+        f"final_balance={final_balance:.0f}m."
     )
 
     if is_exhausted:
         _terminate_all_active_client_calls(client_id)
         get_active_recharge(db, client_id)
 
-    return needed_minutes, new_balance, is_exhausted
+    return required_minutes, final_balance, is_exhausted
+
+
+def consolidate_duplicate_usage_logs(db: Session, client_id: Optional[str] = None) -> int:
+    """Consolidate multiple pulse rows for the same telecom CallSid into a single canonical row.
+    Strictly filters only actual telecom calls (CallSid like 'CA%') and ignores BOOSTER_TOPUP / non-call records.
+    """
+    try:
+        query = (
+            db.query(LeadUsageLog.CallSid)
+            .filter(
+                LeadUsageLog.CallSid.isnot(None),
+                LeadUsageLog.CallSid.like("CA%"),
+            )
+        )
+        if client_id:
+            query = query.filter(LeadUsageLog.ClientId == client_id)
+
+        duplicate_sids = (
+            query.group_by(LeadUsageLog.CallSid)
+            .having(func.count(LeadUsageLog.Id) > 1)
+            .all()
+        )
+
+        consolidated_count = 0
+        for (sid,) in duplicate_sids:
+            if not sid:
+                continue
+            logs = (
+                db.query(LeadUsageLog)
+                .filter(LeadUsageLog.CallSid == sid)
+                .order_by(LeadUsageLog.DeductedAt.asc())
+                .all()
+            )
+            if len(logs) <= 1:
+                continue
+
+            primary = logs[0]
+            total_minutes = sum(float(l.MinutesDeducted or 0.0) for l in logs)
+            latest_balance = logs[-1].NewBalance
+            max_duration = max(int(l.CallDurationSeconds or 0) for l in logs)
+
+            primary.MinutesDeducted = total_minutes
+            primary.NewBalance = latest_balance
+            primary.CallDurationSeconds = max_duration
+            primary.DeductedAt = logs[-1].DeductedAt
+
+            for dup in logs[1:]:
+                db.delete(dup)
+
+            consolidated_count += 1
+
+        if consolidated_count > 0:
+            db.commit()
+            logger.info(f"[Billing] Consolidated {consolidated_count} duplicate CallSid usage log groups.")
+        return consolidated_count
+    except Exception as exc:
+        db.rollback()
+        logger.warning(f"[Billing] Error consolidating duplicate usage logs: {exc}")
+        return 0
 
 
 def _terminate_all_active_client_calls(client_id: str) -> None:
@@ -482,6 +697,7 @@ def allocate_recharge(
         # Booster pack merges directly into active plan
         prev_bal = existing_active.RemainingMinutes
         existing_active.RemainingMinutes += minutes
+        existing_active.BoosterMinutes = float(getattr(existing_active, "BoosterMinutes", 0.0) or 0.0) + minutes
         existing_active.Status = RECHARGE_STATUS_ACTIVE
         db.add(existing_active)
 
@@ -716,6 +932,7 @@ def verify_razorpay_payment(
         # Booster minutes merge directly into current active plan
         prev_bal = existing_active.RemainingMinutes
         existing_active.RemainingMinutes += recharge.PurchasedMinutes
+        existing_active.BoosterMinutes = float(getattr(existing_active, "BoosterMinutes", 0.0) or 0.0) + recharge.PurchasedMinutes
         existing_active.Status = RECHARGE_STATUS_ACTIVE
         recharge.Status = RECHARGE_STATUS_SUPERSEDED
         recharge.PaymentReference = payment_id
@@ -736,16 +953,51 @@ def verify_razorpay_payment(
         db.add(log_entry)
     else:
         if existing_active:
+            leftover = max(0.0, float(existing_active.RemainingMinutes or 0.0))
+            if leftover > 0:
+                recharge.RemainingMinutes = round(recharge.RemainingMinutes + leftover, 4)
+                recharge.RolloverMinutesCarried = leftover
+                logger.info(f"[Billing] Rolled over {leftover} minutes from previous plan {existing_active.Id} to new plan {recharge.Id}")
             existing_active.Status = RECHARGE_STATUS_SUPERSEDED
             db.add(existing_active)
         recharge.Status = RECHARGE_STATUS_ACTIVE
-        recharge.RechargedAt = now
-        recharge.ExpiresAt = compute_cycle_expiry(now, recharge.ValidityDaysSnapshot or 30)
         recharge.PaymentReference = payment_id
         recharge.FailureReason = None
-        if template and template.AddonChannels:
-            recharge.ActiveChannels = list(template.AddonChannels)
-            recharge.NextCycleChannels = list(template.AddonChannels)
+
+        # Approach 1: Retain cycle anchor date if upgrading mid-cycle
+        if existing_active and existing_active.ExpiresAt and not _is_expired(existing_active.ExpiresAt, now):
+            recharge.ExpiresAt = existing_active.ExpiresAt
+            recharge.RechargedAt = existing_active.RechargedAt or now
+            logger.info(f"[Billing Upgrade] Retained existing billing cycle anchor: {recharge.ExpiresAt}")
+        else:
+            recharge.RechargedAt = now
+            recharge.ExpiresAt = compute_cycle_expiry(now, recharge.ValidityDaysSnapshot or 30)
+
+        # Approach 1: Inherit ongoing active channels from existing plan
+        prior_active = list(existing_active.ActiveChannels or []) if existing_active else []
+        prior_next = list(existing_active.NextCycleChannels or prior_active) if existing_active else []
+
+        if not prior_active:
+            past_superseded = (
+                db.query(LeadClientRecharge)
+                .filter(
+                    LeadClientRecharge.ClientId == client_id,
+                    LeadClientRecharge.Status == RECHARGE_STATUS_SUPERSEDED,
+                    LeadClientRecharge.Id != recharge.Id,
+                )
+                .order_by(LeadClientRecharge.CreatedAt.desc())
+                .all()
+            )
+            for p in past_superseded:
+                if p.ActiveChannels:
+                    prior_active = list(p.ActiveChannels)
+                    prior_next = list(p.NextCycleChannels or prior_active)
+                    break
+
+        current_active = list(template.AddonChannels or []) if (template and template.AddonChannels) else list(recharge.ActiveChannels or [])
+        current_next = list(template.AddonChannels or []) if (template and template.AddonChannels) else list(recharge.NextCycleChannels or current_active)
+        recharge.ActiveChannels = list(dict.fromkeys(prior_active + current_active))
+        recharge.NextCycleChannels = list(dict.fromkeys(prior_next + current_next))
 
 
     # Generate Custom Server-Side Invoice & Dispatch Dual Email (Body + Attachment)
@@ -955,9 +1207,13 @@ def create_razorpay_subscription(
     now = utcnow()
     active_plan = get_active_recharge(db, client_id)
     if active_plan and (not active_plan.ExpiresAt or not _is_expired(active_plan.ExpiresAt, now)) and not active_plan.CancelAtPeriodEnd:
-        raise ValueError(
-            "You already have an active subscription. Additional subscriptions cannot be purchased while your current plan is active."
-        )
+        # Only block if client already has an active recurring Razorpay subscription for the exact same or higher plan
+        if active_plan.RazorpaySubscriptionId:
+            template = db.get(LeadRechargePlanTemplate, plan_template_id)
+            if template and template.Id == active_plan.PlanTemplateId:
+                raise ValueError(
+                    "You are already actively subscribed to this plan. You can upgrade to a higher tier or top up minutes."
+                )
 
     template = db.get(LeadRechargePlanTemplate, plan_template_id)
     if not template or not template.IsActive:
@@ -1120,28 +1376,104 @@ def verify_razorpay_subscription_payment(
         .first()
     )
 
+    rollover_carried = 0.0
     if existing_active:
+        # Rollover unused remaining minutes from manual or prior subscription
+        leftover = max(0.0, float(existing_active.RemainingMinutes or 0.0))
+        if leftover > 0:
+            recharge.RemainingMinutes = round(recharge.RemainingMinutes + leftover, 4)
+            rollover_carried = leftover
+            logger.info(f"[Billing] Rolled over {leftover} minutes from previous plan {existing_active.Id} to new subscription {recharge.Id}")
         existing_active.Status = RECHARGE_STATUS_SUPERSEDED
         db.add(existing_active)
 
     recharge.Status = RECHARGE_STATUS_ACTIVE
-    recharge.RechargedAt = now
-    recharge.ExpiresAt = compute_cycle_expiry(now, recharge.ValidityDaysSnapshot or 30)
     recharge.PaymentReference = payment_id
     recharge.IsAutoRenew = True
-    recharge.RolloverMinutesCarried = 0.0
+    recharge.RolloverMinutesCarried = rollover_carried
     recharge.FailureReason = None
+
+    # Approach 1 (Keep the Seed / Anchor Date):
+    # Retain the existing billing cycle anchor date when upgrading mid-cycle
+    if existing_active and existing_active.ExpiresAt and not _is_expired(existing_active.ExpiresAt, now):
+        recharge.ExpiresAt = existing_active.ExpiresAt
+        recharge.RechargedAt = existing_active.RechargedAt or now
+        logger.info(f"[Billing Upgrade] Retained existing billing cycle anchor: {recharge.ExpiresAt}")
+    else:
+        recharge.RechargedAt = now
+        recharge.ExpiresAt = compute_cycle_expiry(now, recharge.ValidityDaysSnapshot or 30)
+
+    # Approach 1 (Omni-Channels Retention):
+    # Retain all ongoing active channels from existing plan so voice upgrade doesn't wipe them!
+    prior_active = list(existing_active.ActiveChannels or []) if existing_active else []
+    prior_next = list(existing_active.NextCycleChannels or prior_active) if existing_active else []
+
+    if not prior_active:
+        past_superseded = (
+            db.query(LeadClientRecharge)
+            .filter(
+                LeadClientRecharge.ClientId == client_id,
+                LeadClientRecharge.Status == RECHARGE_STATUS_SUPERSEDED,
+                LeadClientRecharge.Id != recharge.Id,
+            )
+            .order_by(LeadClientRecharge.CreatedAt.desc())
+            .all()
+        )
+        for p in past_superseded:
+            if p.ActiveChannels:
+                prior_active = list(p.ActiveChannels)
+                prior_next = list(p.NextCycleChannels or prior_active)
+                break
+
+    current_active = list(recharge.ActiveChannels or [])
+    current_next = list(recharge.NextCycleChannels or current_active)
 
     template = db.get(LeadRechargePlanTemplate, recharge.PlanTemplateId) if recharge.PlanTemplateId else None
     if template and template.AddonChannels:
-        recharge.ActiveChannels = list(template.AddonChannels)
-        recharge.NextCycleChannels = list(template.AddonChannels)
-    elif not recharge.ActiveChannels and recharge.PlanNameSnapshot:
+        current_active = list(dict.fromkeys(current_active + list(template.AddonChannels)))
+        current_next = list(dict.fromkeys(current_next + list(template.AddonChannels)))
+    elif not current_active and recharge.PlanNameSnapshot:
         low = recharge.PlanNameSnapshot.lower()
         found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin") if c in low]
         if found:
-            recharge.ActiveChannels = found
-            recharge.NextCycleChannels = found
+            current_active = list(dict.fromkeys(current_active + found))
+            current_next = list(dict.fromkeys(current_next + found))
+
+    recharge.ActiveChannels = list(dict.fromkeys(prior_active + current_active))
+    recharge.NextCycleChannels = list(dict.fromkeys(prior_next + current_next))
+
+    # Cancel previous Razorpay subscription so client is not double-charged on renewal
+    if existing_active and existing_active.RazorpaySubscriptionId and existing_active.RazorpaySubscriptionId != recharge.RazorpaySubscriptionId:
+        try:
+            rzp = get_razorpay_client()
+            rzp.subscription.cancel(existing_active.RazorpaySubscriptionId)
+            logger.info(f"[Billing Upgrade] Successfully cancelled superseded Razorpay subscription {existing_active.RazorpaySubscriptionId}")
+        except Exception as cancel_err:
+            logger.warning(f"[Billing Upgrade] Notice: Could not cancel superseded subscription {existing_active.RazorpaySubscriptionId}: {cancel_err}")
+
+    # Sync Razorpay subscription renewal price for the combined bundle (Voice + Channels)
+    if recharge.RazorpaySubscriptionId and recharge.NextCycleChannels:
+        try:
+            base_voice_price = _extract_base_voice_price(db, recharge)
+            addon_sum = sum(get_channel_price_from_db(db, c) for c in recharge.NextCycleChannels)
+            next_cycle_price = round(base_voice_price + addon_sum, 2)
+
+            if next_cycle_price > (recharge.PricePaid or 0):
+                bundle_plan_id = ensure_bundle_razorpay_plan(db, next_cycle_price, recharge.NextCycleChannels, template)
+                rzp = get_razorpay_client()
+                rzp.subscription.update(
+                    recharge.RazorpaySubscriptionId,
+                    {
+                        "plan_id": bundle_plan_id,
+                        "schedule_change_at": "cycle_end",
+                    },
+                )
+                logger.info(
+                    f"[Billing Upgrade] Scheduled Razorpay subscription {recharge.RazorpaySubscriptionId} "
+                    f"to renew combined bundle (₹{next_cycle_price}) on {recharge.ExpiresAt}."
+                )
+        except Exception as sched_err:
+            logger.warning(f"[Billing Upgrade] Notice: Could not schedule bundle renewal in Razorpay: {sched_err}")
 
 
     invoice_url = f"/api/leadai/billing/invoices/{recharge.Id}/download"
@@ -1433,6 +1765,25 @@ def cancel_razorpay_subscription(
     }
 
 
+def _extract_base_voice_price(db: Session, recharge: Optional[LeadClientRecharge]) -> float:
+    """Extracts pure voice base price, excluding any add-on channels bundled into template or PricePaid.
+    Prevents double-charging channels when calculating bundle renewals or quotes.
+    """
+    if not recharge:
+        return 0.0
+    template = db.get(LeadRechargePlanTemplate, recharge.PlanTemplateId) if recharge.PlanTemplateId else None
+    if template:
+        channels = list(template.AddonChannels or [])
+        addon_cost = sum(get_channel_price_from_db(db, ch) for ch in channels)
+        pure_voice = max(0.0, float(template.Price) - addon_cost)
+        if pure_voice > 0 or template.PlanCategory == PLAN_CATEGORY_VOICE_STANDARD:
+            return pure_voice
+
+    channels = list(recharge.ActiveChannels or [])
+    addon_cost = sum(get_channel_price_from_db(db, ch) for ch in channels)
+    return max(0.0, float(recharge.PricePaid or 0.0) - addon_cost)
+
+
 def create_custom_bundle_subscription(
     db: Session,
     client_id: str,
@@ -1443,9 +1794,12 @@ def create_custom_bundle_subscription(
     now = utcnow()
     active_plan = get_active_recharge(db, client_id)
     if active_plan and (not active_plan.ExpiresAt or not _is_expired(active_plan.ExpiresAt, now)) and not active_plan.CancelAtPeriodEnd:
-        raise ValueError(
-            "You already have an active subscription. Additional subscriptions cannot be purchased while your current plan is active."
-        )
+        if active_plan.RazorpaySubscriptionId:
+            template = db.query(LeadRechargePlanTemplate).filter(LeadRechargePlanTemplate.Id == active_plan.PlanTemplateId).first()
+            if template and template.IncludedMinutes >= voice_mins and not raw_channels:
+                raise ValueError(
+                    "You already have an active recurring plan. You can upgrade to a higher tier or top up minutes."
+                )
 
     include_voice = payload.get("include_voice", True)
     voice_mins = float(payload.get("voice_minutes", 500.0)) if include_voice else 0.0
@@ -1455,23 +1809,19 @@ def create_custom_bundle_subscription(
     addons = [ch.lower().strip() for ch in raw_channels if isinstance(ch, str)]
     addon_total = sum(get_channel_price_from_db(db, ch) for ch in addons)
 
-    billing_cycle = str(payload.get("billing_cycle", "monthly")).lower()
-    is_yearly = billing_cycle == "yearly"
     monthly_total = voice_price + addon_total
     if monthly_total <= 0:
         raise ValueError("Custom bundle must contain at least voice minutes or one channel add-on.")
 
-    # 15% discount for yearly billing
-    total_price = (monthly_total * 12 * 0.85) if is_yearly else monthly_total
-    validity_days = 365 if is_yearly else 30
-    total_voice_mins = (voice_mins * 12.0) if is_yearly else voice_mins
+    total_price = monthly_total
+    validity_days = 30
+    total_voice_mins = voice_mins
 
     channels_label = ", ".join([ch.title() for ch in addons]) if addons else "Voice Only"
-    cycle_label = "Yearly" if is_yearly else "Monthly"
     if include_voice:
-        plan_name = f"Custom Bundle ({int(total_voice_mins)} Mins - {cycle_label})"
+        plan_name = f"Custom Bundle ({int(total_voice_mins)} Mins)"
     else:
-        plan_name = f"Custom Channel Automation ({cycle_label})"
+        plan_name = "Custom Channel Automation"
 
     # Create a custom plan template for this client
     template = LeadRechargePlanTemplate(
@@ -1532,13 +1882,12 @@ def get_channel_addon_quote(db: Session, client_id: str, channel: str) -> dict:
     else:
         remaining_days = total_cycle_days
 
-    # Daily-rate proration: monthly rate covers 30 days
+    # Daily-rate proration: monthly rate covers 30 days, capped at full monthly price
     daily_rate = monthly_price / 30.0
-    prorated_price = max(1.0, round(daily_rate * remaining_days, 2))
+    prorated_price = min(monthly_price, max(1.0, round(daily_rate * remaining_days, 2)))
 
-    # Calculate next cycle bundle price when synced with AutoPay
-    template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
-    base_voice_price = template.Price if template else active_plan.PricePaid
+    # Calculate next cycle bundle price when synced with AutoPay using decoupled base voice price
+    base_voice_price = _extract_base_voice_price(db, active_plan)
     existing_next_channels = list(active_plan.NextCycleChannels or active_plan.ActiveChannels or [])
     if ch_key not in existing_next_channels:
         combined_channels = existing_next_channels + [ch_key]
@@ -1590,15 +1939,15 @@ def cancel_channel_for_next_cycle(
         curr_next.remove(ch_key)
     active_plan.NextCycleChannels = curr_next
 
-    # Recompute next cycle bundle price
-    template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
-    base_voice_price = template.Price if template else active_plan.PricePaid
+    # Recompute next cycle bundle price with decoupled base voice price
+    base_voice_price = _extract_base_voice_price(db, active_plan)
     addon_sum = sum(get_channel_price_from_db(db, c) for c in curr_next)
     next_cycle_price = round(base_voice_price + addon_sum, 2)
 
     # Sync updated lower bundle price with Razorpay AutoPay subscription schedule
     if active_plan.RazorpaySubscriptionId and not active_plan.CancelAtPeriodEnd:
         try:
+            template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
             reduced_plan_id = ensure_bundle_razorpay_plan(db, next_cycle_price, curr_next, template)
             rzp = get_razorpay_client()
             rzp.subscription.update(
@@ -1669,9 +2018,8 @@ def resume_channel_for_next_cycle(
     curr_next.append(ch_key)
     active_plan.NextCycleChannels = curr_next
 
-    # 2. Recompute next cycle bundle price
-    template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
-    base_voice_price = template.Price if template else active_plan.PricePaid
+    # 2. Recompute next cycle bundle price with decoupled base voice price
+    base_voice_price = _extract_base_voice_price(db, active_plan)
     addon_sum = sum(get_channel_price_from_db(db, c) for c in curr_next)
     next_cycle_price = round(base_voice_price + addon_sum, 2)
     db.add(active_plan)
@@ -1802,7 +2150,7 @@ def verify_channel_addon_payment(
     if active_plan.RazorpaySubscriptionId and not active_plan.CancelAtPeriodEnd:
         try:
             template = db.get(LeadRechargePlanTemplate, active_plan.PlanTemplateId) if active_plan.PlanTemplateId else None
-            base_voice_price = template.Price if template else active_plan.PricePaid
+            base_voice_price = _extract_base_voice_price(db, active_plan)
             addon_sum = sum(get_channel_price_from_db(db, c) for c in curr_next)
             next_cycle_price = round(base_voice_price + addon_sum, 2)
 
@@ -1918,6 +2266,12 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
     elif ch_norm in ("linkedin", "li"):
         target_keys = {"linkedin", "li"}
         channel_name = "LinkedIn Lead Gen"
+    elif ch_norm in ("blog", "blogs", "ai_blog", "content_studio"):
+        target_keys = {"blog", "blogs", "ai_blog", "content_studio"}
+        channel_name = "AI Blog & Content Studio"
+    elif ch_norm in ("voice_facilities", "voice_addon", "did"):
+        target_keys = {"voice_facilities", "voice_addon", "did"}
+        channel_name = "Voice Call Facilities"
     else:
         target_keys = {ch_norm}
         channel_name = channel.title()
@@ -1938,7 +2292,7 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
                     db.rollback()
         if not active_channels and active.PlanNameSnapshot:
             plan_lower = active.PlanNameSnapshot.lower()
-            found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin") if c in plan_lower]
+            found = [c for c in ("whatsapp", "instagram", "facebook", "linkedin", "blog") if c in plan_lower]
             if found:
                 active_channels = set(found)
                 active.ActiveChannels = found
@@ -1951,6 +2305,4 @@ def check_channel_access(db: Session, client_id: str, channel: str) -> tuple[boo
         return False, f"Your active plan does not include '{channel_name}'. Please add this channel add-on from Billing & Prepaid Recharges to perform actions on it."
 
     return True, ""
-
-
 

@@ -85,6 +85,19 @@ class LeadAISettings:
     # reasons, never message text.
     engine_trace_log: bool = _b("ENGINE_TRACE_LOG", "true")
     engine_trace_store: bool = _b("ENGINE_TRACE_STORE", "true")
+    # Monitor agent (LeadAI/engine/monitor.py): off | observe | enforce. Classifies each
+    # turn, concurrently with retrieval, as a real knowledge question vs a general/
+    # non-substantive remark (greeting-adjacent chit-chat, "let's talk in Hindi", "are
+    # you there?") that should never reach KB retrieval. observe = classify and trace
+    # only; enforce = also skip retrieval and answer directly when general.
+    triage_mode: str = os.getenv("TRIAGE_MODE", "off").strip().lower()
+    triage_timeout_seconds: float = _f("TRIAGE_TIMEOUT_SECONDS", 4.0)
+    triage_confidence_threshold: float = _f("TRIAGE_CONFIDENCE_THRESHOLD", 0.7)
+    # How many times in a row the AI may say "I don't know that" (engine/decline.py)
+    # before engine/graph.py forces a human handoff instead of letting the conversation
+    # continue. Gives a misheard word or a genuine gap in the knowledge base a couple of
+    # tries (the model's own reply already invites another question) before giving up.
+    decline_retry_limit: int = _i("DECLINE_RETRY_LIMIT", 2)
     # Which pipeline drives LeadAI phone calls (LeadAI/voice/routing.py):
     #   legacy  the existing /media-stream loop in outbound/app.py (default)
     #   canary  Pipecat only for the numbers in VOICE_PIPECAT_NUMBERS, legacy for the rest
@@ -93,6 +106,7 @@ class LeadAISettings:
     voice_pipecat_numbers: str = os.getenv("VOICE_PIPECAT_NUMBERS", "")
     conversation_lock: bool = _b("LEADAI_CONVERSATION_LOCK", "false")
     conversation_lock_timeout: int = _i("LEADAI_CONVERSATION_LOCK_TIMEOUT", 30)
+    scoring_workers: int = _i("LEADAI_SCORING_WORKERS", 4)
     handoff_confidence_threshold: float = _f("LEADAI_HANDOFF_THRESHOLD", 0.40)
     chunk_max_chars: int = _i("LEADAI_CHUNK_MAX_CHARS", 900)
     chunk_overlap: int = _i("LEADAI_CHUNK_OVERLAP", 150)
@@ -284,6 +298,8 @@ class LeadAISettings:
     razorpay_key_secret: str | None = os.getenv("RAZORPAY_KEY_SECRET") or None
     razorpay_webhook_secret: str | None = os.getenv("RAZORPAY_WEBHOOK_SECRET") or None
     razorpay_mandate_max_amount: float = _f("RAZORPAY_MANDATE_MAX_AMOUNT", 15000.0)
+    enable_gst: bool = _b("ENABLE_GST", "false")
+    gst_rate: float = _f("GST_RATE", 0.18)
 
     @property
     def minio_enabled(self) -> bool:

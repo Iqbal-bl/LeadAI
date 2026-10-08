@@ -2,12 +2,13 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { Script, ScriptPreview } from '../../../../../models/script.models';
 import { SharedModule } from '../../../../../shared/shared.module';
 import { FlowchartEditorComponent } from '../flowchart-editor/flowchart-editor.component';
+import { PersonaPanelComponent } from '../persona-panel/persona-panel.component';
 import { CLIENT_PERMISSIONS } from '../../../../../modules/client/constants/permission.constants';
 
 @Component({
   selector: 'app-script-workspace',
   standalone: true,
-  imports: [SharedModule, FlowchartEditorComponent],
+  imports: [SharedModule, FlowchartEditorComponent, PersonaPanelComponent],
   templateUrl: './script-workspace.component.html',
 })
 export class ScriptWorkspaceComponent {
@@ -31,11 +32,33 @@ export class ScriptWorkspaceComponent {
   @Output() onChannelChange = new EventEmitter<'chat' | 'voice'>();
   @Output() scriptXmlEditorContentChange = new EventEmitter<string>();
   @Output() toggleList = new EventEmitter<void>();
+  @Output() onAgentSaved = new EventEmitter<string>();
 
   editorMode: 'code' | 'flowchart' = 'code';
 
   onFlowchartChange(xml: string): void {
     this.scriptXmlEditorContent = xml;
     this.scriptXmlEditorContentChange.emit(xml);
+  }
+
+  insertToken(token: string): void {
+    const textarea = document.querySelector(
+      'textarea[placeholder*="Write XML schema flow here"]',
+    ) as HTMLTextAreaElement;
+    if (textarea && textarea.selectionStart !== undefined) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const current = this.scriptXmlEditorContent || '';
+      this.scriptXmlEditorContent =
+        current.substring(0, start) + token + current.substring(end);
+      this.scriptXmlEditorContentChange.emit(this.scriptXmlEditorContent);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + token.length, start + token.length);
+      }, 0);
+    } else {
+      this.scriptXmlEditorContent = (this.scriptXmlEditorContent || '') + token;
+      this.scriptXmlEditorContentChange.emit(this.scriptXmlEditorContent);
+    }
   }
 }

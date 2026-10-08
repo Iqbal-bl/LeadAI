@@ -34,6 +34,15 @@ class PublisherService:
         Publishes an article across all requested channels (WordPress, LinkedIn, Facebook, Instagram).
         Updates article.Results, post IDs, status, and published_at.
         """
+        # Idempotency guard: If article is already published live, prevent duplicate publishing
+        if article.Status == "published" and article.PublishedAt:
+            logger.info(
+                "[PublisherService] Article %s is already published at %s. Skipping duplicate publication across channels.",
+                article.Id,
+                article.PublishedAt,
+            )
+            return article.Results or {}
+
         client_id = article.ClientId
         blog_settings: Optional[LeadBlogSettings] = db.query(LeadBlogSettings).filter(
             LeadBlogSettings.ClientId == client_id,
@@ -56,6 +65,12 @@ class PublisherService:
 
         # 2. Publish to Social Channels (LinkedIn, Facebook, Instagram)
         social_channels = [c for c in channels if c in ("linkedin", "facebook", "instagram")]
+        if article.LinkedInPostId and "linkedin" in social_channels and article.Status == "published":
+            existing_li_res = (article.Results or {}).get("linkedin")
+            if existing_li_res and existing_li_res.get("success"):
+                results["linkedin"] = existing_li_res
+                social_channels = [c for c in social_channels if c != "linkedin"]
+
         if social_channels:
             social_res = cls.publish_to_social(db, client_id, article, social_channels, actor=actor)
             results.update(social_res)
@@ -93,6 +108,22 @@ class PublisherService:
 
         db.commit()
         db.refresh(article)
+
+        from ... import activity
+        from ...activity import A
+        activity.log(
+            db,
+            action=A.BLOG_ARTICLE_PUBLISHED,
+            client_id=client_id,
+            actor_email=actor or "system",
+            entity_type="blog",
+            entity_id=article.Id,
+            log_type="Info" if (all_success or any_success) else "Error",
+            message=f"Blog article '{article.Title[:80]}' published to {', '.join(results.keys()) if results else 'configured channels'}",
+            meta={"channels": channels, "results": results, "article_id": article.Id, "article_title": article.Title},
+            commit=True,
+        )
+
         return results
 
     @classmethod
@@ -196,6 +227,7 @@ class PublisherService:
                 publish_social(
                     db=db,
                     client_id=client_id,
+                    account_id=getattr(article, "ChannelAccountId", None),
                     caption=caption.strip(),
                     uploaded=uploaded,
                     platforms=social_channels,

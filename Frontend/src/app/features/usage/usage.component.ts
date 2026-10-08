@@ -128,6 +128,20 @@ export class UsageComponent implements OnInit, OnDestroy {
       description: 'Connect, qualify, and message B2B prospects directly on LinkedIn.',
       features: ['B2B profile qualification', 'Automated connection outreach', 'Seamless CRM contact creation'],
     },
+    {
+      key: 'blog',
+      name: 'AI Blog & Content Automation',
+      icon: 'pi pi-file-edit',
+      color: '#f59e0b',
+      monthlyPrice: 2000,
+      description: 'Automated SEO blog generation, Ghost/WordPress publishing, and organic lead acquisition.',
+      features: [
+        'SEO-optimized long-form AI article generation',
+        'One-click WordPress & Ghost auto-publishing',
+        'Keyword intent scoring & organic lead capture',
+      ],
+    }
+
   ];
 
   /** Standard Minute Booster Top-Ups */
@@ -332,12 +346,43 @@ export class UsageComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Calculates quota percentage for progress indicator.
+   * Returns total cumulative booster minutes active in the current plan.
+   * Pulls from backend active_recharge.booster_minutes, with resilient fallback
+   * summing successful booster/topup payments from paymentHistory for this cycle.
+   */
+  public get boosterMinutes(): number {
+    const active = this.summary?.active_recharge;
+    if (active?.booster_minutes && active.booster_minutes > 0) {
+      return active.booster_minutes;
+    }
+    if (!active || !this.paymentHistory?.length) return 0;
+    const activeStart = active.recharged_at ? new Date(active.recharged_at).getTime() : 0;
+    const activeEnd = active.expires_at ? new Date(active.expires_at).getTime() : Infinity;
+
+    return this.paymentHistory
+      .filter((p) => {
+        const s = (p.status || '').toLowerCase();
+        if (s !== 'success' && s !== 'active' && s !== 'superseded' && s !== 'completed') return false;
+        const name = (p.plan_name_snapshot || '').toLowerCase();
+        const isBooster = name.includes('booster') || name.includes('topup') || name.includes('top-up');
+        if (!isBooster) return false;
+        const createdAt = p.created_at ? new Date(p.created_at).getTime() : 0;
+        return createdAt >= (activeStart - 60000) && createdAt <= activeEnd;
+      })
+      .reduce((sum, p) => sum + (p.purchased_minutes || 0), 0);
+  }
+
+  /**
+   * Calculates quota percentage for progress indicator against total capacity (base + booster minutes).
    */
   public getQuotaPercentage(): number {
     const active = this.summary?.active_recharge;
-    if (!active || !active.purchased_minutes || active.purchased_minutes <= 0) return 0;
-    const pct = (active.remaining_minutes / active.purchased_minutes) * 100;
+    if (!active) return 0;
+    const baseMinutes = active.purchased_minutes || 0;
+    const totalPool = baseMinutes + this.boosterMinutes;
+    if (totalPool <= 0) return 0;
+    const remaining = active.remaining_minutes ?? this.summary?.total_remaining_minutes ?? 0;
+    const pct = (remaining / totalPool) * 100;
     return Math.min(100, Math.max(0, Math.round(pct)));
   }
 
@@ -500,17 +545,17 @@ export class UsageComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Calculates 18% standard GST on the subtotal.
+   * GST calculation (set to 0 for now until tax invoicing is enabled).
    */
   public getGstAmount(): number {
-    return Math.round(this.getSubtotal() * 0.18 * 100) / 100;
+    return 0;
   }
 
   /**
-   * Computes grand total payable including GST.
+   * Computes grand total payable.
    */
   public getGrandTotal(): number {
-    return Math.round((this.getSubtotal() + this.getGstAmount()) * 100) / 100;
+    return this.getSubtotal();
   }
 
   /**
@@ -811,5 +856,17 @@ export class UsageComponent implements OnInit, OnDestroy {
    */
   public navigateToPricing(): void {
     this.router.navigate(['/plans']);
+  }
+
+  /**
+   * Formats duration in seconds into human-readable format:
+   * e.g., 111s -> "1min 51sec", 45s -> "45sec", 120s -> "2min"
+   */
+  public formatDuration(seconds: number | null | undefined): string {
+    if (!seconds || seconds <= 0) return '—';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    if (mins === 0) return `${secs}sec`;
+    return secs > 0 ? `${mins}min ${secs}sec` : `${mins}min`;
   }
 }

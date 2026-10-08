@@ -1,5 +1,5 @@
 import { Component, inject, OnInit, OnDestroy } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { NotificationPanelComponent } from '../../../layout/notification-panel/notification-panel.component';
 import { ToolbarComponent } from '../../../layout/toolbar/toolbar.component';
 import { SidebarComponent } from '../../../layout/sidebar/sidebar.component';
@@ -8,6 +8,7 @@ import {
   SidebarSection,
 } from '../../../services/layout.service';
 import { Subscription } from 'rxjs';
+import { distinctUntilChanged } from 'rxjs/operators';
 import { ClientNavigationalMenu } from '../constants/client-navigational-menu';
 import { ClientPermissionService } from '../services/client-permission.service';
 import { AuthService } from '../../../services/auth.service';
@@ -32,6 +33,7 @@ export class ClientShellComponent implements OnInit, OnDestroy {
   private permissionService = inject(ClientPermissionService);
   private leadService = inject(LeadService);
   private toastService = inject(ToastService);
+  private router = inject(Router);
   private sub = new Subscription();
 
   navigationalMenu: SidebarSection[] = [];
@@ -55,15 +57,49 @@ export class ClientShellComponent implements OnInit, OnDestroy {
       }),
     );
 
-    // Global Inbox WebSocket connection management
+    // Global Inbox WebSocket connection and company subscription enforcement.
+    // Avoid re-fetching /access/me on initial shell load since SubscriptionGuard already verified it.
+    let lastCheckedCompanyId = this.authService.getSelectedCompanyId();
+
     this.sub.add(
-      this.authService.selectedCompanyId$.subscribe((clientId) => {
-        if (clientId) {
-          this.leadService.connectInbox(clientId);
-        } else {
-          this.leadService.disconnectInbox();
-        }
-      })
+      this.authService.selectedCompanyId$
+        .pipe(distinctUntilChanged())
+        .subscribe((clientId) => {
+          if (clientId) {
+            this.leadService.connectInbox(clientId);
+
+            // If company-scoped user switches to an unsubscribed company, redirect to plans
+            if (
+              !this.authService.isSuperAdmin() &&
+              !this.authService.isPlatformAdmin()
+            ) {
+              // If this is the initial company load or current company is already validated, don't duplicate the check
+              if (clientId === lastCheckedCompanyId) {
+                const currentUser = this.authService.getCurrentUser();
+                if (
+                  currentUser &&
+                  currentUser.has_active_subscription !== undefined
+                ) {
+                  if (!currentUser.has_active_subscription) {
+                    this.router.navigate(['/plans']);
+                  }
+                  return;
+                }
+              }
+
+              lastCheckedCompanyId = clientId;
+              this.authService.getAccessMe(clientId).subscribe({
+                next: (user) => {
+                  if (!user.has_active_subscription) {
+                    this.router.navigate(['/plans']);
+                  }
+                },
+              });
+            }
+          } else {
+            this.leadService.disconnectInbox();
+          }
+        }),
     );
 
     // Handle lead threshold crossed notification events

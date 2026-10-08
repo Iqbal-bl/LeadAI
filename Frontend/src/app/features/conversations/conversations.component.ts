@@ -20,6 +20,14 @@ export class ConversationsComponent implements OnInit {
   selectedChannel = '';
   showAllLeads = false;
   selectedCampaignId = '';
+  selectedLeadSource = '';
+
+  leadSourceOptions = [
+    { label: 'All sources', value: '' },
+    { label: 'Inbound', value: 'inbound' },
+    { label: 'From import', value: 'import' },
+    { label: 'From broadcast', value: 'broadcast' },
+  ];
 
   campaigns: Campaign[] = [];
 
@@ -62,6 +70,9 @@ export class ConversationsComponent implements OnInit {
     }
     if (this.selectedCampaignId) {
       params.campaign_id = this.selectedCampaignId;
+    }
+    if (this.selectedLeadSource) {
+      params.lead_source = this.selectedLeadSource;
     }
 
     this.inboxService.getInbox(params).subscribe({
@@ -137,8 +148,9 @@ export class ConversationsComponent implements OnInit {
       email: 'pi pi-envelope',
       voice: 'pi pi-phone',
       web: 'pi pi-desktop',
+      linkedin: 'pi pi-linkedin',
     };
-    return icons[channel] || 'pi pi-comment';
+    return icons[channel?.toLowerCase()] || 'pi pi-comment';
   }
 
   getChannelColor(channel: string): string {
@@ -150,7 +162,8 @@ export class ConversationsComponent implements OnInit {
       email: '#ef4444',
       voice: '#f59e0b',
       web: '#3b82f6',
+      linkedin: '#0A66C2',
     };
-    return colors[channel] || '#6b7280';
+    return colors[channel?.toLowerCase()] || '#6b7280';
   }
 }

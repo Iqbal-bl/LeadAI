@@ -7,6 +7,7 @@ import {
   CompanyPermissionsOut,
   CompanyPermissionsPatchIn,
   CompanySettings,
+  CompanyVoiceSettingsUpdate,
 } from '../models/company.models';
 
 @Injectable({
@@ -71,11 +72,22 @@ export class CompanyService {
   // PUT /companies/{id}/settings
   public updateCompanySettings(
     id: string,
-    settings: CompanySettings,
+    settings: Partial<CompanySettings>,
   ): Observable<CompanySettings> {
     return this.apiService.put<CompanySettings>(
       `companies/${id}/settings`,
       settings,
+    );
+  }
+
+  // PUT /companies/{id}/voice-settings (superadmin only)
+  public updateCompanyVoiceSettings(
+    id: string,
+    payload: CompanyVoiceSettingsUpdate,
+  ): Observable<CompanySettings> {
+    return this.apiService.put<CompanySettings>(
+      `companies/${id}/voice-settings`,
+      payload,
     );
   }
 

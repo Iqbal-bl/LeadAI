@@ -191,7 +191,7 @@ xml = """<?xml version="1.0" encoding="UTF-8"?>
 </script>"""
 gs = check("create globex script", client.post(f"{P}/scripts?client_id={GLOBEX}", json={
     "name": "Globex Buyer Flow", "channel": "all", "language": "en-IN",
-    "script_xml": xml, "is_default": True, "voice_speaker": "anushka"}), 201)
+    "script_xml": xml, "is_default": True}), 201)
 print("   globex script sections:", gs["section_count"])
 
 active = check("globex active script", client.get(f"{P}/scripts/active?client_id={GLOBEX}&channel=chat"))

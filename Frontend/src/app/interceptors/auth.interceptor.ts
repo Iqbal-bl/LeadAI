@@ -24,7 +24,7 @@ export class AuthInterceptor implements HttpInterceptor {
   constructor(
     private authService: AuthService,
     private toast: ToastService,
-  ) {}
+  ) { }
 
   intercept(
     req: HttpRequest<any>,
@@ -51,7 +51,7 @@ export class AuthInterceptor implements HttpInterceptor {
         headers = headers.set(
           'Authorization',
           'Basic ' +
-            btoa(`${authConfig.clientId}:${authConfig.clientSecret || ''}`),
+          btoa(`${authConfig.clientId}:${(authConfig as any).clientSecret || ''}`),
         );
       }
       req = req.clone({ headers });
@@ -134,7 +134,7 @@ export class AuthInterceptor implements HttpInterceptor {
           accessTokenLastUpdatedAt != null &&
           expiresIn != null &&
           new Date().getTime() - Date.parse(accessTokenLastUpdatedAt) <
-            Number(expiresIn) * 1000
+          Number(expiresIn) * 1000
         ) {
           console.log('token not expired');
           return throwError(() => err);

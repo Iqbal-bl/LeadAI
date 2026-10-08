@@ -15,6 +15,8 @@ from ..db import get_leadai_db
 from ..models_blog import LeadBlogSettings
 from ..rbac import Principal, assert_owns, require, resolve_scope
 from ..security import encrypt_pii
+from .. import activity
+from ..activity import A
 from ..services.blog.article_service import ArticleService
 from ..services.blog.generator_service import GeneratorService
 from ..services.blog.topic_picker import TopicPickerService
@@ -127,6 +129,11 @@ def update_blog_settings(
     db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     bs = db.query(LeadBlogSettings).filter(
         LeadBlogSettings.ClientId == target_client,
         LeadBlogSettings.IsDeleted == False,
@@ -181,6 +188,22 @@ def update_blog_settings(
     db.commit()
     db.refresh(bs)
 
+    activity.log_principal(
+        db,
+        principal,
+        action=A.BLOG_SETTINGS_UPDATED,
+        client_id=target_client,
+        entity_type="blog",
+        message=f"Blog settings updated (auto_blog={bs.IsAutoBlogEnabled}, mode={bs.Mode}, time={bs.ScheduleTime})",
+        meta={
+            "is_auto_blog_enabled": bs.IsAutoBlogEnabled,
+            "mode": bs.Mode,
+            "schedule_time": bs.ScheduleTime,
+            "topic_niche": bs.TopicNiche,
+            "target_channels": bs.TargetChannels,
+        },
+    )
+
     if bs.IsAutoBlogEnabled:
         from ..services.jobs import bootstrap_blog_job
         bootstrap_blog_job(db)
@@ -225,6 +248,11 @@ def trigger_automated_blog_run(
     db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     bs = db.query(LeadBlogSettings).filter(
         LeadBlogSettings.ClientId == target_client,
         LeadBlogSettings.IsDeleted == False,
@@ -297,8 +325,14 @@ def generate_blog_preview(
     company_id: Optional[str] = None,
     client_id: Optional[str] = Query(None),
     principal: Principal = Depends(require("campaign.manage")),
+    db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     if not payload.topic.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Topic is required.")
     return GeneratorService.generate_blog(payload)
@@ -322,18 +356,24 @@ def generate_and_save_article(
     db: Session = Depends(get_leadai_db),
 ):
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     if not payload.topic.strip():
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Topic is required.")
 
     client = db.query(Client).filter(Client.Id == target_client, Client.IsDeleted == False).first()
     company_name = client.Name if client else "Your Organization"
 
-    return ArticleService.generate_and_save(
+    articles = ArticleService.generate_multi_account_blogs(
         db=db,
         client_id=target_client,
         req=payload,
         company_name=company_name,
     )
+    return articles[0] if articles else None
 
 
 @router.post(
@@ -354,6 +394,11 @@ def trigger_daily_blog_run(
 ):
     """Picks a trending niche topic for the company and executes generation."""
     target_client = _resolve_company(principal, company_id or client_id)
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, target_client, "blog")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
     bs = db.query(LeadBlogSettings).filter(
         LeadBlogSettings.ClientId == target_client,
         LeadBlogSettings.IsDeleted == False,
@@ -378,9 +423,10 @@ def trigger_daily_blog_run(
         target_channels=bs.TargetChannels if bs else ["wordpress"],
     )
 
-    return ArticleService.generate_and_save(
+    articles = ArticleService.generate_multi_account_blogs(
         db=db,
         client_id=target_client,
         req=req,
         company_name=company_name,
     )
+    return articles[0] if articles else None

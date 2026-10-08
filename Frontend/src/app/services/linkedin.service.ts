@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 import {
   LinkedInStatus,
+  LinkedInAccount,
   LinkedInCredentialsPayload,
   GenerateKeywordsRequest,
   GenerateKeywordsResponse,
@@ -21,9 +22,14 @@ import {
   LinkedInCommentSettings,
   GetCommentsResponse,
   SyncCommentsResponse,
+  LinkedInAutoConnectSettings,
+  GetAutoConnectSettingsResponse,
+  SaveAutoConnectSettingsResponse,
+  TriggerAutoConnectResponse,
+  LinkedInRemoteLoginStartRequest,
+  LinkedInRemoteLoginResponse,
+  LinkedInRemoteLoginInteractRequest,
 } from '../models/linkedin.models';
-
-
 
 @Injectable({
   providedIn: 'root',
@@ -32,7 +38,72 @@ export class LinkedinService {
   constructor(private apiService: ApiService) {}
 
   /**
-   * Check connection status of company LinkedIn account
+   * Start interactive remote login solver session for LinkedIn
+   */
+  public startRemoteLogin(
+    payload: LinkedInRemoteLoginStartRequest
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.post<LinkedInRemoteLoginResponse>(
+      'linkedin/remote-login/start',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Interact with remote browser (click, type, submit pin, refresh)
+   */
+  public interactRemoteLogin(
+    sessionId: string,
+    payload: LinkedInRemoteLoginInteractRequest
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.post<LinkedInRemoteLoginResponse>(
+      `linkedin/remote-login/interact/${encodeURIComponent(sessionId)}`,
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Poll remote login solver status
+   */
+  public checkRemoteLoginStatus(
+    sessionId: string
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.get<LinkedInRemoteLoginResponse>(
+      `linkedin/remote-login/status/${encodeURIComponent(sessionId)}`,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Cancel and close remote login session
+   */
+  public cancelRemoteLogin(
+    sessionId: string
+  ): Observable<{ ok: boolean }> {
+    return this.apiService.post<{ ok: boolean }>(
+      `linkedin/remote-login/cancel/${encodeURIComponent(sessionId)}`,
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Fetch current screenshot frame as Blob
+   */
+  public getRemoteLoginScreenshotBlob(
+    sessionId: string
+  ): Observable<Blob> {
+    return this.apiService.get<Blob>(
+      `linkedin/remote-login/screenshot/${encodeURIComponent(sessionId)}?t=${Date.now()}`,
+      { responseType: 'blob', companyScoped: true }
+    );
+  }
+
+
+  /**
+   * Check connection status of company LinkedIn account(s)
    */
   public getStatus(): Observable<LinkedInStatus> {
     return this.apiService.get<LinkedInStatus>('linkedin/status', {
@@ -41,16 +112,41 @@ export class LinkedinService {
   }
 
   /**
+   * List all connected LinkedIn accounts for the active company
+   */
+  public getAccounts(): Observable<{ accounts: LinkedInAccount[]; total: number }> {
+    return this.apiService.get<{ accounts: LinkedInAccount[]; total: number }>(
+      'linkedin/accounts',
+      { companyScoped: true }
+    );
+  }
+
+  /**
    * Retrieve LinkedIn OAuth 2.0 authorization URL
    */
-  public getConnectUrl(): Observable<{ authorize_url: string }> {
+  public getConnectUrl(prompt?: string): Observable<{ authorize_url: string }> {
+    const params: any = {};
+    if (prompt) {
+      params['prompt'] = prompt;
+    }
     return this.apiService.get<{ authorize_url: string }>('linkedin/connect', {
       companyScoped: true,
+      params,
     });
   }
 
   /**
-   * Disconnect LinkedIn profile
+   * Disconnect a specific LinkedIn account profile by ID
+   */
+  public disconnectAccount(accountId: string): Observable<{ ok: boolean; message?: string }> {
+    return this.apiService.delete<{ ok: boolean; message?: string }>(
+      `linkedin/accounts/${encodeURIComponent(accountId)}`,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Disconnect LinkedIn profile (legacy / all)
    */
   public disconnect(): Observable<{ ok: boolean }> {
     return this.apiService.post<{ ok: boolean }>(
@@ -196,11 +292,15 @@ export class LinkedinService {
    * Fetch message history for a specific LinkedIn thread
    */
   public getConversationMessages(
-    conversationUrnId: string
+    conversationUrnId: string,
+    loadEarlier: boolean = false
   ): Observable<GetConversationMessagesResponse> {
     return this.apiService.get<GetConversationMessagesResponse>(
       `linkedin/conversations/${encodeURIComponent(conversationUrnId)}/messages`,
-      { companyScoped: true }
+      {
+        params: loadEarlier ? { load_earlier: 'true' } : {},
+        companyScoped: true,
+      }
     );
   }
 
@@ -334,13 +434,15 @@ export class LinkedinService {
    */
   public captureCommentLead(
     commentId: string
-  ): Observable<{ ok: boolean; message: string; customer_id?: string; display_name?: string }> {
-    return this.apiService.post<{ ok: boolean; message: string; customer_id?: string; display_name?: string }>(
+  ): Observable<{ ok: boolean; message: string; customer_id?: string; display_name?: string; linkedin_profile_url?: string | null }> {
+    return this.apiService.post<{ ok: boolean; message: string; customer_id?: string; display_name?: string; linkedin_profile_url?: string | null }>(
       `linkedin/comments/${encodeURIComponent(commentId)}/capture-lead`,
       {},
       { companyScoped: true }
     );
   }
+
+
 
   /**
    * Poll LinkedIn for latest post comments and trigger AI reply generation
@@ -352,6 +454,41 @@ export class LinkedinService {
       { companyScoped: true }
     );
   }
+
+  /**
+   * Fetch automated candidate search & connection scheduler settings
+   */
+  public getAutoConnectSettings(): Observable<GetAutoConnectSettingsResponse> {
+    return this.apiService.get<GetAutoConnectSettingsResponse>(
+      'linkedin/auto-connect/settings',
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Update automated candidate search & connection scheduler settings
+   */
+  public saveAutoConnectSettings(
+    payload: LinkedInAutoConnectSettings
+  ): Observable<SaveAutoConnectSettingsResponse> {
+    return this.apiService.post<SaveAutoConnectSettingsResponse>(
+      'linkedin/auto-connect/settings',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Trigger immediate test execution of auto-connect job
+   */
+  public triggerAutoConnectNow(): Observable<TriggerAutoConnectResponse> {
+    return this.apiService.post<TriggerAutoConnectResponse>(
+      'linkedin/auto-connect/run-now',
+      {},
+      { companyScoped: true }
+    );
+  }
 }
+
 
 

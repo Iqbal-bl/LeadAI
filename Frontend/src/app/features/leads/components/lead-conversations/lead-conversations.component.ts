@@ -49,6 +49,16 @@ export interface CallRecordingCardState {
   expanded: boolean;
 }
 
+export interface CallMetadataInfo {
+  status?: string;
+  duration?: string | number;
+  phone?: string;
+  language?: string;
+  initiatedBy?: string;
+  leadStatus?: string;
+  leadScore?: number | null;
+}
+
 @Component({
   selector: 'app-lead-conversations',
   standalone: true,
@@ -59,6 +69,19 @@ export interface CallRecordingCardState {
 export class LeadConversationsComponent implements OnChanges {
   @Input() conversations: any[] = [];
   @Input() sendingReply = false;
+  @Input() showReplyInput = true;
+  @Input() replyPlaceholder = 'Type your response to customer...';
+  @Input() title = 'Conversations';
+  @Input() subtitle = '';
+  @Input() icon = 'pi pi-comments';
+  @Input() showHeader = true;
+  @Input() showMaximize = true;
+  @Input() cardMode = true;
+  @Input() maxHeight = '380px';
+  @Input() recipientName = '';
+  @Input() recordingUrl?: string | null;
+  @Input() emptyMessage = 'No messages in this conversation yet.';
+  @Input() callMetadata?: CallMetadataInfo | null;
 
   @Output() sendReply = new EventEmitter<string>();
   @Output() previewTranscript = new EventEmitter<any>();
@@ -84,7 +107,7 @@ export class LeadConversationsComponent implements OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['conversations']) {
+    if (changes['conversations'] || changes['recordingUrl'] || changes['recipientName']) {
       this.processConversations();
       this.scrollToBottom();
     }
@@ -134,22 +157,37 @@ export class LeadConversationsComponent implements OnChanges {
         ? `${placedTime} → ${endReason}`
         : placedTime || endReason || 'Voice call';
 
+      const explicitRecordingUrl =
+        this.recordingUrl ||
+        msgsForSid.find((m) => m.recording_url || m.recordingUrl)?.recording_url ||
+        msgsForSid.find((m) => m.recording_url || m.recordingUrl)?.recordingUrl;
+
       if (!this.callRecordingsMap[sid]) {
         this.callRecordingsMap[sid] = {
           callSid: sid,
           loading: false,
-          recording: undefined, // undefined = idle/lazy
+          recording: explicitRecordingUrl
+            ? ({ url: explicitRecordingUrl, call_sid: sid, expires_in_seconds: 3600 } as any)
+            : undefined,
           error: null,
           placedTime,
           endReason,
           subtitle,
-          expanded: false,
+          expanded: !!explicitRecordingUrl,
         };
       } else {
         // Update labels while preserving loaded recording state
         this.callRecordingsMap[sid].placedTime = placedTime;
         this.callRecordingsMap[sid].endReason = endReason;
         this.callRecordingsMap[sid].subtitle = subtitle;
+        if (explicitRecordingUrl && !this.callRecordingsMap[sid].recording) {
+          this.callRecordingsMap[sid].recording = {
+            url: explicitRecordingUrl,
+            call_sid: sid,
+            expires_in_seconds: 3600,
+          } as any;
+          this.callRecordingsMap[sid].expanded = true;
+        }
       }
     });
 
@@ -188,7 +226,7 @@ export class LeadConversationsComponent implements OnChanges {
         isCustomer: isCust,
         isAgent: isAg,
         isAi: isAIAssistant,
-        senderLabel: isCust ? msg.leadName || 'Customer' : isAg ? 'Agent' : 'AI Assistant',
+        senderLabel: isCust ? (msg.leadName || this.recipientName || 'Customer') : isAg ? 'Agent' : 'AI Assistant',
         bubbleBg: isCust ? '#6366f1' : 'var(--card-bg)',
         textColor: isCust ? '#ffffff' : 'var(--app-text)',
         bubbleBorder: isCust ? 'none' : '1px solid var(--app-border)',
@@ -277,6 +315,7 @@ export class LeadConversationsComponent implements OnChanges {
 
   private computeIsCustomer(msg: any): boolean {
     if (!msg) return false;
+    if (msg.isCustomer === true) return true;
     const sender = (msg.sender || '').toLowerCase().trim();
     const type = (msg.type || '').toLowerCase().trim();
     const role = (msg.role || '').toLowerCase().trim();

@@ -17,7 +17,9 @@ import { CallingPanelComponent } from '../components/calling-panel/calling-panel
 import { WorkerAssignmentComponent } from '../components/worker-assignment/worker-assignment.component';
 import { LeadStatusBadgeComponent } from '../components/lead-status-badge/lead-status-badge.component';
 import { LeadConversationsComponent } from '../components/lead-conversations/lead-conversations.component';
+import { LeadDataPointsComponent } from '../components/lead-data-points/lead-data-points.component';
 import { LeadDetail } from '../../../models/inbox.models';
+import { Location } from '@angular/common';
 
 @Component({
   selector: 'app-lead-detail',
@@ -30,6 +32,7 @@ import { LeadDetail } from '../../../models/inbox.models';
     WorkerAssignmentComponent,
     LeadStatusBadgeComponent,
     LeadConversationsComponent,
+    LeadDataPointsComponent,
   ],
   templateUrl: './lead-detail.component.html',
   styleUrl: './lead-detail.component.scss',
@@ -56,6 +59,7 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
     private voiceService: VoiceService,
     private toastService: ToastService,
     private roleManagementService: RoleManagementService,
+    private location: Location,
   ) {}
 
   ngOnInit(): void {
@@ -222,7 +226,8 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
                   msgPayload.confidence !== null
                     ? msgPayload.confidence
                     : updated[existingIdx].confidence,
-                sources: msgPayload.sources || updated[existingIdx].sources || [],
+                sources:
+                  msgPayload.sources || updated[existingIdx].sources || [],
                 model_used:
                   msgPayload.model_used ||
                   updated[existingIdx].model_used ||
@@ -389,6 +394,14 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
           createdAt: detail.created_at,
           updatedAt: detail.last_message_at,
           leadStatus: detail.lead?.status || '',
+          data_points_json:
+            (detail as any).data_points_json ||
+            (detail as any).DataPointsJson ||
+            (detail as any).data_points ||
+            (detail.lead as any)?.data_points_json ||
+            (detail.lead as any)?.DataPointsJson ||
+            (detail.lead as any)?.data_points ||
+            null,
         };
 
         this.aiSummary = {
@@ -448,6 +461,6 @@ export class LeadDetailComponent implements OnInit, OnDestroy {
   }
 
   goBack(): void {
-    this.router.navigate(['/client/leads']);
+    this.location.back();
   }
 }

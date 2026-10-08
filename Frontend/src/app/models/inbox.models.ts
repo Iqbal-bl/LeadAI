@@ -22,6 +22,11 @@ export interface LeadInfo {
   sentiment: string | null;
   score_breakdown?: ScoreBreakdown | Record<string, number> | null;
   qualified_at?: string | null;
+  data_points_json?: Record<string, any> | null;
+  DataPointsJson?: Record<string, any> | null;
+  data_points?: Record<string, any> | null;
+  converted_account_id?: string | null;
+  converted_at?: string | null;
 }
 
 export interface MessageSource {
@@ -79,6 +84,17 @@ export interface LeadInboxItem {
   lead: LeadInfo | null;
   above_threshold?: boolean;
   campaign_id?: string;
+  origin_attribution?: OriginAttribution | null;
+}
+
+export interface OriginAttribution {
+  origin_type: 'post_comment' | 'campaign' | 'ad' | 'direct' | 'website' | 'voice_call' | string;
+  channel: string;
+  title?: string | null;
+  snippet?: string | null;
+  reference_id?: string | null;
+  url?: string | null;
+  interaction_type?: string | null;
 }
 
 export interface DeliveryInfo {
@@ -114,6 +130,9 @@ export interface LeadDetail extends LeadInboxItem {
   leadStatus?: string;
   source?: string;
   avatar?: string;
+  data_points_json?: Record<string, any> | null;
+  DataPointsJson?: Record<string, any> | null;
+  data_points?: Record<string, any> | null;
 }
 
 export interface ContactInfo {
@@ -121,6 +140,7 @@ export interface ContactInfo {
   email: string | null;
   whatsapp: string | null;
   instagram: string | null;
+  linkedin?: string | null;
   revealed_at: string;
   warning: string;
   display_name: string;

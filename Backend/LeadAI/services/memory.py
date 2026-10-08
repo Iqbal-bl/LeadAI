@@ -55,7 +55,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from ..models import Lead, LeadConversation, LeadCustomer, LeadMessage
+from ..models import Lead, LeadCompanyDataPoint, LeadConversation, LeadCustomer, LeadMessage
 
 logger = logging.getLogger(__name__)
 
@@ -330,6 +330,48 @@ def thread_state_note(db: Session, conversation: LeadConversation, history: list
         return _clip(note + " ".join(parts), THREAD_NOTE_MAX_CHARS)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[LeadAI memory] thread state failed for conv %s: %s", conversation.Id, exc)
+        return ""
+
+
+def missing_data_points_note(db: Session, client_id: str, lead: Lead | None) -> str:
+    """"Still need to learn: X, Y" — the company's own required data points
+    (see LeadCompanyDataPoint) not yet collected for this lead.
+
+    Deliberately NOT gated by thread_is_truncated() like thread_state_note():
+    that gate exists to avoid repeating what the model can already see in a
+    short thread, but a brand-new conversation is exactly when a required data
+    point is most likely still missing and most needs asking for — gating this
+    the same way would mean it almost never fires when it matters.
+
+    Returns "" when the company has no required data points, or none are
+    missing. Never raises into a live turn.
+    """
+    try:
+        required = (
+            db.query(LeadCompanyDataPoint)
+            .filter(
+                LeadCompanyDataPoint.ClientId == client_id,
+                LeadCompanyDataPoint.Required == True,  # noqa: E712
+                LeadCompanyDataPoint.IsActive == True,  # noqa: E712
+                LeadCompanyDataPoint.IsDeleted == False,  # noqa: E712
+            )
+            .order_by(LeadCompanyDataPoint.DisplayOrder.asc())
+            .all()
+        )
+        if not required:
+            return ""
+        known = (lead.DataPointsJson or {}) if lead is not None else {}
+        missing = [dp.Label for dp in required if not known.get(dp.Key)]
+        if not missing:
+            return ""
+        return (
+            "This company also wants you to find out: " + ", ".join(missing) + ". "
+            "Work ONE of these into the conversation naturally where it fits — do not "
+            "interrogate the customer with a list, and never ask for something already "
+            "answered above."
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[LeadAI memory] missing data points check failed for client %s: %s", client_id, exc)
         return ""
 
 
