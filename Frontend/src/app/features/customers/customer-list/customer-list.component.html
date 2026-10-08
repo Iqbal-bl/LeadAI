@@ -102,26 +102,16 @@
               >
                 {{ customer.phone_masked || customer.email_masked }}
               </div>
-              <!-- LinkedIn badge when there is no phone/email but a profile URL exists -->
+              <!-- LinkedIn masked badge when there is no phone/email but a profile URL exists -->
               <div
                 *ngIf="!customer.phone_masked && !customer.email_masked && customer.linkedin_profile_url"
-                (click)="$event.stopPropagation()"
+                class="text-xs truncate font-mono flex items-center gap-1.5"
+                style="color: var(--app-text-muted)"
+                pTooltip="LinkedIn Profile (Masked for privacy — view Customer Detail to reveal)"
+                tooltipPosition="top"
               >
-                <a
-                  [href]="customer.linkedin_profile_url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
-                  style="background: rgba(10,102,194,0.12); color: #0A66C2; border: 1px solid rgba(10,102,194,0.25);"
-                  onmouseover="this.style.background='rgba(10,102,194,0.22)'"
-                  onmouseout="this.style.background='rgba(10,102,194,0.12)'"
-                  pTooltip="Open LinkedIn Profile"
-                  tooltipPosition="top"
-                >
-                  <i class="pi pi-linkedin text-xs"></i>
-                  <span>LinkedIn Profile</span>
-                  <i class="pi pi-external-link" style="font-size:9px"></i>
-                </a>
+                <i class="pi pi-linkedin text-xs" style="color: #0A66C2"></i>
+                <span>linkedin.com/in/*********</span>
               </div>
               <!-- No contact at all -->
               <div

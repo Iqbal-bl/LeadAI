@@ -281,7 +281,9 @@ COMMENT DETAILS:
 
     @classmethod
     def capture_commenter_as_lead(cls, db: Session, comment: LeadSocialComment) -> Optional[LeadCustomer]:
-        """Convert a LinkedIn commenter into a LeadCustomer and LeadChannelIdentity in CRM."""
+        """Convert a LinkedIn commenter into a LeadCustomer, LeadConversation, and Lead in pipeline."""
+        from ..models import LeadConversation, Lead
+
         # ------------------------------------------------------------------ #
         # Path 1: comment is already linked to a customer — backfill URL if  #
         # missing then return early.                                          #
@@ -291,17 +293,6 @@ COMMENT DETAILS:
             if cust and not cust.LinkedinProfileUrl and comment.AuthorProfileUrl:
                 cust.LinkedinProfileUrl = comment.AuthorProfileUrl
                 cust.UpdatedAt = utcnow()
-            # Ensure a LeadAccount exists for CRM list visibility
-            if cust:
-                crm_service.create_account(
-                    db, comment.ClientId,
-                    display_name=cust.DisplayName or "LinkedIn Member",
-                    source="linkedin",
-                    stage="lead",
-                    customer_id=cust.Id,
-                    linkedin_profile_url=getattr(cust, "LinkedinProfileUrl", None) or comment.AuthorProfileUrl,
-                    actor="linkedin_comment_ai",
-                )
             db.commit()
             return cust
 
@@ -335,18 +326,47 @@ COMMENT DETAILS:
         comment.CustomerId = customer.Id
         comment.IdentityId = identity.Id if identity else None
 
-        # Ensure a LeadAccount exists for CRM list visibility (deduplicates automatically)
-        crm_service.create_account(
-            db, comment.ClientId,
-            display_name=customer.DisplayName or "LinkedIn Member",
-            source="linkedin_comment",
-            stage="lead",
-            customer_id=customer.Id,
-            linkedin_profile_url=getattr(customer, "LinkedinProfileUrl", None) or comment.AuthorProfileUrl,
-            tags="linkedin,comment_lead",
-            actor="linkedin_comment_ai",
-        )
+        # Link or create LeadConversation & Lead in pipeline (WITHOUT premature LeadAccount creation)
+        db_conv = db.query(LeadConversation).filter(
+            LeadConversation.ClientId == comment.ClientId,
+            LeadConversation.Channel == "linkedin",
+            LeadConversation.CustomerId == customer.Id,
+            LeadConversation.IsDeleted == False,
+        ).first()
+
+        if not db_conv:
+            db_conv = LeadConversation(
+                ClientId=comment.ClientId,
+                CustomerId=customer.Id,
+                Channel="linkedin",
+                Status="open",
+                ChannelAccountId=channel_account_id if channel_account_id != "linkedin-default" else None,
+                ExternalThreadId=str(comment.CommentUrn or customer.Id),
+                Summary=f"Comment on '{comment.PostTitle}': {comment.CommentText[:300]}",
+                LastMessageAt=utcnow(),
+            )
+            db.add(db_conv)
+            db.flush()
+
+        db_lead = db.query(Lead).filter(
+            Lead.ConversationId == db_conv.Id,
+            Lead.IsDeleted == False,
+        ).first()
+        if not db_lead:
+            score = int((comment.IntentScore or 0.6) * 100)
+            db_lead = Lead(
+                ClientId=comment.ClientId,
+                ConversationId=db_conv.Id,
+                Status="hot" if score >= 85 else "warm",
+                Score=score,
+                Intent="lead_inquiry" if comment.IsLeadCandidate else "engagement",
+                Interest=f"Comment on {comment.PostTitle or 'LinkedIn Post'}",
+                Product=comment.PostTitle or "unknown",
+                CreatedBy="linkedin_comment_ai",
+            )
+            db.add(db_lead)
+
         db.commit()
-        logger.info(f"Captured/linked LinkedIn commenter as CRM Lead: {customer.DisplayName} ({customer.Id})")
+        logger.info(f"Captured/linked LinkedIn commenter as Lead in pipeline: {customer.DisplayName} ({customer.Id})")
         return customer
 

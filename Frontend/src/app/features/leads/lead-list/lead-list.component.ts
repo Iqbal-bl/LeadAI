@@ -63,6 +63,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
     { label: 'WhatsApp', value: 'whatsapp' },
     { label: 'Facebook Messenger', value: 'messenger' },
     { label: 'Instagram', value: 'instagram' },
+    { label: 'LinkedIn', value: 'linkedin' },
     { label: 'SMS', value: 'sms' },
     { label: 'Email', value: 'email' },
     { label: 'Voice Dialler', value: 'voice' },
@@ -249,11 +250,13 @@ export class LeadListComponent implements OnInit, OnDestroy {
             tags: item.lead?.interest ? [item.lead.interest] : [],
             leadScore: score,
             priority: score > 75 ? 'High' : score > 45 ? 'Medium' : 'Low',
-            status: item.lead?.status
-              ? item.lead.status.toUpperCase()
-              : item.status
-                ? item.status.toUpperCase()
-                : 'NEW',
+            status: item.lead?.converted_account_id
+              ? 'CONVERTED'
+              : item.lead?.status
+                ? item.lead.status.toUpperCase()
+                : item.status
+                  ? item.status.toUpperCase()
+                  : 'NEW',
             source: item.channel || 'web',
             originAttribution: item.origin_attribution || null,
             assignedTo: item.assigned_user_email || 'AI Assistant',
@@ -263,6 +266,8 @@ export class LeadListComponent implements OnInit, OnDestroy {
             avatar: '',
             leadStatus: item.lead?.status || '',
             aboveThreshold: item.above_threshold,
+            convertedAccountId: item.lead?.converted_account_id || null,
+            convertedAt: item.lead?.converted_at || null,
           };
         });
 
@@ -349,13 +354,26 @@ export class LeadListComponent implements OnInit, OnDestroy {
       },
     ];
 
-    const isQualified =
-      (lead.leadStatus || lead.status || '').toLowerCase() === 'qualified';
-    if (isQualified) {
+    const canConvert =
+      this.authService.hasPermission('customer.manage') ||
+      ['admin', 'company_admin', 'companyadmin', 'manager', 'platform_admin', 'superadmin'].includes(
+        (this.authService.getUserRole() || '').toLowerCase()
+      );
+    const isUnconverted = !lead.convertedAccountId;
+
+    if (canConvert && isUnconverted) {
       items.push({
         label: 'Convert to Customer',
         icon: 'pi pi-user-plus',
         command: () => this.openConvertDialog(lead),
+      });
+    }
+
+    if (lead.convertedAccountId) {
+      items.push({
+        label: 'View Customer Account',
+        icon: 'pi pi-user',
+        command: () => this.router.navigate(['/client/customers', lead.convertedAccountId]),
       });
     }
 
@@ -401,10 +419,14 @@ export class LeadListComponent implements OnInit, OnDestroy {
       }
     }
 
+    const initialEmail =
+      lead.assigned_user_email ||
+      (lead.assignedTo && lead.assignedTo.includes('@') ? lead.assignedTo : '');
+
     this.convertPayload = {
       conversation_id: convId,
       lead_id: convId,
-      owner_email: lead.assignedTo || lead.assigned_user_email || '',
+      owner_email: initialEmail,
       stage: 'customer',
       value: numericValue,
       notes: lead.summary ? `Summary: ${lead.summary.slice(0, 150)}...` : '',
@@ -417,12 +439,13 @@ export class LeadListComponent implements OnInit, OnDestroy {
     if (!this.convertPayload.conversation_id) return;
     this.converting = true;
 
+    const emailVal = this.convertPayload.owner_email?.trim();
+    const validEmail = emailVal && emailVal.includes('@') ? emailVal : null;
+
     const payload = {
       conversation_id: this.convertPayload.conversation_id,
       lead_id: this.convertPayload.lead_id,
-      owner_email: this.convertPayload.owner_email
-        ? this.convertPayload.owner_email.trim()
-        : null,
+      owner_email: validEmail,
       stage: this.convertPayload.stage || 'customer',
       value:
         this.convertPayload.value != null
@@ -482,6 +505,16 @@ export class LeadListComponent implements OnInit, OnDestroy {
       string,
       'success' | 'secondary' | 'info' | 'warn' | 'danger' | 'contrast'
     > = {
+      CONVERTED: 'success',
+      Converted: 'success',
+      QUALIFIED: 'info',
+      Qualified: 'info',
+      HOT: 'danger',
+      Hot: 'danger',
+      WARM: 'warn',
+      Warm: 'warn',
+      COLD: 'secondary',
+      Cold: 'secondary',
       New: 'info',
       Assigned: 'secondary',
       'Follow-up': 'warn',
@@ -516,6 +549,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
       email: 'pi pi-envelope',
       voice: 'pi pi-phone',
       web: 'pi pi-desktop',
+      linkedin: 'pi pi-linkedin',
     };
     return icons[channel?.toLowerCase()] || 'pi pi-comment';
   }
@@ -529,6 +563,7 @@ export class LeadListComponent implements OnInit, OnDestroy {
       email: '#ef4444',
       voice: '#f59e0b',
       web: '#3b82f6',
+      linkedin: '#0A66C2',
     };
     return colors[channel?.toLowerCase()] || '#6b7280';
   }

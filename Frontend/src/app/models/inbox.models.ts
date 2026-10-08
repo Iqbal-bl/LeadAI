@@ -25,6 +25,8 @@ export interface LeadInfo {
   data_points_json?: Record<string, any> | null;
   DataPointsJson?: Record<string, any> | null;
   data_points?: Record<string, any> | null;
+  converted_account_id?: string | null;
+  converted_at?: string | null;
 }
 
 export interface MessageSource {
@@ -138,6 +140,7 @@ export interface ContactInfo {
   email: string | null;
   whatsapp: string | null;
   instagram: string | null;
+  linkedin?: string | null;
   revealed_at: string;
   warning: string;
   display_name: string;

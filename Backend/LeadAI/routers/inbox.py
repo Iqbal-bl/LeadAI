@@ -129,7 +129,7 @@ def list_conversations(
     ),
     channel: str | None = Query(
         default=None,
-        pattern="^(web|whatsapp|messenger|instagram|voice|sms|email)$",
+        pattern="^(web|whatsapp|messenger|instagram|voice|sms|email|linkedin)$",
         description="Filter by the channel the conversation arrived on.",
     ),
     assigned_to: str | None = Query(
@@ -208,7 +208,12 @@ def list_conversations(
             query = query.filter(LeadCampaign.CreatedVia != "import")
 
     if not include_unreached:
-        query = query.filter(LeadConversation.MessageCount > 0)
+        query = query.filter(
+            or_(
+                LeadConversation.MessageCount > 0,
+                LeadConversation.Channel == "linkedin",
+            )
+        )
 
     # --- lead-score threshold ------------------------------------------------
     # `IsAboveThreshold` is denormalised onto the lead row and indexed, so this
@@ -687,6 +692,7 @@ def reveal_contact(
         email=decrypt_pii(customer.EmailEnc),
         whatsapp=decrypt_pii(customer.WhatsAppEnc),
         instagram=decrypt_pii(customer.InstagramEnc),
+        linkedin=getattr(customer, "LinkedinProfileUrl", None),
         display_name=resolve_display_name(db, customer, conversation),
         social_identities=social,
         revealed_at=datetime.now(timezone.utc),

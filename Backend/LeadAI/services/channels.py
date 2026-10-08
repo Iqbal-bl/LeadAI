@@ -80,30 +80,47 @@ def social_identities_for(db: Session, customer_id: str | None) -> list:
         .order_by(LeadChannelIdentity.CreatedAt.asc())
         .all()
     )
+    from ..models import LeadCustomer
+    customer = db.get(LeadCustomer, customer_id) if customer_id else None
+
     social = []
+    seen = set()
+
     for ident in identities:
-        # ProfileName is the person's real display name ("Manmeet Kaur"); ExternalUsername
-        # is the resolved @handle ("_man11_10") — a separate lookup, cached once per contact
-        # (see the bot-loop guard in routers/webhooks.py). On Instagram the handle IS the
-        # @username — SocialIdentityOut's own docstring says so — so it must win whenever
-        # it's known, or a real name with a space in it produces a handle that isn't the
-        # handle at all and a profile_url that isn't a valid link. Messenger has no @handle
-        # concept at all (Meta never exposes one), so ProfileName is the only thing to show.
+        # Ignore dummy thread identifiers
+        if ident.Channel == "linkedin" and ident.ExternalUserId and str(ident.ExternalUserId).startswith("li_conv-"):
+            continue
+
         if ident.Channel == CHANNEL_INSTAGRAM:
             handle = ident.ExternalUsername or ident.ProfileName
+            display_str = handle or ""
+        elif ident.Channel == "linkedin":
+            handle = ident.ExternalUsername  # Only set handle if real handle exists (no spaces)
+            display_str = ident.ProfileName or ident.ExternalUsername or ""
         else:
             handle = ident.ProfileName or ident.ExternalUsername
+            display_str = handle or ""
+
+        # Deduplicate per channel + normalized name
+        key = (ident.Channel, display_str.strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+
         profile_url = None
         if ident.Channel == CHANNEL_INSTAGRAM and ident.ExternalUsername:
-            # Only a resolved username makes a working link; a raw IGSID (or a real name
-            # with spaces in it) does not.
             profile_url = f"https://instagram.com/{ident.ExternalUsername.lstrip('@')}"
         elif ident.Channel == CHANNEL_MESSENGER and ident.ExternalUserId:
             profile_url = f"https://m.me/{ident.ExternalUserId}"
+        elif ident.Channel == "linkedin":
+            profile_url = getattr(customer, "LinkedinProfileUrl", None) if customer else None
+            if not profile_url and ident.ExternalUsername:
+                profile_url = f"https://www.linkedin.com/in/{ident.ExternalUsername}"
+
         social.append(
             SocialIdentityOut(
                 channel=ident.Channel,
-                handle=handle or ident.ExternalUserId,
+                handle=handle,
                 profile_name=ident.ProfileName,
                 external_user_id=ident.ExternalUserId,
                 profile_url=profile_url,
