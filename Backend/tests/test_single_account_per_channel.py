@@ -1,5 +1,5 @@
 """A company may have at most one connected account per channel (whatsapp, messenger,
-instagram, linkedin). Reproduces a live incident: connecting a Facebook Page whose
+instagram). LinkedIn is the exception: several people can be connected to one company. Reproduces a live incident: connecting a Facebook Page whose
 linked Instagram business account differed from the company's already-connected
 Instagram account silently added a SECOND, independent Instagram channel — nothing
 told the operator, and nothing stopped it.
@@ -7,8 +7,8 @@ told the operator, and nothing stopped it.
 Covers all three ways a channel account gets created:
   * POST /channels (manual connect — WhatsApp today)
   * the Facebook Page login flow (_upsert_fb_account — messenger + instagram)
-  * LinkedIn's OAuth callback (save_tokens), which used to silently REPLACE the
-    existing account instead of refusing
+  * LinkedIn's OAuth callback (save_tokens), which is NOT limited: a second person is a
+    second account, and neither connection replaces the other
 
 In every case: reconnecting the SAME external account (a token refresh / re-auth) must
 still work with no error; connecting a genuinely DIFFERENT account for a channel the
@@ -203,19 +203,25 @@ def test_reconnecting_the_same_linkedin_person_is_a_refresh_not_a_new_account():
     assert rows[0].ExternalId == "urn:li:person:A"
 
 
-def test_a_different_linkedin_person_is_refused_not_silently_swapped_in():
-    # Before this fix, save_tokens silently repointed the existing row at the NEW person,
-    # losing the original connection with no warning to the operator.
+def test_a_company_can_connect_several_linkedin_people_and_none_replaces_another():
     db, client, principal = setup()
-    asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:A", "tok-a", 3600))
-    try:
-        asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:B", "tok-b", 3600))
-        assert False, "a second, different LinkedIn person should have been refused"
-    except ValueError as exc:
-        assert "already has a LinkedIn account" in str(exc)
+    asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:multi-1", "tok-a", 3600))
+    asyncio.run(linkedin.save_tokens(db, client.Id, "urn:li:person:multi-2", "tok-b", 3600))
     rows = db.query(models.LeadChannelAccount).filter_by(ClientId=client.Id, Channel="linkedin").all()
-    assert len(rows) == 1
-    assert rows[0].ExternalId == "urn:li:person:A", "the original connection must survive the refused attempt"
+    assert sorted(r.ExternalId for r in rows) == ["urn:li:person:multi-1", "urn:li:person:multi-2"]
+    assert all(r.IsActive and not r.IsDeleted for r in rows)
+
+
+def test_creating_a_second_linkedin_account_through_the_channels_api_is_allowed():
+    db, client, principal = setup()
+    for urn in ("urn:li:person:api-1", "urn:li:person:api-2"):
+        channels.create_account(
+            ChannelAccountCreate(channel="linkedin", name=f"Person {urn[-1]}", external_id=urn,
+                                access_token="x" * 20),
+            fake_request(), scope=(principal, client.Id), db=db,
+        )
+    rows = db.query(models.LeadChannelAccount).filter_by(ClientId=client.Id, Channel="linkedin").all()
+    assert len(rows) == 2
 
 
 if __name__ == "__main__":

@@ -79,6 +79,7 @@ class A:
     LEAD_EXPORTED = "lead.exported"
     PII_REVEALED = "lead.pii_revealed"
     PHONE_CAPTURED = "lead.phone_captured"
+    DATA_POINT_COLLECTED = "lead.data_point_collected"
 
     # user management
     USER_CREATED = "user.created"

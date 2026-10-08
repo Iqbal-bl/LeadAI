@@ -23,7 +23,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import or_
+from sqlalchemy import or_, tuple_
 from sqlalchemy.orm import Session
 
 from domain.models import Client
@@ -33,6 +33,7 @@ from ..activity import A
 from ..db import get_leadai_db
 from ..models import (
     Lead,
+    LeadActivityLog,
     LeadCall,
     LeadCampaign,
     LeadConversation,
@@ -52,11 +53,14 @@ from ..schemas import (
     ConversationListOut,
     ConversationOut,
     DeliveryOut,
+    LeadHistoryListOut,
+    LeadHistorySourceOut,
     Ok,
     StatusRequest,
 )
 from ..security import decrypt_pii
 from ..serializers import (
+    activity_out,
     call_conversation_detail,
     chat_conversation_detail,
     conversation_detail,
@@ -323,6 +327,70 @@ def get_call_conversation(
     client_id = resolve_scope(principal)
     conversation = _load(db, conversation_id, principal, client_id)
     return call_conversation_detail(db, conversation, principal)
+
+
+@router.get(
+    "/{conversation_id}/history",
+    response_model=LeadHistoryListOut,
+    summary="Lead timeline: source, assignment, calls placed, data points collected, qualification",
+)
+def get_lead_history(
+    conversation_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+    principal: Principal = Depends(require("lead.read.all", "lead.read.assigned")),
+    db: Session = Depends(get_leadai_db),
+):
+    """Paginated, newest-first union of every event this lead has: assignment
+    and status changes (filed on the conversation), calls placed (filed on
+    each LeadCall), qualification/threshold/data-points-collected (filed on
+    the lead), and phone-capture/PII-reveal (filed on the customer) — plus
+    where the lead came from, same inbound/import/broadcast split the inbox
+    list already filters by by (see list_conversations's lead_source param)."""
+    client_id = resolve_scope(principal)
+    conversation = _load(db, conversation_id, principal, client_id)
+    lead = db.query(Lead).filter(Lead.ConversationId == conversation.Id).one_or_none()
+    call_ids = [
+        c.Id for c in db.query(LeadCall.Id).filter(LeadCall.ConversationId == conversation.Id).all()
+    ]
+
+    pairs = [("conversation", conversation.Id)]
+    if lead:
+        pairs.append(("lead", lead.Id))
+    if conversation.CustomerId:
+        pairs.append(("customer", conversation.CustomerId))
+    pairs.extend(("call", cid) for cid in call_ids)
+
+    query = db.query(LeadActivityLog).filter(
+        LeadActivityLog.ClientId == client_id,
+        tuple_(LeadActivityLog.EntityType, LeadActivityLog.EntityId).in_(pairs),
+    )
+    total = query.count()
+    rows = (
+        query.order_by(LeadActivityLog.CreatedAt.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    if conversation.CampaignId:
+        campaign = db.get(LeadCampaign, conversation.CampaignId)
+        source = LeadHistorySourceOut(
+            channel=conversation.Channel,
+            kind="import" if campaign and campaign.CreatedVia == "import" else "broadcast",
+            campaign_id=conversation.CampaignId,
+            campaign_name=campaign.Name if campaign else None,
+        )
+    else:
+        source = LeadHistorySourceOut(channel=conversation.Channel, kind="inbound")
+
+    return LeadHistoryListOut(
+        total_items=total,
+        page=page,
+        page_size=page_size,
+        source=source,
+        items=[activity_out(r) for r in rows],
+    )
 
 
 # ===========================================================================

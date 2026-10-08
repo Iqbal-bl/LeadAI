@@ -954,6 +954,23 @@ class ActivityListOut(Paged):
     items: list[ActivityOut] = []
 
 
+class LeadHistorySourceOut(BaseModel):
+    """Where this lead came from — same taxonomy as the inbox's own
+    ?lead_source= filter (inbound | import | broadcast)."""
+    channel: str
+    kind: str  # inbound | import | broadcast
+    campaign_id: str | None = None
+    campaign_name: str | None = None
+
+
+class LeadHistoryListOut(Paged):
+    """A lead's full timeline: assignment, status changes, calls placed, data
+    points collected, qualification — unioned from every entity an event
+    about this lead could be filed under (lead/conversation/call/customer)."""
+    source: LeadHistorySourceOut
+    items: list[ActivityOut] = []
+
+
 class HealthOut(BaseModel):
     status: str
     llm: str

@@ -256,11 +256,34 @@ def score_turn(
     conversation), so a scoring rule or side effect added here applies everywhere.
     """
     previous_status = lead.Status
+    before_data_points = dict(lead.DataPointsJson or {})
     ai_engine.qualify(db, client.Id, lead, history, trace=trace)
     conversation.Summary, conversation.NextStep = ai_engine.summarize(
         db, client.Id, client.Name, lead, history, trace=trace
     )
     conversation.MessageCount = len(history)
+
+    # Which data points changed, for the lead's own timeline — never the values
+    # themselves (same discipline as PHONE_CAPTURED: the log records THAT a fact
+    # was collected, not the fact's content, since values can be PII).
+    after_data_points = lead.DataPointsJson or {}
+    changed_keys = [k for k, v in after_data_points.items() if before_data_points.get(k) != v]
+    if changed_keys:
+        activity.log(
+            db,
+            action=A.DATA_POINT_COLLECTED,
+            client_id=client.Id,
+            actor_email="ai",
+            actor_role="ai",
+            entity_type="lead",
+            entity_id=lead.Id,
+            message=(
+                f"Collected {', '.join(changed_keys)}" if len(changed_keys) <= 3
+                else f"Collected {len(changed_keys)} data point(s)"
+            ),
+            meta={"data_points_collected": changed_keys},
+            request=request,
+        )
 
     if lead.Status == "qualified" and previous_status != "qualified":
         activity.log(

@@ -120,7 +120,8 @@ def _assert_single_account_per_channel(
     db: Session, client_id: str, channel: str, external_id: str
 ) -> None:
     """A company may have at most one connected account per channel (whatsapp,
-    messenger, instagram, linkedin, ...).
+    messenger, instagram, ...). LinkedIn is exempt: a company can connect several
+    LinkedIn people, each a separate account.
 
     Reconnecting the SAME account (identical ExternalId) is always fine — that is a
     token refresh or re-authorisation, not a second account, so callers only run this
@@ -128,6 +129,8 @@ def _assert_single_account_per_channel(
     the same channel type is refused until the existing one is disconnected, rather
     than silently added alongside it or silently replacing it.
     """
+    if channel == "linkedin":
+        return
     other = (
         db.query(LeadChannelAccount)
         .filter(
