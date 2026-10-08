@@ -65,6 +65,7 @@ export class ClientDetailComponent implements OnInit {
   voiceSpeed: number = 1.1;
   voiceSpeaker: string = DEFAULT_SARVAM_FEMALE_VOICE;
   sttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
+  multiStt = true;
   savingVoiceSettings = false;
 
   // Baseline state for partial update dirty-tracking
@@ -72,6 +73,7 @@ export class ClientDetailComponent implements OnInit {
   savedVoiceSpeed: number = 1.1;
   savedVoiceSpeaker: string = DEFAULT_SARVAM_FEMALE_VOICE;
   savedSttTtsProvider: 'sarvam' | 'deepgram' = 'sarvam';
+  savedMultiStt = true;
 
   ngOnInit(): void {
     this.route.params.subscribe((params) => {
@@ -185,7 +187,8 @@ export class ClientDetailComponent implements OnInit {
       this.voiceGender !== this.savedVoiceGender ||
       this.voiceSpeed !== this.savedVoiceSpeed ||
       this.voiceSpeaker !== this.savedVoiceSpeaker ||
-      this.sttTtsProvider !== this.savedSttTtsProvider
+      this.sttTtsProvider !== this.savedSttTtsProvider ||
+      this.multiStt !== this.savedMultiStt
     );
   }
 
@@ -208,11 +211,13 @@ export class ClientDetailComponent implements OnInit {
               : DEFAULT_SARVAM_FEMALE_VOICE);
 
         this.sttTtsProvider = settings.stt_tts_provider || 'sarvam';
+        this.multiStt = settings.multi_stt ?? true;
 
         this.savedVoiceGender = this.voiceGender;
         this.savedVoiceSpeed = this.voiceSpeed;
         this.savedVoiceSpeaker = this.voiceSpeaker;
         this.savedSttTtsProvider = this.sttTtsProvider;
+        this.savedMultiStt = this.multiStt;
         this.buildServicesList();
       },
       error: () => {
@@ -223,11 +228,13 @@ export class ClientDetailComponent implements OnInit {
           DEFAULT_COMPANY_SETTINGS.voice_speaker || DEFAULT_SARVAM_FEMALE_VOICE;
         this.sttTtsProvider =
           DEFAULT_COMPANY_SETTINGS.stt_tts_provider || 'sarvam';
+        this.multiStt = DEFAULT_COMPANY_SETTINGS.multi_stt ?? true;
 
         this.savedVoiceGender = this.voiceGender;
         this.savedVoiceSpeed = this.voiceSpeed;
         this.savedVoiceSpeaker = this.voiceSpeaker;
         this.savedSttTtsProvider = this.sttTtsProvider;
+        this.savedMultiStt = this.multiStt;
         this.buildServicesList();
       },
     });
@@ -242,6 +249,11 @@ export class ClientDetailComponent implements OnInit {
 
     if (this.sttTtsProvider !== this.savedSttTtsProvider) {
       payload.stt_tts_provider = this.sttTtsProvider;
+      hasChanges = true;
+    }
+
+    if (this.multiStt !== this.savedMultiStt) {
+      payload.multi_stt = this.multiStt;
       hasChanges = true;
     }
 
@@ -292,16 +304,18 @@ export class ClientDetailComponent implements OnInit {
             updatedSettings.voice_speaker || this.voiceSpeaker;
           this.savedSttTtsProvider =
             updatedSettings.stt_tts_provider || this.sttTtsProvider;
+          this.savedMultiStt = updatedSettings.multi_stt ?? this.multiStt;
 
           this.voiceGender = this.savedVoiceGender;
           this.voiceSpeed = this.savedVoiceSpeed;
           this.voiceSpeaker = this.savedVoiceSpeaker;
           this.sttTtsProvider = this.savedSttTtsProvider;
+          this.multiStt = this.savedMultiStt;
 
           this.messageService.add({
             severity: 'success',
             summary: 'Voice Settings Saved',
-            detail: `Provider: ${this.sttTtsProvider.toUpperCase()}, Voice: ${this.voiceSpeaker} (${this.voiceGender}), Speed: ${this.voiceSpeed}x`,
+            detail: `Provider: ${this.sttTtsProvider.toUpperCase()}, Voice: ${this.voiceSpeaker} (${this.voiceGender}), Speed: ${this.voiceSpeed}x, Auto-detect: ${this.multiStt ? 'On' : 'Off'}`,
           });
           this.buildServicesList();
         },
