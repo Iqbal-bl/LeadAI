@@ -151,30 +151,49 @@ class RemoteLoginSession:
                 self.message = f"LinkedIn Error: {self.error}"
                 return
 
+        page_text = ""
+        try:
+            page_text = (await self.page.inner_text("body") or "").lower()
+        except Exception:
+            pass
+
         # Check for 2FA / Authenticator App / SMS / Email PIN verification inputs
         pin_loc = self.page.locator(
             "input#two-step-submit-pin, input[name='twoStepPin'], input[name='pin'], "
-            "input#input__phone_verification_pin, input#input__email_verification_pin, "
-            "input[name='verification-code'], input[name='phone-pin'], input[type='tel'], "
-            "input[autocomplete='one-time-code']"
+            "input[name='two-step-auth-code'], input#input__phone_verification_pin, "
+            "input#input__email_verification_pin, input[name='verification-code'], "
+            "input[name='phone-pin'], input[type='tel'], input[autocomplete='one-time-code'], "
+            "input[aria-label*='code' i], input[aria-label*='pin' i]"
         ).first
 
-        if (
-            await pin_loc.count() > 0
-            or "two-step" in current_url
+        has_pin_elements = await pin_loc.count() > 0
+        is_pin_url = (
+            "two-step" in current_url
             or "challenge" in current_url
             or "pin" in current_url
             or "checkpoint" in current_url
             or "verification" in current_url
-        ):
-            if await pin_loc.count() > 0 or "two-step" in current_url or "pin" in current_url or "email-challenge" in current_url or "phone" in current_url:
-                self.challenge_type = "2fa" if "two-step" in current_url else "email_pin"
-                self.status = "checkpoint_required"
-                self.message = (
-                    "Two-Factor Authentication (2FA) / Verification Code required. "
-                    "Please enter the 6-digit code from your Authenticator App, SMS, or Email below."
-                )
-                return
+            or "email-challenge" in current_url
+            or "phone" in current_url
+        )
+        is_pin_text = (
+            "authenticator" in page_text
+            or "enter the code" in page_text
+            or "verification code" in page_text
+            or "two-step" in page_text
+            or "security code" in page_text
+        )
+
+        if has_pin_elements or is_pin_url or is_pin_text:
+            is_auth_app = "authenticator" in page_text or "two-step" in current_url or "authenticator" in current_url
+            self.challenge_type = "2fa" if is_auth_app else "email_pin"
+            self.status = "checkpoint_required"
+            self.message = (
+                "Authenticator App verification code required. Please enter the 6-digit code shown in your Authenticator App above."
+                if is_auth_app
+                else "Verification code required. Please enter the code from your SMS or Email above."
+            )
+            return
 
         # Check for Arkose Labs or general CAPTCHA
         captcha_loc = self.page.locator("#captcha-internal, iframe[title*='challenge'], iframe[src*='arkose'], iframe[src*='captcha'], div#captcha_container, div.checkpoint-container").first
@@ -244,20 +263,42 @@ class RemoteLoginSession:
                 elif action == "submit_pin" and text:
                     logger.info("[RemoteSession %s] Submitting 2FA / PIN / OTP verification code", self.session_id)
                     pin_input = self.page.locator(
-                        "input#two-step-submit-pin:visible, input[name='twoStepPin']:visible, "
-                        "input[name='pin']:visible, input#input__phone_verification_pin:visible, "
-                        "input#input__email_verification_pin:visible, input[name='verification-code']:visible, "
-                        "input[name='phone-pin']:visible, input[autocomplete='one-time-code']:visible, "
-                        "input[type='tel']:visible, input[type='text']:visible"
+                        "input#two-step-submit-pin:visible, "
+                        "input[name='twoStepPin']:visible, "
+                        "input[name='pin']:visible, "
+                        "input[name='two-step-auth-code']:visible, "
+                        "input#input__phone_verification_pin:visible, "
+                        "input#input__email_verification_pin:visible, "
+                        "input[name='verification-code']:visible, "
+                        "input[name='phone-pin']:visible, "
+                        "input[autocomplete='one-time-code']:visible, "
+                        "input[id*='pin' i]:visible, "
+                        "input[id*='code' i]:visible, "
+                        "input[name*='code' i]:visible, "
+                        "input[aria-label*='code' i]:visible, "
+                        "input[aria-label*='pin' i]:visible, "
+                        "input[type='tel']:visible, "
+                        "input[type='number']:visible, "
+                        "input[type='text']:visible"
                     ).first
+
                     if await pin_input.count() > 0:
+                        try:
+                            await pin_input.click()
+                        except Exception:
+                            pass
                         await pin_input.fill(text.strip())
                         await asyncio.sleep(0.3)
                         submit_btn = self.page.locator(
-                            "button#two-step-submit-button:visible, button[type='submit']:visible, "
-                            "button#email-pin-submit-button:visible, button[data-litms-control-urn*='submit']:visible, "
-                            "button:has-text('Submit'):visible, button:has-text('Verify'):visible, "
-                            "button:has-text('Continue'):visible"
+                            "button#two-step-submit-button:visible, "
+                            "button[type='submit']:visible, "
+                            "button#email-pin-submit-button:visible, "
+                            "button[data-litms-control-urn*='submit']:visible, "
+                            "button:has-text('Submit'):visible, "
+                            "button:has-text('Verify'):visible, "
+                            "button:has-text('Continue'):visible, "
+                            "button[aria-label*='Submit' i]:visible, "
+                            "button[aria-label*='Verify' i]:visible"
                         ).first
                         if await submit_btn.count() > 0:
                             await submit_btn.click()
@@ -267,8 +308,12 @@ class RemoteLoginSession:
                         # Direct keyboard typing as fallback
                         await self.page.keyboard.type(text.strip())
                         await self.page.keyboard.press("Enter")
-                    
-                    await asyncio.sleep(1.8)
+
+                    # Wait and check if verification completed login
+                    for _ in range(5):
+                        await asyncio.sleep(0.8)
+                        if await self._check_cookies_and_update():
+                            return self.to_dict()
 
                 elif action == "refresh":
                     logger.info("[RemoteSession %s] Reloading page", self.session_id)

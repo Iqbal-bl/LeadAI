@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ViewChild, ViewChildren, ElementRef, QueryList } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { SharedModule } from '../../shared/shared.module';
 import { LinkedinService } from '../../services/linkedin.service';
@@ -55,9 +55,194 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   captchaScreenshotUrl: string | null = null;
   loadingCaptchaScreenshot = false;
   captchaPinCode: string = '';
+  otpDigits: string[] = ['', '', '', '', '', ''];
   submittingCaptchaInteraction = false;
+  submittingCaptchaPinCode = false;
+  relayingClick = false;
   captchaPollingInterval: any = null;
   lastClickRipple: { x: number; y: number } | null = null;
+  @ViewChild('pinInput') pinInputElement?: ElementRef<HTMLInputElement>;
+  @ViewChildren('digitInput') digitInputs?: QueryList<ElementRef<HTMLInputElement>>;
+
+  get is2faOrPinChallenge(): boolean {
+    const type = (this.captchaChallengeType || '').toLowerCase();
+    const msg = (this.captchaMessage || '').toLowerCase();
+    return (
+      type === '2fa' ||
+      type === 'email_pin' ||
+      type === 'sms_pin' ||
+      msg.includes('authenticator') ||
+      msg.includes('code') ||
+      msg.includes('pin') ||
+      msg.includes('two-step') ||
+      msg.includes('verification')
+    );
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
+
+  focusDigitInput(index: number): void {
+    setTimeout(() => {
+      const inputs = this.digitInputs?.toArray();
+      if (inputs && inputs[index]) {
+        inputs[index].nativeElement.focus();
+        inputs[index].nativeElement.select();
+      }
+    }, 40);
+  }
+
+  focusPinInput(): void {
+    const emptyIndex = this.otpDigits.findIndex((d) => !d);
+    this.focusDigitInput(emptyIndex !== -1 ? emptyIndex : 0);
+  }
+
+  onDigitInput(index: number, event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const rawVal = input.value || '';
+    const digitsOnly = rawVal.replace(/[^0-9]/g, '');
+
+    if (digitsOnly.length > 1) {
+      // If user typed multiple digits or pasted into a box
+      const chars = digitsOnly.split('');
+      for (let i = 0; i < chars.length && index + i < 6; i++) {
+        this.otpDigits[index + i] = chars[i];
+      }
+      this.captchaPinCode = this.otpDigits.join('');
+      const nextFocus = Math.min(index + chars.length, 5);
+      this.focusDigitInput(nextFocus);
+      if (this.captchaPinCode.length === 6) {
+        this.submitCaptchaPin();
+      }
+      return;
+    }
+
+    if (digitsOnly.length === 1) {
+      this.otpDigits[index] = digitsOnly;
+      input.value = digitsOnly;
+      this.captchaPinCode = this.otpDigits.join('');
+
+      if (index < 5) {
+        this.focusDigitInput(index + 1);
+      } else if (this.captchaPinCode.length === 6) {
+        // Automatically submit when all 6 digits are completed!
+        this.submitCaptchaPin();
+      }
+    } else {
+      this.otpDigits[index] = '';
+      input.value = '';
+      this.captchaPinCode = this.otpDigits.join('');
+    }
+  }
+
+  onDigitKeyDown(index: number, event: KeyboardEvent): void {
+    if (event.key === 'Backspace') {
+      if (!this.otpDigits[index] && index > 0) {
+        this.otpDigits[index - 1] = '';
+        this.captchaPinCode = this.otpDigits.join('');
+        this.focusDigitInput(index - 1);
+        event.preventDefault();
+      } else {
+        this.otpDigits[index] = '';
+        this.captchaPinCode = this.otpDigits.join('');
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowLeft' && index > 0) {
+      this.focusDigitInput(index - 1);
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'ArrowRight' && index < 5) {
+      this.focusDigitInput(index + 1);
+      event.preventDefault();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      if (this.captchaPinCode.trim().length >= 6 && !this.submittingCaptchaPinCode) {
+        event.preventDefault();
+        this.submitCaptchaPin();
+      }
+    }
+  }
+
+  onDigitPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const pastedData = event.clipboardData?.getData('text') || '';
+    const digits = pastedData.replace(/[^0-9]/g, '').slice(0, 6);
+    if (!digits) return;
+
+    for (let i = 0; i < 6; i++) {
+      this.otpDigits[i] = digits[i] || '';
+    }
+    this.captchaPinCode = this.otpDigits.join('');
+
+    if (digits.length === 6) {
+      this.focusDigitInput(5);
+      this.submitCaptchaPin();
+    } else {
+      this.focusDigitInput(Math.min(digits.length, 5));
+    }
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleCaptchaKeydown(event: KeyboardEvent): void {
+    if (!this.showCaptchaModal || !this.activeCaptchaSessionId) return;
+
+    const activeEl = document.activeElement;
+    const isInsideDigitInput = this.digitInputs?.some((el) => el.nativeElement === activeEl);
+
+    if (event.key === 'Enter') {
+      if (this.captchaPinCode.trim().length >= 6 && !this.submittingCaptchaPinCode) {
+        event.preventDefault();
+        this.submitCaptchaPin();
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      return;
+    }
+
+    // If focus is already in one of the 6 digit inputs, let onDigitKeyDown handle it
+    if (isInsideDigitInput) {
+      return;
+    }
+
+    // Capture digits 0-9 typed anywhere
+    if (/^[0-9]$/.test(event.key)) {
+      const nextIdx = this.otpDigits.findIndex((d) => !d);
+      const targetIdx = nextIdx !== -1 ? nextIdx : 0;
+      this.otpDigits[targetIdx] = event.key;
+      this.captchaPinCode = this.otpDigits.join('');
+      event.preventDefault();
+
+      if (targetIdx < 5) {
+        this.focusDigitInput(targetIdx + 1);
+      } else if (this.captchaPinCode.length === 6) {
+        this.submitCaptchaPin();
+      }
+      return;
+    }
+
+    // Capture backspace typed anywhere
+    if (event.key === 'Backspace') {
+      for (let i = 5; i >= 0; i--) {
+        if (this.otpDigits[i]) {
+          this.otpDigits[i] = '';
+          this.captchaPinCode = this.otpDigits.join('');
+          this.focusDigitInput(i);
+          event.preventDefault();
+          break;
+        }
+      }
+      return;
+    }
+  }
 
 
   // Auto-Accept & Automation Settings
@@ -438,6 +623,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
             this.showCaptchaModal = true;
             this.refreshCaptchaScreenshot();
             this.startCaptchaPolling();
+            this.focusPinInput();
           } else {
             this.savingCredentials = false;
             this.messageService.add({
@@ -525,6 +711,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
               detail: res.message || 'Verification session expired or failed.',
             });
           } else if (res.status === 'checkpoint_required') {
+            if (res.challenge_type && res.challenge_type !== this.captchaChallengeType) {
+              this.captchaChallengeType = res.challenge_type;
+            }
             if (res.message && res.message !== this.captchaMessage) {
               this.captchaMessage = res.message;
             }
@@ -584,7 +773,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   }
 
   onChallengeViewportClick(event: MouseEvent, imgEl: HTMLImageElement): void {
-    if (!this.activeCaptchaSessionId || this.submittingCaptchaInteraction) return;
+    if (!this.activeCaptchaSessionId || this.submittingCaptchaInteraction || this.relayingClick) return;
 
     const rect = imgEl.getBoundingClientRect();
     const scaleX = 1024 / rect.width;
@@ -600,7 +789,12 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       this.lastClickRipple = null;
     }, 800);
 
-    this.submittingCaptchaInteraction = true;
+    // If on a 2FA / PIN screen, clicking anywhere on the screen also focuses the PIN input box
+    if (this.is2faOrPinChallenge) {
+      this.focusPinInput();
+    }
+
+    this.relayingClick = true;
     this.linkedinService
       .interactRemoteLogin(this.activeCaptchaSessionId, {
         action: 'click',
@@ -609,23 +803,30 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       })
       .subscribe({
         next: (res) => {
-          this.submittingCaptchaInteraction = false;
+          this.relayingClick = false;
           if (res.status === 'success' || res.completed) {
             this.handleCaptchaSuccess();
           } else {
+            if (res.challenge_type) {
+              this.captchaChallengeType = res.challenge_type;
+            }
+            if (res.message) {
+              this.captchaMessage = res.message;
+            }
             this.refreshCaptchaScreenshot();
           }
         },
         error: () => {
-          this.submittingCaptchaInteraction = false;
+          this.relayingClick = false;
         },
       });
   }
 
   submitCaptchaPin(): void {
     const pin = this.captchaPinCode.trim();
-    if (!pin || !this.activeCaptchaSessionId) return;
+    if (!pin || !this.activeCaptchaSessionId || this.submittingCaptchaPinCode) return;
 
+    this.submittingCaptchaPinCode = true;
     this.submittingCaptchaInteraction = true;
     this.linkedinService
       .interactRemoteLogin(this.activeCaptchaSessionId, {
@@ -634,15 +835,25 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
       })
       .subscribe({
         next: (res) => {
+          this.submittingCaptchaPinCode = false;
           this.submittingCaptchaInteraction = false;
-          this.captchaPinCode = '';
           if (res.status === 'success' || res.completed) {
+            this.otpDigits = ['', '', '', '', '', ''];
+            this.captchaPinCode = '';
             this.handleCaptchaSuccess();
           } else {
+            if (res.challenge_type) {
+              this.captchaChallengeType = res.challenge_type;
+            }
+            if (res.message) {
+              this.captchaMessage = res.message;
+            }
             this.refreshCaptchaScreenshot();
+            this.focusPinInput();
           }
         },
         error: () => {
+          this.submittingCaptchaPinCode = false;
           this.submittingCaptchaInteraction = false;
         },
       });

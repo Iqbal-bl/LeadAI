@@ -2307,9 +2307,10 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
     Enforces strict process isolation from messaging/InMail to prevent session contention and detection.
     """
     from ..models_blog import LeadSocialComment, LeadCommentSettings, LeadArticle
+    from ..models_social import LeadSocialPost
     from ..services.comment_reply_ai import CommentReplyAIService
 
-    limit_posts = min(max(1, limit_posts), 2)
+    limit_posts = min(max(1, limit_posts), 5)
 
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
     if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
@@ -2341,38 +2342,68 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                     except Exception as feed_err:
                         logger.debug("Initial feed load notice: %s", feed_err)
 
-                # 1. Discover posts to scan (minimal & light to avoid detection)
+                # 1. Discover posts to scan — Prioritize LIVE posts from user's LinkedIn profile activity feed
                 posts_to_scan = []
                 existing_urns = set()
 
-                # Correlate first with published DB articles
-                db_articles = db.query(LeadArticle).filter(
-                    LeadArticle.ClientId == account.ClientId,
-                    LeadArticle.LinkedInPostId != None,
-                    LeadArticle.IsDeleted == False
-                ).order_by(LeadArticle.CreatedAt.desc()).limit(limit_posts).all()
+                activity_urls = []
 
-                for art in db_articles:
-                    if art.LinkedInPostId and (art.LinkedInPostId.startswith("urn:li:activity:") or art.LinkedInPostId.startswith("urn:li:ugcPost:")):
-                        if art.LinkedInPostId not in existing_urns and len(posts_to_scan) < limit_posts:
-                            posts_to_scan.append({
-                                "post_urn": art.LinkedInPostId,
-                                "post_url": f"https://www.linkedin.com/feed/update/{art.LinkedInPostId}/",
-                                "title": art.Title,
-                                "article_id": art.Id,
-                            })
-                            existing_urns.add(art.LinkedInPostId)
+                # A. Check if profile_url is cached in account.MetaJson
+                meta = account.MetaJson or {}
+                cached_profile = meta.get("profile_url")
+                if cached_profile:
+                    clean_cached = cached_profile.split("?")[0].rstrip("/")
+                    activity_urls.append(f"{clean_cached}/recent-activity/all/")
+                    activity_urls.append(f"{clean_cached}/recent-activity/posts/")
 
-                # If needed, check ONLY the notifications tab (never spam 5 URLs)
-                if len(posts_to_scan) < limit_posts:
+                # B. If not cached, extract profile vanity URL dynamically from feed or current page
+                if not activity_urls:
                     try:
-                        await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/notifications/", wait_until="domcontentloaded", timeout=15000)
-                        await asyncio.sleep(1.5)
+                        detected_profile_url = await safe_evaluate(page, '''() => {
+                            const sel = document.querySelector('.feed-identity-module a[href*="/in/"]');
+                            if (sel && sel.href) return sel.href;
+                            const allInLinks = Array.from(document.querySelectorAll('a[href*="/in/"]'));
+                            for (const a of allInLinks) {
+                                if (a.href && a.href.includes('/in/') && !a.href.includes('/feed') && !a.href.includes('/company/')) {
+                                    return a.href;
+                                }
+                            }
+                            return null;
+                        }''')
+                        if detected_profile_url:
+                            clean_profile = detected_profile_url.split("?")[0].rstrip("/")
+                            activity_urls.append(f"{clean_profile}/recent-activity/all/")
+                            activity_urls.append(f"{clean_profile}/recent-activity/posts/")
+                            try:
+                                if meta.get("profile_url") != clean_profile:
+                                    meta["profile_url"] = clean_profile
+                                    account.MetaJson = meta
+                                    db.commit()
+                            except Exception:
+                                pass
+                    except Exception as detect_err:
+                        logger.debug("Profile URL detection notice: %s", detect_err)
+
+                # Scan user's live activity feed for their actual posts
+                for act_url in activity_urls:
+                    if len(posts_to_scan) >= limit_posts:
+                        break
+                    try:
+                        logger.info("[LinkedIn Safe Scan] Navigating to user live activity feed: %s", act_url)
+                        await _browser_manager.navigate_with_session(page, account, act_url, wait_until="domcontentloaded", timeout=15000)
+                        # Natural human scroll to trigger lazy loading of post cards
+                        await safe_evaluate(page, "() => window.scrollBy(0, 500)")
+                        await asyncio.sleep(2.0)
 
                         activity_urns = await safe_evaluate(page, '''() => {
                             const urns = [];
                             const seen = new Set();
-                            const items = document.querySelectorAll('.feed-shared-update-v2, [data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-id*="urn:li:activity"], .nt-card');
+                            const items = document.querySelectorAll(
+                                '.feed-shared-update-v2, .profile-creator-shared-feed-update__container, ' +
+                                '[data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-urn*="urn:li:share"], ' +
+                                '[data-id*="urn:li:activity"], [data-id*="urn:li:ugcPost"], [data-id*="urn:li:share"], ' +
+                                'div[data-view-name*="feed"], .nt-card'
+                            );
                             items.forEach(el => {
                                 const u = el.getAttribute('data-urn') || el.getAttribute('data-id') || el.getAttribute('data-activity-urn') || '';
                                 const match = u.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
@@ -2381,7 +2412,10 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                     urns.push(match[0]);
                                 }
                             });
-                            const links = document.querySelectorAll('a[href*="/feed/update/"], a[href*="activity:"], .nt-card__headline');
+                            const links = document.querySelectorAll(
+                                'a[href*="/feed/update/"], a[href*="/analytics/post-summary/"], ' +
+                                'a[href*="activity:"], a[href*="ugcPost:"], a[href*="share:"], .nt-card__headline'
+                            );
                             links.forEach(l => {
                                 const href = l.href || '';
                                 const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
@@ -2396,6 +2430,49 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         for act_urn in (activity_urns or []):
                             if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
                                 p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
+                                
+                                # Correlate with database records if matched
+                                linked_art = db.query(LeadArticle).filter(
+                                    LeadArticle.ClientId == account.ClientId,
+                                    LeadArticle.LinkedInPostId == act_urn,
+                                    LeadArticle.IsDeleted == False
+                                ).first()
+
+                                posts_to_scan.append({
+                                    "post_urn": act_urn,
+                                    "post_url": p_url,
+                                    "title": linked_art.Title if linked_art else None,
+                                    "article_id": linked_art.Id if linked_art else None,
+                                })
+                                existing_urns.add(act_urn)
+
+                        if posts_to_scan:
+                            break
+                    except Exception as tab_err:
+                        logger.debug("Checking live activity tab notice: %s", tab_err)
+
+                # Fallback: check notifications tab or DB only if ZERO live posts were found on the profile
+                if not posts_to_scan:
+                    try:
+                        await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/notifications/", wait_until="domcontentloaded", timeout=12000)
+                        await asyncio.sleep(1.2)
+                        notif_urns = await safe_evaluate(page, '''() => {
+                            const urns = [];
+                            const seen = new Set();
+                            const links = document.querySelectorAll('a[href*="/feed/update/"], a[href*="activity:"]');
+                            links.forEach(l => {
+                                const href = l.href || '';
+                                const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
+                                if (match && !seen.has(match[0])) {
+                                    seen.add(match[0]);
+                                    urns.push(match[0]);
+                                }
+                            });
+                            return urns;
+                        }''', fallback=[])
+                        for act_urn in (notif_urns or []):
+                            if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
+                                p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
                                 posts_to_scan.append({
                                     "post_urn": act_urn,
                                     "post_url": p_url,
@@ -2403,8 +2480,8 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                     "article_id": None,
                                 })
                                 existing_urns.add(act_urn)
-                    except Exception as tab_err:
-                        logger.debug("Checking notifications notice: %s", tab_err)
+                    except Exception:
+                        pass
 
                 logger.info("[LinkedIn Safe Scan] Found %d post(s) to scan for comments", len(posts_to_scan))
 
@@ -2440,6 +2517,14 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         # Natural human scroll into comments section to trigger lazy loading
                         await safe_evaluate(page, "() => window.scrollBy(0, 600)")
                         await asyncio.sleep(1.0)
+
+                        # Extract post text / commentary if available
+                        dom_post_text = await safe_evaluate(page, '''() => {
+                            const body = document.querySelector('.feed-shared-update-v2__description, .update-components-text, .feed-shared-text, [data-test-id="main-feed-activity-card__commentary"]');
+                            return body ? (body.innerText || '').trim() : '';
+                        }''', fallback="")
+                        if dom_post_text and not post_text:
+                            post_text = dom_post_text
                     
                         # 1. Switch comment filter dropdown from 'Most relevant' to 'All comments' / 'Most recent' if present
                         await safe_evaluate(page, '''() => {
@@ -2657,6 +2742,15 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                 if linked_article:
                     article_id = linked_article.Id
                     post_title = linked_article.Title
+                else:
+                    linked_sp = db.query(LeadSocialPost).filter(
+                        LeadSocialPost.ClientId == account.ClientId,
+                        LeadSocialPost.LinkedInPostId == post_urn
+                    ).first()
+                    if linked_sp:
+                        post_title = (linked_sp.Caption or "")[:120] if linked_sp.Caption else post_title
+                        if not post_snippet:
+                            post_snippet = linked_sp.Caption or ""
 
             for c_data in p_data.get("comments", []):
                 c_urn = c_data["comment_urn"]
