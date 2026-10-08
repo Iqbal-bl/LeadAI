@@ -1,9 +1,29 @@
+export interface LinkedInAccount {
+  id: string;
+  name: string;
+  person_urn: string;
+  connected: boolean;
+  access_token_valid: boolean;
+  has_refresh_token: boolean;
+  has_cookie_credentials: boolean;
+  profile_picture_url?: string | null;
+  email?: string | null;
+  is_active: boolean;
+  auto_accept?: boolean;
+  welcome_message?: string | null;
+  auto_dm_leads?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface LinkedInStatus {
   connected: boolean;
   person_urn?: string;
   access_token_valid?: boolean;
   has_refresh_token?: boolean;
   has_cookie_credentials?: boolean;
+  connected_count?: number;
+  accounts?: LinkedInAccount[];
   [key: string]: any;
 }
 

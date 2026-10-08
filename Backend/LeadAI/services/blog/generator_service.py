@@ -135,6 +135,7 @@ class GeneratorService:
 
         state = {
             "topic": req.topic.strip(),
+            "variant_angle": req.variant_angle,
             "tone": req.tone or "professional",
             "target_audience": req.target_audience or "Business leaders, practitioners, and modern professionals",
             "keywords": req.keywords or [],

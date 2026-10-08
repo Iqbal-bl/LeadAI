@@ -4,6 +4,7 @@ import { SharedModule } from '../../shared/shared.module';
 import { LinkedinService } from '../../services/linkedin.service';
 import {
   LinkedInStatus,
+  LinkedInAccount,
   LinkedInProfile,
   LinkedInCredentialsPayload,
   LinkedInInvitationItem,
@@ -118,6 +119,10 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   selectedCount = 0;
   selectedProfiles: LinkedInProfile[] = [];
   unreadConversationsCount = 0;
+
+  get connectedAccounts(): LinkedInAccount[] {
+    return this.status?.accounts || [];
+  }
   filteredConversations: LinkedInConversation[] = [];
   canSendReply = false;
 
@@ -244,9 +249,12 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     window.addEventListener('message', this.messageListener);
   }
 
-  connectOAuth(): void {
+  connectOAuth(forceLogin: boolean = false): void {
     this.oauthLoading = true;
-    this.linkedinService.getConnectUrl().subscribe({
+    const initialCount = this.status?.accounts?.length || 0;
+    const promptParam = (this.status?.connected || forceLogin || initialCount > 0) ? 'login' : undefined;
+
+    this.linkedinService.getConnectUrl(promptParam).subscribe({
       next: (res) => {
         if (res?.authorize_url) {
           const width = 600;
@@ -263,17 +271,19 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
           this.pollingInterval = setInterval(() => {
             this.linkedinService.getStatus().subscribe({
               next: (status) => {
-                if (status?.connected) {
+                const currentCount = status?.accounts?.length || 0;
+                if (status?.connected && (currentCount > initialCount || (initialCount === 0 && status.connected))) {
                   this.clearPolling();
                   this.oauthLoading = false;
                   this.status = status;
                   if (popup && !popup.closed) {
                     popup.close();
                   }
+                  const newestAccount = status.accounts?.[status.accounts.length - 1];
                   this.messageService.add({
                     severity: 'success',
-                    summary: 'Connected to LinkedIn',
-                    detail: `Account linked successfully (${status.person_urn || 'Profile'}).`,
+                    summary: 'LinkedIn Account Linked',
+                    detail: `Account "${newestAccount?.name || status.person_urn || 'Profile'}" added successfully.`,
                   });
                   this.loadStatus();
                 }
@@ -328,6 +338,34 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
               severity: 'error',
               summary: 'Error',
               detail: err?.error?.detail || 'Failed to disconnect profile.',
+            });
+          },
+        });
+      },
+    });
+  }
+
+  disconnectSpecificAccount(account: LinkedInAccount): void {
+    this.confirmationService.confirm({
+      message: `Are you sure you want to disconnect LinkedIn account "${account.name || account.person_urn}"?`,
+      header: 'Disconnect Account',
+      icon: 'pi pi-exclamation-triangle',
+      acceptButtonStyleClass: 'p-button-danger',
+      accept: () => {
+        this.linkedinService.disconnectAccount(account.id).subscribe({
+          next: () => {
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Account Disconnected',
+              detail: `Disconnected ${account.name || 'account'} successfully.`,
+            });
+            this.loadStatus();
+          },
+          error: (err) => {
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: err?.error?.detail || 'Failed to disconnect account.',
             });
           },
         });

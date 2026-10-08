@@ -56,6 +56,12 @@ class PublisherService:
 
         # 2. Publish to Social Channels (LinkedIn, Facebook, Instagram)
         social_channels = [c for c in channels if c in ("linkedin", "facebook", "instagram")]
+        if article.LinkedInPostId and "linkedin" in social_channels and article.Status == "published":
+            existing_li_res = (article.Results or {}).get("linkedin")
+            if existing_li_res and existing_li_res.get("success"):
+                results["linkedin"] = existing_li_res
+                social_channels = [c for c in social_channels if c != "linkedin"]
+
         if social_channels:
             social_res = cls.publish_to_social(db, client_id, article, social_channels, actor=actor)
             results.update(social_res)
@@ -212,6 +218,7 @@ class PublisherService:
                 publish_social(
                     db=db,
                     client_id=client_id,
+                    account_id=getattr(article, "ChannelAccountId", None),
                     caption=caption.strip(),
                     uploaded=uploaded,
                     platforms=social_channels,

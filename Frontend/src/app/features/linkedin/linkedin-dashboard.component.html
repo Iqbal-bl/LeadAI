@@ -124,7 +124,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
           <!-- Left: OAuth & Bot Setup -->
           <div class="lg:col-span-7 space-y-6">
-            <!-- 1. Company Page & Official LinkedIn OAuth Card -->
+            <!-- 1. Multi-Account LinkedIn OAuth Management Card -->
             <div
               class="card-base p-6 border transition-all duration-200"
               [style.border-color]="
@@ -134,19 +134,16 @@
               "
               [style.background]="
                 status?.connected
-                  ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.06), rgba(0, 65, 130, 0.02))'
+                  ? 'linear-gradient(135deg, rgba(10, 102, 194, 0.04), rgba(0, 65, 130, 0.02))'
                   : 'var(--app-surface)'
               "
             >
-              <div class="flex items-start justify-between gap-4">
-                <div class="flex items-start gap-4">
+              <!-- Card Header -->
+              <div class="flex items-start justify-between gap-4 pb-4 border-b border-black/5 dark:border-white/5">
+                <div class="flex items-start gap-3.5">
                   <div
                     class="w-11 h-11 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                    [style.background]="
-                      status?.connected
-                        ? 'linear-gradient(135deg, #0A66C2, #004182)'
-                        : 'linear-gradient(135deg, #64748b, #475569)'
-                    "
+                    style="background: linear-gradient(135deg, #0A66C2, #004182)"
                   >
                     <i class="pi pi-linkedin text-xl"></i>
                   </div>
@@ -156,18 +153,18 @@
                         class="text-base font-semibold"
                         style="color: var(--app-text)"
                       >
-                        Company Page & Official LinkedIn OAuth
+                        Connected LinkedIn Profiles & Channels
                       </h3>
                       <p-tag
                         *ngIf="status?.connected"
-                        value="Authorized"
+                        [value]="(status?.accounts?.length || 1) + ' Connected'"
                         severity="success"
                         [rounded]="true"
                       ></p-tag>
                       <p-tag
-                        *ngIf="status && !status.connected"
-                        value="1-Click OAuth"
-                        severity="info"
+                        *ngIf="!status?.connected"
+                        value="Not Connected"
+                        severity="secondary"
                         [rounded]="true"
                       ></p-tag>
                     </div>
@@ -175,68 +172,138 @@
                       class="text-xs mt-1"
                       style="color: var(--app-text-muted)"
                     >
-                      Official 1-Click integration for blog/article publishing,
-                      page updates, and Company Page inboxes. Zero passwords or
-                      cookies needed.
+                      Connect multiple LinkedIn profiles for your company. Whenever blogs are generated, tailored variants are created and published for each connected profile.
                     </p>
-
-                    <div
-                      *ngIf="status?.connected"
-                      class="mt-3 p-3 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 space-y-1"
-                    >
-                      <div
-                        class="text-xs font-mono"
-                        style="color: var(--app-text)"
-                      >
-                        <span class="text-muted">Member URN:</span>
-                        <span class="font-semibold text-brand-500">{{
-                          status?.person_urn || "urn:li:person:connected"
-                        }}</span>
-                      </div>
-                      <div class="flex items-center gap-3 text-xs">
-                        <span
-                          *ngIf="status?.access_token_valid"
-                          class="text-emerald-500 font-medium"
-                          >● OAuth Token Active</span
-                        >
-                        <span
-                          *ngIf="status?.has_refresh_token"
-                          class="text-blue-500 font-medium"
-                          >● Auto-Refresh Enabled</span
-                        >
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 <div class="shrink-0">
                   <p-button
-                    *ngIf="!status?.connected"
-                    label="{{
-                      oauthLoading ? 'Connecting...' : 'Connect OAuth'
-                    }}"
+                    label="{{ oauthLoading ? 'Connecting...' : (status?.connected ? '+ Connect Another Account' : 'Connect LinkedIn (OAuth)') }}"
                     icon="{{
                       oauthLoading
                         ? 'pi pi-spin pi-spinner'
-                        : 'pi pi-external-link'
+                        : 'pi pi-plus-circle'
                     }}"
-                    iconPos="right"
+                    iconPos="left"
                     [loading]="oauthLoading"
                     (onClick)="connectOAuth()"
                     [rounded]="true"
-                    [style]="{ background: '#0A66C2', border: 'none' }"
-                  ></p-button>
-
-                  <p-button
-                    *ngIf="status?.connected"
-                    label="Disconnect"
-                    icon="pi pi-power-off"
-                    severity="danger"
-                    [outlined]="true"
-                    [rounded]="true"
                     size="small"
-                    (onClick)="disconnectProfile()"
+                    [style]="{ background: '#0A66C2', border: 'none', color: '#ffffff' }"
                   ></p-button>
+                </div>
+              </div>
+
+              <!-- Empty State: No Accounts -->
+              <div
+                *ngIf="!status?.connected || connectedAccounts.length === 0"
+                class="py-8 text-center"
+              >
+                <div class="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center mb-3 text-2xl">
+                  <i class="pi pi-link"></i>
+                </div>
+                <h4 class="text-sm font-semibold mb-1" style="color: var(--app-text)">No LinkedIn Accounts Connected</h4>
+                <p class="text-xs max-w-md mx-auto mb-4" style="color: var(--app-text-muted)">
+                  Authorize one or multiple LinkedIn accounts with 1-click OAuth to unlock automated multi-account blog publishing and network growth.
+                </p>
+                <p-button
+                  label="Connect LinkedIn Account"
+                  icon="pi pi-external-link"
+                  iconPos="right"
+                  [loading]="oauthLoading"
+                  (onClick)="connectOAuth()"
+                  [rounded]="true"
+                  [style]="{ background: '#0A66C2', border: 'none' }"
+                ></p-button>
+              </div>
+
+              <!-- List of Connected LinkedIn Profiles -->
+              <div
+                *ngIf="status?.connected && connectedAccounts.length > 0"
+                class="mt-4 space-y-3"
+              >
+                <div
+                  *ngFor="let acc of connectedAccounts; let i = index"
+                  class="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all hover:border-blue-400/50 bg-white/60 dark:bg-black/20"
+                  style="border-color: var(--app-border)"
+                >
+                  <div class="flex items-center gap-3.5 min-w-0">
+                    <!-- Profile Picture or Initials -->
+                    <div class="relative shrink-0">
+                      <img
+                        *ngIf="acc.profile_picture_url"
+                        [src]="acc.profile_picture_url"
+                        [alt]="acc.name"
+                        class="w-11 h-11 rounded-full object-cover border-2 border-blue-500/30"
+                      />
+                      <div
+                        *ngIf="!acc.profile_picture_url"
+                        class="w-11 h-11 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-sm"
+                      >
+                        {{ acc.name ? acc.name.charAt(0).toUpperCase() : 'L' }}
+                      </div>
+                      <span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-zinc-900"></span>
+                    </div>
+
+                    <!-- Profile Info -->
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-semibold text-sm truncate" style="color: var(--app-text)">
+                          {{ acc.name || 'LinkedIn Member' }}
+                        </span>
+                        <span class="text-xs px-2 py-0.5 rounded font-mono bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50">
+                          Account #{{ i + 1 }}
+                        </span>
+                      </div>
+                      <div class="text-xs font-mono mt-0.5 truncate" style="color: var(--app-text-muted)">
+                        {{ acc.person_urn || 'urn:li:person' }}
+                        <span *ngIf="acc.email" class="font-sans ml-1 text-slate-400">({{ acc.email }})</span>
+                      </div>
+                      <div class="flex items-center gap-3 mt-1.5 text-xs">
+                        <span
+                          *ngIf="acc.access_token_valid"
+                          class="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1"
+                        >
+                          <i class="pi pi-check-circle text-[10px]"></i> Token Active
+                        </span>
+                        <span
+                          *ngIf="acc.has_refresh_token"
+                          class="text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1"
+                        >
+                          <i class="pi pi-sync text-[10px]"></i> Auto-Refresh
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="shrink-0 flex items-center gap-2 self-end sm:self-center">
+                    <p-button
+                      label="Disconnect"
+                      icon="pi pi-power-off"
+                      severity="danger"
+                      [text]="true"
+                      size="small"
+                      pTooltip="Disconnect this LinkedIn account"
+                      (onClick)="disconnectSpecificAccount(acc)"
+                    ></p-button>
+                  </div>
+                </div>
+
+                <!-- Footer Summary info -->
+                <div class="pt-2 flex items-center justify-between text-xs" style="color: var(--app-text-muted)">
+                  <span>
+                    <i class="pi pi-info-circle mr-1 text-blue-500"></i>
+                    All connected accounts automatically receive distinct daily blog variants.
+                  </span>
+                  <button
+                    type="button"
+                    class="text-xs text-red-500 hover:underline"
+                    (click)="disconnectProfile()"
+                  >
+                    Disconnect All Accounts
+                  </button>
                 </div>
               </div>
             </div>

@@ -141,6 +141,8 @@ class LeadArticle(LeadAIBase):
 
     # Target Channels & Outcomes
     TargetChannels = Column(JSON, nullable=True, default=list)  # ["linkedin", "facebook", "instagram", "wordpress"]
+    ChannelAccountId = Column(String(36), nullable=True, index=True) # Linked LeadChannelAccount Id
+    ChannelAccountName = Column(String(200), nullable=True)          # Member profile name
     Results = Column(JSON, nullable=True)                     # {"linkedin": {"success": true, "post_id": "..."}, ...}
     LinkedInPostId = Column(String(120), nullable=True)
     FacebookPostId = Column(String(120), nullable=True)

@@ -60,6 +60,7 @@ async def _bg_auto_sync_comments(company_id: str):
     summary="Retrieve LinkedIn authorization link",
 )
 async def linkedin_connect(
+    prompt: Optional[str] = Query(None, description="OAuth prompt hint: 'login' or 'select_account'"),
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -72,7 +73,7 @@ async def linkedin_connect(
         raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
 
     try:
-        url = await linkedin.build_authorize_url(db, client_id)
+        url = await linkedin.build_authorize_url(db, client_id, prompt=prompt)
         return {"authorize_url": url}
     except Exception as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -86,10 +87,10 @@ async def linkedin_status(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
-    from ..models_ext import LeadChannelAccount
+    from ..models import LeadChannelAccount
 
     principal, client_id = scope
-    cred = (
+    accounts = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.ClientId == client_id,
@@ -97,10 +98,47 @@ async def linkedin_status(
             LeadChannelAccount.IsDeleted == False,
         )
         .order_by(LeadChannelAccount.UpdatedAt.desc())
-        .first()
+        .all()
     )
 
-    if not cred:
+    now = utcnow()
+    if now.tzinfo is not None:
+        now = now.replace(tzinfo=None)
+
+    account_items = []
+    has_any_connected = False
+    primary_cred = accounts[0] if accounts else None
+
+    for acc in accounts:
+        meta = acc.MetaJson or {}
+        access_token_valid = (
+            acc.TokenExpiresAt > now
+            if acc.TokenExpiresAt and acc.AccessTokenEnc
+            else False
+        )
+        has_credentials = bool(acc.LinkedinCookieEnc or (acc.LinkedinUsernameEnc and acc.LinkedinPasswordEnc))
+        if bool(acc.AccessTokenEnc):
+            has_any_connected = True
+        
+        account_items.append({
+            "id": acc.Id,
+            "name": acc.Name or "LinkedIn Profile",
+            "person_urn": acc.ExternalId,
+            "connected": bool(acc.AccessTokenEnc),
+            "access_token_valid": access_token_valid,
+            "has_refresh_token": bool(acc.AppSecretEnc),
+            "has_cookie_credentials": has_credentials,
+            "profile_picture_url": meta.get("profile_picture_url"),
+            "email": meta.get("email"),
+            "is_active": acc.IsActive,
+            "auto_accept": meta.get("linkedin_auto_accept", False),
+            "welcome_message": meta.get("linkedin_welcome_message"),
+            "auto_dm_leads": meta.get("linkedin_auto_dm_leads", True),
+            "created_at": acc.CreatedAt.isoformat() if acc.CreatedAt else None,
+            "updated_at": acc.UpdatedAt.isoformat() if acc.UpdatedAt else None,
+        })
+
+    if not primary_cred:
         return {
             "connected": False,
             "person_urn": None,
@@ -110,45 +148,153 @@ async def linkedin_status(
             "auto_accept": False,
             "welcome_message": None,
             "auto_dm_leads": True,
+            "accounts": [],
+            "connected_count": 0,
         }
 
+    primary_meta = primary_cred.MetaJson or {}
+    primary_token_valid = (
+        primary_cred.TokenExpiresAt > now
+        if primary_cred.TokenExpiresAt and primary_cred.AccessTokenEnc
+        else False
+    )
+    primary_has_credentials = bool(primary_cred.LinkedinCookieEnc or (primary_cred.LinkedinUsernameEnc and primary_cred.LinkedinPasswordEnc))
+
+    return {
+        "connected": has_any_connected,
+        "person_urn": primary_cred.ExternalId,
+        "access_token_valid": primary_token_valid,
+        "has_refresh_token": bool(primary_cred.AppSecretEnc),
+        "has_cookie_credentials": primary_has_credentials,
+        "auto_accept": primary_meta.get("linkedin_auto_accept", False),
+        "welcome_message": primary_meta.get("linkedin_welcome_message"),
+        "auto_dm_leads": primary_meta.get("linkedin_auto_dm_leads", True),
+        "accounts": account_items,
+        "connected_count": len([a for a in account_items if a["connected"]]),
+    }
+
+
+@router.get(
+    "/accounts",
+    summary="Get all connected LinkedIn accounts for company",
+)
+async def list_linkedin_accounts(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..models import LeadChannelAccount
+    principal, client_id = scope
     now = utcnow()
     if now.tzinfo is not None:
         now = now.replace(tzinfo=None)
 
-    access_token_valid = (
-        cred.TokenExpiresAt > now
-        if cred.TokenExpiresAt and cred.AccessTokenEnc
-        else False
+    accounts = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == client_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.CreatedAt.asc())
+        .all()
     )
 
-    meta = cred.MetaJson or {}
+    items = []
+    for acc in accounts:
+        meta = acc.MetaJson or {}
+        access_token_valid = (
+            acc.TokenExpiresAt > now
+            if acc.TokenExpiresAt and acc.AccessTokenEnc
+            else False
+        )
+        has_credentials = bool(acc.LinkedinCookieEnc or (acc.LinkedinUsernameEnc and acc.LinkedinPasswordEnc))
+        
+        items.append({
+            "id": acc.Id,
+            "name": acc.Name or "LinkedIn Profile",
+            "person_urn": acc.ExternalId,
+            "connected": bool(acc.AccessTokenEnc),
+            "access_token_valid": access_token_valid,
+            "has_refresh_token": bool(acc.AppSecretEnc),
+            "has_cookie_credentials": has_credentials,
+            "profile_picture_url": meta.get("profile_picture_url"),
+            "email": meta.get("email"),
+            "is_active": acc.IsActive,
+            "auto_accept": meta.get("linkedin_auto_accept", False),
+            "welcome_message": meta.get("linkedin_welcome_message"),
+            "auto_dm_leads": meta.get("linkedin_auto_dm_leads", True),
+            "created_at": acc.CreatedAt.isoformat() if acc.CreatedAt else None,
+            "updated_at": acc.UpdatedAt.isoformat() if acc.UpdatedAt else None,
+        })
 
-    has_credentials = bool(cred.LinkedinCookieEnc or (cred.LinkedinUsernameEnc and cred.LinkedinPasswordEnc))
+    return {"accounts": items, "total": len(items)}
 
-    return {
-        "connected": bool(cred.AccessTokenEnc),
-        "person_urn": cred.ExternalId,
-        "access_token_valid": access_token_valid,
-        "has_refresh_token": bool(cred.AppSecretEnc),
-        "has_cookie_credentials": has_credentials,
-        "auto_accept": meta.get("linkedin_auto_accept", False),
-        "welcome_message": meta.get("linkedin_welcome_message"),
-        "auto_dm_leads": meta.get("linkedin_auto_dm_leads", True),
-    }
 
+@router.delete(
+    "/accounts/{account_id}",
+    summary="Disconnect specific LinkedIn account",
+)
+@router.post(
+    "/accounts/{account_id}/disconnect",
+    summary="Disconnect specific LinkedIn account",
+)
+async def disconnect_linkedin_account(
+    account_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..models import LeadChannelAccount
+    principal, client_id = scope
+    acc = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.Id == account_id,
+            LeadChannelAccount.ClientId == client_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .first()
+    )
+    if not acc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn account not found")
+
+    acc_name = acc.Name or "LinkedIn Profile"
+    acc.IsDeleted = True
+    acc.IsActive = False
+    acc.AccessTokenEnc = None
+    acc.AppSecretEnc = None
+    acc.TokenExpiresAt = None
+    acc.LinkedinCookieEnc = None
+    acc.LinkedinUsernameEnc = None
+    acc.LinkedinPasswordEnc = None
+    acc.UpdatedAt = utcnow()
+    db.commit()
+
+    activity.log(
+        db,
+        action=A.CHANNEL_DISCONNECTED,
+        client_id=client_id,
+        actor_email=principal.email,
+        entity_type="channel_account",
+        entity_id=account_id,
+        log_type="Info",
+        message=f"Disconnected LinkedIn profile '{acc_name}'",
+        commit=True,
+    )
+
+    return {"ok": True, "message": f"LinkedIn account '{acc_name}' disconnected successfully"}
 
 
 @router.post(
     "/disconnect",
-    summary="Disconnect LinkedIn account",
+    summary="Disconnect all LinkedIn accounts",
 )
 async def linkedin_disconnect(
     request: Request,
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
-    from ..models_ext import LeadChannelAccount
+    from ..models import LeadChannelAccount
     from ..models_blog import LeadSocialComment
 
     principal, client_id = scope
@@ -250,9 +396,10 @@ async def linkedin_callback(
     try:
         token_data = await linkedin.exchange_code_for_tokens(code)
         access_token = token_data["access_token"]
-        person_urn = await linkedin.fetch_person_urn(access_token)
+        user_info = await linkedin.fetch_user_info(access_token)
+        person_urn = user_info["person_urn"]
 
-        await linkedin.save_tokens(
+        acc = await linkedin.save_tokens(
             db=db,
             client_id=company_id,
             person_urn=person_urn,
@@ -260,6 +407,18 @@ async def linkedin_callback(
             expires_in_seconds=token_data["expires_in"],
             refresh_token=token_data.get("refresh_token"),
             refresh_token_expires_in_seconds=token_data.get("refresh_token_expires_in"),
+            profile_info=user_info,
+        )
+
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message=f"Connected LinkedIn profile '{user_info.get('name')}' ({person_urn})",
+            commit=True,
         )
 
         # Return a simple script to notify the opener window and close the popup
@@ -273,7 +432,8 @@ async def linkedin_callback(
             window.opener.postMessage({{
                 type: 'LINKEDIN_OAUTH_SUCCESS',
                 state: '{state}',
-                person_urn: '{person_urn}'
+                person_urn: '{person_urn}',
+                name: '{user_info.get("name")}'
             }}, '*');
         }}
         window.close();
@@ -312,9 +472,10 @@ async def linkedin_callback_json(
     try:
         token_data = await linkedin.exchange_code_for_tokens(payload.code)
         access_token = token_data["access_token"]
-        person_urn = await linkedin.fetch_person_urn(access_token)
+        user_info = await linkedin.fetch_user_info(access_token)
+        person_urn = user_info["person_urn"]
 
-        await linkedin.save_tokens(
+        acc = await linkedin.save_tokens(
             db=db,
             client_id=company_id,
             person_urn=person_urn,
@@ -322,8 +483,21 @@ async def linkedin_callback_json(
             expires_in_seconds=token_data["expires_in"],
             refresh_token=token_data.get("refresh_token"),
             refresh_token_expires_in_seconds=token_data.get("refresh_token_expires_in"),
+            profile_info=user_info,
         )
-        return {"success": True, "person_urn": person_urn}
+
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message=f"Connected LinkedIn profile '{user_info.get('name')}' ({person_urn})",
+            commit=True,
+        )
+
+        return {"success": True, "person_urn": person_urn, "name": user_info.get("name"), "account_id": acc.Id}
     except Exception as exc:
         logger.error("LinkedIn OAuth JSON callback failed: %s", exc)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc))

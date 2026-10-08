@@ -62,10 +62,12 @@ def orchestrator_node(state: State) -> dict:
     language = state.get("language") or "English"
     cta_text = state.get("cta_text")
     cta_url = state.get("cta_url")
-    forced_kind = state.get("forced_kind")
     cta_part = f"Call to Action (CTA): {cta_text} ({cta_url})\n" if cta_text else ""
+    forced_kind = state.get("forced_kind")
     forced_part = "Force blog_kind=news_roundup\n" if forced_kind else ""
-    evidence_list = [e.model_dump() for e in evidence[:12]]
+    evidence_list = [e.model_dump() if hasattr(e, "model_dump") else e for e in evidence[:12]]
+    variant_angle = state.get("variant_angle")
+    angle_part = f"Unique Content Perspective / Profile Angle: {variant_angle}\nNote: Tailor the outline, tone, and strategic examples specifically to this angle so it provides fresh, distinct value.\n" if variant_angle else ""
 
     prompt = (
         f"Topic: {state['topic']}\n"
@@ -74,6 +76,7 @@ def orchestrator_node(state: State) -> dict:
         f"Language: {language}\n"
         f"Total Target Word Count: {target_words} words ({target_length})\n"
         f"Focus Keywords: {', '.join(keywords) if keywords else 'None specified'}\n"
+        f"{angle_part}"
         f"{cta_part}"
         f"Mode: {mode}\n"
         f"As-of Date: {state.get('as_of', '2026-09-01')}\n"
