@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, Any, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
@@ -342,6 +342,18 @@ class LinkedInBotCredentialsInput(BaseModel):
     username: str | None = None
     password: str | None = None
 
+class LinkedInRemoteLoginStartInput(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+class LinkedInRemoteLoginInteractInput(BaseModel):
+    action: str = Field(description="click | type | press_key | submit_pin | refresh")
+    x: Optional[int] = None
+    y: Optional[int] = None
+    text: Optional[str] = None
+    key: Optional[str] = None
+
+
 class LinkedInGenerateKeywordsInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=500)
 
@@ -503,23 +515,17 @@ async def linkedin_callback_json(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc))
 
 
-@router.post(
-    "/credentials",
-    summary="Save LinkedIn credentials/cookie for candidates automation",
-)
-async def save_linkedin_credentials(
-    payload: LinkedInBotCredentialsInput,
-    background_tasks: BackgroundTasks = None,
-    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
-    db: Session = Depends(get_leadai_db),
-):
-    _, company_id = scope
-    from ..services import billing as billing_svc
-    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
-    if not allowed:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+def _save_linkedin_bot_session(
+    db: Session,
+    company_id: str,
+    cookie_str: str,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+) -> LeadChannelAccount:
+    from ..models import LeadChannelAccount
+    from ..models_blog import LeadSocialComment
 
-    # Find the active LeadChannelAccount row
     row = (
         db.query(LeadChannelAccount)
         .filter(
@@ -532,7 +538,6 @@ async def save_linkedin_credentials(
     )
 
     if not row:
-        # Check if there is an existing row that can be reactivated
         row = (
             db.query(LeadChannelAccount)
             .filter(
@@ -572,10 +577,9 @@ async def save_linkedin_credentials(
         o.IsDeleted = True
         o.UpdatedAt = utcnow()
 
-    # Encrypt and save the credentials
-    if payload.cookie_li_at:
+    if cookie_str:
         import re
-        raw_cookie = payload.cookie_li_at.strip()
+        raw_cookie = cookie_str.strip()
         li_at_match = re.search(r'li_at=([^;]+)', raw_cookie)
         jsessionid_match = re.search(r'JSESSIONID="?([^";]+)"?', raw_cookie)
         
@@ -586,31 +590,12 @@ async def save_linkedin_credentials(
             row.LinkedinCookieEnc = encrypt_pii(f"{li_at}|||{jsessionid}")
         else:
             row.LinkedinCookieEnc = encrypt_pii(li_at)
-            
-        if payload.username and payload.password:
-            row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
-            row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
-    elif payload.username and payload.password:
-        row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
-        row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
-        
-        # Attempt automated headless browser session extraction
-        from ..social import linkedin_bot
-        extracted_cookie = await linkedin_bot.extract_session_cookie_via_browser(payload.username.strip(), payload.password.strip())
-        if extracted_cookie:
-            row.LinkedinCookieEnc = encrypt_pii(extracted_cookie)
-        else:
-            # Wipe stale expired cookie so it is not used
-            row.LinkedinCookieEnc = None
-            row.UpdatedAt = utcnow()
-            db.commit()
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "LinkedIn triggered a security check (CAPTCHA / 2FA code) or invalid login. Please switch to 'Mode B: Session Token (li_at)' and paste your li_at token directly."
-            )
+
+    if username and password:
+        row.LinkedinUsernameEnc = encrypt_pii(username.strip())
+        row.LinkedinPasswordEnc = encrypt_pii(password.strip())
 
     # Soft delete existing comments for this company & channel so that previous account comments are isolated
-    from ..models_blog import LeadSocialComment
     db.query(LeadSocialComment).filter(
         LeadSocialComment.ClientId == company_id,
         LeadSocialComment.Channel == "linkedin",
@@ -628,7 +613,234 @@ async def save_linkedin_credentials(
     if background_tasks is not None:
         background_tasks.add_task(_bg_auto_sync_comments, company_id)
 
-    return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+    return row
+
+
+@router.post(
+    "/remote-login/start",
+    summary="Start interactive remote LinkedIn login and CAPTCHA/challenge session",
+)
+async def start_remote_linkedin_login(
+    payload: LinkedInRemoteLoginStartInput,
+    background_tasks: BackgroundTasks,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = await remote_login_manager.create_session(
+        client_id=company_id,
+        username=payload.username.strip(),
+        password=payload.password.strip(),
+    )
+
+    result = await session.start()
+
+    if result.get("status") == "success" and session.extracted_cookie:
+        acc = _save_linkedin_bot_session(
+            db, company_id, session.extracted_cookie,
+            payload.username.strip(), payload.password.strip(),
+            background_tasks=background_tasks
+        )
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            actor_email=principal.email,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message="Connected LinkedIn Bot automation profile via browser login",
+            commit=True,
+        )
+        return {
+            "ok": True,
+            "status": "success",
+            "session_id": session.session_id,
+            "message": "LinkedIn connected successfully!",
+            "completed": True,
+        }
+
+    return {
+        "ok": result.get("status") != "failed",
+        "status": result.get("status"),
+        "session_id": session.session_id,
+        "challenge_type": result.get("challenge_type"),
+        "message": result.get("message"),
+        "has_screenshot": result.get("has_screenshot", False),
+        "completed": False,
+        "expires_in": result.get("expires_in", 600),
+    }
+
+
+@router.get(
+    "/remote-login/screenshot/{session_id}",
+    summary="Fetch live viewport screenshot for solving CAPTCHA / 2FA challenge",
+)
+async def get_remote_login_screenshot(
+    session_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+):
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = remote_login_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Login session not found or expired")
+
+    img_bytes = await session.get_screenshot()
+    if not img_bytes:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No screenshot available for session")
+
+    return Response(
+        content=img_bytes,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+    )
+
+
+@router.post(
+    "/remote-login/interact/{session_id}",
+    summary="Send user interaction (click, type, PIN submit) to solve CAPTCHA / challenge",
+)
+async def interact_remote_login(
+    session_id: str,
+    payload: LinkedInRemoteLoginInteractInput,
+    background_tasks: BackgroundTasks,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, company_id = scope
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = remote_login_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Login session not found or expired")
+
+    result = await session.interact(
+        action=payload.action,
+        x=payload.x,
+        y=payload.y,
+        text=payload.text,
+        key=payload.key,
+    )
+
+    if result.get("status") == "success" and session.extracted_cookie:
+        acc = _save_linkedin_bot_session(
+            db, company_id, session.extracted_cookie,
+            session.username, session.password,
+            background_tasks=background_tasks
+        )
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            actor_email=principal.email,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message="Connected LinkedIn Bot automation profile via interactive solver",
+            commit=True,
+        )
+
+    return result
+
+
+@router.get(
+    "/remote-login/status/{session_id}",
+    summary="Poll status of interactive remote login session",
+)
+async def check_remote_login_status(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, company_id = scope
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = remote_login_manager.get_session(session_id)
+    if not session:
+        return {"status": "expired", "message": "Session expired", "completed": False}
+
+    result = await session.check_status()
+    if result.get("status") == "success" and session.extracted_cookie:
+        acc = _save_linkedin_bot_session(
+            db, company_id, session.extracted_cookie,
+            session.username, session.password,
+            background_tasks=background_tasks
+        )
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            actor_email=principal.email,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message="Connected LinkedIn Bot automation profile via solver",
+            commit=True,
+        )
+
+    return result
+
+
+@router.post(
+    "/remote-login/cancel/{session_id}",
+    summary="Cancel and tear down remote login session",
+)
+async def cancel_remote_login(
+    session_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+):
+    from ..social.linkedin_remote_session import remote_login_manager
+    await remote_login_manager.cancel_session(session_id)
+    return {"ok": True}
+
+
+@router.post(
+    "/credentials",
+    summary="Save LinkedIn credentials/cookie for candidates automation",
+)
+async def save_linkedin_credentials(
+    payload: LinkedInBotCredentialsInput,
+    background_tasks: BackgroundTasks = None,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
+    if payload.cookie_li_at:
+        row = _save_linkedin_bot_session(
+            db, company_id, payload.cookie_li_at,
+            payload.username, payload.password,
+            background_tasks=background_tasks
+        )
+        return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+
+    elif payload.username and payload.password:
+        from ..social import linkedin_bot
+        extracted_cookie = await linkedin_bot.extract_session_cookie_via_browser(payload.username.strip(), payload.password.strip())
+        if extracted_cookie:
+            row = _save_linkedin_bot_session(
+                db, company_id, extracted_cookie,
+                payload.username.strip(), payload.password.strip(),
+                background_tasks=background_tasks
+            )
+            return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "LinkedIn triggered a security check (CAPTCHA / 2FA code). Please use the interactive solver or enter your li_at session token directly."
+            )
+
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Please provide cookie_li_at or username and password")
+
 
 
 @router.delete(

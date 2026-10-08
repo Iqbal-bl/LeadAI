@@ -47,6 +47,19 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   savingCredentials = false;
   showCredentialsSuccess = false;
 
+  // Remote Interactive Login & CAPTCHA / 2FA Solver State
+  showCaptchaModal = false;
+  activeCaptchaSessionId: string | null = null;
+  captchaChallengeType: string = 'captcha';
+  captchaMessage: string = '';
+  captchaScreenshotUrl: string | null = null;
+  loadingCaptchaScreenshot = false;
+  captchaPinCode: string = '';
+  submittingCaptchaInteraction = false;
+  captchaPollingInterval: any = null;
+  lastClickRipple: { x: number; y: number } | null = null;
+
+
   // Auto-Accept & Automation Settings
   autoAcceptEnabled = false;
   autoDmLeadsEnabled = true;
@@ -166,6 +179,11 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.clearPolling();
     this.stopChatPolling();
+    this.stopCaptchaPolling();
+    if (this.captchaScreenshotUrl) {
+      URL.revokeObjectURL(this.captchaScreenshotUrl);
+      this.captchaScreenshotUrl = null;
+    }
     if (this.activeMessageSub) {
       this.activeMessageSub.unsubscribe();
       this.activeMessageSub = undefined;
@@ -380,18 +398,74 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  // --- Bot Automation Credentials ---
+  // --- Bot Automation Credentials & Interactive Remote Solver ---
   saveBotCredentials(): void {
-    const hasCookie = !!this.credentialsForm.cookie_li_at?.trim();
-    const hasCreds =
-      !!this.credentialsForm.username?.trim() &&
-      !!this.credentialsForm.password?.trim();
+    if (this.authMode === 'credentials') {
+      const username = this.credentialsForm.username?.trim();
+      const password = this.credentialsForm.password?.trim();
 
-    if (!hasCookie && !hasCreds) {
+      if (!username || !password) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Missing Credentials',
+          detail: 'Please enter both your LinkedIn email and password.',
+        });
+        return;
+      }
+
+      this.savingCredentials = true;
+      this.linkedinService.startRemoteLogin({ username, password }).subscribe({
+        next: (res) => {
+          if (res.status === 'success' || res.completed) {
+            this.savingCredentials = false;
+            this.showCredentialsSuccess = true;
+            this.credentialsForm.password = '';
+            this.messageService.add({
+              severity: 'success',
+              summary: 'Connected Successfully',
+              detail: 'LinkedIn session credentials configured successfully.',
+            });
+            this.loadStatus();
+            this.loadConversations();
+            this.loadInvitations();
+            this.loadComments();
+          } else if (res.status === 'checkpoint_required') {
+            this.activeCaptchaSessionId = res.session_id;
+            this.captchaChallengeType = res.challenge_type || 'captcha';
+            this.captchaMessage =
+              res.message ||
+              'LinkedIn security checkpoint required. Please complete the verification below.';
+            this.showCaptchaModal = true;
+            this.refreshCaptchaScreenshot();
+            this.startCaptchaPolling();
+          } else {
+            this.savingCredentials = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Login Failed',
+              detail: res.message || 'LinkedIn authentication failed. Check credentials.',
+            });
+          }
+        },
+        error: (err) => {
+          this.savingCredentials = false;
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Connection Error',
+            detail: err?.error?.detail || err?.error?.message || 'Error connecting to LinkedIn.',
+          });
+        },
+      });
+      return;
+    }
+
+    // Direct Session Token (Mode B)
+    const hasCookie = !!this.credentialsForm.cookie_li_at?.trim();
+    if (!hasCookie) {
       this.messageService.add({
         severity: 'warn',
-        summary: 'Missing Credentials',
-        detail: 'Please enter your LinkedIn email and password.',
+        summary: 'Missing Token',
+        detail: "Please paste your personal 'li_at' session token.",
       });
       return;
     }
@@ -410,7 +484,7 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.credentialsForm.password = '';
         this.messageService.add({
           severity: 'success',
-          summary: 'Credentials Saved',
+          summary: 'Token Saved',
           detail: 'LinkedIn session credentials configured successfully.',
         });
         this.loadStatus();
@@ -422,12 +496,215 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
         this.savingCredentials = false;
         this.messageService.add({
           severity: 'error',
-          summary: 'Failed to Save Credentials',
+          summary: 'Failed to Save Token',
           detail: err?.error?.detail || 'Error saving LinkedIn credentials.',
         });
       },
     });
   }
+
+  startCaptchaPolling(): void {
+    this.stopCaptchaPolling();
+    this.captchaPollingInterval = setInterval(() => {
+      if (!this.activeCaptchaSessionId || !this.showCaptchaModal) {
+        this.stopCaptchaPolling();
+        return;
+      }
+
+      this.linkedinService.checkRemoteLoginStatus(this.activeCaptchaSessionId).subscribe({
+        next: (res) => {
+          if (res.status === 'success' || res.completed) {
+            this.handleCaptchaSuccess();
+          } else if (res.status === 'failed' || res.status === 'expired') {
+            this.stopCaptchaPolling();
+            this.showCaptchaModal = false;
+            this.savingCredentials = false;
+            this.messageService.add({
+              severity: 'error',
+              summary: 'Verification Failed',
+              detail: res.message || 'Verification session expired or failed.',
+            });
+          } else if (res.status === 'checkpoint_required') {
+            if (res.message && res.message !== this.captchaMessage) {
+              this.captchaMessage = res.message;
+            }
+          }
+        },
+      });
+    }, 2000);
+  }
+
+  stopCaptchaPolling(): void {
+    if (this.captchaPollingInterval) {
+      clearInterval(this.captchaPollingInterval);
+      this.captchaPollingInterval = null;
+    }
+  }
+
+  handleCaptchaSuccess(): void {
+    this.stopCaptchaPolling();
+    this.showCaptchaModal = false;
+    this.savingCredentials = false;
+    this.credentialsForm.password = '';
+    this.showCredentialsSuccess = true;
+    this.activeCaptchaSessionId = null;
+
+    if (this.captchaScreenshotUrl) {
+      URL.revokeObjectURL(this.captchaScreenshotUrl);
+      this.captchaScreenshotUrl = null;
+    }
+
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Verification Completed!',
+      detail: 'LinkedIn account connected successfully.',
+    });
+
+    this.loadStatus();
+    this.loadConversations();
+    this.loadInvitations();
+    this.loadComments();
+  }
+
+  refreshCaptchaScreenshot(): void {
+    if (!this.activeCaptchaSessionId) return;
+    this.loadingCaptchaScreenshot = true;
+    this.linkedinService.getRemoteLoginScreenshotBlob(this.activeCaptchaSessionId).subscribe({
+      next: (blob) => {
+        if (this.captchaScreenshotUrl) {
+          URL.revokeObjectURL(this.captchaScreenshotUrl);
+        }
+        this.captchaScreenshotUrl = URL.createObjectURL(blob);
+        this.loadingCaptchaScreenshot = false;
+      },
+      error: () => {
+        this.loadingCaptchaScreenshot = false;
+      },
+    });
+  }
+
+  onChallengeViewportClick(event: MouseEvent, imgEl: HTMLImageElement): void {
+    if (!this.activeCaptchaSessionId || this.submittingCaptchaInteraction) return;
+
+    const rect = imgEl.getBoundingClientRect();
+    const scaleX = 1024 / rect.width;
+    const scaleY = 720 / rect.height;
+    const clickX = Math.round((event.clientX - rect.left) * scaleX);
+    const clickY = Math.round((event.clientY - rect.top) * scaleY);
+
+    this.lastClickRipple = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    setTimeout(() => {
+      this.lastClickRipple = null;
+    }, 800);
+
+    this.submittingCaptchaInteraction = true;
+    this.linkedinService
+      .interactRemoteLogin(this.activeCaptchaSessionId, {
+        action: 'click',
+        x: clickX,
+        y: clickY,
+      })
+      .subscribe({
+        next: (res) => {
+          this.submittingCaptchaInteraction = false;
+          if (res.status === 'success' || res.completed) {
+            this.handleCaptchaSuccess();
+          } else {
+            this.refreshCaptchaScreenshot();
+          }
+        },
+        error: () => {
+          this.submittingCaptchaInteraction = false;
+        },
+      });
+  }
+
+  submitCaptchaPin(): void {
+    const pin = this.captchaPinCode.trim();
+    if (!pin || !this.activeCaptchaSessionId) return;
+
+    this.submittingCaptchaInteraction = true;
+    this.linkedinService
+      .interactRemoteLogin(this.activeCaptchaSessionId, {
+        action: 'submit_pin',
+        text: pin,
+      })
+      .subscribe({
+        next: (res) => {
+          this.submittingCaptchaInteraction = false;
+          this.captchaPinCode = '';
+          if (res.status === 'success' || res.completed) {
+            this.handleCaptchaSuccess();
+          } else {
+            this.refreshCaptchaScreenshot();
+          }
+        },
+        error: () => {
+          this.submittingCaptchaInteraction = false;
+        },
+      });
+  }
+
+  refreshCaptchaPage(): void {
+    if (!this.activeCaptchaSessionId) return;
+    this.submittingCaptchaInteraction = true;
+    this.linkedinService
+      .interactRemoteLogin(this.activeCaptchaSessionId, {
+        action: 'refresh',
+      })
+      .subscribe({
+        next: () => {
+          this.submittingCaptchaInteraction = false;
+          this.refreshCaptchaScreenshot();
+        },
+        error: () => {
+          this.submittingCaptchaInteraction = false;
+        },
+      });
+  }
+
+  checkCaptchaStatusManually(): void {
+    if (!this.activeCaptchaSessionId) return;
+    this.submittingCaptchaInteraction = true;
+    this.linkedinService
+      .checkRemoteLoginStatus(this.activeCaptchaSessionId)
+      .subscribe({
+        next: (res) => {
+          this.submittingCaptchaInteraction = false;
+          if (res.status === 'success' || res.completed) {
+            this.handleCaptchaSuccess();
+          } else {
+            this.refreshCaptchaScreenshot();
+            this.messageService.add({
+              severity: 'info',
+              summary: 'Verification Pending',
+              detail: res.message || 'Challenge is still active. Please continue on screen.',
+            });
+          }
+        },
+        error: () => {
+          this.submittingCaptchaInteraction = false;
+        },
+      });
+  }
+
+  cancelCaptchaModal(): void {
+    if (this.activeCaptchaSessionId) {
+      this.linkedinService.cancelRemoteLogin(this.activeCaptchaSessionId).subscribe();
+      this.activeCaptchaSessionId = null;
+    }
+    this.stopCaptchaPolling();
+    this.showCaptchaModal = false;
+    this.savingCredentials = false;
+    if (this.captchaScreenshotUrl) {
+      URL.revokeObjectURL(this.captchaScreenshotUrl);
+      this.captchaScreenshotUrl = null;
+    }
+  }
+
 
   disconnectBotCredentials(): void {
     this.confirmationService.confirm({

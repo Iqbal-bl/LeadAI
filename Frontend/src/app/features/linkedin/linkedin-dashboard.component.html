@@ -3544,3 +3544,160 @@
     ></p-button>
   </ng-template>
 </p-dialog>
+
+<!-- Interactive LinkedIn CAPTCHA & Security Checkpoint Solver Modal -->
+<p-dialog
+  [(visible)]="showCaptchaModal"
+  [modal]="true"
+  [closable]="false"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: '56rem', maxWidth: '96vw' }"
+  styleClass="linkedin-captcha-dialog"
+>
+  <ng-template pTemplate="header">
+    <div class="flex items-center justify-between w-full pr-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <i class="pi pi-shield text-base"></i>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+            LinkedIn Security Verification
+            <span class="px-2 py-0.5 text-[10px] rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+              Interactive Solver
+            </span>
+          </h3>
+          <p class="text-[11px] text-muted">Complete the challenge below to establish your secure session</p>
+        </div>
+      </div>
+      <p-button
+        icon="pi pi-times"
+        [text]="true"
+        [rounded]="true"
+        severity="secondary"
+        (onClick)="cancelCaptchaModal()"
+      ></p-button>
+    </div>
+  </ng-template>
+
+  <div class="space-y-4">
+    <!-- Notice Banner -->
+    <div class="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-indigo-200 text-xs flex items-start gap-2.5">
+      <i class="pi pi-info-circle text-indigo-400 mt-0.5 shrink-0 text-sm"></i>
+      <div class="flex-1 space-y-1">
+        <p class="font-medium text-indigo-100">{{ captchaMessage || 'LinkedIn has requested a security check (CAPTCHA, Puzzle, or PIN verification).' }}</p>
+        <p class="text-[11px] text-indigo-300/80">
+          Click directly on the screen below to interact (solve image puzzles, rotate animals, or select options). If you received a verification PIN via email/SMS, enter it in the code input below.
+        </p>
+      </div>
+    </div>
+
+    <!-- Live Browser Screen Stream Viewport -->
+    <div class="relative rounded-xl overflow-hidden border border-slate-700/60 bg-slate-950 shadow-2xl flex items-center justify-center min-h-[380px]">
+      <!-- Click Ripple indicator -->
+      <div
+        *ngIf="lastClickRipple"
+        class="absolute z-20 pointer-events-none w-6 h-6 rounded-full border-2 border-indigo-400 bg-indigo-400/40 animate-ping -translate-x-1/2 -translate-y-1/2"
+        [style.left.px]="lastClickRipple.x"
+        [style.top.px]="lastClickRipple.y"
+      ></div>
+
+      <!-- Screenshot Image -->
+      <img
+        #viewportImg
+        *ngIf="captchaScreenshotUrl"
+        [src]="captchaScreenshotUrl"
+        alt="LinkedIn Security Challenge"
+        (click)="onChallengeViewportClick($event, viewportImg)"
+        class="w-full h-auto block select-none cursor-crosshair transition-opacity duration-200"
+        [class.opacity-60]="submittingCaptchaInteraction || loadingCaptchaScreenshot"
+        title="Click anywhere on the screen to interact"
+      />
+
+      <!-- Loading / Placeholder Screen -->
+      <div
+        *ngIf="!captchaScreenshotUrl && loadingCaptchaScreenshot"
+        class="flex flex-col items-center justify-center py-20 gap-3 text-slate-400"
+      >
+        <i class="pi pi-spin pi-spinner text-3xl text-indigo-400"></i>
+        <span class="text-xs">Loading live security challenge view...</span>
+      </div>
+
+      <!-- Processing Interaction Overlay -->
+      <div
+        *ngIf="submittingCaptchaInteraction"
+        class="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center gap-2.5"
+      >
+        <div class="w-10 h-10 rounded-full bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center">
+          <i class="pi pi-spin pi-spinner text-lg text-indigo-400"></i>
+        </div>
+        <span class="text-xs font-medium text-white shadow-sm">Relaying click & updating screen...</span>
+      </div>
+    </div>
+
+    <!-- Interactive Tools & Inputs -->
+    <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-3">
+      <!-- PIN / OTP input -->
+      <div class="flex items-center gap-2 w-full md:w-auto flex-1 max-w-md">
+        <input
+          type="text"
+          pInputText
+          [(ngModel)]="captchaPinCode"
+          placeholder="Enter 6-digit PIN / OTP code (if prompted)"
+          (keydown.enter)="submitCaptchaPin()"
+          class="w-full text-xs font-mono"
+        />
+        <p-button
+          label="Submit Code"
+          icon="pi pi-send"
+          [loading]="submittingCaptchaInteraction"
+          [disabled]="!captchaPinCode.trim()"
+          (onClick)="submitCaptchaPin()"
+          [rounded]="true"
+          [style]="{ background: '#6366f1', border: 'none' }"
+          class="shrink-0"
+        ></p-button>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2 w-full md:w-auto justify-end">
+        <p-button
+          label="Reload Page"
+          icon="pi pi-refresh"
+          [text]="true"
+          severity="secondary"
+          size="small"
+          [loading]="submittingCaptchaInteraction"
+          (onClick)="refreshCaptchaPage()"
+          pTooltip="Reload LinkedIn page if challenge got stuck"
+        ></p-button>
+        <p-button
+          label="Check Status"
+          icon="pi pi-check-circle"
+          severity="success"
+          size="small"
+          [loading]="submittingCaptchaInteraction"
+          (onClick)="checkCaptchaStatusManually()"
+          pTooltip="Check if verification has been solved"
+        ></p-button>
+      </div>
+    </div>
+  </div>
+
+  <ng-template pTemplate="footer">
+    <div class="flex items-center justify-between w-full pt-2">
+      <span class="text-[11px] text-muted flex items-center gap-1.5">
+        <i class="pi pi-lock text-indigo-400"></i> Encrypted end-to-end browser session
+      </span>
+      <p-button
+        label="Cancel Connection"
+        icon="pi pi-times"
+        severity="danger"
+        [text]="true"
+        (onClick)="cancelCaptchaModal()"
+      ></p-button>
+    </div>
+  </ng-template>
+</p-dialog>
+

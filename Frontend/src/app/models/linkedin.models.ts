@@ -274,3 +274,28 @@ export interface TriggerAutoConnectResponse {
   ok: boolean;
   message: string;
 }
+
+export interface LinkedInRemoteLoginStartRequest {
+  username: string;
+  password: string;
+}
+
+export interface LinkedInRemoteLoginResponse {
+  ok: boolean;
+  status: 'initializing' | 'submitting' | 'checkpoint_required' | 'success' | 'failed' | 'cancelled' | 'expired';
+  session_id: string;
+  challenge_type?: 'captcha' | 'email_pin' | 'sms_pin' | '2fa' | 'general_checkpoint' | 'none';
+  message?: string;
+  has_screenshot?: boolean;
+  completed?: boolean;
+  expires_in?: number;
+}
+
+export interface LinkedInRemoteLoginInteractRequest {
+  action: 'click' | 'type' | 'press_key' | 'submit_pin' | 'refresh';
+  x?: number | null;
+  y?: number | null;
+  text?: string | null;
+  key?: string | null;
+}
+

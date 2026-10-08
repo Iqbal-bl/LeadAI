@@ -26,6 +26,9 @@ import {
   GetAutoConnectSettingsResponse,
   SaveAutoConnectSettingsResponse,
   TriggerAutoConnectResponse,
+  LinkedInRemoteLoginStartRequest,
+  LinkedInRemoteLoginResponse,
+  LinkedInRemoteLoginInteractRequest,
 } from '../models/linkedin.models';
 
 @Injectable({
@@ -33,6 +36,71 @@ import {
 })
 export class LinkedinService {
   constructor(private apiService: ApiService) {}
+
+  /**
+   * Start interactive remote login solver session for LinkedIn
+   */
+  public startRemoteLogin(
+    payload: LinkedInRemoteLoginStartRequest
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.post<LinkedInRemoteLoginResponse>(
+      'linkedin/remote-login/start',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Interact with remote browser (click, type, submit pin, refresh)
+   */
+  public interactRemoteLogin(
+    sessionId: string,
+    payload: LinkedInRemoteLoginInteractRequest
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.post<LinkedInRemoteLoginResponse>(
+      `linkedin/remote-login/interact/${encodeURIComponent(sessionId)}`,
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Poll remote login solver status
+   */
+  public checkRemoteLoginStatus(
+    sessionId: string
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.get<LinkedInRemoteLoginResponse>(
+      `linkedin/remote-login/status/${encodeURIComponent(sessionId)}`,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Cancel and close remote login session
+   */
+  public cancelRemoteLogin(
+    sessionId: string
+  ): Observable<{ ok: boolean }> {
+    return this.apiService.post<{ ok: boolean }>(
+      `linkedin/remote-login/cancel/${encodeURIComponent(sessionId)}`,
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Fetch current screenshot frame as Blob
+   */
+  public getRemoteLoginScreenshotBlob(
+    sessionId: string
+  ): Observable<Blob> {
+    return this.apiService.get<Blob>(
+      `linkedin/remote-login/screenshot/${encodeURIComponent(sessionId)}?t=${Date.now()}`,
+      { responseType: 'blob', companyScoped: true }
+    );
+  }
+
 
   /**
    * Check connection status of company LinkedIn account(s)
