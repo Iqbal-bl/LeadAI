@@ -259,7 +259,7 @@ async def search_profiles_api(account, keywords: str, limit: int = 15) -> List[d
                     "location": location,
                     "profile_url": f"https://www.linkedin.com/in/{urn_id}",
                 })
-        return profiles
+        return profiles[:limit] if limit and limit > 0 else profiles
 
     return await asyncio.to_thread(_search)
 

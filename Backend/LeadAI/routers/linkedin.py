@@ -943,6 +943,8 @@ async def linkedin_search_profiles(
 
     try:
         profiles = await linkedin_bot.search_profiles_api(row, payload.keywords, limit=payload.limit)
+        if payload.limit and payload.limit > 0:
+            profiles = profiles[:payload.limit]
         return {"profiles": profiles}
     except Exception as exc:
         logger.error("LinkedIn profile search failed: %s", exc)

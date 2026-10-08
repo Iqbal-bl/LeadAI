@@ -1345,7 +1345,9 @@ export class LinkedinDashboardComponent implements OnInit, OnDestroy {
     this.linkedinService.searchProfiles(query, this.searchLimit).subscribe({
       next: (res) => {
         this.isSearchingProfiles = false;
-        this.profiles = (res.profiles || []).map((p) => ({
+        const raw = res.profiles || [];
+        const limited = this.searchLimit > 0 ? raw.slice(0, this.searchLimit) : raw;
+        this.profiles = limited.map((p) => ({
           ...p,
           selected: false,
         }));
