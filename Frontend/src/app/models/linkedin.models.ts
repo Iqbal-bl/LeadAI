@@ -1,9 +1,29 @@
+export interface LinkedInAccount {
+  id: string;
+  name: string;
+  person_urn: string;
+  connected: boolean;
+  access_token_valid: boolean;
+  has_refresh_token: boolean;
+  has_cookie_credentials: boolean;
+  profile_picture_url?: string | null;
+  email?: string | null;
+  is_active: boolean;
+  auto_accept?: boolean;
+  welcome_message?: string | null;
+  auto_dm_leads?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
 export interface LinkedInStatus {
   connected: boolean;
   person_urn?: string;
   access_token_valid?: boolean;
   has_refresh_token?: boolean;
   has_cookie_credentials?: boolean;
+  connected_count?: number;
+  accounts?: LinkedInAccount[];
   [key: string]: any;
 }
 
@@ -254,3 +274,28 @@ export interface TriggerAutoConnectResponse {
   ok: boolean;
   message: string;
 }
+
+export interface LinkedInRemoteLoginStartRequest {
+  username: string;
+  password: string;
+}
+
+export interface LinkedInRemoteLoginResponse {
+  ok: boolean;
+  status: 'initializing' | 'submitting' | 'checkpoint_required' | 'success' | 'failed' | 'cancelled' | 'expired';
+  session_id: string;
+  challenge_type?: 'captcha' | 'email_pin' | 'sms_pin' | '2fa' | 'general_checkpoint' | 'none';
+  message?: string;
+  has_screenshot?: boolean;
+  completed?: boolean;
+  expires_in?: number;
+}
+
+export interface LinkedInRemoteLoginInteractRequest {
+  action: 'click' | 'type' | 'press_key' | 'submit_pin' | 'refresh';
+  x?: number | null;
+  y?: number | null;
+  text?: string | null;
+  key?: string | null;
+}
+

@@ -52,7 +52,7 @@ export class ContentDraftService {
 
     // Try direct posts/draft endpoint or content drafts endpoint
     return this.http
-      .post<GenerateDraftResponse>(`${this.apiUrl}/social/drafts`, body, {
+      .post<GenerateDraftResponse>(`${this.apiUrl}/social/drafts/generate`, body, {
         headers,
       })
       .pipe(

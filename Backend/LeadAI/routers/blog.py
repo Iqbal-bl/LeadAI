@@ -367,12 +367,13 @@ def generate_and_save_article(
     client = db.query(Client).filter(Client.Id == target_client, Client.IsDeleted == False).first()
     company_name = client.Name if client else "Your Organization"
 
-    return ArticleService.generate_and_save(
+    articles = ArticleService.generate_multi_account_blogs(
         db=db,
         client_id=target_client,
         req=payload,
         company_name=company_name,
     )
+    return articles[0] if articles else None
 
 
 @router.post(
@@ -422,9 +423,10 @@ def trigger_daily_blog_run(
         target_channels=bs.TargetChannels if bs else ["wordpress"],
     )
 
-    return ArticleService.generate_and_save(
+    articles = ArticleService.generate_multi_account_blogs(
         db=db,
         client_id=target_client,
         req=req,
         company_name=company_name,
     )
+    return articles[0] if articles else None

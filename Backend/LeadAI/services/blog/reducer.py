@@ -24,6 +24,37 @@ def _get_llm():
     )
 
 
+def _trim_to_target_words(body: str, target_words: int, tone: str = "professional") -> str:
+    """Condense oversized blog content so it adheres closely to the target word count."""
+    current_words = len(body.split())
+    if current_words <= int(target_words * 1.15):
+        return body
+
+    llm = _get_llm()
+    trim_prompt = (
+        f"You are an executive editor. The following draft has {current_words} words, "
+        f"but the client strictly requested ~{target_words} words (maximum {int(target_words * 1.05)} words).\n\n"
+        f"Task: Condense, tighten, and edit the draft to strictly ~{target_words} words.\n"
+        f"Rules:\n"
+        f"1. Preserve ALL '## Heading' section titles exactly.\n"
+        f"2. Keep the core frameworks, bullet takeaways, and key insights, but cut wordiness, redundancy, conversational padding, and fluff.\n"
+        f"3. Maintain the '{tone}' tone.\n"
+        f"4. Return ONLY the edited Markdown text without preambles or explanations.\n\n"
+        f"Draft to edit:\n{body}"
+    )
+    try:
+        res = llm.invoke([
+            SystemMessage(content="You are a professional editor specializing in concise, high-impact B2B writing."),
+            HumanMessage(content=trim_prompt)
+        ])
+        trimmed = res.content.strip()
+        if len(trimmed.split()) > 50:
+            return trimmed
+    except Exception as exc:
+        print(f"[Reducer] Word trimming warning: {exc}")
+    return body
+
+
 def merge_content(state: State) -> dict:
     """Merge worker-generated sections into a single Markdown document in task sequence."""
     plan: Plan = state["plan"]
@@ -33,6 +64,10 @@ def merge_content(state: State) -> dict:
     sections = sorted(sections, key=lambda item: item[0])
     ordered_sections = [content for _, content in sections]
     body = "\n\n".join(ordered_sections).strip()
+
+    target_words = state.get("target_words", 1000) or 1000
+    tone = state.get("tone", "professional")
+    body = _trim_to_target_words(body, target_words, tone=tone)
 
     merged_md = f"# {plan.blog_title}\n\n{body}\n"
     return {"merged_md": merged_md}

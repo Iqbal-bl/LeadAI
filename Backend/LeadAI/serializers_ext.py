@@ -35,6 +35,7 @@ from .schemas_ext import (
     FileOut,
     RecipientOut,
 )
+from .security import mask_linkedin
 
 
 def channel_account_out(row: LeadChannelAccount, public_base: str | None = None) -> ChannelAccountOut:
@@ -218,6 +219,8 @@ def campaign_recipient_attempt_out(
 
 
 def account_out(row: LeadAccount) -> AccountOut:
+    raw_linkedin = getattr(row, "LinkedinProfileUrl", None)
+    masked_linkedin = mask_linkedin(raw_linkedin)
     return AccountOut(
         id=row.Id,
         client_id=row.ClientId,
@@ -225,7 +228,8 @@ def account_out(row: LeadAccount) -> AccountOut:
         company_name=row.CompanyName,
         phone_masked=row.PhoneMasked,
         email_masked=row.EmailMasked,
-        linkedin_profile_url=getattr(row, "LinkedinProfileUrl", None),
+        linkedin_masked=masked_linkedin,
+        linkedin_profile_url=masked_linkedin,
         stage=row.Stage,
         status=row.Status,
         owner_email=row.OwnerEmail,

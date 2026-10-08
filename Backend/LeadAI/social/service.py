@@ -156,16 +156,30 @@ async def publish(
                 from .linkedin import get_valid_access_token, post_to_linkedin
                 from ..models_ext import LeadChannelAccount
                 
-                # Retrieve credential and access token
-                access_token = await get_valid_access_token(db, client_id)
-                db_cred = db.query(LeadChannelAccount).filter(
+                # Retrieve credential and access token for specific account or primary active account
+                cred_query = db.query(LeadChannelAccount).filter(
                     LeadChannelAccount.ClientId == client_id,
                     LeadChannelAccount.Channel == "linkedin",
-                    LeadChannelAccount.IsDeleted == False
-                ).first()
-                person_urn = db_cred.ExternalId if db_cred else None
+                    LeadChannelAccount.IsDeleted == False,
+                )
+                if account_id:
+                    cred_query = cred_query.filter(LeadChannelAccount.Id == account_id)
+                db_cred = cred_query.first()
+                if not db_cred and account_id:
+                    # Fallback to any active linkedin account if specified id not found
+                    db_cred = db.query(LeadChannelAccount).filter(
+                        LeadChannelAccount.ClientId == client_id,
+                        LeadChannelAccount.Channel == "linkedin",
+                        LeadChannelAccount.IsDeleted == False,
+                    ).first()
+                
+                if not db_cred:
+                    raise ValueError("No connected LinkedIn account found for this organization.")
+
+                access_token = await get_valid_access_token(db, client_id, account_id=db_cred.Id)
+                person_urn = db_cred.ExternalId
                 if not person_urn:
-                    raise ValueError("LinkedIn account is connected but missing Person URN. Please reconnect.")
+                    raise ValueError(f"LinkedIn account '{db_cred.Name or db_cred.Id}' is missing Person URN. Please reconnect.")
                 
                 # Check capabilities
                 capabilities = PLATFORM_CAPABILITIES.get(platform)
@@ -180,8 +194,8 @@ async def publish(
                 result = await post_to_linkedin(access_token, person_urn, caption, uploaded, media_shape)
                 results[platform] = {
                     "success": True,
-                    "account_id": client_id,
-                    "account_name": "LinkedIn User",
+                    "account_id": db_cred.Id,
+                    "account_name": db_cred.Name or "LinkedIn User",
                     "result": result,
                     "id": result.get("post_id"),
                 }

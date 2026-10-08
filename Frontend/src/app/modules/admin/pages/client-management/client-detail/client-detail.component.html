@@ -124,7 +124,10 @@
 
     <!-- <div class="card-base p-4">
       <div class="flex items-center justify-between mb-1">
-        <span class="text-xs font-semibold uppercase tracking-wider" style="color: var(--app-text-muted)">
+        <span
+          class="text-xs font-semibold uppercase tracking-wider"
+          style="color: var(--app-text-muted)"
+        >
           AI Traffic
         </span>
         <i class="pi pi-chart-line text-sm text-amber-500"></i>
@@ -132,8 +135,10 @@
       <div class="text-2xl font-bold" style="color: var(--app-text)">
         {{ company.conversation_count || 0 }}
       </div>
-      <span class="text-[11px]" style="color: var(--app-text-muted)">Total AI conversations & calls</span>
-    </div> -->
+      <span class="text-[11px]" style="color: var(--app-text-muted)"
+        >Total AI conversations & calls</span
+      >
+    </div>
 
     <div class="card-base p-4">
       <div class="flex items-center justify-between mb-1">
@@ -173,18 +178,6 @@
           provisioned for this workspace
         </p>
       </div>
-
-      <div class="flex items-center gap-2">
-        <span
-          class="text-xs px-2.5 py-1 rounded-full font-medium"
-          style="
-            background: var(--app-surface-alt, #f1f5f9);
-            color: var(--app-text-secondary);
-          "
-        >
-          Omnichannel Engine v2.5
-        </span>
-      </div>
     </div>
 
     <!-- Grid of Services Cards -->
@@ -215,11 +208,11 @@
                 </span>
               </div>
             </div>
-            <p-tag
+            <!-- <p-tag
               [value]="s.statusLabel"
               [severity]="s.badgeSeverity"
               [rounded]="true"
-            ></p-tag>
+            ></p-tag> -->
           </div>
 
           <!-- Description -->
@@ -249,7 +242,7 @@
           </div>
 
           <!-- Config / Metadata Box -->
-          <div
+          <!-- <div
             *ngIf="s.configDetails"
             class="p-2.5 rounded-lg text-xs space-y-1 mb-4"
             style="
@@ -296,7 +289,7 @@
                 {{ s.configDetails.extraNote }}
               </span>
             </div>
-          </div>
+          </div> -->
         </div>
 
         <!-- Card Footer Actions -->
@@ -686,6 +679,7 @@
             (onChange)="onVoiceGenderChange()"
             [disabled]="sttTtsProvider === 'deepgram'"
             placeholder="Select Voice Gender"
+            appendTo="body"
             styleClass="w-full text-sm"
             [style]="{ width: '100%' }"
           ></p-dropdown>
@@ -709,6 +703,8 @@
             placeholder="Select Speaker"
             optionLabel="label"
             optionValue="value"
+            appendTo="body"
+            scrollHeight="220px"
             styleClass="w-full text-sm"
             [style]="{ width: '100%' }"
           ></p-dropdown>

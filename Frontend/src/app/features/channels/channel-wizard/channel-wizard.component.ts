@@ -291,11 +291,14 @@ export class ChannelWizardComponent implements OnInit, OnDestroy {
     if (!this.existingChannels || this.existingChannels.length === 0) {
       return false;
     }
-    return this.existingChannels.some(
-      (c) =>
-        c.channel?.toLowerCase() === platformId.toLowerCase() &&
-        c.is_active !== false,
-    );
+    const target = platformId.toLowerCase();
+    return this.existingChannels.some((c) => {
+      const ch = c.channel?.toLowerCase();
+      if (target === 'facebook') {
+        return (ch === 'facebook' || ch === 'messenger') && c.is_active !== false;
+      }
+      return ch === target && c.is_active !== false;
+    });
   }
 
   private updatePlatformStates(): void {

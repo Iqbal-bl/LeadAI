@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_serializer
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
 
 ChannelName = Literal["web", "whatsapp", "messenger", "instagram", "sms", "email", "voice", "linkedin"]
 CampaignKind = Literal["message", "call"]
@@ -55,6 +55,7 @@ class ChannelAccountCreate(BaseModel):
 
 class ChannelAccountUpdate(BaseModel):
     name: str | None = None
+    external_id: str | None = None
     access_token: str | None = None
     app_secret: str | None = None
     verify_token: str | None = None
@@ -534,8 +535,8 @@ class AccountOut(BaseModel):
     company_name: str | None = None
     phone_masked: str | None = None
     email_masked: str | None = None
-    # Public LinkedIn profile URL — present when the lead was captured from a
-    # LinkedIn comment. None for non-LinkedIn sources.
+    linkedin_masked: str | None = None
+    # Masked LinkedIn profile URL — present when the lead was captured from LinkedIn.
     linkedin_profile_url: str | None = None
     stage: str
     status: str
@@ -600,10 +601,20 @@ class AccountNoteOut(BaseModel):
 
 class ConvertLeadRequest(BaseModel):
     conversation_id: str
-    owner_email: EmailStr | None = None
+    owner_email: str | None = None
     stage: str = "customer"
     value: float | None = None
     notes: str | None = None
+
+    @field_validator("owner_email", mode="before")
+    @classmethod
+    def sanitize_owner_email(cls, v: Any) -> str | None:
+        if not v or not isinstance(v, str):
+            return None
+        v = v.strip()
+        if not v or "@" not in v or v.lower() == "ai assistant":
+            return None
+        return v
 
 
 class QuickMessageRequest(BaseModel):

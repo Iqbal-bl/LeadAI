@@ -92,7 +92,7 @@ class GenerateBlogRequest(BaseModel):
     include_images: Optional[bool] = True
     num_images: Optional[int] = 1
     target_words: Optional[int] = 1000
-    target_length: Optional[str] = "~1000 words"
+    target_length: Optional[str] = None
     language: Optional[str] = "English"
     cta_text: Optional[str] = "Book Free Strategy Session Today"
     cta_url: Optional[str] = "#strategy-session"
@@ -102,6 +102,9 @@ class GenerateBlogRequest(BaseModel):
     scheduled_generation_at: Optional[datetime] = None
     requires_approval: Optional[bool] = True
     target_channels: Optional[List[str]] = Field(default_factory=list)
+    channel_account_id: Optional[str] = None
+    channel_account_name: Optional[str] = None
+    variant_angle: Optional[str] = None
     
     # Author & Notification
     author_name: Optional[str] = "LeadAI Content Studio"
@@ -167,6 +170,8 @@ class ArticleResponse(BaseModel):
     submitted_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     target_channels: Optional[List[str]] = []
+    channel_account_id: Optional[str] = None
+    channel_account_name: Optional[str] = None
     results: Optional[Dict[str, Any]] = None
     linkedin_post_id: Optional[str] = None
     facebook_post_id: Optional[str] = None

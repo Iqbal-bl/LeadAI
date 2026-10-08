@@ -15,7 +15,8 @@ export interface Customer {
   company?: string | null; // backwards-compatible alias
   phone_masked: string | null;
   email_masked: string | null;
-  /** LinkedIn profile URL — set when the customer was captured from a LinkedIn comment. */
+  linkedin_masked?: string | null;
+  /** LinkedIn profile URL — masked in general responses, unmasked on audited reveal. */
   linkedin_profile_url?: string | null;
   stage: 'new' | 'active' | 'churned' | 'vip' | 'opportunity' | string;
   status: 'active' | 'inactive' | string;
@@ -53,6 +54,8 @@ export interface CustomerRevealResponse {
   phone: string | null;
   email: string | null;
   whatsapp?: string | null;
+  linkedin?: string | null;
+  linkedin_profile_url?: string | null;
   social_identities?: Array<{
     channel: string;
     external_user_id?: string;

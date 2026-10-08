@@ -320,7 +320,7 @@ export class FacebookCallbackComponent implements OnInit {
   selectionToken = '';
   pages: FacebookPageItem[] = [];
   selectedPageId: string = '';
-  connectInstagram = true;
+  connectInstagram = false;
   selectingPage = false;
 
   get hasLinkedInstagram(): boolean {

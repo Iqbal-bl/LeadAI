@@ -1010,29 +1010,19 @@ def handle_blog_generate(db: Session, payload: dict) -> dict:
     )
 
     try:
-        article_resp = ArticleService.generate_and_save(
+        articles = ArticleService.generate_multi_account_blogs(
             db=db,
             client_id=client_id,
             req=req,
             company_name=company_name
         )
-        activity.log(
-            db,
-            action=A.BLOG_ARTICLE_GENERATED,
-            client_id=client_id,
-            actor_email="scheduler",
-            entity_type="blog",
-            entity_id=article_resp.id,
-            log_type="Info",
-            message=f"Auto-Blog Generated: '{article_resp.title}' (Status: {article_resp.status})",
-            meta={"article_id": article_resp.id, "status": article_resp.status, "topic": topic, "requires_approval": article_resp.requires_approval},
-            commit=True,
-        )
+        first_art = articles[0] if articles else None
         return {
-            "article_id": article_resp.id,
-            "status": article_resp.status,
-            "title": article_resp.title,
-            "requires_approval": article_resp.requires_approval,
+            "articles_count": len(articles),
+            "article_ids": [a.id for a in articles],
+            "first_article_id": first_art.id if first_art else None,
+            "status": first_art.status if first_art else "draft",
+            "title": first_art.title if first_art else topic,
         }
     except Exception as exc:
         logger.error(f"[LeadAI jobs] Blog generation failed for {client_id}: {exc}")
