@@ -24,8 +24,11 @@ export class ClientBillingSummariesComponent implements OnInit {
   loading = true;
   saving = false;
 
-  // Modal Flags
+  // Modal Flags & Modes
   showGrantDialog = false;
+  isRowSpecific = false;
+  lockedClientId = '';
+  selectedClientIds: string[] = [];
 
   // Form Fields for Direct Client Grant
   grantForm: RechargeAllocatePayload = {
@@ -33,9 +36,9 @@ export class ClientBillingSummariesComponent implements OnInit {
     plan_template_id: undefined,
     custom_minutes: 500,
     custom_validity_days: 30,
-    custom_price: 2000,
-    custom_name: 'Custom Enterprise Recharge',
-    payment_reference: 'Super Admin Manual Grant',
+    custom_price: 0,
+    custom_name: 'SuperAdmin Direct Grant',
+    payment_reference: 'SuperAdmin Direct Grant',
   };
   grantType: 'template' | 'custom' = 'template';
 
@@ -72,34 +75,87 @@ export class ClientBillingSummariesComponent implements OnInit {
     });
   }
 
-  openGrantModal(clientId?: string): void {
+  openTopGrantModal(): void {
+    this.isRowSpecific = false;
+    this.lockedClientId = '';
+    this.selectedClientIds = [];
     this.grantForm = {
-      client_id: clientId || (this.companies[0]?.id || ''),
+      client_id: '',
       plan_template_id: this.plans[0]?.id,
-      custom_minutes: 1000,
-      custom_validity_days: 60,
-      custom_price: 4000,
-      custom_name: 'Custom Admin Grant',
-      payment_reference: 'Super Admin Manual Grant',
+      custom_minutes: 500,
+      custom_validity_days: 30,
+      custom_price: 0,
+      custom_name: 'SuperAdmin Direct Grant',
+      payment_reference: 'SuperAdmin Direct Grant',
+    };
+    this.grantType = 'template';
+    this.showGrantDialog = true;
+  }
+
+  openRowGrantModal(clientId: string): void {
+    this.isRowSpecific = true;
+    this.lockedClientId = clientId;
+    this.selectedClientIds = [clientId];
+    this.grantForm = {
+      client_id: clientId,
+      plan_template_id: this.plans[0]?.id,
+      custom_minutes: 500,
+      custom_validity_days: 30,
+      custom_price: 0,
+      custom_name: 'SuperAdmin Direct Grant',
+      payment_reference: 'SuperAdmin Direct Grant',
     };
     this.grantType = 'template';
     this.showGrantDialog = true;
   }
 
   submitGrant(): void {
-    if (!this.grantForm.client_id) {
+    const clientIds = this.isRowSpecific
+      ? (this.lockedClientId ? [this.lockedClientId] : [])
+      : this.selectedClientIds;
+
+    if (!clientIds || clientIds.length === 0) {
       this.messageService.add({
         severity: 'warn',
         summary: 'Validation Error',
-        detail: 'Please select a target client company.',
+        detail: 'Please select at least one target client company.',
       });
       return;
     }
 
+    if (this.grantType === 'template' && !this.grantForm.plan_template_id) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Validation Error',
+        detail: 'Please select a plan template.',
+      });
+      return;
+    }
+
+    if (this.grantType === 'custom') {
+      if (!this.grantForm.custom_minutes || this.grantForm.custom_minutes <= 0) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation Error',
+          detail: 'Minutes to credit must be strictly greater than 0.',
+        });
+        return;
+      }
+      if (!this.grantForm.custom_validity_days || this.grantForm.custom_validity_days <= 0) {
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Validation Error',
+          detail: 'Validity days must be strictly greater than 0.',
+        });
+        return;
+      }
+    }
+
     this.saving = true;
     const payload: RechargeAllocatePayload = {
-      client_id: this.grantForm.client_id,
-      payment_reference: this.grantForm.payment_reference,
+      client_id: clientIds[0],
+      client_ids: clientIds,
+      payment_reference: this.grantForm.payment_reference || 'SuperAdmin Direct Grant',
     };
 
     if (this.grantType === 'template') {
@@ -107,8 +163,8 @@ export class ClientBillingSummariesComponent implements OnInit {
     } else {
       payload.custom_minutes = this.grantForm.custom_minutes;
       payload.custom_validity_days = this.grantForm.custom_validity_days;
-      payload.custom_price = this.grantForm.custom_price;
-      payload.custom_name = this.grantForm.custom_name;
+      payload.custom_price = 0;
+      payload.custom_name = this.grantForm.custom_name || 'SuperAdmin Direct Grant';
     }
 
     this.billingService.adminRechargeClient(payload).subscribe({
@@ -118,7 +174,7 @@ export class ClientBillingSummariesComponent implements OnInit {
         this.messageService.add({
           severity: 'success',
           summary: 'Recharge Granted',
-          detail: `Recharge "${recharge.plan_name_snapshot}" granted to client.`,
+          detail: `Recharge "${recharge.plan_name_snapshot}" granted to ${clientIds.length} company/companies.`,
         });
         this.loadData();
       },
@@ -156,5 +212,22 @@ export class ClientBillingSummariesComponent implements OnInit {
   getChannelInfo(ch: string): { name: string; icon: string } {
     const key = (ch || '').toLowerCase().trim();
     return this.CHANNEL_CONFIG[key] || { name: ch, icon: 'pi pi-globe' };
+  }
+
+  getSelectedPlan(): RechargePlanTemplate | undefined {
+    return this.plans.find((p) => p.id === this.grantForm.plan_template_id);
+  }
+
+  getCategoryBadge(category: string | undefined): { label: string; class: string; icon: string } {
+    switch (category) {
+      case 'voice_topup':
+        return { label: 'Booster', class: 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300', icon: 'pi pi-bolt' };
+      case 'channel_addon':
+        return { label: 'Add-on', class: 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300', icon: 'pi pi-comments' };
+      case 'omni_channel':
+        return { label: 'Omni', class: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300', icon: 'pi pi-share-alt' };
+      default:
+        return { label: 'Base Plan', class: 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300', icon: 'pi pi-phone' };
+    }
   }
 }

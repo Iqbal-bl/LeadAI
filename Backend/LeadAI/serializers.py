@@ -316,9 +316,10 @@ def resolve_origin_attribution(
 ) -> OriginAttributionOut | None:
     """Resolve the specific post, campaign, ad or inbound asset that originated this lead."""
     # 1. Social post comment attribution
-    if customer:
-        from .models_blog import LeadSocialComment
+    from .models_blog import LeadSocialComment
 
+    comment = None
+    if customer:
         comment = (
             db.query(LeadSocialComment)
             .filter(
@@ -328,19 +329,31 @@ def resolve_origin_attribution(
             .order_by(LeadSocialComment.CreatedAt.desc())
             .first()
         )
-        if comment:
-            title = comment.PostTitle
-            if not title and comment.PostSnippet:
-                title = comment.PostSnippet[:60] + ("..." if len(comment.PostSnippet) > 60 else "")
-            return OriginAttributionOut(
-                origin_type="post_comment",
-                channel=comment.Channel or conversation.Channel or "social",
-                title=title or "Social Post",
-                snippet=comment.CommentText or comment.PostSnippet,
-                reference_id=comment.PostUrn or comment.CommentUrn,
-                url=comment.AuthorProfileUrl,
-                interaction_type="comment_reply" if comment.ParentCommentUrn else "post_comment",
+    if not comment and conversation.ExternalThreadId:
+        comment = (
+            db.query(LeadSocialComment)
+            .filter(
+                LeadSocialComment.CommentUrn == str(conversation.ExternalThreadId),
+                LeadSocialComment.IsDeleted == False,
             )
+            .first()
+        )
+
+    if comment:
+        channel_name = comment.Channel or conversation.Channel or "social"
+        title = comment.PostTitle
+        if not title and comment.PostSnippet:
+            title = comment.PostSnippet[:60] + ("..." if len(comment.PostSnippet) > 60 else "")
+        post_link = comment.AuthorProfileUrl or (comment.PostUrn if comment.PostUrn and comment.PostUrn.startswith("http") else None)
+        return OriginAttributionOut(
+            origin_type="post_comment",
+            channel=channel_name,
+            title=title or f"{channel_name.title()} Post",
+            snippet=comment.CommentText or comment.PostSnippet,
+            reference_id=comment.PostUrn or comment.CommentUrn,
+            url=post_link,
+            interaction_type="comment_reply" if comment.ParentCommentUrn else "post_comment",
+        )
 
     # 2. Outbound campaign attribution
     if conversation.CampaignId:

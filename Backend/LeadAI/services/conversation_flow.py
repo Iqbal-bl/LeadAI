@@ -668,7 +668,79 @@ def deliver(
             )
         )
 
-    # Meta's 24-hour rule. Outside the window a free-form send is REJECTED by the
+    from ..models_blog import LeadSocialComment
+
+    # Check if this conversation originates from a post comment (Facebook or Instagram)
+    is_comment_thread = bool(
+        (conversation.CreatedBy and conversation.CreatedBy.endswith("_comment"))
+        or (conversation.Summary and "Lead captured from" in (conversation.Summary or "") and "post:" in (conversation.Summary or ""))
+        or (
+            conversation.ExternalThreadId
+            and db.query(LeadSocialComment)
+            .filter(
+                LeadSocialComment.ClientId == conversation.ClientId,
+                LeadSocialComment.CommentUrn == conversation.ExternalThreadId,
+                LeadSocialComment.IsDeleted == False,
+            )
+            .first()
+        )
+    )
+
+    if is_comment_thread:
+        try:
+            reply_id = ch.reply_to_comment(
+                account, conversation.Channel, conversation.ExternalThreadId, text
+            )
+            if reply_id:
+                account.LastOutboundAt = utcnow()
+                soc = (
+                    db.query(LeadSocialComment)
+                    .filter(
+                        LeadSocialComment.ClientId == conversation.ClientId,
+                        LeadSocialComment.CommentUrn == conversation.ExternalThreadId,
+                        LeadSocialComment.IsDeleted == False,
+                    )
+                    .first()
+                )
+                if soc:
+                    soc.Status = "replied"
+                    soc.ReplyText = text
+                    soc.ReplyUrn = reply_id
+                    soc.RepliedAt = utcnow()
+                    soc.RepliedBy = "agent"
+                    db.flush()
+
+                logger.info(
+                    "[LeadAI] comment reply delivered on %s conv=%s provider_id=%s",
+                    conversation.Channel, conversation.Id, reply_id,
+                )
+                return _record(DeliveryResult("sent", message_id=reply_id))
+            else:
+                account.LastErrorAt = utcnow()
+                account.LastError = f"Provider rejected the comment reply ({conversation.Channel})"
+                return _record(
+                    DeliveryResult(
+                        "failed",
+                        error="Failed to reply to comment",
+                        detail=f"The {conversation.Channel} provider rejected the comment reply.",
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001
+            account.LastErrorAt = utcnow()
+            account.LastError = str(exc)[:500]
+            logger.warning(
+                "[LeadAI] comment reply delivery failed on %s conv=%s: %s",
+                conversation.Channel, conversation.Id, exc,
+            )
+            return _record(
+                DeliveryResult(
+                    "failed",
+                    error=str(exc)[:500],
+                    detail=f"The {conversation.Channel} provider rejected the comment reply.",
+                )
+            )
+
+    # Meta's 24-hour rule for direct messages. Outside the window a free-form send is REJECTED by the
     # Graph API, so checking first turns a confusing provider error into a clear
     # instruction. Checked here rather than inside channels.send_text() because
     # campaigns legitimately send templates outside the window.

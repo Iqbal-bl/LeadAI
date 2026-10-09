@@ -1144,6 +1144,8 @@ class ClientRechargeOut(BaseModel):
     remaining_minutes: float
     booster_minutes: float = 0.0
     rollover_minutes_carried: float = 0.0
+    total_allocated_minutes: float = 0.0
+    quota_percentage: int = 0
     validity_days_snapshot: int
     price_paid: float
     recharged_at: datetime | None = None
@@ -1296,6 +1298,8 @@ class UsageLogOut(BaseModel):
     client_id: str
     recharge_id: str
     call_sid: str
+    activity_type: str | None = None
+    activity_label: str | None = None
     conversation_id: str | None = None
     call_duration_seconds: int
     minutes_deducted: float
@@ -1318,6 +1322,8 @@ class BillingSummaryOut(BaseModel):
     active_recharge: ClientRechargeOut | None = None
     pending_recharges: list[ClientRechargeOut] = []
     total_remaining_minutes: float = 0.0
+    total_allocated_minutes: float = 0.0
+    quota_percentage: int = 0
     is_quota_active: bool = False
 
 

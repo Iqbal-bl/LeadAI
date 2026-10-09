@@ -39,19 +39,16 @@ import logging
 import threading
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
-from numpy.ma import identity
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-from LeadAI.models_ext import CHANNEL_INSTAGRAM
-
-from LeadAI.models_ext import CHANNEL_INSTAGRAM
 
 from .. import activity
 from ..activity import A
 from ..config import settings
 from ..db import get_leadai_db, session as new_session
 from ..models import (
+    CHANNEL_INSTAGRAM,
+    CHANNEL_MESSENGER,
     LeadChannelAccount,
     LeadChannelEvent,
     LeadMessage,
@@ -594,14 +591,17 @@ def _process_one_comment(db: Session, item: dict) -> None:
 
     post_id = item.get("post_id") or ""
     post_ctx = channels.fetch_post_context(account, item["channel"], post_id) if post_id else {}
-    post_title = post_ctx.get("post_title") or f"{item['channel'].title()} Post"
+    channel_label = "Facebook" if item["channel"] in (CHANNEL_MESSENGER, "facebook") else item["channel"].title()
+    post_title = post_ctx.get("post_title") or f"{channel_label} Post"
     post_snippet = post_ctx.get("post_snippet") or ""
     post_url = post_ctx.get("permalink_url") or post_id or f"urn:meta:{item['channel']}:{item['comment_id']}"
 
-    author_name = item.get("author_name") or f"{item['channel'].title()} User"
+    author_name = item.get("author_name") or f"{channel_label} User"
     author_url = None
     if item["channel"] == CHANNEL_INSTAGRAM and item.get("author_name"):
         author_url = f"https://instagram.com/{item['author_name'].lstrip('@')}"
+    elif item["channel"] in (CHANNEL_MESSENGER, "facebook") and item.get("author_id"):
+        author_url = f"https://facebook.com/{item['author_id']}"
 
     soc_comment = LeadSocialComment(
         ClientId=account.ClientId,
@@ -648,11 +648,10 @@ def _process_one_comment(db: Session, item: dict) -> None:
         db.commit()
 
         try:
-            from ..ws_hub import broadcast_to_company
-            broadcast_to_company(
+            conversation_flow._broadcast_inbox(
                 account.ClientId,
-                "leadai.social_comment",
                 {
+                    "type": "social_comment",
                     "id": soc_comment.Id,
                     "channel": soc_comment.Channel,
                     "author_name": soc_comment.AuthorName,

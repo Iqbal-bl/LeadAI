@@ -327,6 +327,64 @@
         ></p-button>
       </div>
     </div>
+
+    <!-- Origin Attribution -->
+    <div
+      *ngIf="originInfo"
+      class="p-3 rounded-xl border space-y-2 mt-2"
+      style="
+        background: var(--app-bg-secondary);
+        border-color: var(--app-border);
+      "
+    >
+      <div class="flex items-center justify-between">
+        <span
+          class="text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
+          style="color: var(--app-text-muted)"
+        >
+          <i class="pi pi-compass text-indigo-500"></i> Lead Origin
+        </span>
+        <span
+          class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium capitalize"
+          [ngClass]="{
+            'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300': (originInfo.channel === 'messenger' || originInfo.channel === 'facebook'),
+            'bg-pink-100 text-pink-800 dark:bg-pink-950/60 dark:text-pink-300': originInfo.channel === 'instagram',
+            'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300': originInfo.channel === 'linkedin',
+            'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300': !['messenger', 'facebook', 'instagram', 'linkedin'].includes(originInfo.channel)
+          }"
+        >
+          <i [class]="getChannelIcon(originInfo.channel)" class="text-[10px]"></i>
+          {{ originInfo.channel === 'messenger' ? 'Facebook' : (originInfo.channel | titlecase) }}
+        </span>
+      </div>
+
+      <div>
+        <div class="text-xs font-semibold" style="color: var(--app-text)">
+          {{ originInfo.title || 'Social Post' }}
+        </div>
+        <div
+          *ngIf="originInfo.snippet && originInfo.snippet !== originInfo.title"
+          class="text-[11px] line-clamp-2 mt-0.5 italic"
+          style="color: var(--app-text-secondary)"
+        >
+          "{{ originInfo.snippet }}"
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-1 text-[11px]" *ngIf="originInfo.url">
+        <span class="text-slate-400">Source Post</span>
+        <a
+          [href]="originInfo.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+        >
+          <span>View on {{ originInfo.channel === 'messenger' ? 'Facebook' : (originInfo.channel | titlecase) }}</span>
+          <i class="pi pi-external-link text-[10px]"></i>
+        </a>
+      </div>
+    </div>
+
     <p-divider></p-divider>
     <div>
       <span

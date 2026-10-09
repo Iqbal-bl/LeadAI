@@ -226,12 +226,30 @@ export class LeadConversationsComponent implements OnChanges {
         isCustomer: isCust,
         isAgent: isAg,
         isAi: isAIAssistant,
-        senderLabel: isCust ? (msg.leadName || this.recipientName || 'Customer') : isAg ? 'Agent' : 'AI Assistant',
-        bubbleBg: isCust ? '#6366f1' : 'var(--card-bg)',
-        textColor: isCust ? '#ffffff' : 'var(--app-text)',
-        bubbleBorder: isCust ? 'none' : '1px solid var(--app-border)',
+        senderLabel: isCust
+          ? (msg.leadName || this.recipientName || 'Customer')
+          : isAg
+            ? 'Agent (Human)'
+            : isAIAssistant
+              ? 'AI Assistant'
+              : 'System',
+        bubbleBg: isCust
+          ? '#6366f1'
+          : isAg
+            ? '#2563eb'
+            : isAIAssistant
+              ? '#059669'
+              : '#475569',
+        textColor: '#ffffff',
+        bubbleBorder: 'none',
         roundedClass: isCust ? 'rounded-tl-none' : 'rounded-tr-none',
-        headerTextColor: isCust ? '#e0e7ff' : 'var(--app-text-muted)',
+        headerTextColor: isCust
+          ? '#e0e7ff'
+          : isAg
+            ? '#dbeafe'
+            : isAIAssistant
+              ? '#d1fae5'
+              : '#cbd5e1',
         confidencePercent: confPct,
         confidenceBadgeClass: confBadgeClass,
         confidenceTooltip: confTooltip,

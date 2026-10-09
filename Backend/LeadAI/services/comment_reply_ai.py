@@ -287,92 +287,264 @@ COMMENT DETAILS:
 
     @classmethod
     def capture_commenter_as_lead(cls, db: Session, comment: LeadSocialComment) -> Optional[LeadCustomer]:
-        """Convert a LinkedIn commenter into a LeadCustomer, LeadConversation, and Lead in pipeline."""
-        from ..models import LeadConversation, Lead
+        """Convert a social media commenter (Instagram, Facebook/Messenger, LinkedIn) into a LeadCustomer,
+        LeadConversation, Lead, and LeadAccount in CRM with full source and origin attribution."""
+        from ..models import (
+            LeadConversation,
+            Lead,
+            LeadMessage,
+            CHANNEL_MESSENGER,
+            CHANNEL_INSTAGRAM,
+        )
+
+        channel_raw = (comment.Channel or "linkedin").lower()
+        if channel_raw in ("messenger", "facebook"):
+            channel_key = "messenger"
+            channel_label = "Facebook"
+            default_display = "Facebook User"
+        elif channel_raw == "instagram":
+            channel_key = "instagram"
+            channel_label = "Instagram"
+            default_display = "Instagram User"
+        elif channel_raw == "linkedin":
+            channel_key = "linkedin"
+            channel_label = "LinkedIn"
+            default_display = "LinkedIn Member"
+        else:
+            channel_key = channel_raw
+            channel_label = channel_raw.title()
+            default_display = f"{channel_label} User"
+
+        customer: Optional[LeadCustomer] = None
+        identity: Optional[LeadChannelIdentity] = None
 
         # ------------------------------------------------------------------ #
-        # Path 1: comment is already linked to a customer — backfill URL if  #
-        # missing then return early.                                          #
+        # Step 1: Resolve or Link LeadCustomer & LeadChannelIdentity          #
         # ------------------------------------------------------------------ #
         if comment.CustomerId:
-            cust = db.get(LeadCustomer, comment.CustomerId)
-            if cust and not cust.LinkedinProfileUrl and comment.AuthorProfileUrl:
-                cust.LinkedinProfileUrl = comment.AuthorProfileUrl
-                cust.UpdatedAt = utcnow()
-            db.commit()
-            return cust
+            customer = db.get(LeadCustomer, comment.CustomerId)
+            if customer:
+                if channel_key == "linkedin" and not customer.LinkedinProfileUrl and comment.AuthorProfileUrl:
+                    customer.LinkedinProfileUrl = comment.AuthorProfileUrl
+                    customer.UpdatedAt = utcnow()
+                elif channel_key == "instagram" and comment.AuthorName and not customer.InstagramEnc:
+                    customer.InstagramEnc = encrypt_pii(comment.AuthorName.lstrip("@"))
+                    customer.UpdatedAt = utcnow()
 
-        external_id = comment.AuthorUrn or comment.AuthorProfileUrl or f"linkedin_comment_{comment.AuthorName.replace(' ', '_')}"
+        if not customer:
+            if channel_key == "linkedin":
+                chan_acct = (
+                    db.query(LeadChannelAccount)
+                    .filter(
+                        LeadChannelAccount.ClientId == comment.ClientId,
+                        LeadChannelAccount.Channel == "linkedin",
+                        LeadChannelAccount.IsDeleted == False,
+                    )
+                    .first()
+                )
+                channel_account_id = chan_acct.Id if chan_acct else "linkedin-default"
+                external_id = comment.AuthorUrn or comment.AuthorProfileUrl or f"linkedin_comment_{comment.AuthorName.replace(' ', '_')}"
+
+                from ..social.linkedin_bot import find_or_link_linkedin_customer
+                customer, identity = find_or_link_linkedin_customer(
+                    db=db,
+                    client_id=comment.ClientId,
+                    channel_account_id=channel_account_id,
+                    sender_urn=comment.AuthorUrn or external_id,
+                    profile_url=comment.AuthorProfileUrl,
+                    display_name=comment.AuthorName,
+                    created_by="linkedin_comment_ai",
+                )
+            else:
+                # Facebook / Messenger / Instagram
+                chan_acct = None
+                if comment.AccountId:
+                    chan_acct = db.get(LeadChannelAccount, comment.AccountId)
+                if not chan_acct:
+                    chan_acct = (
+                        db.query(LeadChannelAccount)
+                        .filter(
+                            LeadChannelAccount.ClientId == comment.ClientId,
+                            LeadChannelAccount.Channel.in_([channel_key, "messenger", "facebook"] if channel_key == "messenger" else [channel_key]),
+                            LeadChannelAccount.IsDeleted == False,
+                        )
+                        .first()
+                    )
+                channel_account_id = chan_acct.Id if chan_acct else None
+
+                author_ext_id = str(comment.AuthorUrn or f"{channel_key}_{comment.Id}")
+                # 1. Match identity by ExternalUserId
+                identity = (
+                    db.query(LeadChannelIdentity)
+                    .filter(
+                        LeadChannelIdentity.ClientId == comment.ClientId,
+                        LeadChannelIdentity.Channel.in_([channel_key, "messenger", "facebook"] if channel_key == "messenger" else [channel_key]),
+                        LeadChannelIdentity.ExternalUserId == author_ext_id,
+                        LeadChannelIdentity.IsDeleted == False,
+                    )
+                    .first()
+                )
+                if identity:
+                    customer = db.get(LeadCustomer, identity.CustomerId)
+
+                # 2. Match customer by DisplayName / Username if not found by identity
+                if not customer and comment.AuthorName and comment.AuthorName != default_display:
+                    customer = (
+                        db.query(LeadCustomer)
+                        .filter(
+                            LeadCustomer.ClientId == comment.ClientId,
+                            LeadCustomer.DisplayName == comment.AuthorName,
+                            LeadCustomer.IsDeleted == False,
+                        )
+                        .first()
+                    )
+
+                # 3. Create brand-new LeadCustomer if none found
+                if not customer:
+                    customer = LeadCustomer(
+                        ClientId=comment.ClientId,
+                        PublicRef=f"Lead #{random.randint(10000, 99999)}",
+                        DisplayName=comment.AuthorName or default_display,
+                        InstagramEnc=encrypt_pii(comment.AuthorName.lstrip("@") if comment.AuthorName else author_ext_id) if channel_key == "instagram" else None,
+                        PhoneEnc=encrypt_pii(None),
+                        CreatedBy=f"{channel_key}_comment",
+                    )
+                    db.add(customer)
+                    db.flush()
+
+                # Ensure LeadChannelIdentity exists
+                if not identity:
+                    identity = LeadChannelIdentity(
+                        ClientId=comment.ClientId,
+                        ChannelAccountId=channel_account_id,
+                        Channel=channel_key,
+                        ExternalUserId=author_ext_id,
+                        CustomerId=customer.Id,
+                        ProfileName=comment.AuthorName or customer.DisplayName,
+                        CreatedBy=f"{channel_key}_comment",
+                    )
+                    db.add(identity)
+                    db.flush()
+
+        comment.CustomerId = customer.Id
+        if identity:
+            comment.IdentityId = identity.Id
 
         # ------------------------------------------------------------------ #
-        # Use unified multi-key resolver to find or link existing customer    #
-        # across DMs, Connection Requests, and Comments                      #
+        # Step 2: Ensure LeadConversation + Lead exist in Inbox               #
         # ------------------------------------------------------------------ #
-        chan_acct = (
-            db.query(LeadChannelAccount)
+        conv = (
+            db.query(LeadConversation)
             .filter(
-                LeadChannelAccount.ClientId == comment.ClientId,
-                LeadChannelAccount.Channel == (comment.Channel or "linkedin"),
-                LeadChannelAccount.IsDeleted == False,
+                LeadConversation.ClientId == comment.ClientId,
+                LeadConversation.CustomerId == customer.Id,
+                LeadConversation.Channel.in_([channel_key, "messenger", "facebook"] if channel_key == "messenger" else [channel_key]),
+                LeadConversation.IsDeleted == False,
+                LeadConversation.Status != "closed",
             )
+            .order_by(LeadConversation.CreatedAt.desc())
             .first()
         )
-        channel_account_id = chan_acct.Id if chan_acct else "linkedin-default"
 
-        from ..social.linkedin_bot import find_or_link_linkedin_customer
-        customer, identity = find_or_link_linkedin_customer(
-            db=db,
-            client_id=comment.ClientId,
-            channel_account_id=channel_account_id,
-            sender_urn=comment.AuthorUrn or external_id,
-            profile_url=comment.AuthorProfileUrl,
-            display_name=comment.AuthorName,
-            created_by="linkedin_comment_ai",
-        )
-        comment.CustomerId = customer.Id
-        comment.IdentityId = identity.Id if identity else None
+        post_heading = comment.PostTitle or comment.PostSnippet or f"{channel_label} Post"
+        if len(post_heading) > 80:
+            post_heading = post_heading[:77] + "..."
 
-        # Link or create LeadConversation & Lead in pipeline (WITHOUT premature LeadAccount creation)
-        db_conv = db.query(LeadConversation).filter(
-            LeadConversation.ClientId == comment.ClientId,
-            LeadConversation.Channel == "linkedin",
-            LeadConversation.CustomerId == customer.Id,
-            LeadConversation.IsDeleted == False,
-        ).first()
-
-        if not db_conv:
-            db_conv = LeadConversation(
+        if not conv:
+            conv = LeadConversation(
                 ClientId=comment.ClientId,
                 CustomerId=customer.Id,
-                Channel="linkedin",
+                Channel=channel_key,
                 Status="open",
-                ChannelAccountId=channel_account_id if channel_account_id != "linkedin-default" else None,
-                ExternalThreadId=str(comment.CommentUrn or customer.Id),
-                Summary=f"Comment on '{comment.PostTitle}': {comment.CommentText[:300]}",
-                LastMessageAt=utcnow(),
+                Summary=f"Lead captured from {channel_label} post: \"{post_heading}\"",
+                NextStep="Respond to commenter or initiate follow-up",
+                ChannelAccountId=comment.AccountId,
+                ExternalThreadId=str(comment.CommentUrn),
+                MessageCount=1,
+                LastMessageAt=comment.CommentCreatedAt or utcnow(),
+                CreatedBy=f"{channel_key}_comment",
             )
-            db.add(db_conv)
+            db.add(conv)
             db.flush()
 
-        db_lead = db.query(Lead).filter(
-            Lead.ConversationId == db_conv.Id,
-            Lead.IsDeleted == False,
-        ).first()
-        if not db_lead:
-            score = int((comment.IntentScore or 0.6) * 100)
-            db_lead = Lead(
+        if identity and not identity.ConversationId:
+            identity.ConversationId = conv.Id
+
+        # Link/Update Lead qualification row
+        lead_row = (
+            db.query(Lead)
+            .filter(Lead.ConversationId == conv.Id)
+            .first()
+        )
+        intent_score_pct = int(min(1.0, max(0.0, float(comment.IntentScore or 0.7))) * 100)
+        status_val = "qualified" if intent_score_pct >= 75 else ("warm" if intent_score_pct >= 45 else "cold")
+
+        if not lead_row:
+            lead_row = Lead(
                 ClientId=comment.ClientId,
-                ConversationId=db_conv.Id,
-                Status="hot" if score >= 85 else "warm",
-                Score=score,
-                Intent="lead_inquiry" if comment.IsLeadCandidate else "engagement",
-                Interest=f"Comment on {comment.PostTitle or 'LinkedIn Post'}",
-                Product=comment.PostTitle or "unknown",
-                CreatedBy="linkedin_comment_ai",
+                ConversationId=conv.Id,
+                Status=status_val,
+                Score=intent_score_pct,
+                Interest=(comment.PostTitle or "Social Post Inquiry")[:160],
+                Intent="inquiry",
+                Product=comment.PostTitle[:100] if comment.PostTitle else "unknown",
+                Sentiment=comment.Sentiment or "positive",
+                CreatedBy=f"{channel_key}_comment",
             )
-            db.add(db_lead)
+            db.add(lead_row)
+            db.flush()
+        else:
+            if intent_score_pct > (lead_row.Score or 0):
+                lead_row.Score = intent_score_pct
+                lead_row.Status = status_val
+                lead_row.UpdatedAt = utcnow()
+
+        # Add comment as first LeadMessage if not already present in conversation
+        has_msg = db.query(LeadMessage).filter(LeadMessage.ConversationId == conv.Id).first()
+        if not has_msg and comment.CommentText:
+            msg = LeadMessage(
+                ClientId=comment.ClientId,
+                ConversationId=conv.Id,
+                Sender="customer",
+                Content=comment.CommentText,
+                CreatedAt=comment.CommentCreatedAt or utcnow(),
+                CreatedBy="meta_webhook" if channel_key in ("messenger", "instagram") else "system",
+            )
+            db.add(msg)
+            db.flush()
+
+        # ------------------------------------------------------------------ #
+        # Step 3: Upsert CRM Account with origin fields & source attribution #
+        # ------------------------------------------------------------------ #
+        origin_fields = {
+            "origin_type": "post_comment",
+            "channel": channel_key,
+            "post_id": comment.PostUrn,
+            "post_title": comment.PostTitle,
+            "post_snippet": comment.PostSnippet,
+            "comment_id": comment.CommentUrn,
+            "comment_text": comment.CommentText,
+            "author_profile_url": comment.AuthorProfileUrl,
+        }
+
+        acct = crm_service.create_account(
+            db, comment.ClientId,
+            display_name=customer.DisplayName or comment.AuthorName or default_display,
+            source=channel_key,
+            stage="lead",
+            customer_id=customer.Id,
+            linkedin_profile_url=comment.AuthorProfileUrl if channel_key == "linkedin" else (getattr(customer, "LinkedinProfileUrl", None)),
+            tags=f"{channel_key},post_comment,comment_lead",
+            fields=origin_fields,
+            actor=f"{channel_key}_comment_ai",
+        )
+        if acct and not acct.SourceConversationId and conv:
+            acct.SourceConversationId = conv.Id
 
         db.commit()
-        logger.info(f"Captured/linked LinkedIn commenter as Lead in pipeline: {customer.DisplayName} ({customer.Id})")
+        logger.info(
+            f"Captured/linked {channel_label} commenter as CRM Lead: {customer.DisplayName} ({customer.Id}) "
+            f"[Post: {comment.PostTitle[:40] if comment.PostTitle else 'N/A'}]"
+        )
         return customer
 

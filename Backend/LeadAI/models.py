@@ -34,6 +34,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -687,10 +688,10 @@ class LeadClientRecharge(LeadAIBase):
     PlanNameSnapshot = Column(String(100), nullable=False)
     PurchasedMinutes = Column(Float, nullable=False)
     RemainingMinutes = Column(Float, nullable=False)
-    BoosterMinutes = Column(Float, nullable=False, default=0.0)
-    RolloverMinutesCarried = Column(Float, nullable=False, default=0.0)
+    BoosterMinutes = Column(Float, nullable=False, default=0.0, server_default=text("0.0"))
+    RolloverMinutesCarried = Column(Float, nullable=False, default=0.0, server_default=text("0.0"))
     ValidityDaysSnapshot = Column(Integer, nullable=False)
-    PricePaid = Column(Float, nullable=False, default=0.0)
+    PricePaid = Column(Float, nullable=False, default=0.0, server_default=text("0.0"))
     RechargedAt = Column(DateTime, nullable=True, index=True)  # Starts when activated
     ExpiresAt = Column(DateTime, nullable=True, index=True)  # RechargedAt + ValidityDays
     Status = Column(String(20), nullable=False, default=RECHARGE_STATUS_PENDING, index=True)  # active, pending, exhausted, expired, superseded, failed, cancelled

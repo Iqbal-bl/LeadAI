@@ -19,10 +19,11 @@
       <button
         pButton
         type="button"
-        label="Grant Direct Recharge"
+        label="Grant Recharge"
         icon="pi pi-gift"
-        class="p-button-primary shadow-md"
-        (click)="openGrantModal()"
+        class="p-button-primary shadow-md font-bold text-sm"
+        (click)="openTopGrantModal()"
+        pTooltip="Credit talktime to one or multiple companies"
       ></button>
     </div>
   </div>
@@ -105,7 +106,7 @@
               label="Grant Recharge"
               icon="pi pi-bolt"
               class="p-button-text p-button-sm p-button-indigo text-xs"
-              (click)="openGrantModal(summary.client_id)"
+              (click)="openRowGrantModal(summary.client_id)"
             ></button>
           </td>
         </tr>
@@ -119,73 +120,216 @@
   </div>
 </div>
 
-<!-- Modal: Grant Direct Recharge to Client -->
+<!-- ======================================================== -->
+<!-- UNIVERSAL MODAL: DIRECT CLIENT RECHARGE GRANT             -->
+<!-- ======================================================== -->
 <p-dialog
   [(visible)]="showGrantDialog"
-  header="Grant Direct Recharge to Client Account"
+  [header]="isRowSpecific ? 'Grant Talktime — ' + getCompanyName(lockedClientId) : 'Grant Recharge Talktime'"
   [modal]="true"
-  [style]="{ width: '500px' }"
+  [style]="{ width: '580px' }"
 >
   <div class="space-y-4 pt-2">
-    <div>
-      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Target Client Company *</label>
-      <p-dropdown
-        [(ngModel)]="grantForm.client_id"
+    <!-- Mode A: Multi-Company Selection (When clicked from top header) -->
+    <div *ngIf="!isRowSpecific">
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+        <span>Target Companies *</span>
+        <span class="text-[10px] text-purple-600 dark:text-purple-400 font-normal">Select 1 or multiple companies</span>
+      </label>
+      <p-multiSelect
+        [(ngModel)]="selectedClientIds"
         [options]="companies"
         optionLabel="name"
         optionValue="id"
-        placeholder="Choose Client Company"
+        placeholder="Select Companies to Credit Talktime"
         styleClass="w-full"
-      ></p-dropdown>
+        display="chip"
+        [filter]="true"
+      ></p-multiSelect>
+      <span class="text-[11px] text-slate-400 mt-1 block">
+        Minutes and validity will be directly credited to each selected company account.
+      </span>
     </div>
 
-    <div>
-      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Recharge Mode</label>
-      <p-dropdown
-        [(ngModel)]="grantType"
-        [options]="[{label: 'Select Master Template', value: 'template'}, {label: 'Custom Immediate Parameters', value: 'custom'}]"
-        optionLabel="label"
-        optionValue="value"
-        styleClass="w-full"
-      ></p-dropdown>
+    <!-- Mode B: Row-Locked Company (When clicked from a specific row) -->
+    <div *ngIf="isRowSpecific">
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Target Company</label>
+      <div class="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/40 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-purple-600/10 text-purple-600 flex items-center justify-center font-bold text-sm">
+            <i class="pi pi-building"></i>
+          </div>
+          <div>
+            <span class="font-bold text-sm text-slate-900 dark:text-white block">{{ getCompanyName(lockedClientId) }}</span>
+            <span class="text-[11px] font-mono text-slate-400">{{ lockedClientId }}</span>
+          </div>
+        </div>
+        <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+          Locked
+        </span>
+      </div>
     </div>
 
-    <div *ngIf="grantType === 'template'">
-      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Master Plan Template *</label>
-      <p-dropdown
-        [(ngModel)]="grantForm.plan_template_id"
-        [options]="plans"
-        optionLabel="name"
-        optionValue="id"
-        styleClass="w-full"
-      ></p-dropdown>
+    <!-- Grant Type Toggle: Segmented Tab Buttons -->
+    <div class="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/90 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+      <button
+        type="button"
+        (click)="grantType = 'template'"
+        [ngClass]="grantType === 'template' ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 font-bold shadow-xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium'"
+        class="flex-1 py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-2 cursor-pointer"
+      >
+        <i class="pi pi-box"></i>
+        From Master Template
+      </button>
+      <button
+        type="button"
+        (click)="grantType = 'custom'"
+        [ngClass]="grantType === 'custom' ? 'bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 font-bold shadow-xs' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium'"
+        class="flex-1 py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-2 cursor-pointer"
+      >
+        <i class="pi pi-sliders-h"></i>
+        Custom Minutes & Validity
+      </button>
     </div>
 
-    <div *ngIf="grantType === 'custom'" class="space-y-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+    <!-- Option A: From Plan Template with Rich Dropdown Formatting -->
+    <div *ngIf="grantType === 'template'" class="space-y-3">
       <div>
-        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Custom Plan Name</label>
-        <input pInputText type="text" [(ngModel)]="grantForm.custom_name" class="w-full" />
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Plan Template *</label>
+        <p-dropdown
+          [(ngModel)]="grantForm.plan_template_id"
+          [options]="plans"
+          optionLabel="name"
+          optionValue="id"
+          placeholder="Choose Plan to Allocate"
+          styleClass="w-full"
+          [filter]="true"
+          filterBy="name,plan_category"
+        >
+          <ng-template pTemplate="selectedItem" let-selected>
+            <div *ngIf="selected" class="flex items-center justify-between w-full pr-2 text-xs">
+              <div class="flex items-center gap-2">
+                <span
+                  class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                  [ngClass]="getCategoryBadge(selected.plan_category).class"
+                >
+                  <i [class]="getCategoryBadge(selected.plan_category).icon" class="text-[9px]"></i>
+                  {{ getCategoryBadge(selected.plan_category).label }}
+                </span>
+                <span class="font-bold text-slate-800 dark:text-slate-100">{{ selected.name }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-slate-500">
+                <span *ngIf="selected.included_minutes" class="font-bold text-indigo-600 dark:text-indigo-400">
+                  {{ selected.included_minutes }}m
+                </span>
+                <span class="text-[11px] text-slate-400">
+                  • {{ selected.plan_category === 'voice_topup' ? 'Active Cycle + Rollover' : (selected.validity_days + 'd') }}
+                </span>
+              </div>
+            </div>
+          </ng-template>
+
+          <ng-template pTemplate="item" let-plan>
+            <div class="flex items-center justify-between w-full py-1 text-xs">
+              <div class="flex items-center gap-2">
+                <span
+                  class="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                  [ngClass]="getCategoryBadge(plan.plan_category).class"
+                >
+                  <i [class]="getCategoryBadge(plan.plan_category).icon" class="text-[9px]"></i>
+                  {{ getCategoryBadge(plan.plan_category).label }}
+                </span>
+                <span class="font-semibold text-slate-800 dark:text-slate-100">{{ plan.name }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span *ngIf="plan.included_minutes" class="px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 rounded font-bold text-[11px]">
+                  {{ plan.included_minutes }} mins
+                </span>
+                <span
+                  class="text-[11px]"
+                  [ngClass]="plan.plan_category === 'voice_topup' ? 'text-amber-600 dark:text-amber-400 font-medium' : 'text-slate-400'"
+                >
+                  {{ plan.plan_category === 'voice_topup' ? 'Active Cycle + Rollover' : (plan.validity_days + ' days') }}
+                </span>
+              </div>
+            </div>
+          </ng-template>
+        </p-dropdown>
+      </div>
+
+      <!-- Selected Plan Preview Snapshot Card -->
+      <div *ngIf="getSelectedPlan() as sel" class="p-3.5 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-800/40 rounded-xl space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+            <i class="pi pi-check-circle"></i> Plan Grant Snapshot
+          </span>
+          <span class="text-xs font-bold text-slate-700 dark:text-slate-300">
+            {{ sel.name }}
+          </span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-xs">
+          <div class="p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+            <span class="text-[10px] text-slate-400 block font-medium">Credited Minutes</span>
+            <span class="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">
+              {{ sel.included_minutes || 0 }} mins
+            </span>
+          </div>
+          <div class="p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+            <span class="text-[10px] text-slate-400 block font-medium">Validity Period</span>
+            <span
+              class="font-extrabold text-sm"
+              [ngClass]="sel.plan_category === 'voice_topup' ? 'text-amber-600 dark:text-amber-400 text-xs' : 'text-slate-800 dark:text-slate-200'"
+            >
+              {{ sel.plan_category === 'voice_topup' ? 'Active Cycle + Rollover' : (sel.validity_days + ' Days') }}
+            </span>
+          </div>
+          <div class="p-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200/60 dark:border-slate-700/60 col-span-2 sm:col-span-1">
+            <span class="text-[10px] text-slate-400 block font-medium">Grant Type</span>
+            <span class="font-bold text-emerald-600 dark:text-emerald-400 text-xs">
+              Free (No Invoice)
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Option B: Custom Values -->
+    <div *ngIf="grantType === 'custom'" class="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-3">
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Grant Label</label>
+        <input pInputText type="text" [(ngModel)]="grantForm.custom_name" class="w-full text-xs" placeholder="e.g. VIP Enterprise Trial Grant" />
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Custom Minutes</label>
-          <input pInputText type="number" [(ngModel)]="grantForm.custom_minutes" class="w-full" />
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Minutes to Credit *</label>
+          <input pInputText type="number" [(ngModel)]="grantForm.custom_minutes" class="w-full font-bold text-xs" placeholder="500" />
         </div>
         <div>
-          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Custom Validity (Days)</label>
-          <input pInputText type="number" [(ngModel)]="grantForm.custom_validity_days" class="w-full" />
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Validity (Days) *</label>
+          <input pInputText type="number" [(ngModel)]="grantForm.custom_validity_days" class="w-full font-bold text-xs" placeholder="30" />
         </div>
       </div>
     </div>
 
+    <!-- Audit Reference Note -->
     <div>
-      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Reference / Note</label>
-      <input pInputText type="text" [(ngModel)]="grantForm.payment_reference" class="w-full" placeholder="e.g. Admin Approval #1092" />
+      <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Audit Reference / Note</label>
+      <input pInputText type="text" [(ngModel)]="grantForm.payment_reference" class="w-full text-xs" placeholder="e.g. Onboarding Promo / Service SLA Compensation" />
+    </div>
+
+    <!-- Informative Non-Monetary Banner -->
+    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 space-y-1">
+      <div class="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 font-semibold">
+        <i class="pi pi-info-circle"></i> Direct SuperAdmin Credit
+      </div>
+      <p class="text-[11px] leading-relaxed">
+        Non-monetary grant. No payment gateway redirect, no AutoPay mandate, and no tax invoice will be generated. An audit entry will be logged directly to the client's minute ledger.
+      </p>
     </div>
   </div>
 
   <ng-template pTemplate="footer">
     <button pButton type="button" label="Cancel" class="p-button-text" (click)="showGrantDialog = false"></button>
-    <button pButton type="button" label="Allocate Recharge" icon="pi pi-bolt" class="p-button-purple" [loading]="saving" (click)="submitGrant()"></button>
+    <button pButton type="button" label="Grant Recharge" icon="pi pi-check" [loading]="saving" (click)="submitGrant()"></button>
   </ng-template>
 </p-dialog>

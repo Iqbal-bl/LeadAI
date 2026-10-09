@@ -80,7 +80,11 @@ def _serialize_template(t: LeadRechargePlanTemplate) -> RechargePlanTemplateOut:
 
 
 def _serialize_recharge(r: LeadClientRecharge, db: Session | None = None) -> ClientRechargeOut:
+    purchased = float(r.PurchasedMinutes or 0.0)
     booster_mins = float(getattr(r, "BoosterMinutes", 0.0) or 0.0)
+    rollover_mins = float(getattr(r, "RolloverMinutesCarried", 0.0) or 0.0)
+    remaining = float(r.RemainingMinutes or 0.0)
+
     if booster_mins <= 0.0 and db is not None and getattr(r, "Id", None):
         try:
             from sqlalchemy import func
@@ -89,7 +93,7 @@ def _serialize_recharge(r: LeadClientRecharge, db: Session | None = None) -> Cli
                 db.query(func.coalesce(func.sum(-LeadUsageLog.MinutesDeducted), 0.0))
                 .filter(
                     LeadUsageLog.RechargeId == r.Id,
-                    LeadUsageLog.CallSid == "BOOSTER_TOPUP",
+                    LeadUsageLog.CallSid.in_(["BOOSTER_TOPUP", "ADMIN_BOOSTER_GRANT"]),
                 )
                 .scalar()
             )
@@ -97,6 +101,9 @@ def _serialize_recharge(r: LeadClientRecharge, db: Session | None = None) -> Cli
                 booster_mins = float(topup_sum)
         except Exception:
             pass
+
+    total_allocated = purchased + booster_mins + rollover_mins
+    quota_pct = int(min(100, max(0, round((remaining / total_allocated) * 100)))) if total_allocated > 0 else 0
 
     return ClientRechargeOut(
         id=r.Id,
@@ -106,7 +113,9 @@ def _serialize_recharge(r: LeadClientRecharge, db: Session | None = None) -> Cli
         purchased_minutes=r.PurchasedMinutes,
         remaining_minutes=r.RemainingMinutes,
         booster_minutes=booster_mins,
-        rollover_minutes_carried=float(getattr(r, "RolloverMinutesCarried", 0.0) or 0.0),
+        rollover_minutes_carried=rollover_mins,
+        total_allocated_minutes=total_allocated,
+        quota_percentage=quota_pct,
         validity_days_snapshot=r.ValidityDaysSnapshot,
         price_paid=r.PricePaid,
         recharged_at=r.RechargedAt,
@@ -128,11 +137,30 @@ def _serialize_recharge(r: LeadClientRecharge, db: Session | None = None) -> Cli
 
 
 def _serialize_usage(u: LeadUsageLog) -> UsageLogOut:
+    call_sid = u.CallSid or ""
+    if call_sid in ("ADMIN_BOOSTER_GRANT", "ADMIN_GRANT"):
+        act_type = "admin_grant"
+        act_label = "SuperAdmin Grant Minutes"
+    elif call_sid == "BOOSTER_TOPUP":
+        act_type = "booster_topup"
+        act_label = "Minute Booster Top-Up"
+    elif call_sid == "SYSTEM_ROLLOVER":
+        act_type = "system_rollover"
+        act_label = "Monthly Minute Rollover"
+    elif float(u.MinutesDeducted or 0.0) <= 0:
+        act_type = "credit"
+        act_label = call_sid or "Minute Credit"
+    else:
+        act_type = "call_deduction"
+        act_label = call_sid
+
     return UsageLogOut(
         id=u.Id,
         client_id=u.ClientId,
         recharge_id=u.RechargeId,
         call_sid=u.CallSid,
+        activity_type=act_type,
+        activity_label=act_label,
         conversation_id=u.ConversationId,
         call_duration_seconds=u.CallDurationSeconds,
         minutes_deducted=u.MinutesDeducted,
@@ -157,11 +185,17 @@ def get_current_plan(
     has_quota, _, _ = billing_svc.check_call_quota(db, client_id)
     rem_mins = active.RemainingMinutes if active else 0.0
 
+    active_out = _serialize_recharge(active, db=db) if active else None
+    total_allocated = active_out.total_allocated_minutes if active_out else 0.0
+    quota_pct = active_out.quota_percentage if active_out else 0
+
     return BillingSummaryOut(
         client_id=client_id,
-        active_recharge=_serialize_recharge(active, db=db) if active else None,
+        active_recharge=active_out,
         pending_recharges=[],
         total_remaining_minutes=rem_mins,
+        total_allocated_minutes=total_allocated,
+        quota_percentage=quota_pct,
         is_quota_active=has_quota,
     )
 
@@ -779,6 +813,9 @@ def admin_recharge_client(
                 payment_ref=payload.payment_reference or f"Admin Grant ({principal.email})",
                 created_by=principal.email,
             )
+        if not last_recharge:
+            raise HTTPException(status_code=400, detail="Failed to allocate recharge.")
+        return _serialize_recharge(last_recharge, db=db)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err))
 

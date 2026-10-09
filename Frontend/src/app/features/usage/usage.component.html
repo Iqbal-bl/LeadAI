@@ -390,9 +390,42 @@
                 {{ log.call_sid }}
               </span>
             </div>
-            <div *ngIf="log.minutes_deducted <= 0" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-              <i class="pi pi-bolt text-xs"></i>
-              <span>Minute Booster Top-Up</span>
+            <div *ngIf="log.minutes_deducted <= 0">
+              <!-- SuperAdmin Grant -->
+              <span
+                *ngIf="log.activity_type === 'admin_grant' || log.call_sid === 'ADMIN_BOOSTER_GRANT' || log.call_sid === 'ADMIN_GRANT'"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20"
+              >
+                <i class="pi pi-shield text-xs"></i>
+                <span>SuperAdmin Grant Minutes</span>
+              </span>
+
+              <!-- Minute Booster Top-Up (Client Self-Service) -->
+              <span
+                *ngIf="(log.activity_type === 'booster_topup' || log.call_sid === 'BOOSTER_TOPUP') && log.activity_type !== 'admin_grant' && log.call_sid !== 'ADMIN_BOOSTER_GRANT' && log.call_sid !== 'ADMIN_GRANT'"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+              >
+                <i class="pi pi-bolt text-xs"></i>
+                <span>Minute Booster Top-Up</span>
+              </span>
+
+              <!-- Monthly Minute Rollover -->
+              <span
+                *ngIf="log.activity_type === 'system_rollover' || log.call_sid === 'SYSTEM_ROLLOVER'"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20"
+              >
+                <i class="pi pi-replay text-xs"></i>
+                <span>Monthly Minute Rollover</span>
+              </span>
+
+              <!-- General Credit Fallback -->
+              <span
+                *ngIf="log.activity_type !== 'admin_grant' && log.call_sid !== 'ADMIN_BOOSTER_GRANT' && log.call_sid !== 'ADMIN_GRANT' && log.activity_type !== 'booster_topup' && log.call_sid !== 'BOOSTER_TOPUP' && log.activity_type !== 'system_rollover' && log.call_sid !== 'SYSTEM_ROLLOVER'"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+              >
+                <i class="pi pi-bolt text-xs"></i>
+                <span>{{ log.activity_label || log.call_sid || 'Minute Credit' }}</span>
+              </span>
             </div>
           </td>
 

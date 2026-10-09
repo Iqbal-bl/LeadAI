@@ -352,25 +352,7 @@ export class BillingDashboardComponent implements OnInit {
   }
 
   get boosterMinutes(): number {
-    const active = this.summary?.active_recharge;
-    if (active?.booster_minutes && active.booster_minutes > 0) {
-      return active.booster_minutes;
-    }
-    if (!active || !this.paymentHistory?.length) return 0;
-    const activeStart = active.recharged_at ? new Date(active.recharged_at).getTime() : 0;
-    const activeEnd = active.expires_at ? new Date(active.expires_at).getTime() : Infinity;
-
-    return this.paymentHistory
-      .filter((p) => {
-        const s = (p.status || '').toLowerCase();
-        if (s !== 'success' && s !== 'active' && s !== 'superseded' && s !== 'completed') return false;
-        const name = (p.plan_name_snapshot || '').toLowerCase();
-        const isBooster = name.includes('booster') || name.includes('topup') || name.includes('top-up');
-        if (!isBooster) return false;
-        const createdAt = p.created_at ? new Date(p.created_at).getTime() : 0;
-        return createdAt >= (activeStart - 60000) && createdAt <= activeEnd;
-      })
-      .reduce((sum, p) => sum + (p.purchased_minutes || 0), 0);
+    return this.summary?.active_recharge?.booster_minutes ?? 0;
   }
 
   calculateUsagePercent(recharge: ClientRecharge): number {

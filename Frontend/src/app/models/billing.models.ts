@@ -35,6 +35,8 @@ export interface ClientRecharge {
   remaining_minutes: number;
   booster_minutes?: number;
   rollover_minutes_carried?: number;
+  total_allocated_minutes?: number;
+  quota_percentage?: number;
   validity_days_snapshot: number;
   price_paid: number;
   recharged_at?: string | null;
@@ -156,6 +158,8 @@ export interface UsageLog {
   client_id: string;
   recharge_id: string;
   call_sid: string;
+  activity_type?: string | null;
+  activity_label?: string | null;
   conversation_id?: string | null;
   call_duration_seconds: number;
   minutes_deducted: number;
@@ -170,6 +174,8 @@ export interface BillingSummary {
   active_recharge?: ClientRecharge | null;
   pending_recharges: ClientRecharge[];
   total_remaining_minutes: number;
+  total_allocated_minutes?: number;
+  quota_percentage?: number;
   is_quota_active: boolean;
 }
 

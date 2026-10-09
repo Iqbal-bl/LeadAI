@@ -27,8 +27,8 @@ export class PlanManagementComponent implements OnInit {
 
   // Dialog Flags
   showPlanDialog = false;
-  showGrantDialog = false;
   editingPlan: RechargePlanTemplate | null = null;
+  autoCalculatePrice: boolean = true;
 
   // Form Fields for Master / Custom Plan
   planForm: PlanTemplateCreatePayload = {
@@ -46,18 +46,6 @@ export class PlanManagementComponent implements OnInit {
     auto_pay_by_default: true,
     description: '',
   };
-
-  // Form Fields for Direct Client Grant
-  grantForm: RechargeAllocatePayload = {
-    client_id: '',
-    plan_template_id: undefined,
-    custom_minutes: 500,
-    custom_validity_days: 30,
-    custom_price: 2000,
-    custom_name: 'Custom Enterprise Recharge',
-    payment_reference: 'Super Admin Manual Grant',
-  };
-  grantType: 'template' | 'custom' = 'template';
 
   constructor(
     private billingService: BillingService,
@@ -108,6 +96,11 @@ export class PlanManagementComponent implements OnInit {
     else if (category === 'channel_addon') name = 'New Channel Add-on';
     else if (type === 'custom') name = 'Custom Enterprise Plan';
 
+    this.autoCalculatePrice = true;
+    const defaultMins = category === 'channel_addon' ? 0 : (category === 'voice_topup' ? 250 : 500);
+    const defaultRate = 4.0;
+    const defaultPrice = category === 'channel_addon' ? 1000 : Math.round(defaultMins * defaultRate);
+
     this.planForm = {
       name: name,
       plan_type: category === 'voice_topup' ? 'topup' : type,
@@ -116,20 +109,41 @@ export class PlanManagementComponent implements OnInit {
       target_client_id: null,
       target_client_ids: [],
       addon_channels: [],
-      included_minutes: category === 'channel_addon' ? 0 : (category === 'voice_topup' ? 250 : 500),
-      validity_days: category === 'voice_topup' ? 0 : 30,
-      price: category === 'voice_topup' ? 1000 : 2000,
-      rate_per_minute: 4.0,
+      included_minutes: defaultMins,
+      validity_days: 30, // Locked strictly at 30 days
+      price: defaultPrice,
+      rate_per_minute: defaultRate,
       auto_pay_by_default: category !== 'voice_topup',
       description: '',
     };
     this.showPlanDialog = true;
   }
 
+  onAutoCalcToggle(): void {
+    if (this.autoCalculatePrice) {
+      this.recalculatePrice();
+    }
+  }
+
+  onRateOrMinutesChange(): void {
+    if (this.autoCalculatePrice) {
+      this.recalculatePrice();
+    }
+  }
+
+  recalculatePrice(): void {
+    if (this.planForm.plan_category === 'channel_addon') return;
+    const mins = Number(this.planForm.included_minutes || 0);
+    const rate = Number(this.planForm.rate_per_minute || 0);
+    if (mins > 0 && rate > 0) {
+      this.planForm.price = Math.round(mins * rate);
+    }
+  }
+
   onCategoryChange(): void {
+    this.planForm.validity_days = 30; // Always 30 days
     if (this.planForm.plan_category === 'voice_topup') {
       this.planForm.plan_type = 'topup';
-      this.planForm.validity_days = 0;
       this.planForm.auto_pay_by_default = false;
       this.planForm.feature_key = null;
       if (!this.planForm.included_minutes || this.planForm.included_minutes === 0) {
@@ -138,15 +152,16 @@ export class PlanManagementComponent implements OnInit {
     } else if (this.planForm.plan_category === 'channel_addon') {
       this.planForm.plan_type = 'standard';
       this.planForm.included_minutes = 0;
-      this.planForm.validity_days = 30;
       this.planForm.auto_pay_by_default = true;
       if (!this.planForm.feature_key) this.planForm.feature_key = 'whatsapp';
     } else {
       this.planForm.feature_key = null;
       if (this.planForm.plan_type === 'topup') this.planForm.plan_type = 'standard';
-      if (!this.planForm.validity_days) this.planForm.validity_days = 30;
       if (!this.planForm.included_minutes) this.planForm.included_minutes = 500;
       this.planForm.auto_pay_by_default = true;
+    }
+    if (this.autoCalculatePrice) {
+      this.recalculatePrice();
     }
   }
 
@@ -207,7 +222,7 @@ export class PlanManagementComponent implements OnInit {
         });
         return;
       }
-      this.planForm.validity_days = 0;
+      this.planForm.validity_days = 30;
       this.planForm.auto_pay_by_default = false;
       this.planForm.plan_type = 'topup';
     } else if (this.planForm.plan_category === 'channel_addon') {
@@ -304,71 +319,6 @@ export class PlanManagementComponent implements OnInit {
           severity: 'error',
           summary: 'Delete Failed',
           detail: err?.error?.detail || 'Failed to retire plan template.',
-        });
-      },
-    });
-  }
-
-  openGrantModal(clientId?: string): void {
-    this.grantClientIds = clientId ? [clientId] : (this.companies.length > 0 ? [this.companies[0].id] : []);
-    this.grantForm = {
-      client_id: clientId || (this.companies[0]?.id || ''),
-      client_ids: this.grantClientIds,
-      plan_template_id: this.plans[0]?.id,
-      custom_minutes: 1000,
-      custom_validity_days: 60,
-      custom_price: 4000,
-      custom_name: 'Custom Admin Grant',
-      payment_reference: 'Super Admin Manual Grant',
-    };
-    this.grantType = 'template';
-    this.showGrantDialog = true;
-  }
-
-  submitGrant(): void {
-    const clientIds = this.grantClientIds.length > 0 ? this.grantClientIds : (this.grantForm.client_id ? [this.grantForm.client_id] : []);
-    if (clientIds.length === 0) {
-      this.messageService.add({
-        severity: 'warn',
-        summary: 'Validation Error',
-        detail: 'Please select at least one client company.',
-      });
-      return;
-    }
-
-    this.saving = true;
-    const payload: RechargeAllocatePayload = {
-      client_id: clientIds[0],
-      client_ids: clientIds,
-      payment_reference: this.grantForm.payment_reference,
-    };
-
-    if (this.grantType === 'template') {
-      payload.plan_template_id = this.grantForm.plan_template_id;
-    } else {
-      payload.custom_minutes = this.grantForm.custom_minutes;
-      payload.custom_validity_days = this.grantForm.custom_validity_days;
-      payload.custom_price = this.grantForm.custom_price;
-      payload.custom_name = this.grantForm.custom_name;
-    }
-
-    this.billingService.adminRechargeClient(payload).subscribe({
-      next: (recharge) => {
-        this.saving = false;
-        this.showGrantDialog = false;
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Recharge Granted',
-          detail: `Recharge "${recharge.plan_name_snapshot}" granted to ${clientIds.length} company/companies.`,
-        });
-        this.loadData();
-      },
-      error: (err) => {
-        this.saving = false;
-        this.messageService.add({
-          severity: 'error',
-          summary: 'Grant Failed',
-          detail: err?.error?.detail || 'Failed to allocate recharge to client.',
         });
       },
     });
