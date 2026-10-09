@@ -191,17 +191,34 @@ def verify_signature(raw_body: bytes, header: str | None, app_secret: str | None
     Returns True when verification is DISABLED by config or no secret is
     configured — that combination is only for local development and is surfaced
     on the health endpoint so it cannot silently ship to production.
+
+    Supports candidate secrets: checks the account's secret first, then falls back
+    to settings.meta_app_secret and settings.instagram_app_secret to handle cases
+    where Meta signs with the App Dashboard key.
     """
     if not settings.meta_verify_signatures:
         return True
-    secret = app_secret or settings.meta_app_secret
-    if not secret:
+
+    candidates = []
+    if app_secret:
+        candidates.append(app_secret)
+    for fallback in (settings.meta_app_secret, settings.instagram_app_secret):
+        if fallback and fallback not in candidates:
+            candidates.append(fallback)
+
+    if not candidates:
         logger.warning("[LeadAI channels] no app secret configured — signature not verified")
         return True
     if not header or not header.startswith("sha256="):
         return False
-    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header.split("=", 1)[1])
+
+    sig_hash = header.split("=", 1)[1]
+    for secret in candidates:
+        expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(expected, sig_hash):
+            return True
+
+    return False
 
 
 def verify_challenge(mode: str | None, token: str | None, expected_token: str | None) -> bool:
@@ -993,7 +1010,7 @@ def fetch_post_context(
                 "post_snippet": caption[:500] if caption else "",
                 "permalink_url": data.get("permalink", ""),
             }
-        elif channel == CHANNEL_MESSENGER:
+        elif channel in (CHANNEL_MESSENGER, "facebook"):
             url = _graph_url(account, post_id)
             r = httpx.get(url, params={"fields": "message,permalink_url", "access_token": token}, timeout=timeout)
             data = r.json() or {}
@@ -1034,8 +1051,11 @@ def reply_to_comment(
                 timeout=timeout,
             )
             data = resp.json() or {}
+            if resp.status_code >= 400:
+                logger.error("[LeadAI channels] reply_to_comment (IG) error %s: %s", resp.status_code, data)
+                return None
             return str(data.get("id", ""))
-        elif channel == CHANNEL_MESSENGER:
+        elif channel in (CHANNEL_MESSENGER, "facebook"):
             url = _graph_url(account, f"{comment_id}/comments")
             resp = httpx.post(
                 url,
@@ -1044,6 +1064,9 @@ def reply_to_comment(
                 timeout=timeout,
             )
             data = resp.json() or {}
+            if resp.status_code >= 400:
+                logger.error("[LeadAI channels] reply_to_comment (FB) error %s: %s", resp.status_code, data)
+                return None
             return str(data.get("id", ""))
     except Exception as exc:
         logger.error("[LeadAI channels] reply_to_comment failed for %s/%s: %s", channel, comment_id, exc)

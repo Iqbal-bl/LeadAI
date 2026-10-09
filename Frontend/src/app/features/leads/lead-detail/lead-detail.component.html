@@ -154,30 +154,40 @@
         <div
           class="max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs shadow-sm"
           [style.background-color]="
-            msg.sender === 'customer' ? '#6366f1' : 'var(--card-bg)'
+            msg.sender === 'customer'
+              ? '#6366f1'
+              : msg.sender === 'agent'
+                ? '#2563eb'
+                : msg.sender === 'ai'
+                  ? '#059669'
+                  : '#475569'
           "
-          [style.color]="
-            msg.sender === 'customer' ? '#ffffff' : 'var(--app-text)'
-          "
-          [style.border]="
-            msg.sender === 'customer' ? 'none' : '1px solid var(--app-border)'
-          "
+          [style.color]="'#ffffff'"
+          [style.border]="'none'"
           [ngClass]="
             msg.sender === 'customer' ? 'rounded-tl-none' : 'rounded-tr-none'
           "
         >
           <div
-            class="font-semibold text-[9px] mb-1 opacity-75"
+            class="font-semibold text-[9px] mb-1 opacity-80"
             [style.color]="
-              msg.sender === 'customer' ? '#e0e7ff' : 'var(--app-text-muted)'
+              msg.sender === 'customer'
+                ? '#e0e7ff'
+                : msg.sender === 'agent'
+                  ? '#dbeafe'
+                  : msg.sender === 'ai'
+                    ? '#d1fae5'
+                    : '#cbd5e1'
             "
           >
             {{
               msg.sender === "customer"
                 ? "Customer"
                 : msg.sender === "ai"
-                  ? "AI Agent (" + msg.model_used + ")"
-                  : "Agent"
+                  ? "AI Agent" + (msg.model_used ? " (" + msg.model_used + ")" : "")
+                  : msg.sender === "agent"
+                    ? "Agent (Human)"
+                    : "System"
             }}
             · {{ msg.created_at | date: "mediumTime" }}
           </div>

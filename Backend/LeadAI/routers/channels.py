@@ -43,7 +43,7 @@ from ..schemas_ext import (
     InstagramCallbackIn,
 )
 from ..schemas import Ok
-from ..security import encrypt_pii
+from ..security import decrypt_pii, encrypt_pii
 from ..serializers_ext import channel_account_out
 from ..services import cache, channels as ch, billing as billing_svc
 from ..services import instagram_login as ig_login
@@ -91,8 +91,61 @@ def list_accounts(
         .order_by(LeadChannelAccount.CreatedAt.desc())
         .all()
     )
+
+    # Auto-heal: Ensure any connected Facebook Page is subscribed to "feed" with Meta
+    for row in rows:
+        if row.Channel == "messenger" and row.IsActive and row.AccessTokenEnc and row.ExternalId:
+            meta = row.MetaJson or {}
+            subscribed_fields = meta.get("subscribed_fields") or []
+            if "feed" not in subscribed_fields:
+                token = decrypt_pii(row.AccessTokenEnc)
+                if token:
+                    try:
+                        fields = fb_login.subscribe_page(row.ExternalId, token)
+                        meta["subscribed_fields"] = fields
+                        row.MetaJson = meta
+                        row.UpdatedAt = utcnow()
+                        db.commit()
+                        logger.info(
+                            "[LeadAI channels] Auto-subscribed Facebook Page %s (%s) to feed: %s",
+                            row.Name,
+                            row.ExternalId,
+                            fields,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "[LeadAI channels] Auto-subscribe to feed failed for %s: %s",
+                            row.Name,
+                            exc,
+                        )
+
     base = _public_base(request)
     return [channel_account_out(row, base) for row in rows]
+
+
+@router.post("/{account_id}/resubscribe", summary="Re-subscribe webhooks with Meta for this channel")
+def resubscribe_channel(
+    account_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("channel.manage")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, client_id = scope
+    row = _get(db, account_id, client_id)
+    if row.Channel not in ("messenger", "facebook"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Resubscribe is currently supported for Facebook Page channels")
+    token = decrypt_pii(row.AccessTokenEnc)
+    if not token or not row.ExternalId:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Channel has no stored token or external Page ID")
+    try:
+        fields = fb_login.subscribe_page(row.ExternalId, token)
+        meta = row.MetaJson or {}
+        meta["subscribed_fields"] = fields
+        row.MetaJson = meta
+        row.UpdatedAt = utcnow()
+        db.commit()
+        return {"success": True, "page_id": row.ExternalId, "subscribed_fields": fields}
+    except Exception as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Failed to resubscribe: {exc}") from exc
 
 
 @router.get("/status", response_model=ChannelStatusOut, summary="Channel health for the dashboard")

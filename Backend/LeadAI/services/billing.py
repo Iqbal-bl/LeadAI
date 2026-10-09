@@ -663,22 +663,28 @@ def allocate_recharge(
     """
     ensure_default_templates(db)
     now = utcnow()
+    template = None
 
     if template_id:
         template = db.get(LeadRechargePlanTemplate, template_id)
         if not template or template.IsDeleted or not template.IsActive:
             raise ValueError(f"Plan template {template_id} is no longer available or has been retired.")
         plan_name = template.Name
-        minutes = template.IncludedMinutes
-        validity = template.ValidityDays
-        price = template.Price
+        minutes = float(template.IncludedMinutes or 0.0)
+        validity = int(template.ValidityDays or 30)
+        price = 0.0  # SuperAdmin manual grants are non-monetary
     else:
         if not custom_minutes or not custom_validity_days:
             raise ValueError("Custom plan requires custom_minutes and custom_validity_days")
         plan_name = custom_name or f"Custom Plan ({int(custom_minutes)} Mins / {custom_validity_days} Days)"
         minutes = float(custom_minutes)
         validity = int(custom_validity_days)
-        price = float(custom_price or 0.0)
+        price = 0.0  # SuperAdmin manual grants are non-monetary
+
+    if validity <= 0:
+        raise ValueError("Plan validity must be strictly greater than 0 days.")
+    if minutes <= 0:
+        raise ValueError("Plan minutes must be strictly greater than 0.")
 
     # Check if client has an existing ACTIVE or UNEXPIRED plan
     existing_active = (
@@ -704,7 +710,7 @@ def allocate_recharge(
         log_entry = LeadUsageLog(
             ClientId=client_id,
             RechargeId=existing_active.Id,
-            CallSid="BOOSTER_TOPUP",
+            CallSid="ADMIN_BOOSTER_GRANT",
             ConversationId=None,
             CallDurationSeconds=0,
             MinutesDeducted=-minutes,
@@ -718,37 +724,71 @@ def allocate_recharge(
         logger.info(f"[Billing] Top-up booster {minutes} mins merged into active plan {existing_active.Id}")
         return existing_active
 
+    rollover_carried = 0.0
+    prev_bal = 0.0
     if existing_active:
+        leftover = max(0.0, float(existing_active.RemainingMinutes or 0.0))
+        if leftover > 0:
+            rollover_carried = leftover
+            logger.info(f"[Billing] Rolled over {leftover} minutes from previous plan {existing_active.Id} to admin grant")
+        prev_bal = float(existing_active.RemainingMinutes or 0.0)
         existing_active.Status = RECHARGE_STATUS_SUPERSEDED
         db.add(existing_active)
 
+    total_remaining = round(minutes + rollover_carried, 4)
     initial_status = RECHARGE_STATUS_ACTIVE
     recharged_at = now
     expires_at = compute_cycle_expiry(now, validity)
 
-    channels = list(template.AddonChannels) if template and template.AddonChannels else []
+    # Inherit active channels so client WhatsApp/Instagram channels are never lost on admin grant
+    prior_active = list(existing_active.ActiveChannels or []) if existing_active else []
+    template_channels = list(template.AddonChannels) if template and template.AddonChannels else []
+    active_channels = list(dict.fromkeys(prior_active + template_channels)) if (prior_active or template_channels) else []
+
     recharge = LeadClientRecharge(
         ClientId=client_id,
         PlanTemplateId=template_id,
         PlanNameSnapshot=plan_name,
         PurchasedMinutes=minutes,
-        RemainingMinutes=minutes,
+        RemainingMinutes=total_remaining,
+        BoosterMinutes=0.0,
+        RolloverMinutesCarried=rollover_carried,
         ValidityDaysSnapshot=validity,
-        PricePaid=price,
+        PricePaid=0.0,
         RechargedAt=recharged_at,
         ExpiresAt=expires_at,
         Status=initial_status,
-        PaymentReference=payment_ref,
+        PaymentReference=payment_ref or "SuperAdmin Direct Grant",
         CreatedBy=created_by,
-        ActiveChannels=channels,
-        NextCycleChannels=channels,
+        ActiveChannels=active_channels,
+        NextCycleChannels=active_channels,
+        IsAutoRenew=False,
+        CancelAtPeriodEnd=False,
+        InvoiceUrl=None,
+        InvoiceId=None,
     )
     db.add(recharge)
+    db.flush()
+
+    # Log usage ledger audit row for admin grant
+    log_entry = LeadUsageLog(
+        ClientId=client_id,
+        RechargeId=recharge.Id,
+        CallSid="ADMIN_GRANT",
+        ConversationId=None,
+        CallDurationSeconds=0,
+        MinutesDeducted=-minutes,
+        PreviousBalance=prev_bal,
+        NewBalance=total_remaining,
+        DeductedAt=now,
+    )
+    db.add(log_entry)
+
     db.commit()
     db.refresh(recharge)
 
     logger.info(
-        f"[Billing] Allocated recharge {recharge.Id} ({plan_name}) for client {client_id}. Status: {initial_status}"
+        f"[Billing] Allocated recharge {recharge.Id} ({plan_name}) for client {client_id}. Status: {initial_status}, Rollover: {rollover_carried}m"
     )
     return recharge
 
@@ -964,8 +1004,14 @@ def verify_razorpay_payment(
         recharge.PaymentReference = payment_id
         recharge.FailureReason = None
 
-        # Approach 1: Retain cycle anchor date if upgrading mid-cycle
-        if existing_active and existing_active.ExpiresAt and not _is_expired(existing_active.ExpiresAt, now):
+        # Retain cycle anchor date if upgrading a paid plan mid-cycle.
+        # But if the previous active plan was a SuperAdmin Grant (PricePaid == 0 or PaymentReference contains Admin),
+        # the fresh paid subscription cycle anchor must start from today (now), with leftover minutes rolled over.
+        is_prior_admin_grant = bool(existing_active and (
+            float(existing_active.PricePaid or 0.0) == 0.0 or 
+            (existing_active.PaymentReference and "Admin" in str(existing_active.PaymentReference))
+        ))
+        if existing_active and existing_active.ExpiresAt and not _is_expired(existing_active.ExpiresAt, now) and not is_prior_admin_grant:
             recharge.ExpiresAt = existing_active.ExpiresAt
             recharge.RechargedAt = existing_active.RechargedAt or now
             logger.info(f"[Billing Upgrade] Retained existing billing cycle anchor: {recharge.ExpiresAt}")

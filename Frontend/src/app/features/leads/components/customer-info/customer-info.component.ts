@@ -53,6 +53,25 @@ export class CustomerInfoComponent implements OnInit, OnChanges {
     return this.lead?.leadScore ?? this.lead?.lead_score ?? this.lead?.score ?? 0;
   }
 
+  get originInfo(): any {
+    return this.lead?.originAttribution || this.lead?.origin_attribution || null;
+  }
+
+  getChannelIcon(channel?: string): string {
+    const icons: Record<string, string> = {
+      whatsapp: 'pi pi-whatsapp',
+      messenger: 'pi pi-facebook',
+      facebook: 'pi pi-facebook',
+      instagram: 'pi pi-instagram',
+      linkedin: 'pi pi-linkedin',
+      sms: 'pi pi-mobile',
+      email: 'pi pi-envelope',
+      voice: 'pi pi-phone',
+      web: 'pi pi-desktop',
+    };
+    return icons[channel?.toLowerCase() || ''] || 'pi pi-comment';
+  }
+
   private computeLeadInitials(): void {
     const name = this.lead?.name || '';
     if (name) {

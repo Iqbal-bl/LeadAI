@@ -627,21 +627,25 @@
           <tr>
             <td class="text-xs text-slate-600 dark:text-slate-300">{{ log.deducted_at | date:'medium' }}</td>
             <td>
-              <span *ngIf="log.call_sid === 'BOOSTER_TOPUP'"
+              <span *ngIf="log.activity_type === 'admin_grant' || log.call_sid === 'ADMIN_BOOSTER_GRANT' || log.call_sid === 'ADMIN_GRANT'"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                <i class="pi pi-shield text-[10px]"></i> SuperAdmin Grant Minutes
+              </span>
+              <span *ngIf="(log.activity_type === 'booster_topup' || log.call_sid === 'BOOSTER_TOPUP') && log.activity_type !== 'admin_grant' && log.call_sid !== 'ADMIN_BOOSTER_GRANT' && log.call_sid !== 'ADMIN_GRANT'"
                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                 <i class="pi pi-bolt text-[10px]"></i> Minute Booster Top-Up
               </span>
-              <span *ngIf="log.call_sid === 'SYSTEM_ROLLOVER'"
+              <span *ngIf="log.activity_type === 'system_rollover' || log.call_sid === 'SYSTEM_ROLLOVER'"
                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                 <i class="pi pi-replay text-[10px]"></i> Monthly Minute Rollover
               </span>
-              <span *ngIf="log.call_sid !== 'BOOSTER_TOPUP' && log.call_sid !== 'SYSTEM_ROLLOVER'"
+              <span *ngIf="log.call_sid !== 'BOOSTER_TOPUP' && log.call_sid !== 'SYSTEM_ROLLOVER' && log.call_sid !== 'ADMIN_BOOSTER_GRANT' && log.call_sid !== 'ADMIN_GRANT' && log.activity_type !== 'admin_grant' && log.activity_type !== 'booster_topup' && log.activity_type !== 'system_rollover'"
                 class="font-mono text-xs text-indigo-600 dark:text-indigo-400">
                 {{ log.call_sid }}
               </span>
             </td>
             <td class="text-xs text-slate-500">
-              {{ (log.call_sid === 'BOOSTER_TOPUP' || log.call_sid === 'SYSTEM_ROLLOVER') ? '—' :
+              {{ (log.call_sid === 'BOOSTER_TOPUP' || log.call_sid === 'SYSTEM_ROLLOVER' || log.call_sid === 'ADMIN_BOOSTER_GRANT' || log.call_sid === 'ADMIN_GRANT' || log.activity_type === 'admin_grant') ? '—' :
               (log.call_duration_seconds + 's') }}
             </td>
             <td>

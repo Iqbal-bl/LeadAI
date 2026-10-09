@@ -85,6 +85,55 @@ def list_customers(
     """
     principal, client_id = scope
 
+    # Auto-heal: Ensure any captured social comments (LinkedIn, Facebook, Instagram) have an account in leadai_accounts
+    try:
+        from ..models_blog import LeadSocialComment
+        captured_comments = (
+            db.query(LeadSocialComment)
+            .filter(
+                LeadSocialComment.ClientId == client_id,
+                LeadSocialComment.CustomerId != None,
+                LeadSocialComment.IsDeleted == False,
+            )
+            .all()
+        )
+        for c_comm in captured_comments:
+            has_acct = (
+                db.query(LeadAccount)
+                .filter(
+                    LeadAccount.ClientId == client_id,
+                    LeadAccount.CustomerId == c_comm.CustomerId,
+                    LeadAccount.IsDeleted == False,
+                )
+                .first()
+            )
+            if not has_acct:
+                channel_name = (c_comm.Channel or "social").lower()
+                channel_title = "Facebook" if channel_name in ("messenger", "facebook") else channel_name.title()
+                crm.create_account(
+                    db,
+                    client_id,
+                    display_name=c_comm.AuthorName or f"{channel_title} User",
+                    source=channel_name,
+                    stage="lead",
+                    customer_id=c_comm.CustomerId,
+                    linkedin_profile_url=c_comm.AuthorProfileUrl if channel_name == "linkedin" else None,
+                    tags=f"{channel_name},post_comment,comment_lead",
+                    fields={
+                        "origin_type": "post_comment",
+                        "channel": channel_name,
+                        "post_id": c_comm.PostUrn,
+                        "post_title": c_comm.PostTitle,
+                        "post_snippet": c_comm.PostSnippet,
+                        "comment_id": c_comm.CommentUrn,
+                        "comment_text": c_comm.CommentText,
+                        "author_profile_url": c_comm.AuthorProfileUrl,
+                    },
+                    actor=f"{channel_name}_comment_ai",
+                )
+                db.commit()
+    except Exception as sync_err:
+        logger.warning(f"Error auto-syncing captured social comments to accounts: {sync_err}")
 
     query = db.query(LeadAccount).filter(
         LeadAccount.ClientId == client_id,

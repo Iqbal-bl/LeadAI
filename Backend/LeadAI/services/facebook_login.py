@@ -108,6 +108,8 @@ SCOPES_MESSAGING = (
     "business_management",
     "pages_manage_posts",
     "pages_read_engagement",
+    "pages_manage_engagement",
+    "pages_read_user_content",
 )
 # Only requested when the caller wants the Page's linked Instagram too. Asking
 # for Instagram scopes when the company has no linked IG account makes the
@@ -346,6 +348,7 @@ SUBSCRIBE_FIELDS = (
     "messaging_optins",
     "message_reactions",
     "messaging_referrals",   # SINGULAR. Meta's field name has no trailing s.
+    "feed",                  # Feed updates & comments on Facebook Page posts
 )
 
 
