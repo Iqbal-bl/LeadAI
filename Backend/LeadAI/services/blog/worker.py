@@ -13,10 +13,9 @@ WORKER_SYSTEM = """
 You are a senior technical writer and content specialist.
 Write ONE section of a blog post in clean, well-formatted Markdown.
 
-Constraints:
-- Follow the provided Goal and cover ALL bullets in order.
-- Do not skip or merge bullets.
-- Stay close to the Target words (+-15%).
+STRICT CONSTRAINTS:
+- HARD WORD LIMIT: Adhere strictly to the requested section Target words. Do NOT exceed this word count limit. Keep writing dense, punchy, and impactful. Eliminate conversational filler, redundant introductions, and wordy transitions.
+- Follow the provided Goal and cover the bullets succinctly in order.
 - Output ONLY the section content in Markdown.
 - Start with a '## <Section Title>' heading.
 - Do NOT include the overarching blog title H1.
@@ -29,56 +28,68 @@ Constraints:
 
 def _get_llm():
     api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+    cb = []
+    try:
+        from core.usage_tracker import InAppUsageCallbackHandler
+        cb.append(InAppUsageCallbackHandler(process="blog_worker", channel="blog"))
+    except Exception:
+        pass
     return ChatOpenAI(
         model=settings.openai_model or "gpt-4o-mini",
         api_key=api_key,
-        temperature=0.4,
+        temperature=0.3,
+        callbacks=cb,
     )
+
 
 
 def worker_node(payload: dict) -> dict:
     """Generate one blog section for one planned task."""
-    task = Task(**payload["task"])
-    plan = Plan(**payload["plan"])
-    evidence = [EvidenceItem(**item) for item in payload.get("evidence", [])]
-    topic = payload["topic"]
-    mode = payload.get("mode", "closed_book")
-    as_of = payload.get("as_of", "2026-09-01")
-    recency_days = payload.get("recency_days", 3650)
+    from core.usage_tracker import bind_usage_context
 
-    bullets_text = "\n- " + "\n- ".join(task.bullets)
-    evidence_text = ""
-    if evidence:
-        evidence_text = "\n".join(
-            f"- {item.title} | {item.url} | {item.published_at or 'date:unknown'}"
-            for item in evidence[:15]
-        )
+    client_id = payload.get("client_id")
+    with bind_usage_context(company_id=client_id, process="blog_worker", channel="blog"):
+        task = Task(**payload["task"])
+        plan = Plan(**payload["plan"])
+        evidence = [EvidenceItem(**item) for item in payload.get("evidence", [])]
+        topic = payload["topic"]
+        mode = payload.get("mode", "closed_book")
+        as_of = payload.get("as_of", "2026-09-01")
+        recency_days = payload.get("recency_days", 3650)
 
-    citation_section = f"Evidence to Cite:\n{evidence_text}" if evidence_text else ""
+        bullets_text = "\n- " + "\n- ".join(task.bullets)
+        evidence_text = ""
+        if evidence:
+            evidence_text = "\n".join(
+                f"- {item.title} | {item.url} | {item.published_at or 'date:unknown'}"
+                for item in evidence[:15]
+            )
 
-    llm = _get_llm()
-    section_md = llm.invoke(
-        [
-            SystemMessage(content=WORKER_SYSTEM),
-            HumanMessage(
-                content=(
-                    f"Blog Title: {plan.blog_title}\n"
-                    f"Audience: {plan.audience}\n"
-                    f"Tone: {plan.tone}\n"
-                    f"Topic: {topic}\n"
-                    f"Mode: {mode}\n"
-                    f"As-of Date: {as_of}\n\n"
-                    f"Section Title: {task.title}\n"
-                    f"Goal: {task.goal}\n"
-                    f"Target words: {task.target_words}\n"
-                    f"Bullets to Cover:\n{bullets_text}\n\n"
-                    f"{citation_section}"
-                )
-            ),
-        ]
-    ).content.strip()
+        citation_section = f"Evidence to Cite:\n{evidence_text}" if evidence_text else ""
+        max_words = int(task.target_words * 1.05)
 
+        llm = _get_llm()
+        section_md = llm.invoke(
+            [
+                SystemMessage(content=WORKER_SYSTEM),
+                HumanMessage(
+                    content=(
+                        f"Blog Title: {plan.blog_title}\n"
+                        f"Audience: {plan.audience}\n"
+                        f"Tone: {plan.tone}\n"
+                        f"Topic: {topic}\n"
+                        f"Mode: {mode}\n"
+                        f"As-of Date: {as_of}\n\n"
+                        f"Section Title: {task.title}\n"
+                        f"Goal: {task.goal}\n"
+                        f"STRICT WORD BUDGET: Exactly ~{task.target_words} words (HARD CEILING: {max_words} words. Do NOT exceed {max_words} words!)\n"
+                        f"Bullets to Cover:\n{bullets_text}\n\n"
+                        f"{citation_section}"
+                    )
+                ),
+            ]
+        ).content.strip()
 
-    return {
-        "sections": [(task.id, section_md)]
-    }
+        return {
+            "sections": [(task.id, section_md)]
+        }

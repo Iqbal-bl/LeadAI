@@ -5,7 +5,7 @@ import base64
 import os
 import re
 from io import BytesIO
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import requests
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -17,11 +17,50 @@ from .state import State
 
 def _get_llm():
     api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+    cb = []
+    try:
+        from core.usage_tracker import InAppUsageCallbackHandler
+        cb.append(InAppUsageCallbackHandler(process="blog_reducer", channel="blog"))
+    except Exception:
+        pass
     return ChatOpenAI(
         model=settings.openai_model or "gpt-4o-mini",
         api_key=api_key,
         temperature=0.2,
+        callbacks=cb,
     )
+
+
+
+def _trim_to_target_words(body: str, target_words: int, tone: str = "professional") -> str:
+    """Condense oversized blog content so it adheres closely to the target word count."""
+    current_words = len(body.split())
+    if current_words <= int(target_words * 1.15):
+        return body
+
+    llm = _get_llm()
+    trim_prompt = (
+        f"You are an executive editor. The following draft has {current_words} words, "
+        f"but the client strictly requested ~{target_words} words (maximum {int(target_words * 1.05)} words).\n\n"
+        f"Task: Condense, tighten, and edit the draft to strictly ~{target_words} words.\n"
+        f"Rules:\n"
+        f"1. Preserve ALL '## Heading' section titles exactly.\n"
+        f"2. Keep the core frameworks, bullet takeaways, and key insights, but cut wordiness, redundancy, conversational padding, and fluff.\n"
+        f"3. Maintain the '{tone}' tone.\n"
+        f"4. Return ONLY the edited Markdown text without preambles or explanations.\n\n"
+        f"Draft to edit:\n{body}"
+    )
+    try:
+        res = llm.invoke([
+            SystemMessage(content="You are a professional editor specializing in concise, high-impact B2B writing."),
+            HumanMessage(content=trim_prompt)
+        ])
+        trimmed = res.content.strip()
+        if len(trimmed.split()) > 50:
+            return trimmed
+    except Exception as exc:
+        print(f"[Reducer] Word trimming warning: {exc}")
+    return body
 
 
 def merge_content(state: State) -> dict:
@@ -33,6 +72,10 @@ def merge_content(state: State) -> dict:
     sections = sorted(sections, key=lambda item: item[0])
     ordered_sections = [content for _, content in sections]
     body = "\n\n".join(ordered_sections).strip()
+
+    target_words = state.get("target_words", 1000) or 1000
+    tone = state.get("tone", "professional")
+    body = _trim_to_target_words(body, target_words, tone=tone)
 
     merged_md = f"# {plan.blog_title}\n\n{body}\n"
     return {"merged_md": merged_md}
@@ -68,57 +111,61 @@ Return strictly GlobalImagePlan schema.
 
 def decide_images(state: State) -> dict:
     """Decide image specifications and insert placeholders in Markdown."""
-    merged_md = state["merged_md"]
-    plan: Plan = state.get("plan")
+    from core.usage_tracker import bind_usage_context
 
-    blog_type = state.get("blog_type", "text_and_image")
-    include_images = state.get("include_images", True)
-    num_images = state.get("num_images", 1) or 1
+    client_id = state.get("client_id")
+    with bind_usage_context(company_id=client_id, process="blog_reducer", channel="blog"):
+        merged_md = state["merged_md"]
+        plan: Plan = state.get("plan")
 
-    if blog_type == "text_only" or not include_images or num_images <= 0:
+        blog_type = state.get("blog_type", "text_and_image")
+        include_images = state.get("include_images", True)
+        num_images = state.get("num_images", 1) or 1
+
+        if blog_type == "text_only" or not include_images or num_images <= 0:
+            return {
+                "md_with_placeholders": merged_md,
+                "image_specs": [],
+            }
+
+        llm = _get_llm()
+        planner = llm.with_structured_output(GlobalImagePlan)
+        system_prompt = get_decide_images_system(num_images=num_images)
+
+        try:
+            image_plan: GlobalImagePlan = planner.invoke(
+                [
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(
+                        content=(
+                            f"Topic: {state['topic']}\n"
+                            f"Max images: {num_images}\n\n"
+                            f"Markdown:\n{merged_md}"
+                        )
+                    ),
+                ]
+            )
+            image_specs = [img.model_dump() for img in image_plan.images[:num_images]]
+            md_with_placeholders = image_plan.md_with_placeholders or merged_md
+        except Exception as exc:
+            print(f"[Reducer] decide_images error: {exc}")
+            image_specs = []
+            md_with_placeholders = merged_md
+
+        # Ensure placeholders are present in Markdown
+        for idx, spec in enumerate(image_specs, start=1):
+            placeholder = f"[[IMAGE_{idx}]]"
+            spec["placeholder"] = placeholder
+            if placeholder not in md_with_placeholders:
+                md_with_placeholders = md_with_placeholders + f"\n\n{placeholder}\n"
+
         return {
-            "md_with_placeholders": merged_md,
-            "image_specs": [],
+            "md_with_placeholders": md_with_placeholders,
+            "image_specs": image_specs,
         }
 
-    llm = _get_llm()
-    planner = llm.with_structured_output(GlobalImagePlan)
-    system_prompt = get_decide_images_system(num_images=num_images)
 
-    try:
-        image_plan: GlobalImagePlan = planner.invoke(
-            [
-                SystemMessage(content=system_prompt),
-                HumanMessage(
-                    content=(
-                        f"Topic: {state['topic']}\n"
-                        f"Max images: {num_images}\n\n"
-                        f"Markdown:\n{merged_md}"
-                    )
-                ),
-            ]
-        )
-        image_specs = [img.model_dump() for img in image_plan.images[:num_images]]
-        md_with_placeholders = image_plan.md_with_placeholders or merged_md
-    except Exception as exc:
-        print(f"[Reducer] decide_images error: {exc}")
-        image_specs = []
-        md_with_placeholders = merged_md
-
-    # Ensure placeholders are present in Markdown
-    for idx, spec in enumerate(image_specs, start=1):
-        placeholder = f"[[IMAGE_{idx}]]"
-        spec["placeholder"] = placeholder
-        if placeholder not in md_with_placeholders:
-            md_with_placeholders = md_with_placeholders + f"\n\n{placeholder}\n"
-
-    return {
-        "md_with_placeholders": md_with_placeholders,
-        "image_specs": image_specs,
-    }
-
-
-def _generate_image_bytes(prompt: str) -> bytes:
+def _generate_image_bytes(prompt: str, client_id: Optional[str] = None) -> bytes:
     """Generate image bytes using Cloudflare Flux, OpenAI DALL-E, or high-res PIL graphics."""
     # 1. Try Cloudflare Workers AI (if credentials present)
     cf_account = os.getenv("CLOUDFLARE_ACCOUNT_ID")
@@ -152,6 +199,22 @@ def _generate_image_bytes(prompt: str) -> bytes:
                 n=1,
             )
             if img_res.data:
+                # Record in-app usage for image generation
+                try:
+                    from core.usage_tracker import record_usage
+
+                    record_usage(
+                        company_id=client_id,
+                        provider="openai",
+                        model="dall-e-3",
+                        is_image=True,
+                        image_count=1,
+                        process="blog_image_generation",
+                        channel="blog",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
                 first = img_res.data[0]
                 if getattr(first, "b64_json", None):
                     return base64.b64decode(first.b64_json)
@@ -161,6 +224,7 @@ def _generate_image_bytes(prompt: str) -> bytes:
                         return img_resp.content
         except Exception as exc:
             print(f"[Reducer] OpenAI image generation warning: {exc}")
+
 
     # 3. Fallback: Generate a high quality clean banner image
     try:
@@ -269,7 +333,7 @@ def generate_and_place_images(state: State) -> dict:
         alt = spec.get("alt", "AI Generated Graphic")
         caption = spec.get("caption", "")
 
-        img_bytes = _generate_image_bytes(prompt)
+        img_bytes = _generate_image_bytes(prompt, client_id=state.get("client_id"))
         image_url = _upload_image_to_storage(img_bytes, filename)
 
         if image_url:

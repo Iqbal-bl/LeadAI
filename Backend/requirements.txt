@@ -97,6 +97,7 @@ tzdata==2025.2
 cloudinary>=1.40.0
 
 # --- LangChain / LangGraph (Social Agent AI) ---
+langsmith>=0.1.0
 langchain>=0.3
 langchain-core>=0.3
 langchain-openai>=0.2

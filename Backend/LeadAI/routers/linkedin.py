@@ -6,14 +6,14 @@ from __future__ import annotations
 import logging
 from typing import Optional, Any, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from .. import activity
 from ..activity import A
 from ..db import get_leadai_db
-from ..models import LeadChannelAccount, LeadAccount, utcnow
+from ..models import LeadChannelAccount, LeadAccount, LeadConversation, LeadCustomer, Lead, LeadMessage, utcnow
 from ..models_ext import LeadChannelIdentity
 from ..rbac import Principal, assert_owns, scoped
 from ..security import encrypt_pii
@@ -60,6 +60,7 @@ async def _bg_auto_sync_comments(company_id: str):
     summary="Retrieve LinkedIn authorization link",
 )
 async def linkedin_connect(
+    prompt: Optional[str] = Query(None, description="OAuth prompt hint: 'login' or 'select_account'"),
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
@@ -72,7 +73,7 @@ async def linkedin_connect(
         raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
 
     try:
-        url = await linkedin.build_authorize_url(db, client_id)
+        url = await linkedin.build_authorize_url(db, client_id, prompt=prompt)
         return {"authorize_url": url}
     except Exception as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -86,10 +87,10 @@ async def linkedin_status(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
-    from ..models_ext import LeadChannelAccount
+    from ..models import LeadChannelAccount
 
     principal, client_id = scope
-    cred = (
+    accounts = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.ClientId == client_id,
@@ -97,10 +98,47 @@ async def linkedin_status(
             LeadChannelAccount.IsDeleted == False,
         )
         .order_by(LeadChannelAccount.UpdatedAt.desc())
-        .first()
+        .all()
     )
 
-    if not cred:
+    now = utcnow()
+    if now.tzinfo is not None:
+        now = now.replace(tzinfo=None)
+
+    account_items = []
+    has_any_connected = False
+    primary_cred = accounts[0] if accounts else None
+
+    for acc in accounts:
+        meta = acc.MetaJson or {}
+        access_token_valid = (
+            acc.TokenExpiresAt > now
+            if acc.TokenExpiresAt and acc.AccessTokenEnc
+            else False
+        )
+        has_credentials = bool(acc.LinkedinCookieEnc or (acc.LinkedinUsernameEnc and acc.LinkedinPasswordEnc))
+        if bool(acc.AccessTokenEnc):
+            has_any_connected = True
+        
+        account_items.append({
+            "id": acc.Id,
+            "name": acc.Name or "LinkedIn Profile",
+            "person_urn": acc.ExternalId,
+            "connected": bool(acc.AccessTokenEnc),
+            "access_token_valid": access_token_valid,
+            "has_refresh_token": bool(acc.AppSecretEnc),
+            "has_cookie_credentials": has_credentials,
+            "profile_picture_url": meta.get("profile_picture_url"),
+            "email": meta.get("email"),
+            "is_active": acc.IsActive,
+            "auto_accept": meta.get("linkedin_auto_accept", False),
+            "welcome_message": meta.get("linkedin_welcome_message"),
+            "auto_dm_leads": meta.get("linkedin_auto_dm_leads", True),
+            "created_at": acc.CreatedAt.isoformat() if acc.CreatedAt else None,
+            "updated_at": acc.UpdatedAt.isoformat() if acc.UpdatedAt else None,
+        })
+
+    if not primary_cred:
         return {
             "connected": False,
             "person_urn": None,
@@ -110,45 +148,153 @@ async def linkedin_status(
             "auto_accept": False,
             "welcome_message": None,
             "auto_dm_leads": True,
+            "accounts": [],
+            "connected_count": 0,
         }
 
+    primary_meta = primary_cred.MetaJson or {}
+    primary_token_valid = (
+        primary_cred.TokenExpiresAt > now
+        if primary_cred.TokenExpiresAt and primary_cred.AccessTokenEnc
+        else False
+    )
+    primary_has_credentials = bool(primary_cred.LinkedinCookieEnc or (primary_cred.LinkedinUsernameEnc and primary_cred.LinkedinPasswordEnc))
+
+    return {
+        "connected": has_any_connected,
+        "person_urn": primary_cred.ExternalId,
+        "access_token_valid": primary_token_valid,
+        "has_refresh_token": bool(primary_cred.AppSecretEnc),
+        "has_cookie_credentials": primary_has_credentials,
+        "auto_accept": primary_meta.get("linkedin_auto_accept", False),
+        "welcome_message": primary_meta.get("linkedin_welcome_message"),
+        "auto_dm_leads": primary_meta.get("linkedin_auto_dm_leads", True),
+        "accounts": account_items,
+        "connected_count": len([a for a in account_items if a["connected"]]),
+    }
+
+
+@router.get(
+    "/accounts",
+    summary="Get all connected LinkedIn accounts for company",
+)
+async def list_linkedin_accounts(
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..models import LeadChannelAccount
+    principal, client_id = scope
     now = utcnow()
     if now.tzinfo is not None:
         now = now.replace(tzinfo=None)
 
-    access_token_valid = (
-        cred.TokenExpiresAt > now
-        if cred.TokenExpiresAt and cred.AccessTokenEnc
-        else False
+    accounts = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == client_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.CreatedAt.asc())
+        .all()
     )
 
-    meta = cred.MetaJson or {}
+    items = []
+    for acc in accounts:
+        meta = acc.MetaJson or {}
+        access_token_valid = (
+            acc.TokenExpiresAt > now
+            if acc.TokenExpiresAt and acc.AccessTokenEnc
+            else False
+        )
+        has_credentials = bool(acc.LinkedinCookieEnc or (acc.LinkedinUsernameEnc and acc.LinkedinPasswordEnc))
+        
+        items.append({
+            "id": acc.Id,
+            "name": acc.Name or "LinkedIn Profile",
+            "person_urn": acc.ExternalId,
+            "connected": bool(acc.AccessTokenEnc),
+            "access_token_valid": access_token_valid,
+            "has_refresh_token": bool(acc.AppSecretEnc),
+            "has_cookie_credentials": has_credentials,
+            "profile_picture_url": meta.get("profile_picture_url"),
+            "email": meta.get("email"),
+            "is_active": acc.IsActive,
+            "auto_accept": meta.get("linkedin_auto_accept", False),
+            "welcome_message": meta.get("linkedin_welcome_message"),
+            "auto_dm_leads": meta.get("linkedin_auto_dm_leads", True),
+            "created_at": acc.CreatedAt.isoformat() if acc.CreatedAt else None,
+            "updated_at": acc.UpdatedAt.isoformat() if acc.UpdatedAt else None,
+        })
 
-    has_credentials = bool(cred.LinkedinCookieEnc or (cred.LinkedinUsernameEnc and cred.LinkedinPasswordEnc))
+    return {"accounts": items, "total": len(items)}
 
-    return {
-        "connected": bool(cred.AccessTokenEnc),
-        "person_urn": cred.ExternalId,
-        "access_token_valid": access_token_valid,
-        "has_refresh_token": bool(cred.AppSecretEnc),
-        "has_cookie_credentials": has_credentials,
-        "auto_accept": meta.get("linkedin_auto_accept", False),
-        "welcome_message": meta.get("linkedin_welcome_message"),
-        "auto_dm_leads": meta.get("linkedin_auto_dm_leads", True),
-    }
 
+@router.delete(
+    "/accounts/{account_id}",
+    summary="Disconnect specific LinkedIn account",
+)
+@router.post(
+    "/accounts/{account_id}/disconnect",
+    summary="Disconnect specific LinkedIn account",
+)
+async def disconnect_linkedin_account(
+    account_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    from ..models import LeadChannelAccount
+    principal, client_id = scope
+    acc = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.Id == account_id,
+            LeadChannelAccount.ClientId == client_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .first()
+    )
+    if not acc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn account not found")
+
+    acc_name = acc.Name or "LinkedIn Profile"
+    acc.IsDeleted = True
+    acc.IsActive = False
+    acc.AccessTokenEnc = None
+    acc.AppSecretEnc = None
+    acc.TokenExpiresAt = None
+    acc.LinkedinCookieEnc = None
+    acc.LinkedinUsernameEnc = None
+    acc.LinkedinPasswordEnc = None
+    acc.UpdatedAt = utcnow()
+    db.commit()
+
+    activity.log(
+        db,
+        action=A.CHANNEL_DISCONNECTED,
+        client_id=client_id,
+        actor_email=principal.email,
+        entity_type="channel_account",
+        entity_id=account_id,
+        log_type="Info",
+        message=f"Disconnected LinkedIn profile '{acc_name}'",
+        commit=True,
+    )
+
+    return {"ok": True, "message": f"LinkedIn account '{acc_name}' disconnected successfully"}
 
 
 @router.post(
     "/disconnect",
-    summary="Disconnect LinkedIn account",
+    summary="Disconnect all LinkedIn accounts",
 )
 async def linkedin_disconnect(
     request: Request,
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
-    from ..models_ext import LeadChannelAccount
+    from ..models import LeadChannelAccount
     from ..models_blog import LeadSocialComment
 
     principal, client_id = scope
@@ -195,6 +341,18 @@ class LinkedInBotCredentialsInput(BaseModel):
     cookie_li_at: str | None = None
     username: str | None = None
     password: str | None = None
+
+class LinkedInRemoteLoginStartInput(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+class LinkedInRemoteLoginInteractInput(BaseModel):
+    action: str = Field(description="click | type | press_key | submit_pin | refresh")
+    x: Optional[int] = None
+    y: Optional[int] = None
+    text: Optional[str] = None
+    key: Optional[str] = None
+
 
 class LinkedInGenerateKeywordsInput(BaseModel):
     prompt: str = Field(min_length=1, max_length=500)
@@ -250,9 +408,10 @@ async def linkedin_callback(
     try:
         token_data = await linkedin.exchange_code_for_tokens(code)
         access_token = token_data["access_token"]
-        person_urn = await linkedin.fetch_person_urn(access_token)
+        user_info = await linkedin.fetch_user_info(access_token)
+        person_urn = user_info["person_urn"]
 
-        await linkedin.save_tokens(
+        acc = await linkedin.save_tokens(
             db=db,
             client_id=company_id,
             person_urn=person_urn,
@@ -260,6 +419,18 @@ async def linkedin_callback(
             expires_in_seconds=token_data["expires_in"],
             refresh_token=token_data.get("refresh_token"),
             refresh_token_expires_in_seconds=token_data.get("refresh_token_expires_in"),
+            profile_info=user_info,
+        )
+
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message=f"Connected LinkedIn profile '{user_info.get('name')}' ({person_urn})",
+            commit=True,
         )
 
         # Return a simple script to notify the opener window and close the popup
@@ -273,7 +444,8 @@ async def linkedin_callback(
             window.opener.postMessage({{
                 type: 'LINKEDIN_OAUTH_SUCCESS',
                 state: '{state}',
-                person_urn: '{person_urn}'
+                person_urn: '{person_urn}',
+                name: '{user_info.get("name")}'
             }}, '*');
         }}
         window.close();
@@ -312,9 +484,10 @@ async def linkedin_callback_json(
     try:
         token_data = await linkedin.exchange_code_for_tokens(payload.code)
         access_token = token_data["access_token"]
-        person_urn = await linkedin.fetch_person_urn(access_token)
+        user_info = await linkedin.fetch_user_info(access_token)
+        person_urn = user_info["person_urn"]
 
-        await linkedin.save_tokens(
+        acc = await linkedin.save_tokens(
             db=db,
             client_id=company_id,
             person_urn=person_urn,
@@ -322,30 +495,37 @@ async def linkedin_callback_json(
             expires_in_seconds=token_data["expires_in"],
             refresh_token=token_data.get("refresh_token"),
             refresh_token_expires_in_seconds=token_data.get("refresh_token_expires_in"),
+            profile_info=user_info,
         )
-        return {"success": True, "person_urn": person_urn}
+
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message=f"Connected LinkedIn profile '{user_info.get('name')}' ({person_urn})",
+            commit=True,
+        )
+
+        return {"success": True, "person_urn": person_urn, "name": user_info.get("name"), "account_id": acc.Id}
     except Exception as exc:
         logger.error("LinkedIn OAuth JSON callback failed: %s", exc)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(exc))
 
 
-@router.post(
-    "/credentials",
-    summary="Save LinkedIn credentials/cookie for candidates automation",
-)
-async def save_linkedin_credentials(
-    payload: LinkedInBotCredentialsInput,
-    background_tasks: BackgroundTasks = None,
-    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
-    db: Session = Depends(get_leadai_db),
-):
-    _, company_id = scope
-    from ..services import billing as billing_svc
-    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
-    if not allowed:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+def _save_linkedin_bot_session(
+    db: Session,
+    company_id: str,
+    cookie_str: str,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+) -> LeadChannelAccount:
+    from ..models import LeadChannelAccount
+    from ..models_blog import LeadSocialComment
 
-    # Find the active LeadChannelAccount row
     row = (
         db.query(LeadChannelAccount)
         .filter(
@@ -358,7 +538,6 @@ async def save_linkedin_credentials(
     )
 
     if not row:
-        # Check if there is an existing row that can be reactivated
         row = (
             db.query(LeadChannelAccount)
             .filter(
@@ -398,10 +577,9 @@ async def save_linkedin_credentials(
         o.IsDeleted = True
         o.UpdatedAt = utcnow()
 
-    # Encrypt and save the credentials
-    if payload.cookie_li_at:
+    if cookie_str:
         import re
-        raw_cookie = payload.cookie_li_at.strip()
+        raw_cookie = cookie_str.strip()
         li_at_match = re.search(r'li_at=([^;]+)', raw_cookie)
         jsessionid_match = re.search(r'JSESSIONID="?([^";]+)"?', raw_cookie)
         
@@ -412,31 +590,12 @@ async def save_linkedin_credentials(
             row.LinkedinCookieEnc = encrypt_pii(f"{li_at}|||{jsessionid}")
         else:
             row.LinkedinCookieEnc = encrypt_pii(li_at)
-            
-        if payload.username and payload.password:
-            row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
-            row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
-    elif payload.username and payload.password:
-        row.LinkedinUsernameEnc = encrypt_pii(payload.username.strip())
-        row.LinkedinPasswordEnc = encrypt_pii(payload.password.strip())
-        
-        # Attempt automated headless browser session extraction
-        from ..social import linkedin_bot
-        extracted_cookie = await linkedin_bot.extract_session_cookie_via_browser(payload.username.strip(), payload.password.strip())
-        if extracted_cookie:
-            row.LinkedinCookieEnc = encrypt_pii(extracted_cookie)
-        else:
-            # Wipe stale expired cookie so it is not used
-            row.LinkedinCookieEnc = None
-            row.UpdatedAt = utcnow()
-            db.commit()
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "LinkedIn triggered a security check (CAPTCHA / 2FA code) or invalid login. Please switch to 'Mode B: Session Token (li_at)' and paste your li_at token directly."
-            )
+
+    if username and password:
+        row.LinkedinUsernameEnc = encrypt_pii(username.strip())
+        row.LinkedinPasswordEnc = encrypt_pii(password.strip())
 
     # Soft delete existing comments for this company & channel so that previous account comments are isolated
-    from ..models_blog import LeadSocialComment
     db.query(LeadSocialComment).filter(
         LeadSocialComment.ClientId == company_id,
         LeadSocialComment.Channel == "linkedin",
@@ -454,7 +613,234 @@ async def save_linkedin_credentials(
     if background_tasks is not None:
         background_tasks.add_task(_bg_auto_sync_comments, company_id)
 
-    return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+    return row
+
+
+@router.post(
+    "/remote-login/start",
+    summary="Start interactive remote LinkedIn login and CAPTCHA/challenge session",
+)
+async def start_remote_linkedin_login(
+    payload: LinkedInRemoteLoginStartInput,
+    background_tasks: BackgroundTasks,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = await remote_login_manager.create_session(
+        client_id=company_id,
+        username=payload.username.strip(),
+        password=payload.password.strip(),
+    )
+
+    result = await session.start()
+
+    if result.get("status") == "success" and session.extracted_cookie:
+        acc = _save_linkedin_bot_session(
+            db, company_id, session.extracted_cookie,
+            payload.username.strip(), payload.password.strip(),
+            background_tasks=background_tasks
+        )
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            actor_email=principal.email,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message="Connected LinkedIn Bot automation profile via browser login",
+            commit=True,
+        )
+        return {
+            "ok": True,
+            "status": "success",
+            "session_id": session.session_id,
+            "message": "LinkedIn connected successfully!",
+            "completed": True,
+        }
+
+    return {
+        "ok": result.get("status") != "failed",
+        "status": result.get("status"),
+        "session_id": session.session_id,
+        "challenge_type": result.get("challenge_type"),
+        "message": result.get("message"),
+        "has_screenshot": result.get("has_screenshot", False),
+        "completed": False,
+        "expires_in": result.get("expires_in", 600),
+    }
+
+
+@router.get(
+    "/remote-login/screenshot/{session_id}",
+    summary="Fetch live viewport screenshot for solving CAPTCHA / 2FA challenge",
+)
+async def get_remote_login_screenshot(
+    session_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+):
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = remote_login_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Login session not found or expired")
+
+    img_bytes = await session.get_screenshot()
+    if not img_bytes:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No screenshot available for session")
+
+    return Response(
+        content=img_bytes,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+    )
+
+
+@router.post(
+    "/remote-login/interact/{session_id}",
+    summary="Send user interaction (click, type, PIN submit) to solve CAPTCHA / challenge",
+)
+async def interact_remote_login(
+    session_id: str,
+    payload: LinkedInRemoteLoginInteractInput,
+    background_tasks: BackgroundTasks,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, company_id = scope
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = remote_login_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Login session not found or expired")
+
+    result = await session.interact(
+        action=payload.action,
+        x=payload.x,
+        y=payload.y,
+        text=payload.text,
+        key=payload.key,
+    )
+
+    if result.get("status") == "success" and session.extracted_cookie:
+        acc = _save_linkedin_bot_session(
+            db, company_id, session.extracted_cookie,
+            session.username, session.password,
+            background_tasks=background_tasks
+        )
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            actor_email=principal.email,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message="Connected LinkedIn Bot automation profile via interactive solver",
+            commit=True,
+        )
+
+    return result
+
+
+@router.get(
+    "/remote-login/status/{session_id}",
+    summary="Poll status of interactive remote login session",
+)
+async def check_remote_login_status(
+    session_id: str,
+    background_tasks: BackgroundTasks,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    principal, company_id = scope
+    from ..social.linkedin_remote_session import remote_login_manager
+    session = remote_login_manager.get_session(session_id)
+    if not session:
+        return {"status": "expired", "message": "Session expired", "completed": False}
+
+    result = await session.check_status()
+    if result.get("status") == "success" and session.extracted_cookie:
+        acc = _save_linkedin_bot_session(
+            db, company_id, session.extracted_cookie,
+            session.username, session.password,
+            background_tasks=background_tasks
+        )
+        activity.log(
+            db,
+            action=A.CHANNEL_CONNECTED,
+            client_id=company_id,
+            actor_email=principal.email,
+            entity_type="channel_account",
+            entity_id=acc.Id,
+            log_type="Info",
+            message="Connected LinkedIn Bot automation profile via solver",
+            commit=True,
+        )
+
+    return result
+
+
+@router.post(
+    "/remote-login/cancel/{session_id}",
+    summary="Cancel and tear down remote login session",
+)
+async def cancel_remote_login(
+    session_id: str,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+):
+    from ..social.linkedin_remote_session import remote_login_manager
+    await remote_login_manager.cancel_session(session_id)
+    return {"ok": True}
+
+
+@router.post(
+    "/credentials",
+    summary="Save LinkedIn credentials/cookie for candidates automation",
+)
+async def save_linkedin_credentials(
+    payload: LinkedInBotCredentialsInput,
+    background_tasks: BackgroundTasks = None,
+    scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
+    db: Session = Depends(get_leadai_db),
+):
+    _, company_id = scope
+    from ..services import billing as billing_svc
+    allowed, reason = billing_svc.check_channel_access(db, company_id, "linkedin")
+    if not allowed:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, reason)
+
+    if payload.cookie_li_at:
+        row = _save_linkedin_bot_session(
+            db, company_id, payload.cookie_li_at,
+            payload.username, payload.password,
+            background_tasks=background_tasks
+        )
+        return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+
+    elif payload.username and payload.password:
+        from ..social import linkedin_bot
+        extracted_cookie = await linkedin_bot.extract_session_cookie_via_browser(payload.username.strip(), payload.password.strip())
+        if extracted_cookie:
+            row = _save_linkedin_bot_session(
+                db, company_id, extracted_cookie,
+                payload.username.strip(), payload.password.strip(),
+                background_tasks=background_tasks
+            )
+            return {"ok": True, "has_cookie": bool(row.LinkedinCookieEnc)}
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "LinkedIn triggered a security check (CAPTCHA / 2FA code). Please use the interactive solver or enter your li_at session token directly."
+            )
+
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Please provide cookie_li_at or username and password")
+
 
 
 @router.delete(
@@ -557,6 +943,8 @@ async def linkedin_search_profiles(
 
     try:
         profiles = await linkedin_bot.search_profiles_api(row, payload.keywords, limit=payload.limit)
+        if payload.limit and payload.limit > 0:
+            profiles = profiles[:payload.limit]
         return {"profiles": profiles}
     except Exception as exc:
         logger.error("LinkedIn profile search failed: %s", exc)
@@ -705,21 +1093,29 @@ async def save_linkedin_settings(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
+    from sqlalchemy.orm.attributes import flag_modified
+
     _, company_id = scope
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found. Connect OAuth first.")
 
-    meta = row.MetaJson or {}
+    meta = dict(row.MetaJson or {})
     meta["linkedin_auto_accept"] = payload.auto_accept
     meta["linkedin_welcome_message"] = payload.welcome_message
     meta["linkedin_auto_dm_leads"] = payload.auto_dm_leads
     row.MetaJson = meta
+    flag_modified(row, "MetaJson")
     row.UpdatedAt = utcnow()
     db.commit()
     return {"ok": True}
@@ -745,11 +1141,16 @@ async def get_auto_connect_settings(
     db: Session = Depends(get_leadai_db),
 ):
     _, company_id = scope
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False,
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
@@ -785,21 +1186,28 @@ async def save_auto_connect_settings(
     scope: tuple[Principal, str] = Depends(scoped("social.linkedin")),
     db: Session = Depends(get_leadai_db),
 ):
+    from sqlalchemy.orm.attributes import flag_modified
+
     _, company_id = scope
     from ..services import jobs
     from ..services.jobs import calculate_next_random_schedule
 
-    row = db.query(LeadChannelAccount).filter(
-        LeadChannelAccount.ClientId == company_id,
-        LeadChannelAccount.Channel == "linkedin",
-        LeadChannelAccount.IsDeleted == False,
-    ).first()
+    row = (
+        db.query(LeadChannelAccount)
+        .filter(
+            LeadChannelAccount.ClientId == company_id,
+            LeadChannelAccount.Channel == "linkedin",
+            LeadChannelAccount.IsDeleted == False,
+        )
+        .order_by(LeadChannelAccount.UpdatedAt.desc())
+        .first()
+    )
 
     if not row:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "LinkedIn channel account not found.")
 
-    meta = row.MetaJson or {}
-    auto_cfg = meta.get("linkedin_auto_connect") or {}
+    meta = dict(row.MetaJson or {})
+    auto_cfg = dict(meta.get("linkedin_auto_connect") or {})
     
     auto_cfg["enabled"] = payload.enabled
     auto_cfg["runs_per_day"] = payload.runs_per_day
@@ -822,6 +1230,7 @@ async def save_auto_connect_settings(
 
     meta["linkedin_auto_connect"] = auto_cfg
     row.MetaJson = meta
+    flag_modified(row, "MetaJson")
     row.UpdatedAt = utcnow()
     db.commit()
 
@@ -947,7 +1356,7 @@ async def get_linkedin_invitations(
             is_lead = False
             crm_account_id = None
 
-            # 1. Check by unique sender URN in channel identities
+            # 1. Check by unique sender URN in channel identities and pipeline leads
             if sender_urn:
                 ident = (
                     db.query(LeadChannelIdentity)
@@ -960,36 +1369,67 @@ async def get_linkedin_invitations(
                     .first()
                 )
                 if ident and ident.CustomerId:
-                    crm_acc = (
-                        db.query(LeadAccount)
+                    conv = (
+                        db.query(LeadConversation)
                         .filter(
-                            LeadAccount.ClientId == company_id,
-                            LeadAccount.CustomerId == ident.CustomerId,
-                            LeadAccount.IsDeleted == False,
+                            LeadConversation.ClientId == company_id,
+                            LeadConversation.CustomerId == ident.CustomerId,
+                            LeadConversation.Channel == "linkedin",
+                            LeadConversation.IsDeleted == False,
                         )
                         .first()
                     )
-                    if crm_acc:
-                        is_lead = True
-                        crm_account_id = crm_acc.Id
+                    if conv:
+                        lead_record = (
+                            db.query(Lead)
+                            .filter(
+                                Lead.ConversationId == conv.Id,
+                                Lead.IsDeleted == False,
+                            )
+                            .first()
+                        )
+                        if lead_record:
+                            is_lead = True
+                            crm_account_id = lead_record.ConvertedAccountId
 
-            # 2. Check by verified public_id in account profile URL if not found by URN
+            # 2. Check by verified public_id in customer profile URL if not found by URN
             if not is_lead and public_id:
-                crm_acc = (
-                    db.query(LeadAccount)
+                cust_match = (
+                    db.query(LeadCustomer)
                     .filter(
-                        LeadAccount.ClientId == company_id,
-                        LeadAccount.LinkedinProfileUrl.like(f"%linkedin.com/in/{public_id}%"),
-                        LeadAccount.IsDeleted == False,
+                        LeadCustomer.ClientId == company_id,
+                        LeadCustomer.LinkedinProfileUrl.like(f"%linkedin.com/in/{public_id}%"),
+                        LeadCustomer.IsDeleted == False,
                     )
                     .first()
                 )
-                if crm_acc:
-                    is_lead = True
-                    crm_account_id = crm_acc.Id
+                if cust_match:
+                    conv = (
+                        db.query(LeadConversation)
+                        .filter(
+                            LeadConversation.ClientId == company_id,
+                            LeadConversation.CustomerId == cust_match.Id,
+                            LeadConversation.Channel == "linkedin",
+                            LeadConversation.IsDeleted == False,
+                        )
+                        .first()
+                    )
+                    if conv:
+                        lead_record = (
+                            db.query(Lead)
+                            .filter(
+                                Lead.ConversationId == conv.Id,
+                                Lead.IsDeleted == False,
+                            )
+                            .first()
+                        )
+                        if lead_record:
+                            is_lead = True
+                            crm_account_id = lead_record.ConvertedAccountId
 
             inv["is_crm_lead"] = is_lead
             inv["crm_account_id"] = crm_account_id
+            inv["is_converted"] = bool(crm_account_id)
         return {"invitations": invitations}
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
@@ -1150,12 +1590,13 @@ async def get_linkedin_conversations(
             tid = c.get("conversation_id")
             conv = conv_rows.get(tid)
             lead = lead_rows.get(conv.Id) if conv else None
-            if lead and lead.ConvertedAccountId:
+            if lead:
                 c["is_lead_candidate"] = True
                 c["lead_status"] = lead.Status
                 c["lead_score"] = lead.Score
                 c["lead_intent"] = lead.Intent
                 c["crm_account_id"] = lead.ConvertedAccountId
+                c["is_converted"] = bool(lead.ConvertedAccountId)
             else:
                 last_msg = c.get("last_message") or ""
                 eval_res = LeadIntentEvaluator.evaluate_text(last_msg, use_llm_fallback=False)
@@ -1163,11 +1604,13 @@ async def get_linkedin_conversations(
                 c["lead_status"] = "warm" if eval_res.is_lead else None
                 c["lead_score"] = int(eval_res.score * 100) if eval_res.is_lead else 0
                 c["lead_intent"] = eval_res.category if eval_res.is_lead else None
+                c["crm_account_id"] = None
+                c["is_converted"] = False
 
-                # Automatically convert DM to CRM Customer Lead if commercial buying intent is detected!
+                # Automatically capture DM as Lead in pipeline if commercial buying intent is detected!
                 if eval_res.is_lead:
                     try:
-                        crm_acc = linkedin_bot.auto_convert_linkedin_dm_to_crm_lead(
+                        captured_lead = linkedin_bot.capture_linkedin_dm_as_lead(
                             db=db,
                             account=row,
                             conversation_id=tid,
@@ -1178,8 +1621,6 @@ async def get_linkedin_conversations(
                             last_message=last_msg,
                             eval_res=eval_res,
                         )
-                        if crm_acc:
-                            c["crm_account_id"] = crm_acc.Id
                     except Exception as auto_err:
                         logger.warning("Auto-capture DM lead error: %s", auto_err)
 
@@ -1223,6 +1664,23 @@ async def get_linkedin_conversation_messages(
         # Check thread messages for commercial buying intent and auto-capture if found
         from ..services.intent_detector import LeadIntentEvaluator
         for m in messages:
+            if not m.get("is_self"):
+                # Enrich profile URL on customer if message turn contains profile URL
+                sender_url = m.get("sender_profile_url")
+                if sender_url:
+                    existing_conv = db.query(LeadConversation).filter(
+                        LeadConversation.ClientId == company_id,
+                        LeadConversation.Channel == "linkedin",
+                        LeadConversation.ExternalThreadId == str(conversation_urn_id),
+                        LeadConversation.IsDeleted == False,
+                    ).first()
+                    if existing_conv and existing_conv.CustomerId:
+                        cust = db.get(LeadCustomer, existing_conv.CustomerId)
+                        if cust and (not cust.LinkedinProfileUrl or ("ACoAA" in cust.LinkedinProfileUrl and "ACoAA" not in sender_url)):
+                            cust.LinkedinProfileUrl = sender_url
+                            cust.UpdatedAt = utcnow()
+                            db.commit()
+
             if not m.get("is_self") and m.get("text"):
                 eval_res = LeadIntentEvaluator.evaluate_text(m["text"], use_llm_fallback=False)
                 if eval_res.is_lead:

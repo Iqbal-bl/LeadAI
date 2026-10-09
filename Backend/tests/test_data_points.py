@@ -158,6 +158,23 @@ def test_a_date_data_point_tells_the_model_what_today_actually_is():
     assert f"Today's actual date is {today}" in instruction
 
 
+def test_the_date_note_names_todays_weekday_so_a_bare_day_name_resolves_correctly():
+    """Production bug: a customer said just "Sunday" (no date) for a site
+    visit, and it came back as a Thursday. Giving only the ISO date forces
+    the model to work out what weekday that is before counting forward to
+    "next Sunday" — exactly the arithmetic it got wrong. Naming the weekday
+    removes that step; the instruction also says explicitly to resolve a
+    bare day name to its NEXT upcoming occurrence."""
+    import datetime as _dt
+
+    dp_date = models.LeadCompanyDataPoint(ClientId="c", Key="visit_date", Label="Site Visit Date",
+                                          DataType="date")
+    instruction = ai_engine._data_points_instruction([dp_date])
+    today = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=5, minutes=30)))
+    assert f"({today.strftime('%A')})" in instruction
+    assert "NEXT upcoming occurrence" in instruction
+
+
 def test_no_date_note_when_no_data_point_is_a_date():
     dp_text = models.LeadCompanyDataPoint(ClientId="c", Key="notes", Label="Notes", DataType="text")
     instruction = ai_engine._data_points_instruction([dp_text])

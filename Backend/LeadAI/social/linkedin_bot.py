@@ -218,16 +218,31 @@ async def generate_search_keywords(prompt: str) -> str:
     except Exception as exc:
         logger.warning("LLM keyword generation failed: %s", exc)
     
-    # Fallback to exact phrase
-    return f'"{prompt}"'
+    # Fallback to plain prompt without quotes
+    return prompt.strip()
 
 
 async def search_profiles_api(account, keywords: str, limit: int = 15) -> List[dict]:
-    """Perform people search on LinkedIn using the unofficial api wrapper."""
+    """Perform people search on LinkedIn using the unofficial api wrapper with Voyager query sanitization."""
     api = get_linkedin_client(account)
     
+    def _clean(q: str) -> str:
+        if not q:
+            return ""
+        # Strip parentheses, quotes, brackets, and commas which break Rest.li URL serialization
+        s = re.sub(r'[\(\)\[\]"\'\`,]', ' ', q)
+        return re.sub(r'\s+', ' ', s).strip()
+
     def _search():
-        results = api.search_people(keywords=keywords, limit=limit, include_private_profiles=True)
+        clean_kw = _clean(keywords)
+        results = api.search_people(keywords=clean_kw, limit=limit, include_private_profiles=True)
+        
+        # If no results found with compound query, fallback to the primary keyword
+        if not results and clean_kw:
+            terms = [t.strip() for t in re.split(r'\s+OR\s+|\s+AND\s+', clean_kw, flags=re.IGNORECASE) if t.strip()]
+            if len(terms) > 1 and terms[0]:
+                results = api.search_people(keywords=terms[0], limit=limit, include_private_profiles=True)
+
         profiles = []
         for r in results:
             urn_id = r.get("urn_id")
@@ -242,8 +257,9 @@ async def search_profiles_api(account, keywords: str, limit: int = 15) -> List[d
                     "name": name,
                     "headline": headline,
                     "location": location,
+                    "profile_url": f"https://www.linkedin.com/in/{urn_id}",
                 })
-        return profiles
+        return profiles[:limit] if limit and limit > 0 else profiles
 
     return await asyncio.to_thread(_search)
 
@@ -407,6 +423,20 @@ async def fetch_received_invitations_api(account, limit: int = 50) -> list[dict]
 
 
 
+def normalize_contact_name(name: Optional[str]) -> str:
+    """Normalize a LinkedIn contact name by removing badges, degrees, and extra whitespace.
+    E.g. 'Pratik Raj Singh Verified Profile 3rd+' -> 'Pratik Raj Singh'
+         'Vanshika Verma  1st' -> 'Vanshika Verma'
+    """
+    import re
+    if not name:
+        return ""
+    cleaned = re.sub(r'(?i)\b(verified\s+profile|1st|2nd|3rd\+?)\b', '', name)
+    cleaned = re.sub(r'[\(\[\{].*?[\)\]\}]', '', cleaned)
+    cleaned = re.sub(r'[•·|].*$', '', cleaned)
+    return " ".join(cleaned.split()).strip()
+
+
 def find_or_link_linkedin_customer(
     db,
     client_id: str,
@@ -418,7 +448,7 @@ def find_or_link_linkedin_customer(
     conversation_id: Optional[str] = None,
     created_by: str = "linkedin_bot",
 ) -> tuple[Any, Any]:
-    """Find an existing LeadCustomer across URNs, member tokens, profile URLs, and threads.
+    """Find an existing LeadCustomer across URNs, member tokens, profile URLs, threads, and clean name.
     
     If found, ensures the new URN/token is linked to the SAME customer in LeadChannelIdentity,
     preventing duplicate customer records across DMs, Connection Requests, and Comments.
@@ -432,6 +462,7 @@ def find_or_link_linkedin_customer(
     urn_token = extract_linkedin_token(sender_urn)
     slug = public_id or extract_linkedin_slug(profile_url)
     display_name = (display_name or "LinkedIn Member").strip()
+    clean_name = normalize_contact_name(display_name)
 
     identity = None
     customer = None
@@ -487,9 +518,22 @@ def find_or_link_linkedin_customer(
         if db_conv_existing and db_conv_existing.CustomerId:
             customer = db.get(LeadCustomer, db_conv_existing.CustomerId)
 
-    # 5. If customer found: ensure this specific sender_urn is linked in LeadChannelIdentity
+    # 4.5 Match by normalized contact name (prevents duplicate customer rows for same person)
+    if not customer and clean_name and clean_name.lower() not in ("linkedin member", "unknown", "customer", ""):
+        candidates = db.query(LeadCustomer).filter(
+            LeadCustomer.ClientId == client_id,
+            LeadCustomer.IsDeleted == False
+        ).order_by(LeadCustomer.CreatedAt.desc()).all()
+        for cand in candidates:
+            cand_clean = normalize_contact_name(cand.DisplayName or "")
+            if cand_clean and cand_clean.lower() == clean_name.lower():
+                customer = cand
+                break
+
+    # 5. If customer found: link identity and maintain/upgrade profile URL
+    is_dummy_thread = str(sender_urn).startswith("li_conv-") if sender_urn else True
     if customer:
-        if sender_urn:
+        if sender_urn and not is_dummy_thread:
             exact_ident = db.query(LeadChannelIdentity).filter(
                 LeadChannelIdentity.ClientId == client_id,
                 LeadChannelIdentity.Channel == "linkedin",
@@ -503,39 +547,69 @@ def find_or_link_linkedin_customer(
                     Channel="linkedin",
                     ExternalUserId=str(sender_urn),
                     CustomerId=customer.Id,
-                    ProfileName=display_name or customer.DisplayName,
+                    ProfileName=clean_name or customer.DisplayName,
                     CreatedBy=created_by,
                 )
                 db.add(exact_ident)
                 db.flush()
             identity = exact_ident
 
-        # Upgrade profile URL on customer if incoming is vanity slug
-        if profile_url and (not customer.LinkedinProfileUrl or "ACoAA" in customer.LinkedinProfileUrl):
-            customer.LinkedinProfileUrl = profile_url
-            customer.UpdatedAt = utcnow()
+        # Prefer clean vanity profile URL over empty or internal ACoAA hash
+        if profile_url and profile_url.strip():
+            current_url = customer.LinkedinProfileUrl or ""
+            # If current has nothing, or current is an ACoAA hash and incoming is a vanity URL:
+            if not current_url or ("ACoAA" in current_url and "ACoAA" not in profile_url):
+                customer.LinkedinProfileUrl = profile_url
+                customer.UpdatedAt = utcnow()
+        
+        # If customer still has no profile URL, look for any prior record with a profile URL for this person
+        if not customer.LinkedinProfileUrl and clean_name:
+            prior_donors = db.query(LeadCustomer).filter(
+                LeadCustomer.ClientId == client_id,
+                LeadCustomer.LinkedinProfileUrl.isnot(None),
+                LeadCustomer.LinkedinProfileUrl != "",
+            ).all()
+            for d in prior_donors:
+                if normalize_contact_name(d.DisplayName or "").lower() == clean_name.lower():
+                    customer.LinkedinProfileUrl = d.LinkedinProfileUrl
+                    customer.UpdatedAt = utcnow()
+                    break
+
         return customer, identity
 
     # 6. If brand new: create LeadCustomer + LeadChannelIdentity
+    # Check if any prior customer record has the LinkedIn URL to avoid starting blank
+    final_url = profile_url
+    if not final_url and clean_name:
+        prior_donors = db.query(LeadCustomer).filter(
+            LeadCustomer.ClientId == client_id,
+            LeadCustomer.LinkedinProfileUrl.isnot(None),
+            LeadCustomer.LinkedinProfileUrl != "",
+        ).all()
+        for d in prior_donors:
+            if normalize_contact_name(d.DisplayName or "").lower() == clean_name.lower():
+                final_url = d.LinkedinProfileUrl
+                break
+
     customer = LeadCustomer(
         ClientId=client_id,
         PublicRef=f"Lead #{random.randint(10000, 99999)}",
-        DisplayName=display_name,
-        LinkedinProfileUrl=profile_url,
+        DisplayName=clean_name or display_name,
+        LinkedinProfileUrl=final_url,
         PhoneEnc=encrypt_pii(None),
         CreatedBy=created_by,
     )
     db.add(customer)
     db.flush()
 
-    if sender_urn:
+    if sender_urn and not is_dummy_thread:
         identity = LeadChannelIdentity(
             ClientId=client_id,
             ChannelAccountId=channel_account_id,
             Channel="linkedin",
             ExternalUserId=str(sender_urn),
             CustomerId=customer.Id,
-            ProfileName=display_name,
+            ProfileName=clean_name or display_name,
             CreatedBy=created_by,
         )
         db.add(identity)
@@ -591,17 +665,48 @@ def reply_invitation_api(
                 display_name, sender_urn, profile_url
             )
 
-        from ..services import crm as crm_service
-        crm_service.create_account(
-            db, account.ClientId,
-            display_name=display_name,
-            stage="lead",
-            source="linkedin_invitation",
-            customer_id=customer.Id if customer else (identity.CustomerId if identity else None),
-            linkedin_profile_url=profile_url,
-            tags="linkedin,connection_accepted,auto_captured",
-            actor="linkedin_invite_ai"
-        )
+        # Create or link Conversation & Lead in pipeline (without prematurely creating a Customer Account)
+        from ..models import LeadConversation, Lead
+        target_cust_id = customer.Id if customer else (identity.CustomerId if identity else None)
+        db_conv = None
+        if target_cust_id:
+            db_conv = db.query(LeadConversation).filter(
+                LeadConversation.ClientId == account.ClientId,
+                LeadConversation.Channel == "linkedin",
+                LeadConversation.CustomerId == target_cust_id,
+                LeadConversation.IsDeleted == False,
+            ).first()
+
+        if not db_conv and target_cust_id:
+            db_conv = LeadConversation(
+                ClientId=account.ClientId,
+                CustomerId=target_cust_id,
+                Channel="linkedin",
+                Status="open",
+                ChannelAccountId=account.Id,
+                ExternalThreadId=str(sender_urn or public_id or target_cust_id),
+                Summary=f"Accepted LinkedIn connection request from {display_name}",
+                LastMessageAt=utcnow(),
+            )
+            db.add(db_conv)
+            db.flush()
+
+        if db_conv:
+            db_lead = db.query(Lead).filter(
+                Lead.ConversationId == db_conv.Id,
+                Lead.IsDeleted == False,
+            ).first()
+            if not db_lead:
+                db_lead = Lead(
+                    ClientId=account.ClientId,
+                    ConversationId=db_conv.Id,
+                    Status="warm",
+                    Score=50,
+                    Intent="networking",
+                    Interest="LinkedIn Connection",
+                    CreatedBy="linkedin_invite_ai",
+                )
+                db.add(db_lead)
         db.commit()
 
         # Send welcome message if configured
@@ -683,6 +788,8 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
 
                 accepted_count += 1
                 logger.info("Accepted LinkedIn invitation from %s (%s)", display_name, sender_urn)
+                
+                profile_url = f"https://www.linkedin.com/in/{public_id}" if public_id else None
 
                 # Find or create identity & customer on accepted connection via unified resolver
                 customer, identity = find_or_link_linkedin_customer(
@@ -706,23 +813,54 @@ def process_pending_invitations(db, account) -> tuple[int, int]:
                         display_name, sender_urn, profile_url
                     )
 
-                from ..services import crm as crm_service
                 headline = parsed.get("headline") or ""
                 note = parsed.get("message") or ""
-                crm_service.create_account(
-                    db, account.ClientId,
-                    display_name=display_name,
-                    stage="lead",
-                    source="linkedin_invitation",
-                    customer_id=customer.Id if customer else (identity.CustomerId if identity else None),
-                    linkedin_profile_url=profile_url,
-                    company_name=headline[:100] if headline else None,
-                    tags="linkedin,connection_accepted,auto_captured" + (",has_note" if note else ""),
-                    fields={"headline": headline, "invitation_note": note, "sender_urn": sender_urn},
-                    actor="linkedin_invite_ai"
-                )
+
+                # Create or link Conversation & Lead in pipeline (without prematurely creating a Customer Account)
+                from ..models import LeadConversation, Lead
+                target_cust_id = customer.Id if customer else (identity.CustomerId if identity else None)
+                db_conv = None
+                if target_cust_id:
+                    db_conv = db.query(LeadConversation).filter(
+                        LeadConversation.ClientId == account.ClientId,
+                        LeadConversation.Channel == "linkedin",
+                        LeadConversation.CustomerId == target_cust_id,
+                        LeadConversation.IsDeleted == False,
+                    ).first()
+
+                if not db_conv and target_cust_id:
+                    db_conv = LeadConversation(
+                        ClientId=account.ClientId,
+                        CustomerId=target_cust_id,
+                        Channel="linkedin",
+                        Status="open",
+                        ChannelAccountId=account.Id,
+                        ExternalThreadId=str(sender_urn or public_id or target_cust_id),
+                        Summary=note[:500] if note else f"Accepted connection request from {display_name}",
+                        LastMessageAt=utcnow(),
+                    )
+                    db.add(db_conv)
+                    db.flush()
+
+                if db_conv:
+                    db_lead = db.query(Lead).filter(
+                        Lead.ConversationId == db_conv.Id,
+                        Lead.IsDeleted == False,
+                    ).first()
+                    if not db_lead:
+                        db_lead = Lead(
+                            ClientId=account.ClientId,
+                            ConversationId=db_conv.Id,
+                            Status="warm",
+                            Score=50,
+                            Intent="networking",
+                            Interest="LinkedIn Connection",
+                            Product=headline[:200] if headline else "unknown",
+                            CreatedBy="linkedin_invite_ai",
+                        )
+                        db.add(db_lead)
                 db.commit()
-                logger.info("Captured accepted LinkedIn connection as CRM lead: %s (%s)", display_name, sender_urn)
+                logger.info("Captured accepted LinkedIn connection as Lead in pipeline: %s (%s)", display_name, sender_urn)
 
                 # Send welcome message if configured
                 if welcome_message:
@@ -1241,6 +1379,7 @@ def _parse_graphql_conversations_payload(data: dict) -> list[dict]:
                 "contact_headline": other_p.get("headline", "") if other_p else "",
                 "contact_public_id": other_p.get("public_id", "") if other_p else "",
                 "contact_urn": other_p.get("urn", "") if other_p else "",
+                "profile_url": other_p.get("profile_url", "") if other_p else "",
                 "contact_avatar": other_p.get("picture_url") if other_p else None,
                 "participants": participants,
                 "last_message": last_msg,
@@ -1855,7 +1994,7 @@ async def send_conversation_message_api(account, conversation_urn_id: str, messa
             raise RuntimeError(f"Failed to dispatch message: {str(exc)}")
 
 
-def auto_convert_linkedin_dm_to_crm_lead(
+def capture_linkedin_dm_as_lead(
     db,
     account,
     conversation_id: str,
@@ -1866,21 +2005,20 @@ def auto_convert_linkedin_dm_to_crm_lead(
     last_message: Optional[str] = None,
     eval_res: Optional[Any] = None,
 ) -> Optional[Any]:
-    """Auto-captures a qualified LinkedIn DM / InMail with commercial buying intent into CRM Customers.
+    """Captures a qualified LinkedIn DM / InMail with commercial buying intent into CRM Leads pipeline.
     
-    Idempotent by design: if an account for this customer already exists, it updates metadata
-    and returns the existing account without creating duplicates.
+    Stores strictly as an unconverted Lead in leadai_leads.
+    Does NOT create a customer account in leadai_accounts; leaves conversion to management.
     """
-    from ..models import LeadCustomer, LeadConversation, Lead, LeadAccount, utcnow
+    from ..models import LeadCustomer, LeadConversation, Lead, utcnow
     from ..models_ext import LeadChannelIdentity
     from ..security import encrypt_pii
-    from ..services import crm as crm_service
     from ..services.intent_detector import LeadIntentEvaluator
 
     # Check settings: is auto_dm_leads enabled for this account?
     meta = account.MetaJson or {}
     if not meta.get("linkedin_auto_dm_leads", True):
-        logger.debug("LinkedIn auto DM leads conversion is disabled in settings; skipping CRM capture.")
+        logger.debug("LinkedIn auto DM leads capture is disabled in settings; skipping capture.")
         return None
 
     if not eval_res or not eval_res.is_lead:
@@ -1917,13 +2055,24 @@ def auto_convert_linkedin_dm_to_crm_lead(
             profile_url, customer.Id, effective_contact_name
         )
 
-    # 2. Find or create LeadConversation
-    db_conv = db.query(LeadConversation).filter(
-        LeadConversation.ClientId == account.ClientId,
-        LeadConversation.Channel == "linkedin",
-        LeadConversation.ExternalThreadId == str(conversation_id),
-        LeadConversation.IsDeleted == False,
-    ).first()
+    # 2. Find or create LeadConversation (with strict single-lead-per-person deduplication)
+    db_conv = None
+    if conversation_id and not str(conversation_id).startswith("conv-"):
+        db_conv = db.query(LeadConversation).filter(
+            LeadConversation.ClientId == account.ClientId,
+            LeadConversation.Channel == "linkedin",
+            LeadConversation.ExternalThreadId == str(conversation_id),
+            LeadConversation.IsDeleted == False,
+        ).first()
+
+    # Deduplication: check if an active conversation already exists for this customer in LinkedIn channel
+    if not db_conv and customer:
+        db_conv = db.query(LeadConversation).filter(
+            LeadConversation.ClientId == account.ClientId,
+            LeadConversation.Channel == "linkedin",
+            LeadConversation.CustomerId == customer.Id,
+            LeadConversation.IsDeleted == False,
+        ).order_by(LeadConversation.CreatedAt.desc()).first()
 
     if not db_conv:
         db_conv = LeadConversation(
@@ -1939,36 +2088,16 @@ def auto_convert_linkedin_dm_to_crm_lead(
         db.add(db_conv)
         db.flush()
     else:
+        # Existing conversation found for this customer: reuse and update!
+        if customer and db_conv.CustomerId != customer.Id:
+            db_conv.CustomerId = customer.Id
+        if conversation_id and not str(conversation_id).startswith("conv-"):
+            db_conv.ExternalThreadId = str(conversation_id)
         if last_message:
             db_conv.Summary = last_message[:500]
         db_conv.LastMessageAt = utcnow()
 
-    # 3. Create or return LeadAccount in CRM
-    crm_lead = crm_service.create_account(
-        db,
-        account.ClientId,
-        display_name=effective_contact_name,
-        stage="lead",
-        source="linkedin_dm",
-        customer_id=customer.Id if customer else None,
-        linkedin_profile_url=profile_url or (customer.LinkedinProfileUrl if customer else None),
-        tags=f"linkedin,dm_lead,{eval_res.category}," + ",".join(eval_res.signals),
-        fields={
-            "intent_score": eval_res.score,
-            "intent_category": eval_res.category,
-            "intent_signals": eval_res.signals,
-            "conversation_id": conversation_id,
-            "last_message": last_message,
-            "rationale": eval_res.rationale,
-        },
-        actor="linkedin_dm_ai",
-    )
-
-    if profile_url and not crm_lead.LinkedinProfileUrl:
-        crm_lead.LinkedinProfileUrl = profile_url
-        crm_lead.UpdatedAt = utcnow()
-
-    # 4. Link or update Lead in leadai_leads
+    # 3. Create or update Lead in leadai_leads (WITHOUT creating LeadAccount)
     db_lead = db.query(Lead).filter(
         Lead.ConversationId == db_conv.Id,
         Lead.IsDeleted == False,
@@ -1991,21 +2120,28 @@ def auto_convert_linkedin_dm_to_crm_lead(
         "rationale": eval_res.rationale,
         "evaluated_at": utcnow().isoformat(),
     }
-    db_lead.ConvertedAccountId = crm_lead.Id
-    db_lead.ConvertedAt = utcnow()
-    db_lead.UpdatedAt = utcnow()
+    db_lead.Interest = "LinkedIn Inbound DM"
+    if last_message and not db_lead.FactsJson:
+        db_lead.FactsJson = [f"Initial message: {last_message[:200]}"]
 
-    if not crm_lead.SourceConversationId:
-        crm_lead.SourceConversationId = db_conv.Id
-    if not crm_lead.SourceLeadId:
-        crm_lead.SourceLeadId = db_lead.Id
+    # Keep ConvertedAccountId and ConvertedAt NULL until explicit conversion by manager/admin!
+    # If the lead was not already converted, ensure they stay None.
+    if not db_lead.ConvertedAccountId:
+        db_lead.ConvertedAccountId = None
+        db_lead.ConvertedAt = None
+
+    db_lead.UpdatedAt = utcnow()
 
     db.commit()
     logger.info(
-        "Auto-converted LinkedIn DM to CRM Customer Lead: %s (%s) - Intent: %s (score=%.2f)",
-        effective_contact_name, crm_lead.Id, eval_res.category, eval_res.score
+        "Captured LinkedIn DM as Lead in pipeline: %s (%s) - Intent: %s (score=%.2f)",
+        effective_contact_name, db_lead.Id, eval_res.category, eval_res.score
     )
-    return crm_lead
+    return db_lead
+
+
+# Backward-compatible alias
+auto_convert_linkedin_dm_to_crm_lead = capture_linkedin_dm_as_lead
 
 
 async def sync_linkedin_conversations(db, account) -> dict:
@@ -2171,9 +2307,10 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
     Enforces strict process isolation from messaging/InMail to prevent session contention and detection.
     """
     from ..models_blog import LeadSocialComment, LeadCommentSettings, LeadArticle
+    from ..models_social import LeadSocialPost
     from ..services.comment_reply_ai import CommentReplyAIService
 
-    limit_posts = min(max(1, limit_posts), 2)
+    limit_posts = min(max(1, limit_posts), 5)
 
     cookie = decrypt_pii(account.LinkedinCookieEnc) if account.LinkedinCookieEnc else None
     if not cookie and not (account.LinkedinUsernameEnc and account.LinkedinPasswordEnc):
@@ -2205,38 +2342,68 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                     except Exception as feed_err:
                         logger.debug("Initial feed load notice: %s", feed_err)
 
-                # 1. Discover posts to scan (minimal & light to avoid detection)
+                # 1. Discover posts to scan — Prioritize LIVE posts from user's LinkedIn profile activity feed
                 posts_to_scan = []
                 existing_urns = set()
 
-                # Correlate first with published DB articles
-                db_articles = db.query(LeadArticle).filter(
-                    LeadArticle.ClientId == account.ClientId,
-                    LeadArticle.LinkedInPostId != None,
-                    LeadArticle.IsDeleted == False
-                ).order_by(LeadArticle.CreatedAt.desc()).limit(limit_posts).all()
+                activity_urls = []
 
-                for art in db_articles:
-                    if art.LinkedInPostId and (art.LinkedInPostId.startswith("urn:li:activity:") or art.LinkedInPostId.startswith("urn:li:ugcPost:")):
-                        if art.LinkedInPostId not in existing_urns and len(posts_to_scan) < limit_posts:
-                            posts_to_scan.append({
-                                "post_urn": art.LinkedInPostId,
-                                "post_url": f"https://www.linkedin.com/feed/update/{art.LinkedInPostId}/",
-                                "title": art.Title,
-                                "article_id": art.Id,
-                            })
-                            existing_urns.add(art.LinkedInPostId)
+                # A. Check if profile_url is cached in account.MetaJson
+                meta = account.MetaJson or {}
+                cached_profile = meta.get("profile_url")
+                if cached_profile:
+                    clean_cached = cached_profile.split("?")[0].rstrip("/")
+                    activity_urls.append(f"{clean_cached}/recent-activity/all/")
+                    activity_urls.append(f"{clean_cached}/recent-activity/posts/")
 
-                # If needed, check ONLY the notifications tab (never spam 5 URLs)
-                if len(posts_to_scan) < limit_posts:
+                # B. If not cached, extract profile vanity URL dynamically from feed or current page
+                if not activity_urls:
                     try:
-                        await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/notifications/", wait_until="domcontentloaded", timeout=15000)
-                        await asyncio.sleep(1.5)
+                        detected_profile_url = await safe_evaluate(page, '''() => {
+                            const sel = document.querySelector('.feed-identity-module a[href*="/in/"]');
+                            if (sel && sel.href) return sel.href;
+                            const allInLinks = Array.from(document.querySelectorAll('a[href*="/in/"]'));
+                            for (const a of allInLinks) {
+                                if (a.href && a.href.includes('/in/') && !a.href.includes('/feed') && !a.href.includes('/company/')) {
+                                    return a.href;
+                                }
+                            }
+                            return null;
+                        }''')
+                        if detected_profile_url:
+                            clean_profile = detected_profile_url.split("?")[0].rstrip("/")
+                            activity_urls.append(f"{clean_profile}/recent-activity/all/")
+                            activity_urls.append(f"{clean_profile}/recent-activity/posts/")
+                            try:
+                                if meta.get("profile_url") != clean_profile:
+                                    meta["profile_url"] = clean_profile
+                                    account.MetaJson = meta
+                                    db.commit()
+                            except Exception:
+                                pass
+                    except Exception as detect_err:
+                        logger.debug("Profile URL detection notice: %s", detect_err)
+
+                # Scan user's live activity feed for their actual posts
+                for act_url in activity_urls:
+                    if len(posts_to_scan) >= limit_posts:
+                        break
+                    try:
+                        logger.info("[LinkedIn Safe Scan] Navigating to user live activity feed: %s", act_url)
+                        await _browser_manager.navigate_with_session(page, account, act_url, wait_until="domcontentloaded", timeout=15000)
+                        # Natural human scroll to trigger lazy loading of post cards
+                        await safe_evaluate(page, "() => window.scrollBy(0, 500)")
+                        await asyncio.sleep(2.0)
 
                         activity_urns = await safe_evaluate(page, '''() => {
                             const urns = [];
                             const seen = new Set();
-                            const items = document.querySelectorAll('.feed-shared-update-v2, [data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-id*="urn:li:activity"], .nt-card');
+                            const items = document.querySelectorAll(
+                                '.feed-shared-update-v2, .profile-creator-shared-feed-update__container, ' +
+                                '[data-urn*="urn:li:activity"], [data-urn*="urn:li:ugcPost"], [data-urn*="urn:li:share"], ' +
+                                '[data-id*="urn:li:activity"], [data-id*="urn:li:ugcPost"], [data-id*="urn:li:share"], ' +
+                                'div[data-view-name*="feed"], .nt-card'
+                            );
                             items.forEach(el => {
                                 const u = el.getAttribute('data-urn') || el.getAttribute('data-id') || el.getAttribute('data-activity-urn') || '';
                                 const match = u.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
@@ -2245,7 +2412,10 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                     urns.push(match[0]);
                                 }
                             });
-                            const links = document.querySelectorAll('a[href*="/feed/update/"], a[href*="activity:"], .nt-card__headline');
+                            const links = document.querySelectorAll(
+                                'a[href*="/feed/update/"], a[href*="/analytics/post-summary/"], ' +
+                                'a[href*="activity:"], a[href*="ugcPost:"], a[href*="share:"], .nt-card__headline'
+                            );
                             links.forEach(l => {
                                 const href = l.href || '';
                                 const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
@@ -2260,6 +2430,49 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         for act_urn in (activity_urns or []):
                             if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
                                 p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
+                                
+                                # Correlate with database records if matched
+                                linked_art = db.query(LeadArticle).filter(
+                                    LeadArticle.ClientId == account.ClientId,
+                                    LeadArticle.LinkedInPostId == act_urn,
+                                    LeadArticle.IsDeleted == False
+                                ).first()
+
+                                posts_to_scan.append({
+                                    "post_urn": act_urn,
+                                    "post_url": p_url,
+                                    "title": linked_art.Title if linked_art else None,
+                                    "article_id": linked_art.Id if linked_art else None,
+                                })
+                                existing_urns.add(act_urn)
+
+                        if posts_to_scan:
+                            break
+                    except Exception as tab_err:
+                        logger.debug("Checking live activity tab notice: %s", tab_err)
+
+                # Fallback: check notifications tab or DB only if ZERO live posts were found on the profile
+                if not posts_to_scan:
+                    try:
+                        await _browser_manager.navigate_with_session(page, account, "https://www.linkedin.com/notifications/", wait_until="domcontentloaded", timeout=12000)
+                        await asyncio.sleep(1.2)
+                        notif_urns = await safe_evaluate(page, '''() => {
+                            const urns = [];
+                            const seen = new Set();
+                            const links = document.querySelectorAll('a[href*="/feed/update/"], a[href*="activity:"]');
+                            links.forEach(l => {
+                                const href = l.href || '';
+                                const match = href.match(/urn:li:(activity|ugcPost|share):[0-9]+/);
+                                if (match && !seen.has(match[0])) {
+                                    seen.add(match[0]);
+                                    urns.push(match[0]);
+                                }
+                            });
+                            return urns;
+                        }''', fallback=[])
+                        for act_urn in (notif_urns or []):
+                            if act_urn not in existing_urns and len(posts_to_scan) < limit_posts:
+                                p_url = f"https://www.linkedin.com/feed/update/{act_urn}/" if not act_urn.startswith("http") else act_urn
                                 posts_to_scan.append({
                                     "post_urn": act_urn,
                                     "post_url": p_url,
@@ -2267,8 +2480,8 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                                     "article_id": None,
                                 })
                                 existing_urns.add(act_urn)
-                    except Exception as tab_err:
-                        logger.debug("Checking notifications notice: %s", tab_err)
+                    except Exception:
+                        pass
 
                 logger.info("[LinkedIn Safe Scan] Found %d post(s) to scan for comments", len(posts_to_scan))
 
@@ -2304,6 +2517,14 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                         # Natural human scroll into comments section to trigger lazy loading
                         await safe_evaluate(page, "() => window.scrollBy(0, 600)")
                         await asyncio.sleep(1.0)
+
+                        # Extract post text / commentary if available
+                        dom_post_text = await safe_evaluate(page, '''() => {
+                            const body = document.querySelector('.feed-shared-update-v2__description, .update-components-text, .feed-shared-text, [data-test-id="main-feed-activity-card__commentary"]');
+                            return body ? (body.innerText || '').trim() : '';
+                        }''', fallback="")
+                        if dom_post_text and not post_text:
+                            post_text = dom_post_text
                     
                         # 1. Switch comment filter dropdown from 'Most relevant' to 'All comments' / 'Most recent' if present
                         await safe_evaluate(page, '''() => {
@@ -2521,6 +2742,15 @@ async def fetch_recent_posts_and_comments_browser(db, account, limit_posts: int 
                 if linked_article:
                     article_id = linked_article.Id
                     post_title = linked_article.Title
+                else:
+                    linked_sp = db.query(LeadSocialPost).filter(
+                        LeadSocialPost.ClientId == account.ClientId,
+                        LeadSocialPost.LinkedInPostId == post_urn
+                    ).first()
+                    if linked_sp:
+                        post_title = (linked_sp.Caption or "")[:120] if linked_sp.Caption else post_title
+                        if not post_snippet:
+                            post_snippet = linked_sp.Caption or ""
 
             for c_data in p_data.get("comments", []):
                 c_urn = c_data["comment_urn"]

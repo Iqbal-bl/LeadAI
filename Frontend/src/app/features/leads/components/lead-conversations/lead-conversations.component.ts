@@ -315,6 +315,7 @@ export class LeadConversationsComponent implements OnChanges {
 
   private computeIsCustomer(msg: any): boolean {
     if (!msg) return false;
+    if (msg.isCustomer === true) return true;
     const sender = (msg.sender || '').toLowerCase().trim();
     const type = (msg.type || '').toLowerCase().trim();
     const role = (msg.role || '').toLowerCase().trim();

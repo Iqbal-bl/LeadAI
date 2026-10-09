@@ -22,6 +22,7 @@ export class CustomerDetailComponent implements OnInit {
   revealedPhone: string | null = null;
   revealedEmail: string | null = null;
   revealedWhatsApp: string | null = null;
+  revealedLinkedIn: string | null = null;
   revealedSocials: any[] = [];
   revealLoading = false;
 
@@ -62,6 +63,7 @@ export class CustomerDetailComponent implements OnInit {
         this.revealedPhone = res.phone;
         this.revealedEmail = res.email;
         this.revealedWhatsApp = res.whatsapp ?? null;
+        this.revealedLinkedIn = res.linkedin ?? res.linkedin_profile_url ?? null;
         this.revealedSocials = res.social_identities ?? [];
         this.revealLoading = false;
         this.messageService.add({
@@ -119,6 +121,30 @@ export class CustomerDetailComponent implements OnInit {
       return `₹${amount}`;
     }
     return `${amount} ${currency}`;
+  }
+
+  getLinkedInDisplay(url: string | null | undefined): string {
+    if (!url) return 'View Profile';
+    const match = url.match(/\/in\/([^\/\?#]+)/);
+    if (match && match[1]) {
+      const slug = match[1];
+      if (slug.includes('ACoAA') || slug.length > 30) {
+        return this.customer?.display_name ? `${this.customer.display_name} (LinkedIn)` : 'View LinkedIn Profile';
+      }
+      return `linkedin.com/in/${slug}`;
+    }
+    return 'View LinkedIn Profile';
+  }
+
+  formatSocialLabel(s: any): string {
+    if (!s) return '';
+    if (s.channel === 'linkedin') {
+      return s.profile_name || s.handle || 'LinkedIn Profile';
+    }
+    if (s.handle) {
+      return s.handle.startsWith('@') ? s.handle : `@${s.handle}`;
+    }
+    return s.profile_name || s.channel;
   }
 
   goBack(): void {

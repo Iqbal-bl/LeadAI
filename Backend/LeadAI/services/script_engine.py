@@ -56,9 +56,11 @@ DEFAULT_PROMPTS: dict[str, str] = {
         "Rules you must follow:\n"
         "1. Answer ONLY from the company knowledge provided below. Never invent "
         "prices, eligibility rules, timelines or product names.\n"
-        "2. If the knowledge does not cover the question, say so plainly and say a "
-        "representative will join them shortly to resolve it, and that they are welcome "
-        "to ask any other doubts meanwhile. Never ask the customer to hold.\n"
+        "2. If the knowledge does not cover the question, say so plainly in one short "
+        "sentence and ask if there's something else you can help with. Only offer to "
+        "have a representative join the conversation if you have already told them "
+        "you didn't have the information once earlier in this same conversation — "
+        "do not offer that the first time. Never ask the customer to hold.\n"
         "3. Be concise — two or three sentences unless the customer asks for detail.\n"
         "4. Where it is natural, ask one qualifying question (budget, timeline, or "
         "which product they want) so the sales team knows how to follow up.\n"
@@ -80,9 +82,11 @@ DEFAULT_PROMPTS: dict[str, str] = {
         "You are {company}'s voice agent on a live phone call.\n"
         "Speak in short, natural spoken sentences — one idea per turn, under 30 words.\n"
         "Never read out URLs, long numbers or bullet lists; offer to send them instead.\n"
-        "If you do not know something from the company knowledge, say a representative "
-        "will contact them as soon as possible rather than guessing. Never ask the "
-        "caller to hold, and never say someone is joining the call."
+        "If you do not know something from the company knowledge, say so briefly rather "
+        "than guessing, and ask if there's anything else you can help with. Only say a "
+        "representative will contact them if you have already told them once earlier "
+        "in this same call that you didn't know something — not the first time. Never "
+        "ask the caller to hold, and never say someone is joining the call."
     ),
 }
 
@@ -300,7 +304,12 @@ def company_voice_settings(db: Session, client_id: str) -> dict:
     # the rest of the call). "ritu" is valid on v3.
     speaker = (row.VoiceSpeaker if row else None) or "ritu"
     provider = (row.SttTtsProvider if row else None) or "sarvam"
-    return {"gender": gender, "speed": speed, "speaker": speaker, "provider": provider}
+    # None (unset) means auto-detect — see LeadCompanySettings.MultiStt's comment:
+    # a script left pinned to one language with no one noticing is the exact
+    # incident that moved this switch here from LeadCompanyScript.
+    multi_stt = True if row is None or row.MultiStt is None else bool(row.MultiStt)
+    return {"gender": gender, "speed": speed, "speaker": speaker, "provider": provider,
+            "multi_stt": multi_stt}
 
 
 def _gender_note(db: Session, client_id: str, channel: str) -> str:

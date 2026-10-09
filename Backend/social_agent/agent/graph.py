@@ -36,7 +36,7 @@ from langgraph.graph import END, StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode
 
 from social_agent.agent.memory import log_llm_input, trim_messages
-from models import get_model
+from social_agent.agent_models import get_model
 
 # Vision mode: attach a Set-of-Mark screenshot (numbered boxes drawn on the
 # real page) after every tool round. Requires a vision-capable model — see

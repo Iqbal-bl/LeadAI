@@ -81,6 +81,8 @@ class ArticleService:
             submitted_at=article.SubmittedAt,
             reviewed_at=article.ReviewedAt,
             target_channels=article.TargetChannels or [],
+            channel_account_id=getattr(article, "ChannelAccountId", None),
+            channel_account_name=getattr(article, "ChannelAccountName", None),
             results=article.Results,
             linkedin_post_id=article.LinkedInPostId,
             facebook_post_id=article.FacebookPostId,
@@ -265,6 +267,8 @@ class ArticleService:
         ).first()
 
         # Run Generator
+        if not req.client_id:
+            req.client_id = client_id
         gen_res = GeneratorService.generate_blog(req)
 
         # Create Article
@@ -284,6 +288,8 @@ class ArticleService:
             RequiresApproval=requires_approval,
             GenerationMode=req.generation_mode or "immediate",
             TargetChannels=channels,
+            ChannelAccountId=req.channel_account_id,
+            ChannelAccountName=req.channel_account_name,
             Status="draft",
             CurrentVersion=1,
             AuthorName=req.author_name or "LeadAI Content Studio",
@@ -381,6 +387,67 @@ class ArticleService:
         return cls._to_response(db, article)
 
     @classmethod
+    def generate_multi_account_blogs(
+        cls,
+        db: Session,
+        client_id: str,
+        req: GenerateBlogRequest,
+        company_name: str = "Your Organization"
+    ) -> List[ArticleResponse]:
+        """
+        Generates uniquely tailored blog variants across all connected LinkedIn accounts
+        (same core topic, distinct angle/perspective/style for each profile),
+        then dispatches approval requests to admin or auto-publishes accordingly.
+        """
+        from ...models_ext import LeadChannelAccount
+
+        # Check for active LinkedIn accounts for this company
+        linkedin_accounts = (
+            db.query(LeadChannelAccount)
+            .filter(
+                LeadChannelAccount.ClientId == client_id,
+                LeadChannelAccount.Channel == "linkedin",
+                LeadChannelAccount.IsDeleted == False,
+            )
+            .all()
+        )
+
+        target_channels = req.target_channels or []
+        is_linkedin_target = (not target_channels) or any(c.lower() == "linkedin" for c in target_channels)
+
+        # If only 1 account or non-LinkedIn target or specific account already chosen: generate standard article
+        if len(linkedin_accounts) <= 1 or not is_linkedin_target or req.channel_account_id:
+            return [cls.generate_and_save(db, client_id, req, company_name)]
+
+        angles = [
+            "Strategic Thought Leadership: Executive vision, industry paradigm shifts, and macroeconomic impact",
+            "Practical Execution: Tactical workflows, practitioner frameworks, and step-by-step methodologies",
+            "Technical Deep-Dive: Architecture, toolchains, implementation benchmarks, and edge cases",
+            "Culture & Leadership: Team enablement, organizational change, and talent strategies",
+        ]
+
+        created_articles: List[ArticleResponse] = []
+        for idx, acc in enumerate(linkedin_accounts):
+            acc_name = acc.Name or f"LinkedIn Profile {idx + 1}"
+            selected_angle = angles[idx % len(angles)] + f" (Tailored for {acc_name})"
+
+            account_req = req.model_copy(deep=True)
+            account_req.channel_account_id = acc.Id
+            account_req.channel_account_name = acc_name
+            account_req.author_name = acc_name
+            account_req.variant_angle = selected_angle
+
+            art_resp = cls.generate_and_save(
+                db=db,
+                client_id=client_id,
+                req=account_req,
+                company_name=company_name
+            )
+            created_articles.append(art_resp)
+
+        return created_articles
+
+    @classmethod
     def review_article(
         cls,
         db: Session,
@@ -393,6 +460,15 @@ class ArticleService:
         article = cls.get_article(db, client_id, article_id)
         if not article:
             raise ValueError(f"Article {article_id} not found.")
+
+        # Locked state guard: once an article is published live, no further editorial actions are permitted
+        if article.Status == "published":
+            logger.info(
+                "[ArticleService.review_article] Article %s is already published live. Action '%s' ignored.",
+                article_id,
+                req.action,
+            )
+            return cls._to_response(db, article)
 
         now = datetime.now(timezone.utc)
 

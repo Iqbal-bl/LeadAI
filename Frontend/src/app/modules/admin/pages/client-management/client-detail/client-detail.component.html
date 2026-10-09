@@ -122,7 +122,7 @@
       >
     </div>
 
-    <div class="card-base p-4">
+    <!-- <div class="card-base p-4">
       <div class="flex items-center justify-between mb-1">
         <span
           class="text-xs font-semibold uppercase tracking-wider"
@@ -652,6 +652,25 @@
             Sarvam.</span
           >
         </div>
+      </div>
+
+      <!-- Auto-detect caller language (applies to both Sarvam and Deepgram) -->
+      <div
+        class="flex items-center justify-between p-3.5 rounded-lg border"
+        style="border-color: var(--app-border)"
+      >
+        <div class="pr-4">
+          <label class="text-xs font-semibold block" style="color: var(--app-text)">
+            Auto-detect caller language
+          </label>
+          <span class="text-[11px] block" style="color: var(--app-text-muted)">
+            On (default): detects language per utterance, for callers who mix languages
+            (e.g. Hinglish). Off: pins the whole call to one language — only turn this
+            off if you deliberately want a single-language call; leaving it off by
+            accident silently breaks replies in every other language.
+          </span>
+        </div>
+        <p-inputSwitch [(ngModel)]="multiStt"></p-inputSwitch>
       </div>
 
       <!-- Sarvam Voice Persona Controls (Disabled when provider is Deepgram) -->

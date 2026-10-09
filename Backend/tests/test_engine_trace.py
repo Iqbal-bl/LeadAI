@@ -231,6 +231,28 @@ def test_greeting_short_circuit_is_recorded():
     assert steps["greeting"]["decision"].startswith("short-circuit") and "retrieve" not in steps
 
 
+def test_language_switch_short_circuit_is_recorded():
+    """A real incident: a caller's entire turn was "please speak in Hindi" —
+    not a knowledge question, but nothing recognised that, so it ran through
+    retrieval, scored confidence 0.256 (of course — it has nothing to do with
+    the company's products), and the voice pipeline ended the call as a
+    low-confidence handoff. Same fix shape as the greeting short-circuit
+    above: this must never reach retrieval at all."""
+    db, conv, ai, steps = turn("can we talk in hindi", score=0.0)
+    assert steps["language_switch"]["decision"].startswith("short-circuit") and "retrieve" not in steps
+    assert steps["handoff"]["decision"] == "none needed"
+
+
+def test_a_question_that_merely_mentions_a_language_still_goes_through_retrieval():
+    """Distinguishing case: a longer, genuinely substantive question must not
+    be short-circuited just because it happens to mention a language — only a
+    turn that IS JUST the language request should skip retrieval."""
+    db, conv, ai, steps = turn(
+        "what is the price of a 3 BHK and do your advisors also speak Hindi by the way",
+    )
+    assert "language_switch" not in steps and "retrieve" in steps
+
+
 def test_a_stopped_conversation_records_why_the_ai_stayed_silent():
     from LeadAI.engine import control
 

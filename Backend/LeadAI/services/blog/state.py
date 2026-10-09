@@ -4,6 +4,7 @@ from .schemas import EvidenceItem, ImageSpec, Plan
 
 
 class State(TypedDict):
+    client_id: Optional[str]
     topic: str
     tone: Optional[str]
     target_audience: Optional[str]

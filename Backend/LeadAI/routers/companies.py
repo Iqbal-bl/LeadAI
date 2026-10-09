@@ -391,6 +391,7 @@ def _settings_out(db: Session, row: LeadCompanySettings) -> CompanySettingsOut:
         voice_speed=row.VoiceSpeed,
         voice_speaker=row.VoiceSpeaker,
         stt_tts_provider=row.SttTtsProvider,
+        multi_stt=row.MultiStt,
     )
 
 
@@ -472,8 +473,10 @@ def update_voice_settings(
     principal: Principal = Depends(super_admin("company.manage")),
     db: Session = Depends(get_leadai_db),
 ):
-    """Gender, speaking speed, which Sarvam voice speaks, and which speech
-    vendor (Sarvam or Deepgram) places every AI call this company makes.
+    """Gender, speaking speed, which Sarvam voice speaks, which speech vendor
+    (Sarvam or Deepgram) places every AI call this company makes, and whether
+    the STT auto-detects the caller's language per utterance (multi_stt) or
+    stays pinned to one language for the whole call.
 
     Deliberately `super_admin(...)`, not `require("settings.manage")` like the
     sibling /settings endpoint above: a company admin has that permission for
@@ -490,6 +493,7 @@ def update_voice_settings(
         ("voice_speed", "VoiceSpeed"),
         ("voice_speaker", "VoiceSpeaker"),
         ("stt_tts_provider", "SttTtsProvider"),
+        ("multi_stt", "MultiStt"),
     ):
         value = getattr(payload, field)
         if value is not None:

@@ -28,6 +28,7 @@ export interface CompanySettings {
   voice_speed?: number | null;
   voice_speaker?: string | null;
   stt_tts_provider?: 'sarvam' | 'deepgram' | null;
+  multi_stt?: boolean | null;
 }
 
 export interface CompanyVoiceSettingsUpdate {
@@ -35,6 +36,7 @@ export interface CompanyVoiceSettingsUpdate {
   voice_speed?: number;
   voice_speaker?: string;
   stt_tts_provider?: 'sarvam' | 'deepgram';
+  multi_stt?: boolean;
 }
 
 export interface CompanyCreatePayload {

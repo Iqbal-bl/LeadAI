@@ -85,6 +85,19 @@ class LeadAISettings:
     # reasons, never message text.
     engine_trace_log: bool = _b("ENGINE_TRACE_LOG", "true")
     engine_trace_store: bool = _b("ENGINE_TRACE_STORE", "true")
+    # Monitor agent (LeadAI/engine/monitor.py): off | observe | enforce. Classifies each
+    # turn, concurrently with retrieval, as a real knowledge question vs a general/
+    # non-substantive remark (greeting-adjacent chit-chat, "let's talk in Hindi", "are
+    # you there?") that should never reach KB retrieval. observe = classify and trace
+    # only; enforce = also skip retrieval and answer directly when general.
+    triage_mode: str = os.getenv("TRIAGE_MODE", "off").strip().lower()
+    triage_timeout_seconds: float = _f("TRIAGE_TIMEOUT_SECONDS", 4.0)
+    triage_confidence_threshold: float = _f("TRIAGE_CONFIDENCE_THRESHOLD", 0.7)
+    # How many times in a row the AI may say "I don't know that" (engine/decline.py)
+    # before engine/graph.py forces a human handoff instead of letting the conversation
+    # continue. Gives a misheard word or a genuine gap in the knowledge base a couple of
+    # tries (the model's own reply already invites another question) before giving up.
+    decline_retry_limit: int = _i("DECLINE_RETRY_LIMIT", 2)
     # Which pipeline drives LeadAI phone calls (LeadAI/voice/routing.py):
     #   legacy  the existing /media-stream loop in outbound/app.py (default)
     #   canary  Pipecat only for the numbers in VOICE_PIPECAT_NUMBERS, legacy for the rest
@@ -248,6 +261,7 @@ class LeadAISettings:
     quiet_hours_end: int = _i("LEADAI_QUIET_HOURS_END", 21)
     default_timezone: str = os.getenv("LEADAI_TIMEZONE", "Asia/Kolkata")
     campaign_dry_run: bool = _b("LEADAI_CAMPAIGN_DRY_RUN", "false")
+    ai_usage_show_cost_to_client: bool = _b("AI_USAGE_SHOW_COST_TO_CLIENT", "false")
 
     # =======================================================================
     # Background worker

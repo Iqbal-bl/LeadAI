@@ -16,7 +16,6 @@ Grounding rules enforced here rather than trusted to the prompt:
 """
 from __future__ import annotations
 
-import json
 import logging
 
 from ..engine import gateway
@@ -64,19 +63,14 @@ def complete_json(
     messages: list[dict],
     temperature: float = 0.0,
     max_tokens: int = 500,
+    profile: str = "chat",
     **kwargs,
 ) -> tuple[dict | None, dict]:
-    """JSON-mode completion, used for structured lead extraction."""
-    raw, meta = complete(system, messages, temperature=temperature, json_mode=True, max_tokens=max_tokens)
-    if not raw:
-        return None, meta
-    try:
-        return json.loads(raw), meta
-    except json.JSONDecodeError:
-        # Models occasionally wrap JSON in prose or a code fence.
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
-        try:
-            return json.loads(cleaned.strip()), meta
-        except json.JSONDecodeError:
-            meta["error"] = "unparseable json"
-            return None, meta
+    """JSON-mode completion, used for structured lead extraction.
+
+    The HTTP call and JSON parsing live in engine/gateway.py so every caller (this one
+    included) shares them. This wrapper keeps the original signature, so existing
+    callers (and test doubles) are untouched.
+    """
+    return gateway.complete_json(system, messages, profile=profile, temperature=temperature,
+                                  max_tokens=max_tokens)

@@ -61,7 +61,7 @@ async def request_with_retry(method: str, url: str, **kwargs) -> httpx.Response:
 
 # ---------- OAuth and Token persistence ----------
 
-async def build_authorize_url(db, client_id: str) -> str:
+async def build_authorize_url(db, client_id: str, prompt: Optional[str] = None) -> str:
     from urllib.parse import urlencode
     from ..services import cache
 
@@ -81,6 +81,8 @@ async def build_authorize_url(db, client_id: str) -> str:
         "scope": SCOPES,
         "state": state,
     }
+    if prompt:
+        params["prompt"] = prompt
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
@@ -132,6 +134,11 @@ async def refresh_access_token(refresh_token: str) -> dict:
 
 
 async def fetch_person_urn(access_token: str) -> str:
+    info = await fetch_user_info(access_token)
+    return info["person_urn"]
+
+
+async def fetch_user_info(access_token: str) -> dict:
     resp = await request_with_retry(
         "GET",
         USERINFO_URL,
@@ -140,7 +147,15 @@ async def fetch_person_urn(access_token: str) -> str:
     if resp.status_code != 200:
         raise Exception(f"Failed to fetch user info: {resp.text}")
     data = resp.json()
-    return f"urn:li:person:{data['sub']}"
+    sub = data.get("sub", "")
+    name = data.get("name") or f"{data.get('given_name', '')} {data.get('family_name', '')}".strip() or "LinkedIn Profile"
+    return {
+        "person_urn": f"urn:li:person:{sub}" if sub else "",
+        "name": name,
+        "email": data.get("email"),
+        "picture": data.get("picture"),
+        "raw": data,
+    }
 
 
 async def save_tokens(
@@ -151,11 +166,11 @@ async def save_tokens(
     expires_in_seconds: int,
     refresh_token: Optional[str] = None,
     refresh_token_expires_in_seconds: Optional[int] = None,
-) -> None:
+    profile_info: Optional[dict] = None,
+) -> LeadChannelAccount:
     from datetime import datetime, timezone
     
-    # Check if an account already exists for this channel and ExternalId — reconnecting
-    # the SAME LinkedIn person is a token refresh or reactivation, not a new account, and reuses this row.
+    # Look up by unique (Channel, ExternalId) constraint
     db_cred = (
         db.query(LeadChannelAccount)
         .filter(
@@ -165,38 +180,30 @@ async def save_tokens(
         .first()
     )
 
-    if not db_cred or db_cred.ClientId != client_id:
-        # A DIFFERENT LinkedIn person connecting for this company: a company may have at
-        # most one LinkedIn account, so this used to silently repoint the existing row at
-        # the new person (losing the old one's connection with no warning). Now it is
-        # refused — the old account must be disconnected first, same as every other channel.
-        other = (
-            db.query(LeadChannelAccount)
-            .filter(
-                LeadChannelAccount.ClientId == client_id,
-                LeadChannelAccount.Channel == "linkedin",
-                LeadChannelAccount.IsDeleted == False,  # noqa: E712
-            )
-            .first()
-        )
-        if other is not None and other.ExternalId != person_urn:
-            raise ValueError(
-                f"This company already has a LinkedIn account connected ('{other.Name}'). "
-                "Disconnect it first before connecting a different one."
-            )
-
     now = time.time()
     access_expires_at = datetime.fromtimestamp(now + expires_in_seconds, tz=timezone.utc).replace(tzinfo=None)
 
     refresh_token_enc = None
     meta_json = {}
+    if db_cred and db_cred.MetaJson:
+        meta_json = dict(db_cred.MetaJson)
+
+    if profile_info:
+        if profile_info.get("picture"):
+            meta_json["profile_picture_url"] = profile_info["picture"]
+        if profile_info.get("email"):
+            meta_json["email"] = profile_info["email"]
+        if profile_info.get("name"):
+            meta_json["profile_name"] = profile_info["name"]
+
     if refresh_token:
         refresh_token_enc = encrypt_pii(refresh_token)
         if refresh_token_expires_in_seconds:
             meta_json["refresh_token_expires_at"] = now + refresh_token_expires_in_seconds
     elif db_cred:
         refresh_token_enc = db_cred.AppSecretEnc
-        meta_json = db_cred.MetaJson or {}
+
+    name = (profile_info.get("name") if profile_info else None) or (db_cred.Name if db_cred and db_cred.Name != "LinkedIn Account" else "LinkedIn Profile")
 
     if not db_cred:
         db_cred = LeadChannelAccount(
@@ -204,44 +211,43 @@ async def save_tokens(
             Channel="linkedin",
             Provider="linkedin",
             LoginType="linkedin",
-            Name="LinkedIn Account",
+            Name=name,
+            ExternalId=person_urn,
             IsActive=True,
             CreatedBy="system"
         )
         db.add(db_cred)
+    else:
+        if name:
+            db_cred.Name = name
 
     db_cred.ClientId = client_id
     db_cred.ExternalId = person_urn
+    db_cred.IsDeleted = False
+    db_cred.IsActive = True
     db_cred.AccessTokenEnc = encrypt_pii(access_token)
     db_cred.TokenExpiresAt = access_expires_at
     db_cred.AppSecretEnc = refresh_token_enc
     db_cred.MetaJson = meta_json
-    db_cred.IsDeleted = False
-    db_cred.IsActive = True
     db_cred.UpdatedAt = utcnow()
 
-    # Soft delete existing comments for this company & channel to avoid cross-account comment bleeding
-    from ..models_blog import LeadSocialComment
-    db.query(LeadSocialComment).filter(
-        LeadSocialComment.ClientId == client_id,
-        LeadSocialComment.Channel == "linkedin",
-        LeadSocialComment.IsDeleted == False
-    ).update(
-        {LeadSocialComment.IsDeleted: True, LeadSocialComment.UpdatedAt: utcnow()},
-        synchronize_session=False
-    )
-
     db.commit()
+    db.refresh(db_cred)
+    return db_cred
 
 
-async def get_valid_access_token(db, client_id: str) -> str:
+async def get_valid_access_token(db, client_id: str, account_id: Optional[str] = None) -> str:
     from datetime import datetime, timezone
     
-    db_cred = db.query(LeadChannelAccount).filter(
+    query = db.query(LeadChannelAccount).filter(
         LeadChannelAccount.ClientId == client_id,
         LeadChannelAccount.Channel == "linkedin",
         LeadChannelAccount.IsDeleted == False
-    ).first()
+    )
+    if account_id:
+        query = query.filter(LeadChannelAccount.Id == account_id)
+    
+    db_cred = query.order_by(LeadChannelAccount.UpdatedAt.desc()).first()
 
     if not db_cred or not db_cred.AccessTokenEnc:
         raise Exception("No LinkedIn credentials found. Visit /linkedin/connect first.")
@@ -258,6 +264,19 @@ async def get_valid_access_token(db, client_id: str) -> str:
     refresh_token = decrypt_pii(db_cred.AppSecretEnc) if db_cred.AppSecretEnc else None
     if not refresh_token:
         raise Exception("Access token expired and no refresh token is stored. Visit connect again.")
+
+    try:
+        new_tokens = await refresh_access_token(refresh_token)
+        new_access_token = new_tokens["access_token"]
+        expires_in = new_tokens.get("expires_in", 5184000)
+        db_cred.AccessTokenEnc = encrypt_pii(new_access_token)
+        db_cred.TokenExpiresAt = datetime.fromtimestamp(now + expires_in, tz=timezone.utc).replace(tzinfo=None)
+        db_cred.UpdatedAt = utcnow()
+        db.commit()
+        return new_access_token
+    except Exception as exc:
+        logger.error("Token refresh failed for client %s account %s: %s", client_id, db_cred.Id, exc)
+        raise Exception("Failed to refresh access token. Please reconnect LinkedIn.")
 
     logger.info("LinkedIn access token expired for company %s, refreshing", client_id)
     new_tokens = await refresh_access_token(refresh_token)

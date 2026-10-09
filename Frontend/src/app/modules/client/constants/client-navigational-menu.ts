@@ -107,6 +107,12 @@ export const ClientNavigationalMenu: SidebarSection[] = [
         routerLink: '/client/prompts',
         permission: 'prompt.read',
       },
+      {
+        label: 'AI Token Usage',
+        icon: 'pi pi-chart-bar',
+        routerLink: '/client/ai-usage',
+        permission: 'analytics.read',
+      },
     ],
   },
   {

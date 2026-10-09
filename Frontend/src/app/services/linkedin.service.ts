@@ -3,6 +3,7 @@ import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
 import {
   LinkedInStatus,
+  LinkedInAccount,
   LinkedInCredentialsPayload,
   GenerateKeywordsRequest,
   GenerateKeywordsResponse,
@@ -25,9 +26,10 @@ import {
   GetAutoConnectSettingsResponse,
   SaveAutoConnectSettingsResponse,
   TriggerAutoConnectResponse,
+  LinkedInRemoteLoginStartRequest,
+  LinkedInRemoteLoginResponse,
+  LinkedInRemoteLoginInteractRequest,
 } from '../models/linkedin.models';
-
-
 
 @Injectable({
   providedIn: 'root',
@@ -36,7 +38,72 @@ export class LinkedinService {
   constructor(private apiService: ApiService) {}
 
   /**
-   * Check connection status of company LinkedIn account
+   * Start interactive remote login solver session for LinkedIn
+   */
+  public startRemoteLogin(
+    payload: LinkedInRemoteLoginStartRequest
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.post<LinkedInRemoteLoginResponse>(
+      'linkedin/remote-login/start',
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Interact with remote browser (click, type, submit pin, refresh)
+   */
+  public interactRemoteLogin(
+    sessionId: string,
+    payload: LinkedInRemoteLoginInteractRequest
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.post<LinkedInRemoteLoginResponse>(
+      `linkedin/remote-login/interact/${encodeURIComponent(sessionId)}`,
+      payload,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Poll remote login solver status
+   */
+  public checkRemoteLoginStatus(
+    sessionId: string
+  ): Observable<LinkedInRemoteLoginResponse> {
+    return this.apiService.get<LinkedInRemoteLoginResponse>(
+      `linkedin/remote-login/status/${encodeURIComponent(sessionId)}`,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Cancel and close remote login session
+   */
+  public cancelRemoteLogin(
+    sessionId: string
+  ): Observable<{ ok: boolean }> {
+    return this.apiService.post<{ ok: boolean }>(
+      `linkedin/remote-login/cancel/${encodeURIComponent(sessionId)}`,
+      {},
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Fetch current screenshot frame as Blob
+   */
+  public getRemoteLoginScreenshotBlob(
+    sessionId: string
+  ): Observable<Blob> {
+    return this.apiService.get<Blob>(
+      `linkedin/remote-login/screenshot/${encodeURIComponent(sessionId)}?t=${Date.now()}`,
+      { responseType: 'blob', companyScoped: true }
+    );
+  }
+
+
+  /**
+   * Check connection status of company LinkedIn account(s)
    */
   public getStatus(): Observable<LinkedInStatus> {
     return this.apiService.get<LinkedInStatus>('linkedin/status', {
@@ -45,16 +112,41 @@ export class LinkedinService {
   }
 
   /**
+   * List all connected LinkedIn accounts for the active company
+   */
+  public getAccounts(): Observable<{ accounts: LinkedInAccount[]; total: number }> {
+    return this.apiService.get<{ accounts: LinkedInAccount[]; total: number }>(
+      'linkedin/accounts',
+      { companyScoped: true }
+    );
+  }
+
+  /**
    * Retrieve LinkedIn OAuth 2.0 authorization URL
    */
-  public getConnectUrl(): Observable<{ authorize_url: string }> {
+  public getConnectUrl(prompt?: string): Observable<{ authorize_url: string }> {
+    const params: any = {};
+    if (prompt) {
+      params['prompt'] = prompt;
+    }
     return this.apiService.get<{ authorize_url: string }>('linkedin/connect', {
       companyScoped: true,
+      params,
     });
   }
 
   /**
-   * Disconnect LinkedIn profile
+   * Disconnect a specific LinkedIn account profile by ID
+   */
+  public disconnectAccount(accountId: string): Observable<{ ok: boolean; message?: string }> {
+    return this.apiService.delete<{ ok: boolean; message?: string }>(
+      `linkedin/accounts/${encodeURIComponent(accountId)}`,
+      { companyScoped: true }
+    );
+  }
+
+  /**
+   * Disconnect LinkedIn profile (legacy / all)
    */
   public disconnect(): Observable<{ ok: boolean }> {
     return this.apiService.post<{ ok: boolean }>(

@@ -11,7 +11,7 @@ notice bad retrieval instead of blindly trusting whatever came back.
 
 from pydantic import BaseModel, Field
 
-from models import get_text_model
+from social_agent.agent_models import get_text_model
 
 
 class RelevanceGrade(BaseModel):

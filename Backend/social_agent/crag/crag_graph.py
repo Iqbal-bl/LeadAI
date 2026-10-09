@@ -14,7 +14,7 @@ from langgraph.graph import END, StateGraph
 from .grader import build_grader, grade_document
 from .web_search import web_search
 
-from models import get_text_model
+from social_agent.agent_models import get_text_model
 
 
 class CragState(TypedDict):

@@ -100,11 +100,16 @@ def local_embed(text: str) -> list[float]:
 # --------------------------------------------------------------------------- #
 # public API
 # --------------------------------------------------------------------------- #
+from core.observability import record_run_metadata, traceable
+
+
+@traceable(name="embedding:openai", run_type="embedding")
 def _openai_embed(texts: list[str]) -> list[list[float]] | None:
     try:
         from ..engine import gateway
 
         vectors: list[list[float]] = []
+        total_prompt_tokens = 0
         # The shared keep-alive pool, not a fresh connection (and TLS handshake) per call.
         client = gateway.shared_client()
         for start in range(0, len(texts), _BATCH):
@@ -116,12 +121,43 @@ def _openai_embed(texts: list[str]) -> list[list[float]] | None:
                 timeout=settings.openai_timeout,
             )
             resp.raise_for_status()
-            data = resp.json()["data"]
+            resp_json = resp.json()
+            data = resp_json.get("data", [])
+            usage = resp_json.get("usage") or {}
+            total_prompt_tokens += usage.get("prompt_tokens") or usage.get("total_tokens") or 0
             # The API guarantees order, but sort on index to be certain —
             # a silently mis-paired vector would be a very hard bug.
             data.sort(key=lambda item: item["index"])
             vectors.extend(item["embedding"] for item in data)
+
+        record_run_metadata(
+            prompt_tokens=total_prompt_tokens,
+            completion_tokens=0,
+            total_tokens=total_prompt_tokens,
+            model=settings.openai_embed_model,
+            provider="openai",
+            extra_metadata={"batch_count": len(texts)},
+            tags=["embeddings", "rag", "openai"],
+        )
+
+        # In-app token tracking
+        try:
+            from core.usage_tracker import get_usage_context, record_usage
+
+            proc = get_usage_context().get("process") or "kb_indexing_embedding"
+            record_usage(
+                provider="openai",
+                model=settings.openai_embed_model,
+                input_tokens=total_prompt_tokens,
+                output_tokens=0,
+                process=proc,
+                channel="knowledge_base",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         return vectors
+
     except Exception as exc:  # noqa: BLE001
         logger.warning("[LeadAI embeddings] OpenAI call failed (%s) — using local fallback", exc)
         return None

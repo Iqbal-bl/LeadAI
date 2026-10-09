@@ -163,7 +163,6 @@ def script_out(row: LeadCompanyScript) -> ScriptOut:
         version=row.Version,
         is_default=bool(row.IsDefault),
         is_active=bool(row.IsActive),
-        multi_stt=bool(row.MultiStt),
         section_count=len(sections),
         created_at=row.CreatedAt,
         updated_at=row.UpdatedAt,
@@ -238,6 +237,8 @@ def lead_out(row: Lead | None) -> LeadOut | None:
         score_breakdown=row.ScoreBreakdown,
         qualified_at=row.QualifiedAt,
         data_points=row.DataPointsJson,
+        converted_account_id=row.ConvertedAccountId,
+        converted_at=row.ConvertedAt,
     )
 
 

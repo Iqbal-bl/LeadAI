@@ -995,6 +995,7 @@ def handle_blog_generate(db: Session, payload: dict) -> dict:
         return {"error": "Missing client_id or topic"}
 
     req = GenerateBlogRequest(
+        client_id=client_id,
         topic=topic,
         keywords=payload.get("keywords") or [],
         tone=payload.get("tone") or "thought_leadership",
@@ -1010,29 +1011,18 @@ def handle_blog_generate(db: Session, payload: dict) -> dict:
     )
 
     try:
-        article_resp = ArticleService.generate_and_save(
+        article = ArticleService.generate_and_save(
             db=db,
             client_id=client_id,
             req=req,
             company_name=company_name
         )
-        activity.log(
-            db,
-            action=A.BLOG_ARTICLE_GENERATED,
-            client_id=client_id,
-            actor_email="scheduler",
-            entity_type="blog",
-            entity_id=article_resp.id,
-            log_type="Info",
-            message=f"Auto-Blog Generated: '{article_resp.title}' (Status: {article_resp.status})",
-            meta={"article_id": article_resp.id, "status": article_resp.status, "topic": topic, "requires_approval": article_resp.requires_approval},
-            commit=True,
-        )
         return {
-            "article_id": article_resp.id,
-            "status": article_resp.status,
-            "title": article_resp.title,
-            "requires_approval": article_resp.requires_approval,
+            "articles_count": 1,
+            "article_ids": [article.id],
+            "first_article_id": article.id,
+            "status": article.status,
+            "title": article.title or topic,
         }
     except Exception as exc:
         logger.error(f"[LeadAI jobs] Blog generation failed for {client_id}: {exc}")
@@ -1139,5 +1129,62 @@ def bootstrap_blog_job(db: Session) -> None:
         enqueue(db, "blog.daily_scheduler", run_at=run_at, commit=True)
         db.commit()
         logger.info("[LeadAI jobs] Enqueued first run of blog.daily_scheduler at %s", run_at)
+
+
+@register("usage.retention_cleanup")
+def handle_usage_retention_cleanup(db: Session, payload: dict) -> dict:
+    """Daily background job to purge granular raw usage events older than 90 days.
+    
+    Leaves daily aggregate rows intact forever for historical reporting.
+    Reschedules itself for the next daily tick (24 hours).
+    """
+    from core.usage_tracker import purge_expired_raw_events
+
+    retention_days = int(payload.get("retention_days", 90))
+    purged_count = purge_expired_raw_events(db, retention_days=retention_days)
+
+    # Re-queue next retention cleanup tick in 24 hours
+    now = utcnow()
+    now_naive = now.replace(tzinfo=None) if now.tzinfo else now
+    has_future_retention = (
+        db.query(LeadJob)
+        .filter(
+            LeadJob.Kind == "usage.retention_cleanup",
+            LeadJob.Status == "queued",
+            LeadJob.RunAt > now_naive,
+            LeadJob.IsDeleted == False,
+        )
+        .first()
+    )
+    if not has_future_retention:
+        next_tick = (now + timedelta(hours=24)).replace(tzinfo=None)
+        enqueue(db, "usage.retention_cleanup", payload={"retention_days": retention_days}, run_at=next_tick, commit=True)
+        db.commit()
+        logger.info(f"[LeadAI jobs] Scheduled next usage.retention_cleanup at {next_tick}")
+
+    return {
+        "purged_count": purged_count,
+        "retention_days": retention_days,
+    }
+
+
+def bootstrap_usage_retention_job(db: Session) -> None:
+    """Ensure that the recurring usage data retention cleanup job exists and is queued."""
+    existing = (
+        db.query(LeadJob)
+        .filter(
+            LeadJob.Kind == "usage.retention_cleanup",
+            LeadJob.Status.in_(("queued", "claimed", "running")),
+            LeadJob.IsDeleted == False,
+        )
+        .first()
+    )
+    if not existing:
+        run_at = utcnow().replace(tzinfo=None)
+        enqueue(db, "usage.retention_cleanup", payload={"retention_days": 90}, run_at=run_at, commit=True)
+        db.commit()
+        logger.info("[LeadAI jobs] Enqueued first run of usage.retention_cleanup at %s", run_at)
+
+
 
 

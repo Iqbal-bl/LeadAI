@@ -133,7 +133,7 @@ def prepare_agent_context(
         "gender": voice_cfg["gender"],
         "speaker": voice_cfg["speaker"],
         "pace": voice_cfg["speed"],
-        "multi_stt": bool(getattr(script, "MultiStt", False)),
+        "multi_stt": voice_cfg["multi_stt"],
         "provider": voice_cfg["provider"],
     }
     return sections, script, voice

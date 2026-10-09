@@ -110,6 +110,9 @@ export class CustomerInfoComponent implements OnInit, OnChanges {
         if (contact.instagram) {
           this.lead.instagram = contact.instagram;
         }
+        if (contact.linkedin) {
+          this.lead.linkedin = contact.linkedin;
+        }
         if (contact.display_name) {
           this.lead.display_name = contact.display_name;
         }
@@ -174,10 +177,16 @@ export class CustomerInfoComponent implements OnInit, OnChanges {
       }
     }
 
+    const initialEmail =
+      this.lead.assigned_user_email ||
+      (this.lead.assignedTo && this.lead.assignedTo.includes('@')
+        ? this.lead.assignedTo
+        : '');
+
     this.convertPayload = {
       conversation_id: convId,
       lead_id: convId,
-      owner_email: this.lead.assignedTo || this.lead.assigned_user_email || '',
+      owner_email: initialEmail,
       stage: 'customer',
       value: numericValue,
       notes: this.lead.summary
@@ -191,12 +200,13 @@ export class CustomerInfoComponent implements OnInit, OnChanges {
     if (!this.convertPayload.conversation_id) return;
     this.converting = true;
 
+    const emailVal = this.convertPayload.owner_email?.trim();
+    const validEmail = emailVal && emailVal.includes('@') ? emailVal : null;
+
     const payload = {
       conversation_id: this.convertPayload.conversation_id,
       lead_id: this.convertPayload.lead_id,
-      owner_email: this.convertPayload.owner_email
-        ? this.convertPayload.owner_email.trim()
-        : null,
+      owner_email: validEmail,
       stage: this.convertPayload.stage || 'customer',
       value:
         this.convertPayload.value != null

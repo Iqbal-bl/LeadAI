@@ -17,9 +17,11 @@ Design constraints
   conversation clearly returns to an IVR menu (e.g. after a transfer).
 """
 
+import os
 import logging
 import openai as _openai
 from typing import List, Dict, Optional
+from core.observability import traceable
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +62,11 @@ class PartyDetectorAgent:
 
     # ── Public API ────────────────────────────────────────────────────────
 
+    @traceable(name="llm:party_detector", run_type="llm")
     async def detect(
         self,
         conversation_history: List[Dict[str, str]],
+        client_id: Optional[str] = None,
     ) -> str:
         """
         Classify the other party based on recent conversation history.
@@ -99,17 +103,39 @@ class PartyDetectorAgent:
         })
 
         try:
-            resp = await self._openai.ChatCompletion.acreate(
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            resp = await client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=messages,
                 temperature=0.0,
                 max_tokens=10,
             )
-            raw = (resp["choices"][0]["message"]["content"] or "").strip().lower()
+            raw = (resp.choices[0].message.content or "").strip().lower()
             verdict = "human" if "human" in raw else "ivr"
+
+            # In-app token tracking
+            try:
+                from core.usage_tracker import record_usage
+
+                usage = getattr(resp, "usage", None)
+                p_tok = (getattr(usage, "prompt_tokens", 0) or 0) or sum(len(str(m.get("content", ""))) for m in messages) // 4
+                c_tok = (getattr(usage, "completion_tokens", 0) or 0) or len(raw) // 4
+                record_usage(
+                    company_id=client_id,
+                    provider="openai",
+                    model="gpt-4o-mini",
+                    input_tokens=p_tok,
+                    output_tokens=c_tok,
+                    process="voice_party_detector",
+                    channel="voice",
+                )
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as e:
             logger.warning(f"[PARTY DETECTOR] LLM call failed: {e}")
             return self.current_party_type
+
 
         # ── Hysteresis transition logic ──────────────────────────────────
         self._apply_verdict(verdict)

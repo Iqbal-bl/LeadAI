@@ -357,12 +357,19 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
       const text = msgPayload.text || msgPayload.content || msgPayload.message;
       const msgId = msgPayload.id || `live-${Date.now()}`;
       if (text) {
-        const rawSender = (msgPayload.sender || msgPayload.role || 'ai').toLowerCase();
+        const rawSender = (
+          msgPayload.sender ||
+          msgPayload.role ||
+          (msgPayload.type && msgPayload.type !== 'message' ? msgPayload.type : null) ||
+          'ai'
+        ).toLowerCase().trim();
+
         const isCust =
           rawSender === 'customer' ||
           rawSender === 'user' ||
           rawSender === 'human' ||
-          rawSender === 'lead';
+          rawSender === 'lead' ||
+          msgPayload.type === 'user';
 
         const existingIdx = msgPayload.id
           ? this.dialogConversations.findIndex((c) => c.id === msgPayload.id)
@@ -370,14 +377,17 @@ export class CampaignDetailComponent implements OnInit, OnDestroy {
 
         const turnObj = {
           id: msgId,
-          sender: isCust ? 'customer' : 'ai',
+          sender: isCust ? 'customer' : (rawSender === 'agent' || rawSender === 'staff' ? 'agent' : 'ai'),
+          type: isCust ? 'customer' : 'ai',
           summary: text,
           content: text,
+          text: text,
           startTime: msgPayload.timestamp || msgPayload.created_at || new Date().toISOString(),
           created_at: msgPayload.timestamp || msgPayload.created_at || new Date().toISOString(),
           confidence: msgPayload.confidence,
           leadName: this.liveCallRecipientName,
           isSystem: false,
+          isCustomer: isCust,
         };
 
         if (existingIdx > -1) {

@@ -61,6 +61,7 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   voice_speed: 1.1,
   voice_speaker: DEFAULT_SARVAM_FEMALE_VOICE,
   stt_tts_provider: 'sarvam',
+  multi_stt: true,
 };
 
 export const DEFAULT_VOICE_SETTINGS = {
@@ -68,6 +69,7 @@ export const DEFAULT_VOICE_SETTINGS = {
   voice_speed: 1.1,
   voice_speaker: DEFAULT_SARVAM_FEMALE_VOICE,
   stt_tts_provider: 'sarvam' as const,
+  multi_stt: true,
 };
 
 export interface VoiceSpeakerOption {

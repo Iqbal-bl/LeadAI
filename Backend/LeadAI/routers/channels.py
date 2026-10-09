@@ -120,7 +120,8 @@ def _assert_single_account_per_channel(
     db: Session, client_id: str, channel: str, external_id: str
 ) -> None:
     """A company may have at most one connected account per channel (whatsapp,
-    messenger, instagram, linkedin, ...).
+    messenger, instagram, ...). LinkedIn is exempt: a company can connect several
+    LinkedIn people, each a separate account.
 
     Reconnecting the SAME account (identical ExternalId) is always fine — that is a
     token refresh or re-authorisation, not a second account, so callers only run this
@@ -128,6 +129,8 @@ def _assert_single_account_per_channel(
     the same channel type is refused until the existing one is disconnected, rather
     than silently added alongside it or silently replacing it.
     """
+    if channel == "linkedin":
+        return
     other = (
         db.query(LeadChannelAccount)
         .filter(
@@ -168,49 +171,57 @@ def create_account(
     elif channel_lower == "whatsapp":
         principal.require("social.whatsapp")
 
-    # The (channel, external_id) pair is globally unique — the same WhatsApp
-    # number cannot be claimed by two companies, or inbound routing would be
-    # ambiguous and one tenant would read another's leads.
-    clash = (
+    # The (channel, external_id) pair is globally unique at the DB level
+    # (uq_leadai_channel_external) regardless of IsDeleted — a soft-deleted
+    # row still occupies that slot. So this lookup must NOT filter IsDeleted,
+    # or reconnecting a previously-disconnected account tries to INSERT a
+    # second row with the same key and hits a duplicate-entry IntegrityError
+    # instead of reviving the old one. A clash only actually blocks the
+    # request when the found row is still live.
+    existing = (
         db.query(LeadChannelAccount)
         .filter(
             LeadChannelAccount.Channel == payload.channel,
             LeadChannelAccount.ExternalId == payload.external_id,
-            LeadChannelAccount.IsDeleted == False,  # noqa: E712
         )
         .first()
     )
-    if clash is not None:
+    if existing is not None and not existing.IsDeleted:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "That account is already connected"
-            + (" to this company." if clash.ClientId == client_id else " to another company."),
+            + (" to this company." if existing.ClientId == client_id else " to another company."),
         )
     _assert_single_account_per_channel(db, client_id, payload.channel, payload.external_id)
 
-    row = LeadChannelAccount(
-        ClientId=client_id,
-        Channel=payload.channel,
-        Provider="linkedin" if payload.channel == "linkedin" else "meta",
-        LoginType=(
-            "linkedin" if payload.channel == "linkedin"
-            else "instagram" if payload.channel == "instagram"
-            else "facebook"
-        ),
-        Name=payload.name,
-        ExternalId=payload.external_id,
-        BusinessAccountId=payload.business_account_id,
-        DisplayNumber=payload.display_number,
-        AccessTokenEnc=encrypt_pii(payload.access_token) if payload.access_token else None,
-        AppSecretEnc=encrypt_pii(payload.app_secret) if payload.app_secret else None,
-        VerifyToken=payload.verify_token or settings.meta_verify_token,
-        ApiVersion=payload.api_version,
-        AutoReply=payload.auto_reply,
-        ScriptId=payload.script_id,
-        DefaultLanguage=payload.default_language,
-        CreatedBy=principal.email,
+    # Reuse the soft-deleted row if one was found above — creating a fresh one
+    # here instead would hit uq_leadai_channel_external (same bug the comment
+    # above this function explains).
+    row = existing or LeadChannelAccount(Channel=payload.channel, ExternalId=payload.external_id)
+    row.ClientId = client_id
+    row.IsDeleted = False
+    row.Provider = "linkedin" if payload.channel == "linkedin" else "meta"
+    row.LoginType = (
+        "linkedin" if payload.channel == "linkedin"
+        else "instagram" if payload.channel == "instagram"
+        else "facebook"
     )
-    db.add(row)
+    row.Name = payload.name
+    row.BusinessAccountId = payload.business_account_id
+    row.DisplayNumber = payload.display_number
+    row.AccessTokenEnc = encrypt_pii(payload.access_token) if payload.access_token else None
+    row.AppSecretEnc = encrypt_pii(payload.app_secret) if payload.app_secret else None
+    row.VerifyToken = payload.verify_token or settings.meta_verify_token
+    row.ApiVersion = payload.api_version
+    row.AutoReply = payload.auto_reply
+    row.ScriptId = payload.script_id
+    row.DefaultLanguage = payload.default_language
+    if existing is None:
+        row.CreatedBy = principal.email
+        db.add(row)
+    else:
+        row.UpdatedBy = principal.email
+        row.UpdatedAt = utcnow()
     db.flush()
     activity.log_principal(
         db,
@@ -593,6 +604,10 @@ def _upsert_fb_account(
     meta: dict,
 ) -> LeadChannelAccount:
     """Create or update one channel row from a Facebook Page connection."""
+    # Not filtering IsDeleted here: the (Channel, ExternalId) pair is unique at
+    # the DB level regardless of soft-delete status, so a previously
+    # disconnected Page must be found and revived, not left invisible to this
+    # query only to collide with its own row on INSERT (uq_leadai_channel_external).
     existing = (
         db.query(LeadChannelAccount)
         .filter(
@@ -707,6 +722,12 @@ def instagram_callback(
     external_id = result["external_id"]
     username = result.get("username") or external_id
 
+    # Not filtering IsDeleted here: the (Channel, ExternalId) pair is unique at
+    # the DB level regardless of soft-delete status, so a previously
+    # disconnected account must be found and revived, not left invisible to
+    # this query only to collide with its own row on INSERT
+    # (uq_leadai_channel_external) — this is exactly the "Duplicate entry"
+    # IntegrityError that disconnect-then-reconnect used to hit.
     existing = (
         db.query(LeadChannelAccount)
         .filter(

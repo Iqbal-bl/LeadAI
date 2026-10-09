@@ -174,6 +174,7 @@ def _register_worker(app: FastAPI) -> None:
             try:
                 jobs.bootstrap_linkedin_job(db)
                 jobs.bootstrap_blog_job(db)
+                jobs.bootstrap_usage_retention_job(db)
             finally:
                 db.close()
         except Exception as exc:  # noqa: BLE001

@@ -20,6 +20,7 @@ What is new:
 """
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -52,6 +53,10 @@ PROFILES: dict[str, Profile] = {
     "voice": Profile("voice", max_tokens=220, timeout=15.0, retries=0),
     # Structured extraction, lead scoring, monitor verdicts.
     "analysis": Profile("analysis", temperature=0.0, max_tokens=500),
+    # Monitor agent triage classification: runs concurrently with retrieval, so it must
+    # never be the slow thing a turn waits on. No retry — a retry would only add a
+    # second multi-second round trip to a call that already fell open once.
+    "triage": Profile("triage", temperature=0.0, max_tokens=120, timeout=4.0, retries=0),
 }
 
 # A trace hook receives (meta, system, messages, reply). It sees message content, so
@@ -148,6 +153,10 @@ def _is_transient(exc: Exception) -> bool:
     return isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout)
 
 
+from core.observability import record_run_metadata, traceable
+
+
+@traceable(name="llm:leadai_gateway", run_type="llm")
 def complete(
     system: str,
     messages: list[dict],
@@ -218,5 +227,58 @@ def complete(
             break
 
     meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    
+    # Record token usage, provider, and model for LangSmith observability
+    record_run_metadata(
+        prompt_tokens=meta.get("prompt_tokens"),
+        completion_tokens=meta.get("completion_tokens"),
+        model=meta.get("model"),
+        provider=meta.get("provider", "openai"),
+        extra_metadata={"profile": prof.name, "attempts": meta.get("attempts"), "json_mode": json_mode},
+        tags=["gateway", prof.name, meta.get("provider", "openai")],
+    )
+
+    # Record in-app token usage (independent of LangSmith)
+    if reply is not None or meta.get("prompt_tokens") is not None:
+        try:
+            from core.usage_tracker import record_usage
+
+            record_usage(
+                provider=meta.get("provider", "openai"),
+                model=meta.get("model", "gpt-4o"),
+                input_tokens=meta.get("prompt_tokens") or 0,
+                output_tokens=meta.get("completion_tokens") or 0,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     _emit_trace(meta, system, messages, reply)
     return reply, meta
+
+
+def complete_json(
+    system: str,
+    messages: list[dict],
+    *,
+    profile: str = "chat",
+    temperature: float = 0.0,
+    max_tokens: int = 500,
+) -> tuple[dict | None, dict]:
+    """JSON-mode completion. Lives here (not services/llm.py) so engine/ code — the
+    monitor agent included — can use it without importing the services layer."""
+    raw, meta = complete(system, messages, profile=profile, temperature=temperature,
+                          max_tokens=max_tokens, json_mode=True)
+    if not raw:
+        return None, meta
+    try:
+        return json.loads(raw), meta
+    except json.JSONDecodeError:
+        # Models occasionally wrap JSON in prose or a code fence.
+        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
+        try:
+            return json.loads(cleaned.strip()), meta
+        except json.JSONDecodeError:
+            meta["error"] = "unparseable json"
+            return None, meta
+
+

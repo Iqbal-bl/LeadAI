@@ -162,7 +162,7 @@ def _has_non_latin_letters(text: str) -> bool:
     return any(ch.isalpha() and ord(ch) > 127 for ch in text or "")
 
 
-def english_query(utterance: str, trace: TurnTrace | None = None) -> str | None:
+def english_query(utterance: str, trace: TurnTrace | None = None, client_id: str | None = None) -> str | None:
     """An English search query for a question asked in another script, else None.
 
     The knowledge base is written in English and the retriever only extracts keywords from
@@ -170,14 +170,14 @@ def english_query(utterance: str, trace: TurnTrace | None = None) -> str | None:
     as a hand-off on nearly every turn. One short model call (about half a second on a warm
     connection) fixes that, and only for non-Latin turns.
     """
-    if not _has_non_latin_letters(utterance):
-        return None
-    text, meta = llm.complete(
-        "Translate the customer's spoken words into ONE short English sentence, to be used as "
-        "a search query over a property company's knowledge base. Output ONLY that sentence.",
-        [{"role": "user", "content": utterance}],
-        temperature=0.0, max_tokens=40, profile="voice",
-    )
+    from core.usage_tracker import bind_usage_context
+    with bind_usage_context(company_id=client_id, process="voice_translation", channel="voice"):
+        text, meta = llm.complete(
+            "Translate the customer's spoken words into ONE short English sentence, to be used as "
+            "a search query over a property company's knowledge base. Output ONLY that sentence.",
+            [{"role": "user", "content": utterance}],
+            temperature=0.0, max_tokens=40, profile="voice",
+        )
     text = (text or "").strip().strip('"').strip()
     trace_step(trace, "query_translation",
                "translated for retrieval" if text else "translation unavailable; using the original",
@@ -317,7 +317,7 @@ def handle_voice_turn(
         lang_note = language_note(language)
         trace_step(trace, "language", f"caller is speaking {language}" if lang_note else "language unknown",
                    code=language)
-        english = english_query(utterance, trace)
+        english = english_query(utterance, trace, client_id=client_id) if _has_non_latin_letters(utterance) else None
 
         if superseded is not None and superseded():
             # Already stale before the expensive call even starts — the caller spoke again,
@@ -340,7 +340,7 @@ def handle_voice_turn(
         # The same judge chat uses (grounding + "declined in words"); a no-op unless ENGINE_MODE.
         result = engine_bridge.apply(
             result, text=utterance, client_id=client_id, conversation_id=conversation.Id,
-            channel="voice",
+            channel="voice", history=history,
         )
         note = result.get("engine")
         trace_step(
@@ -499,7 +499,9 @@ def _returning_opener(
         "The call has just connected. Speak ONLY your opening line: greet them by name if you "
         "know it, say you are following up on their earlier enquiry (name the topic if known), "
         "and ask how you can help. At most 20 words, spoken aloud.")})
-    text, meta = llm.complete(system, messages, profile="voice", max_tokens=90)
+    from core.usage_tracker import bind_usage_context
+    with bind_usage_context(company_id=client.Id, process="voice_opening_line", channel="voice", conversation_id=conversation.Id):
+        text, meta = llm.complete(system, messages, profile="voice", max_tokens=90)
     text = reply_cleanup.strip_control_tokens((text or "").strip())
     if not text:
         text = f"Hello! This is {client.Name}, following up on your earlier enquiry. How can I help you today?"
@@ -530,9 +532,11 @@ def _compose_opening_text(
                    model=model, latency_ms=latency, error=meta.get("error"))
     else:
         trace_step(trace, "opening", "call connected: new customer, speaking the greeting")
-        result = ai_engine.answer(
-            db, client.Id, client.Name, "hello", history=[], channel="voice", script=None, trace=trace
-        )
+        from core.usage_tracker import bind_usage_context
+        with bind_usage_context(company_id=client.Id, process="voice_opening_line", channel="voice", conversation_id=conversation.Id):
+            result = ai_engine.answer(
+                db, client.Id, client.Name, "hello", history=[], channel="voice", script=None, trace=trace
+            )
         text, model, latency = result["reply"], result["model"], result["latency_ms"]
         confidence, sources = result["confidence"], result["sources"]
     return text, model, latency, confidence, sources

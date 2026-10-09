@@ -98,10 +98,13 @@ async def run_task(
     if kind in RECURSION_LIMITS:
         kwargs["recursion_limit"] = RECURSION_LIMITS[kind]
 
-    with use_credentials(creds):
+    from core.usage_tracker import bind_usage_context
+
+    with use_credentials(creds), bind_usage_context(company_id=client_id, process="social_agent", channel=platform):
         result = await run_agent_task(
             task_name, params or {}, use_browser=False, **kwargs
         )
+
 
     if isinstance(result, dict):
         result.setdefault("account_id", creds.account_id)

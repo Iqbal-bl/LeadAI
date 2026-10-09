@@ -1,0 +1,347 @@
+<div class="ai-usage-page">
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       PAGE HEADER
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="page-header">
+    <div class="header-left">
+      <div class="header-icon">
+        <i class="pi pi-microchip-ai"></i>
+      </div>
+      <div>
+        <h1 class="page-title">AI Usage Analytics</h1>
+        <p class="page-subtitle">Platform-wide token consumption, cost attribution &amp; trends</p>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <p-datepicker
+        [(ngModel)]="startDate"
+        [showIcon]="true"
+        dateFormat="dd M yy"
+        placeholder="Start date"
+        appendTo="body"
+        class="filter-input"
+      />
+      <span class="filter-sep">→</span>
+      <p-datepicker
+        [(ngModel)]="endDate"
+        [showIcon]="true"
+        dateFormat="dd M yy"
+        placeholder="End date"
+        appendTo="body"
+        class="filter-input"
+      />
+      <p-iconfield class="filter-input">
+        <p-inputicon styleClass="pi pi-search" />
+        <input
+          pInputText
+          [(ngModel)]="filterClientId"
+          placeholder="Filter company or 'system'"
+          class="filter-text"
+        />
+      </p-iconfield>
+      <button pButton class="btn-apply" label="Apply" icon="pi pi-filter" (click)="load()"></button>
+      <button pButton class="btn-reset p-button-text p-button-secondary" label="Reset" icon="pi pi-refresh" (click)="resetFilters()"></button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SUMMARY KPI CARDS
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="kpi-grid" *ngIf="!loading; else kpiSkeleton">
+    <div class="kpi-card kpi-requests">
+      <div class="kpi-icon"><i class="pi pi-send"></i></div>
+      <div class="kpi-body">
+        <span class="kpi-label">Total Requests</span>
+        <span class="kpi-value">{{ summary?.total_requests | number }}</span>
+      </div>
+    </div>
+    <div class="kpi-card kpi-tokens">
+      <div class="kpi-icon"><i class="pi pi-database"></i></div>
+      <div class="kpi-body">
+        <span class="kpi-label">Total Tokens</span>
+        <span class="kpi-value">{{ fmtTokens(summary?.total_tokens ?? 0) }}</span>
+        <span class="kpi-sub">{{ fmtTokens(summary?.total_input_tokens ?? 0) }} in / {{ fmtTokens(summary?.total_output_tokens ?? 0) }} out</span>
+      </div>
+    </div>
+    <div class="kpi-card kpi-cost">
+      <div class="kpi-icon"><i class="pi pi-dollar"></i></div>
+      <div class="kpi-body">
+        <span class="kpi-label">Total Cost</span>
+        <span class="kpi-value">{{ fmtCost(summary?.total_cost_usd ?? 0) }}</span>
+        <span class="kpi-sub" *ngIf="summary?.is_partial">
+          <i class="pi pi-exclamation-triangle" style="color: var(--color-warn);"></i>&nbsp;Partial — unknown prices exist
+        </span>
+      </div>
+    </div>
+    <div class="kpi-card kpi-period">
+      <div class="kpi-icon"><i class="pi pi-calendar"></i></div>
+      <div class="kpi-body">
+        <span class="kpi-label">Period (IST)</span>
+        <span class="kpi-value" style="font-size: 1rem;">{{ summary?.start_date }}</span>
+        <span class="kpi-sub">→ {{ summary?.end_date }}</span>
+      </div>
+    </div>
+  </div>
+
+  <ng-template #kpiSkeleton>
+    <div class="kpi-grid">
+      <div class="kpi-card" *ngFor="let i of [1,2,3,4]">
+        <p-skeleton height="80px" borderRadius="12px"></p-skeleton>
+      </div>
+    </div>
+  </ng-template>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SPARKLINE TREND CHART
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="chart-card" *ngIf="!loading && dailyTrend.length > 1">
+    <div class="chart-header">
+      <span class="chart-title">Daily Token Trend</span>
+      <span class="chart-subtitle">{{ dailyTrend.length }}-day window</span>
+    </div>
+    <div class="chart-wrap">
+      <svg viewBox="0 0 600 90" preserveAspectRatio="none" class="sparkline-svg">
+        <defs>
+          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--color-primary)" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="var(--color-primary)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <polygon
+          [attr.points]="'0,80 ' + chartPoints + ' 600,80'"
+          fill="url(#sparkGrad)"
+        />
+        <polyline
+          [attr.points]="chartPoints"
+          fill="none"
+          stroke="var(--color-primary)"
+          stroke-width="2"
+          stroke-linejoin="round"
+          stroke-linecap="round"
+        />
+      </svg>
+      <!-- X-axis labels -->
+      <div class="chart-labels">
+        <span>{{ dailyTrend[0].date }}</span>
+        <span>{{ dailyTrend[Math.floor(dailyTrend.length / 2)].date }}</span>
+        <span>{{ dailyTrend[dailyTrend.length - 1].date }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TAB NAV
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="tab-nav">
+    <button
+      class="tab-btn"
+      [class.active]="activeTab === 'companies'"
+      (click)="setTab('companies')"
+    >
+      <i class="pi pi-building"></i> Companies
+    </button>
+    <button
+      class="tab-btn"
+      [class.active]="activeTab === 'process'"
+      (click)="setTab('process')"
+    >
+      <i class="pi pi-cog"></i> By Process
+    </button>
+    <button
+      class="tab-btn"
+      [class.active]="activeTab === 'model'"
+      (click)="setTab('model')"
+    >
+      <i class="pi pi-microchip-ai"></i> By Model
+    </button>
+    <button
+      class="tab-btn"
+      [class.active]="activeTab === 'trend'"
+      (click)="setTab('trend')"
+    >
+      <i class="pi pi-chart-line"></i> Daily Trend
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TABLE: COMPANIES
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="table-card" *ngIf="activeTab === 'companies'">
+    <p-table
+      [value]="companies"
+      [sortField]="companySortField"
+      [sortOrder]="companySortOrder"
+      [loading]="loading"
+      [paginator]="companies.length > 15"
+      [rows]="15"
+      styleClass="p-datatable-sm usage-table"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="company_name">Company <p-sortIcon field="company_name"/></th>
+          <th pSortableColumn="total_requests" class="col-num">Requests <p-sortIcon field="total_requests"/></th>
+          <th pSortableColumn="total_tokens" class="col-num">Tokens <p-sortIcon field="total_tokens"/></th>
+          <th pSortableColumn="total_input_tokens" class="col-num">Input <p-sortIcon field="total_input_tokens"/></th>
+          <th pSortableColumn="total_output_tokens" class="col-num">Output <p-sortIcon field="total_output_tokens"/></th>
+          <th pSortableColumn="total_cost_usd" class="col-num">Cost (USD) <p-sortIcon field="total_cost_usd"/></th>
+          <th class="col-flag"></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr [class.system-row]="row.is_system">
+          <td>
+            <div class="company-cell">
+              <span class="company-dot" [style.background]="row.is_system ? '#6b7280' : 'var(--color-primary)'"></span>
+              <span class="company-name">{{ row.company_name }}</span>
+              <p-tag *ngIf="row.is_system" value="System" severity="secondary" [rounded]="true" class="ml-2"/>
+            </div>
+          </td>
+          <td class="col-num">{{ row.total_requests | number }}</td>
+          <td class="col-num">{{ fmtTokens(row.total_tokens) }}</td>
+          <td class="col-num num-secondary">{{ fmtTokens(row.total_input_tokens) }}</td>
+          <td class="col-num num-secondary">{{ fmtTokens(row.total_output_tokens) }}</td>
+          <td class="col-num cost-cell">{{ fmtCost(row.total_cost_usd) }}</td>
+          <td class="col-flag">
+            <i
+              *ngIf="row.has_unknown_price"
+              class="pi pi-exclamation-triangle warn-icon"
+              pTooltip="Contains requests with unknown pricing"
+              tooltipPosition="left"
+            ></i>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr><td colspan="7" class="empty-msg">No data for selected period.</td></tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TABLE: BY PROCESS
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="table-card" *ngIf="activeTab === 'process'">
+    <p-table
+      [value]="byProcess"
+      [loading]="loading"
+      [paginator]="byProcess.length > 20"
+      [rows]="20"
+      styleClass="p-datatable-sm usage-table"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="display_name">Process <p-sortIcon field="display_name"/></th>
+          <th>Category</th>
+          <th pSortableColumn="total_requests" class="col-num">Requests <p-sortIcon field="total_requests"/></th>
+          <th pSortableColumn="total_tokens" class="col-num">Tokens <p-sortIcon field="total_tokens"/></th>
+          <th pSortableColumn="total_cost_usd" class="col-num">Cost (USD) <p-sortIcon field="total_cost_usd"/></th>
+          <th class="col-flag"></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr>
+          <td>
+            <span class="process-name">{{ row.display_name }}</span>
+            <span class="process-key">{{ row.process }}</span>
+          </td>
+          <td>
+            <span class="cat-badge" [style.background]="categoryColor(row.category)">{{ row.category }}</span>
+          </td>
+          <td class="col-num">{{ row.total_requests | number }}</td>
+          <td class="col-num">{{ fmtTokens(row.total_tokens) }}</td>
+          <td class="col-num cost-cell">{{ fmtCost(row.total_cost_usd) }}</td>
+          <td class="col-flag">
+            <i *ngIf="row.has_unknown_price" class="pi pi-exclamation-triangle warn-icon" pTooltip="Unknown pricing" tooltipPosition="left"></i>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr><td colspan="6" class="empty-msg">No data for selected period.</td></tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TABLE: BY MODEL
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="table-card" *ngIf="activeTab === 'model'">
+    <p-table
+      [value]="byModel"
+      [loading]="loading"
+      styleClass="p-datatable-sm usage-table"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="model">Model <p-sortIcon field="model"/></th>
+          <th pSortableColumn="total_requests" class="col-num">Requests <p-sortIcon field="total_requests"/></th>
+          <th pSortableColumn="total_tokens" class="col-num">Tokens <p-sortIcon field="total_tokens"/></th>
+          <th pSortableColumn="total_input_tokens" class="col-num">Input <p-sortIcon field="total_input_tokens"/></th>
+          <th pSortableColumn="total_output_tokens" class="col-num">Output <p-sortIcon field="total_output_tokens"/></th>
+          <th pSortableColumn="total_cost_usd" class="col-num">Cost (USD) <p-sortIcon field="total_cost_usd"/></th>
+          <th class="col-flag"></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr>
+          <td><span class="model-chip">{{ row.model }}</span></td>
+          <td class="col-num">{{ row.total_requests | number }}</td>
+          <td class="col-num">{{ fmtTokens(row.total_tokens) }}</td>
+          <td class="col-num num-secondary">{{ fmtTokens(row.total_input_tokens) }}</td>
+          <td class="col-num num-secondary">{{ fmtTokens(row.total_output_tokens) }}</td>
+          <td class="col-num cost-cell">{{ fmtCost(row.total_cost_usd) }}</td>
+          <td class="col-flag">
+            <i *ngIf="row.has_unknown_price" class="pi pi-exclamation-triangle warn-icon" pTooltip="Unknown pricing" tooltipPosition="left"></i>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr><td colspan="7" class="empty-msg">No data for selected period.</td></tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TABLE: DAILY TREND
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="table-card" *ngIf="activeTab === 'trend'">
+    <p-table
+      [value]="dailyTrend"
+      [loading]="loading"
+      [paginator]="dailyTrend.length > 31"
+      [rows]="31"
+      styleClass="p-datatable-sm usage-table"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th pSortableColumn="date">Date (IST) <p-sortIcon field="date"/></th>
+          <th pSortableColumn="requests" class="col-num">Requests <p-sortIcon field="requests"/></th>
+          <th pSortableColumn="tokens" class="col-num">Tokens <p-sortIcon field="tokens"/></th>
+          <th pSortableColumn="input_tokens" class="col-num">Input <p-sortIcon field="input_tokens"/></th>
+          <th pSortableColumn="output_tokens" class="col-num">Output <p-sortIcon field="output_tokens"/></th>
+          <th pSortableColumn="cost_usd" class="col-num">Cost (USD) <p-sortIcon field="cost_usd"/></th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-row>
+        <tr>
+          <td><span class="date-chip">{{ row.date }}</span></td>
+          <td class="col-num">{{ row.requests | number }}</td>
+          <td class="col-num">{{ fmtTokens(row.tokens) }}</td>
+          <td class="col-num num-secondary">{{ fmtTokens(row.input_tokens) }}</td>
+          <td class="col-num num-secondary">{{ fmtTokens(row.output_tokens) }}</td>
+          <td class="col-num cost-cell">{{ row.cost_usd !== null ? fmtCost(row.cost_usd) : '—' }}</td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr><td colspan="6" class="empty-msg">No trend data for selected period.</td></tr>
+      </ng-template>
+    </p-table>
+  </div>
+
+</div>

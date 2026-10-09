@@ -261,7 +261,38 @@ def convert_lead(
     whatsapp = decrypt_pii(customer.WhatsAppEnc) if customer else None
     linkedin_profile_url = getattr(customer, "LinkedinProfileUrl", None) if customer else None
 
-    account = find_account_by_phone(db, client_id, phone)
+    account = None
+    if phone:
+        account = find_account_by_phone(db, client_id, phone)
+
+    if account is None and conversation.CustomerId:
+        account = db.query(LeadAccount).filter(
+            LeadAccount.ClientId == client_id,
+            LeadAccount.CustomerId == conversation.CustomerId,
+            LeadAccount.IsDeleted == False,
+        ).first()
+
+    if account is None and linkedin_profile_url and len(linkedin_profile_url) > 20:
+        clean_url = linkedin_profile_url.split("?")[0].rstrip("/")
+        account = db.query(LeadAccount).filter(
+            LeadAccount.ClientId == client_id,
+            LeadAccount.LinkedinProfileUrl.like(f"%{clean_url}%"),
+            LeadAccount.IsDeleted == False,
+        ).first()
+
+    if account is None and customer and customer.DisplayName:
+        from ..social.linkedin_bot import normalize_contact_name
+        clean_target_name = normalize_contact_name(customer.DisplayName)
+        if clean_target_name and clean_target_name.lower() not in ("customer", "unknown lead", "linkedin member", ""):
+            cand_accounts = db.query(LeadAccount).filter(
+                LeadAccount.ClientId == client_id,
+                LeadAccount.IsDeleted == False,
+            ).all()
+            for cand in cand_accounts:
+                if normalize_contact_name(cand.DisplayName).lower() == clean_target_name.lower():
+                    account = cand
+                    break
+
     if account is None:
         # Carry over what the AI already learned during the conversation (city,
         # budget, family size, ...) instead of handing the sales rep an account
@@ -286,9 +317,14 @@ def convert_lead(
             customer_id=conversation.CustomerId,
             linkedin_profile_url=linkedin_profile_url,
         )
-    elif linkedin_profile_url and not account.LinkedinProfileUrl:
-        # Backfill on an already-existing account that predates this feature.
-        account.LinkedinProfileUrl = linkedin_profile_url
+    else:
+        # Existing account matched — backfill or upgrade profile URL and customer_id
+        if linkedin_profile_url:
+            current_acc_url = account.LinkedinProfileUrl or ""
+            if not current_acc_url or ("ACoAA" in current_acc_url and "ACoAA" not in linkedin_profile_url):
+                account.LinkedinProfileUrl = linkedin_profile_url
+        if not account.CustomerId and conversation.CustomerId:
+            account.CustomerId = conversation.CustomerId
 
     account.SourceConversationId = conversation.Id
     account.SourceLeadId = lead.Id

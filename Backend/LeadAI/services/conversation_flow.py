@@ -40,7 +40,10 @@ from domain.models import Client
 
 from .. import activity
 from ..activity import A
+from core.observability import traceable
+from core.usage_tracker import bind_usage_context
 from ..config import settings
+
 from ..db import session as new_session
 from ..engine import bridge as engine_bridge
 from ..engine import control as engine_control
@@ -256,11 +259,34 @@ def score_turn(
     conversation), so a scoring rule or side effect added here applies everywhere.
     """
     previous_status = lead.Status
+    before_data_points = dict(lead.DataPointsJson or {})
     ai_engine.qualify(db, client.Id, lead, history, trace=trace)
     conversation.Summary, conversation.NextStep = ai_engine.summarize(
         db, client.Id, client.Name, lead, history, trace=trace
     )
     conversation.MessageCount = len(history)
+
+    # Which data points changed, for the lead's own timeline — never the values
+    # themselves (same discipline as PHONE_CAPTURED: the log records THAT a fact
+    # was collected, not the fact's content, since values can be PII).
+    after_data_points = lead.DataPointsJson or {}
+    changed_keys = [k for k, v in after_data_points.items() if before_data_points.get(k) != v]
+    if changed_keys:
+        activity.log(
+            db,
+            action=A.DATA_POINT_COLLECTED,
+            client_id=client.Id,
+            actor_email="ai",
+            actor_role="ai",
+            entity_type="lead",
+            entity_id=lead.Id,
+            message=(
+                f"Collected {', '.join(changed_keys)}" if len(changed_keys) <= 3
+                else f"Collected {len(changed_keys)} data point(s)"
+            ),
+            meta={"data_points_collected": changed_keys},
+            request=request,
+        )
 
     if lead.Status == "qualified" and previous_status != "qualified":
         activity.log(
@@ -834,7 +860,12 @@ def handle_customer_turn(
     first one's message and reply already in its history.
     """
     conversation_id = conversation.Id
-    with conversation_lock(db, conversation_id):
+    with conversation_lock(db, conversation_id), bind_usage_context(
+        company_id=client.Id,
+        process="chat_answer",
+        channel=conversation.Channel,
+        conversation_id=conversation.Id,
+    ):
         return _run_customer_turn(
             db, client, conversation, text,
             request=request, source=source, deliver_reply=deliver_reply,
@@ -842,6 +873,7 @@ def handle_customer_turn(
         )
 
 
+@traceable(name="agent:leadai_customer_turn", run_type="chain")
 def _run_customer_turn(
     db: Session,
     client: Client,
@@ -1067,7 +1099,7 @@ def _run_customer_turn(
         # Judge (observe) or decide (enforce) the reply; a no-op unless ENGINE_MODE is set.
         result = engine_bridge.apply(
             result, text=text, client_id=client_id, conversation_id=conversation.Id,
-            channel=conversation.Channel,
+            channel=conversation.Channel, history=history,
         )
         note = result.get("engine")
         trace_step(

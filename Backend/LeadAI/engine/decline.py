@@ -35,3 +35,15 @@ _DECLINE = re.compile(
 
 def is_decline(reply: str | None) -> bool:
     return bool(_DECLINE.search(reply or ""))
+
+
+def recent_decline_count(history: list, lookback: int = 8) -> int:
+    """How many of the AI's own last `lookback` messages already declined in words.
+
+    Used to give a misheard word or a real gap in the knowledge base a couple of tries
+    before forcing a handoff (see engine/graph.py's `_make_decide`) — the model's own
+    reply on a first decline already invites another question; only a repeated decline
+    means the retry genuinely isn't helping.
+    """
+    ai_messages = [m for m in (history or []) if (getattr(m, "Sender", None) or "") == "ai"]
+    return sum(1 for m in ai_messages[-lookback:] if is_decline(getattr(m, "Content", None)))
