@@ -90,9 +90,9 @@ export class CallbackComponent implements OnInit {
           await this.handleAuthentication();
         }
       } else {
-        window.location.assign(
-          environment.authConfig.issuer + '/login?logout=true',
-        );
+        // window.location.assign(
+        //   environment.authConfig.issuer + '/login?logout=true',
+        // );
         console.error('No authorization code found in query parameters.');
       }
     });
@@ -131,15 +131,20 @@ export class CallbackComponent implements OnInit {
           //     this.router.navigate([path]);
           //   },
           // });
-          if (this.authService.isSuperAdmin() || this.authService.isPlatformAdmin()) {
+          if (
+            this.authService.isSuperAdmin() ||
+            this.authService.isPlatformAdmin()
+          ) {
             this.router.navigate(['/admin/dashboard']);
           } else {
             // Check company subscription immediately upon login
             this.authService.getAccessMe().subscribe({
               next: (me) => {
-                const targetClientPath = this.onboardingService.isOnboardingInProgress(me?.client_id)
-                  ? '/onboarding'
-                  : '/client/dashboard';
+                const targetClientPath =
+                  this.onboardingService.isOnboardingInProgress(me?.client_id)
+                    ? '/onboarding'
+                    : '/client/dashboard';
+                const fallbackPlanPath = '/checkout';
                 if (me.has_active_subscription) {
                   this.router.navigate([targetClientPath]);
                 } else {
@@ -150,13 +155,16 @@ export class CallbackComponent implements OnInit {
                         (summary.active_recharge.status === 'active' ||
                           summary.active_recharge.status === 'exhausted')
                       );
-                      this.router.navigate([hasPlan ? targetClientPath : '/plans']);
+                      this.router.navigate([
+                        hasPlan ? targetClientPath : fallbackPlanPath,
+                      ]);
                     },
-                    error: () => this.router.navigate(['/plans']),
+                    error: () => this.router.navigate([fallbackPlanPath]),
                   });
                 }
               },
               error: () => {
+                const fallbackPlanPath = '/checkout';
                 this.billingService.getCurrentPlan().subscribe({
                   next: (summary) => {
                     const hasPlan = !!(
@@ -164,12 +172,15 @@ export class CallbackComponent implements OnInit {
                       (summary.active_recharge.status === 'active' ||
                         summary.active_recharge.status === 'exhausted')
                     );
-                    const targetClientPath = this.onboardingService.isOnboardingInProgress()
-                      ? '/onboarding'
-                      : '/client/dashboard';
-                    this.router.navigate([hasPlan ? targetClientPath : '/plans']);
+                    const targetClientPath =
+                      this.onboardingService.isOnboardingInProgress()
+                        ? '/onboarding'
+                        : '/client/dashboard';
+                    this.router.navigate([
+                      hasPlan ? targetClientPath : fallbackPlanPath,
+                    ]);
                   },
-                  error: () => this.router.navigate(['/plans']),
+                  error: () => this.router.navigate([fallbackPlanPath]),
                 });
               },
             });

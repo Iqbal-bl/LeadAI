@@ -49,11 +49,21 @@ export const routes: Routes = [
   },
   {
     path: 'plans',
-    canActivate: [AuthGuard],
     loadComponent: () =>
       import('./features/plans-pricing/plans-pricing.component').then(
         (m) => m.PlansPricingComponent,
       ),
+  },
+  {
+    path: 'checkout',
+    loadComponent: () =>
+      import('./features/billing-checkout/billing-checkout.component').then(
+        (m) => m.BillingCheckoutComponent,
+      ),
+  },
+  {
+    path: 'plans/checkout',
+    redirectTo: 'checkout',
   },
   {
     path: '**',

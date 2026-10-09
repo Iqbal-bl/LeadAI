@@ -114,6 +114,36 @@ class CompanyOut(BaseModel):
         return dt.isoformat()
 
 
+class ClientRegisterCreate(BaseModel):
+    # Company details
+    company_name: str | None = Field(default=None, min_length=2, max_length=100, description="Name of the company or workspace")
+    name: str | None = Field(default=None, min_length=2, max_length=100, description="Alias for company_name")
+    company_email: EmailStr | None = Field(default=None, description="Contact email for the company")
+    phone_number: str | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=500)
+
+    # Admin user details
+    admin_name: str | None = Field(default=None, min_length=2, max_length=100, description="Full name of the company admin")
+    admin_email: EmailStr | None = Field(default=None, description="Email of the company admin")
+    email: EmailStr | None = Field(default=None, description="Alias for admin_email")
+    user_id: str | None = Field(default=None, description="User ID in identity server if created")
+    password: str | None = Field(default=None, max_length=100, description="Password for the admin user login (optional)")
+
+    # Options
+    send_email_confirmation: bool = Field(default=False)
+    permissions: list[str] | None = Field(default=None, description="Initial feature permissions to enable for the company")
+
+
+class ClientRegisterOut(BaseModel):
+    client_id: str
+    company_name: str
+    admin_email: str
+    admin_name: str
+    user_id: str
+    role: str = "CompanyAdmin"
+    message: str = "Client workspace and admin account registered successfully"
+
+
 class CompanySettingsIn(BaseModel):
     handoff_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     retrieval_top_k: int | None = Field(default=None, ge=1, le=20)

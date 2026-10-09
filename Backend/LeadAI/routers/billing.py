@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ..db import get_leadai_db
@@ -200,12 +200,14 @@ def get_current_plan(
     )
 
 
-@router.get("/available-plans", response_model=list[RechargePlanTemplateOut], summary="List available recharge plans for company")
+@router.get("/available-plans", response_model=list[RechargePlanTemplateOut], summary="List available recharge plans (unauthenticated)")
 def list_available_plans(
-    scope: tuple[Principal, str] = Depends(scoped("billing.read", "company.read")),
+    client_id: str | None = Query(None, description="Optional company ID to include targeted custom plans"),
+    x_company_id: str | None = Header(None, alias="X-Company-Id"),
+    x_client_id: str | None = Header(None, alias="X-Client-Id"),
     db: Session = Depends(get_leadai_db),
 ):
-    _, client_id = scope
+    target_client = client_id or x_company_id or x_client_id
     billing_svc.ensure_default_templates(db)
 
     # Standard global plans OR custom plans targeted to this client_id (excluding on-the-fly client bundles)
@@ -232,9 +234,9 @@ def list_available_plans(
 
         if not t.TargetClientId and not t.TargetClientIds:
             matched.append(t)
-        elif t.TargetClientId == client_id:
+        elif target_client and t.TargetClientId == target_client:
             matched.append(t)
-        elif t.TargetClientIds and isinstance(t.TargetClientIds, list) and client_id in t.TargetClientIds:
+        elif target_client and t.TargetClientIds and isinstance(t.TargetClientIds, list) and target_client in t.TargetClientIds:
             matched.append(t)
 
     return [_serialize_template(r) for r in matched]

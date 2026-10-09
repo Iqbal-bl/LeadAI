@@ -8,7 +8,11 @@ import {
   tap,
   throwError,
 } from 'rxjs';
-import { UserMe, UserProfileUpdatePayload } from '../models/auth.models';
+import {
+  RegisterUrlOptions,
+  UserMe,
+  UserProfileUpdatePayload,
+} from '../models/auth.models';
 import {
   ROLE_COMPANY_ADMIN,
   ROLE_EMPLOYEE,
@@ -175,6 +179,60 @@ export class AuthService {
       '&code_challenge=' +
       code_challenge +
       '&code_challenge_method=S256&scope=openid profile api1 offline_access roles';
+  }
+
+  /**
+   * Constructs Identity Server Account/Create registration URL with plan, channels,
+   * permissions, and returnUrl query parameters.
+   */
+  public buildRegisterUrl(params: RegisterUrlOptions = {}): string {
+    const issuer = (environment.authConfig?.issuer || '').replace(/\/+$/, '');
+    const returnUrl =
+      params.returnUrl ||
+      environment.authConfig?.loginRedirectUri ||
+      `${window.location.origin}/auth/callback`;
+
+    const query = new URLSearchParams();
+    query.set('source', params.source || 'leadai');
+    query.set('returnUrl', returnUrl);
+
+    if (params.permissions) query.set('permissions', params.permissions);
+    if (params.plan) query.set('plan', params.plan);
+    if (params.planName) query.set('plan_name', params.planName);
+    if (params.selectedPlan || params.plan) {
+      query.set('selected_plan', params.selectedPlan || params.plan || '');
+    }
+    if (params.socialMedia) query.set('social_media', params.socialMedia);
+    if (params.channels || params.socialMedia) {
+      query.set('channels', params.channels || params.socialMedia || '');
+    }
+    if (params.billingCycle) query.set('billing_cycle', params.billingCycle);
+    if (params.cycle || params.billingCycle) {
+      query.set('cycle', params.cycle || params.billingCycle || '');
+    }
+    if (params.minutes !== undefined && params.minutes !== null) {
+      query.set('minutes', params.minutes.toString());
+    }
+    if (params.voiceMinutes !== undefined && params.voiceMinutes !== null) {
+      query.set('voice_minutes', params.voiceMinutes.toString());
+    }
+    if (params.planId) query.set('plan_id', params.planId);
+    if (params.planPrice !== undefined && params.planPrice !== null) {
+      query.set('plan_price', params.planPrice.toString());
+    }
+    if (params.totalAmount !== undefined && params.totalAmount !== null) {
+      query.set('total_amount', params.totalAmount.toString());
+    }
+
+    return `${issuer}/Account/Create?${query.toString()}`;
+  }
+
+  /**
+   * Redirects user to Identity Server Account/Create registration endpoint.
+   */
+  public redirectToRegister(params: RegisterUrlOptions = {}): void {
+    const url = this.buildRegisterUrl(params);
+    window.location.href = url;
   }
 
   // Generate the oauth token using code

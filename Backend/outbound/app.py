@@ -82,6 +82,7 @@ PUBLIC_PATHS = (
     "/api/login",
     "/api/check-session",
     "/api/refresh-token",
+    "/api/leadai/billing/available-plans",
 )
 
 

@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
+import { AuthService } from './auth.service';
+import { RegisterUrlOptions } from '../models/auth.models';
 import {
   BillingSummary,
   ChannelActionResponse,
@@ -25,7 +27,10 @@ import {
   providedIn: 'root',
 })
 export class BillingService {
-  constructor(private apiService: ApiService) { }
+  constructor(
+    private apiService: ApiService,
+    private authService: AuthService,
+  ) { }
 
   /** Tenant: Get current active plan & balance summary */
   public getCurrentPlan(): Observable<BillingSummary> {
@@ -199,5 +204,15 @@ export class BillingService {
   /** Admin: System-wide billing summary for all clients */
   public getAdminClientsSummary(): Observable<BillingSummary[]> {
     return this.apiService.get<BillingSummary[]>('admin/billing/clients-summary');
+  }
+
+  /** Identity Server: Build Account/Create registration URL with plan metadata */
+  public buildIdentityServerRegisterUrl(params: RegisterUrlOptions = {}): string {
+    return this.authService.buildRegisterUrl(params);
+  }
+
+  /** Identity Server: Redirect browser to Account/Create registration endpoint */
+  public redirectToIdentityServer(params: RegisterUrlOptions = {}): void {
+    this.authService.redirectToRegister(params);
   }
 }
