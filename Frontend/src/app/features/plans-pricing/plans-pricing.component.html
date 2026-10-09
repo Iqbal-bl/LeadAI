@@ -1,6 +1,10 @@
-<div class="pricing-page-wrapper min-h-screen w-full px-4 sm:px-6 lg:px-10 pb-24 animate-fade-in">
+<div
+  class="pricing-page-wrapper min-h-screen w-full px-4 sm:px-6 lg:px-10 pb-24 animate-fade-in"
+>
   <!-- Top Navigation Return Bar -->
-  <div class="max-w-6xl mx-auto pt-4 flex items-center justify-between gap-3 flex-wrap">
+  <div
+    class="max-w-6xl mx-auto pt-4 flex items-center justify-between gap-3 flex-wrap"
+  >
     <div class="flex items-center gap-2.5">
       <button
         *ngIf="hasActivePlan"
@@ -13,23 +17,26 @@
         <i class="pi pi-arrow-left text-xs"></i>
         <span>Return to Dashboard</span>
       </button>
-
+      <!-- 
       <span
-        *ngIf="!hasActivePlan"
+        *ngIf="!hasActivePlan && currentUserEmail"
         class="inline-flex items-center gap-2 text-xs font-bold px-3.5 py-1.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 shadow-2xs"
       >
         <i class="pi pi-lock text-xs"></i>
         <span>Workspace Locked &bull; Plan Required</span>
-      </span>
+      </span> -->
     </div>
 
     <div class="flex items-center gap-2.5">
-      <span class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+      <!-- <span
+        class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+      >
         <i class="pi pi-shield text-xs"></i>
         <span>Prices Inclusive of 18% GST</span>
-      </span>
+      </span> -->
 
       <button
+        *ngIf="currentUserEmail"
         type="button"
         (click)="logout()"
         pTooltip="Sign Out"
@@ -39,62 +46,37 @@
         <i class="pi pi-sign-out text-xs"></i>
         <span>Sign Out</span>
       </button>
-    </div>
-  </div>
 
-  <!-- Subscription Status Alert Banners -->
-  <div *ngIf="!hasActivePlan" class="max-w-6xl mx-auto mt-5">
-    <!-- Non-Admin Team Member Notice -->
-    <div
-      *ngIf="!isCompanyAdmin"
-      class="p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 shadow-sm flex items-start gap-4"
-    >
-      <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg shrink-0 mt-0.5">
-        <i class="pi pi-shield"></i>
-      </div>
-      <div class="flex-1">
-        <h3 class="text-sm font-bold text-amber-950 dark:text-amber-200">
-          Workspace Subscription Required
-        </h3>
-        <p class="text-xs text-amber-800/90 dark:text-amber-300/80 mt-1 leading-relaxed">
-          <strong>{{ companyName || 'Your company workspace' }}</strong> does not currently have an active subscription.
-          You are signed in as a team member (<strong>{{ currentUserEmail }}</strong>).
-          Only your company administrator can purchase or activate a subscription.
-        </p>
-        <p class="text-xs text-amber-700 dark:text-amber-400 mt-2 font-medium">
-          Please notify your company administrator to complete subscription activation. Once activated, workspace access will unlock for all team members automatically.
-        </p>
-      </div>
-    </div>
-
-    <!-- Admin Activation Required Banner -->
-    <div
-      *ngIf="isCompanyAdmin"
-      class="p-5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/50 shadow-sm flex items-start gap-4"
-    >
-      <div class="w-10 h-10 rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg shrink-0 mt-0.5">
-        <i class="pi pi-sparkles"></i>
-      </div>
-      <div class="flex-1">
-        <h3 class="text-sm font-bold text-indigo-950 dark:text-indigo-200">
-          Activate Subscription for {{ companyName || 'Your Company Workspace' }}
-        </h3>
-        <p class="text-xs text-indigo-900/80 dark:text-indigo-300/80 mt-1 leading-relaxed">
-          Your company workspace is ready! Please select a base plan below and customize your social media add-ons to activate LeadAI and unlock access for you and your team members.
-        </p>
-      </div>
+      <button
+        *ngIf="!currentUserEmail"
+        type="button"
+        (click)="signIn()"
+        pTooltip="Sign In"
+        tooltipPosition="bottom"
+        class="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 hover:text-blue-500 hover:border-blue-300 transition cursor-pointer"
+      >
+        <i class="pi pi-sign-in text-xs"></i>
+        <span>Sign In</span>
+      </button>
     </div>
   </div>
 
   <!-- ========================================================= -->
   <!-- HERO HEADER WITH SUBTLE ARCHITECTURAL GRID & CYCLE TOGGLE -->
   <!-- ========================================================= -->
-  <div class="pricing-hero-grid max-w-5xl mx-auto pt-8 pb-10 text-center relative">
-    <h1 class="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-tight text-slate-950 dark:text-white">
+  <div
+    class="pricing-hero-grid max-w-5xl mx-auto pt-8 pb-10 text-center relative"
+  >
+    <h1
+      class="text-4xl sm:text-5xl lg:text-[54px] font-extrabold tracking-tight leading-tight text-slate-950 dark:text-white"
+    >
       Pricing Plans
     </h1>
-    <p class="mt-3.5 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed font-medium">
-      Manage, track, and optimize your AI lead conversions with a plan built for your needs.
+    <p
+      class="mt-3.5 text-sm sm:text-base text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed font-medium"
+    >
+      Manage, track, and optimize your AI lead conversions with a plan built for
+      your needs.
     </p>
   </div>
 
@@ -104,15 +86,22 @@
     class="max-w-6xl mx-auto mb-8 p-5 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in"
   >
     <div class="flex items-start gap-3.5">
-      <div class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+      <div
+        class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0 mt-0.5"
+      >
         <i class="pi pi-exclamation-triangle text-lg"></i>
       </div>
       <div>
         <h4 class="text-sm font-bold text-amber-600 dark:text-amber-400">
           Active Subscription Running: {{ active.plan_name_snapshot }}
         </h4>
-        <p class="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-          Your account currently has an active plan with <strong>{{ active.remaining_minutes | number }}</strong> call minutes remaining. Need extra minutes or mid-cycle channel add-ons? Manage them directly from Usage &amp; Top-Ups.
+        <p
+          class="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed"
+        >
+          Your account currently has an active plan with
+          <strong>{{ active.remaining_minutes | number }}</strong> call minutes
+          remaining. Need extra minutes or mid-cycle channel add-ons? Manage
+          them directly from Usage &amp; Top-Ups.
         </p>
       </div>
     </div>
@@ -131,8 +120,14 @@
   <!-- ========================================================= -->
   <div class="max-w-6xl mx-auto">
     <!-- Loading Skeletons -->
-    <div *ngIf="isLoadingPlans" class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-7">
-      <div *ngFor="let i of [1, 2, 3]" class="p-8 rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5">
+    <div
+      *ngIf="isLoadingPlans"
+      class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-7"
+    >
+      <div
+        *ngFor="let i of [1, 2, 3]"
+        class="p-8 rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5"
+      >
         <p-skeleton width="45%" height="2rem"></p-skeleton>
         <p-skeleton width="85%" height="1.25rem"></p-skeleton>
         <div class="space-y-3 py-4">
@@ -142,12 +137,19 @@
           <p-skeleton width="65%" height="1rem"></p-skeleton>
         </div>
         <p-skeleton width="55%" height="3rem"></p-skeleton>
-        <p-skeleton width="100%" height="3.25rem" borderRadius="9999px"></p-skeleton>
+        <p-skeleton
+          width="100%"
+          height="3.25rem"
+          borderRadius="9999px"
+        ></p-skeleton>
       </div>
     </div>
 
     <!-- Pricing Cards -->
-    <div *ngIf="!isLoadingPlans" class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-7 items-stretch">
+    <div
+      *ngIf="!isLoadingPlans && standardPlans.length > 0"
+      class="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-7 items-stretch"
+    >
       <!-- ===================================================== -->
       <!-- STANDARD PLANS FROM API (Start & Growth [Best Choice]) -->
       <!-- ===================================================== -->
@@ -158,9 +160,11 @@
           isPopularPlan(plan, idx)
             ? 'pricing-card-dark bg-[#0b0f19] border-[#1e293b] text-white shadow-2xl'
             : 'pricing-card-light bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-sm',
-          isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
+          isPlanSelected &&
+          selectedPlanType === 'standard' &&
+          selectedStandardPlan?.id === plan.id
             ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-950'
-            : ''
+            : '',
         ]"
         class="rounded-[28px] border p-7 lg:p-8 flex flex-col justify-between transition-all duration-300 relative cursor-pointer group"
       >
@@ -169,7 +173,11 @@
           <div class="flex items-center justify-between gap-3 mb-3">
             <h2
               class="text-2xl font-bold tracking-tight"
-              [ngClass]="isPopularPlan(plan, idx) ? 'text-white' : 'text-slate-950 dark:text-white'"
+              [ngClass]="
+                isPopularPlan(plan, idx)
+                  ? 'text-white'
+                  : 'text-slate-950 dark:text-white'
+              "
             >
               {{ getPlanTierTitle(plan, idx) }}
             </h2>
@@ -184,7 +192,12 @@
 
             <!-- Selected indicator on non-popular card if chosen -->
             <span
-              *ngIf="!isPopularPlan(plan, idx) && isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id"
+              *ngIf="
+                !isPopularPlan(plan, idx) &&
+                isPlanSelected &&
+                selectedPlanType === 'standard' &&
+                selectedStandardPlan?.id === plan.id
+              "
               class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
             >
               selected
@@ -193,11 +206,18 @@
 
           <p
             class="text-xs sm:text-sm leading-relaxed min-h-[42px]"
-            [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'"
+            [ngClass]="
+              isPopularPlan(plan, idx)
+                ? 'text-slate-400'
+                : 'text-slate-500 dark:text-slate-400'
+            "
           >
-            {{ plan.description || (idx === 0
-              ? 'Ideal for growing teams automating inbound & outbound AI voice qualification.'
-              : 'Built for high-velocity sales teams scaling multi-channel AI operations.') }}
+            {{
+              plan.description ||
+                (idx === 0
+                  ? "Ideal for growing teams automating inbound & outbound AI voice qualification."
+                  : "Built for high-velocity sales teams scaling multi-channel AI operations.")
+            }}
           </p>
 
           <!-- Feature Checklist -->
@@ -208,11 +228,17 @@
             >
               <i
                 class="pi pi-check text-xs mt-1 font-bold flex-shrink-0"
-                [ngClass]="isPopularPlan(plan, idx) ? 'text-[#4f8ff7]' : 'text-blue-500'"
+                [ngClass]="
+                  isPopularPlan(plan, idx) ? 'text-[#4f8ff7]' : 'text-blue-500'
+                "
               ></i>
               <span
                 class="font-medium leading-snug"
-                [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-200' : 'text-slate-700 dark:text-slate-200'"
+                [ngClass]="
+                  isPopularPlan(plan, idx)
+                    ? 'text-slate-200'
+                    : 'text-slate-700 dark:text-slate-200'
+                "
               >
                 {{ feat }}
               </span>
@@ -226,13 +252,21 @@
             <div class="flex items-baseline gap-1.5">
               <span
                 class="text-4xl lg:text-[42px] font-extrabold tracking-tight"
-                [ngClass]="isPopularPlan(plan, idx) ? 'text-white' : 'text-slate-950 dark:text-white'"
+                [ngClass]="
+                  isPopularPlan(plan, idx)
+                    ? 'text-white'
+                    : 'text-slate-950 dark:text-white'
+                "
               >
                 ₹{{ getCardDisplayMonthlyPrice(plan.price) | number }}
               </span>
               <span
                 class="text-xs font-medium"
-                [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-400' : 'text-slate-400 dark:text-slate-500'"
+                [ngClass]="
+                  isPopularPlan(plan, idx)
+                    ? 'text-slate-400'
+                    : 'text-slate-400 dark:text-slate-500'
+                "
               >
                 / per month
               </span>
@@ -240,9 +274,15 @@
 
             <span
               class="text-xs font-semibold"
-              [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-300' : 'text-slate-700 dark:text-slate-300'"
+              [ngClass]="
+                isPopularPlan(plan, idx)
+                  ? 'text-slate-300'
+                  : 'text-slate-700 dark:text-slate-300'
+              "
             >
-              {{ billingCycle === 'yearly' ? 'billed yearly' : 'billed monthly' }}
+              {{
+                billingCycle === "yearly" ? "billed yearly" : "billed monthly"
+              }}
             </span>
           </div>
 
@@ -251,38 +291,59 @@
             type="button"
             [id]="'btn-select-plan-' + idx"
             (click)="$event.stopPropagation(); selectStandardPlan(plan, true)"
-            [disabled]="isCurrentPlan(plan) || (hasActivePlan && !isHigherTier(plan))"
-            [ngClass]="isCurrentPlan(plan) || (hasActivePlan && !isHigherTier(plan))
-              ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-              : (isPopularPlan(plan, idx)
-                ? 'bg-white text-slate-950 hover:bg-slate-100 shadow-lg'
-                : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100')"
+            [disabled]="
+              isCurrentPlan(plan) || (hasActivePlan && !isHigherTier(plan))
+            "
+            [ngClass]="
+              isCurrentPlan(plan) || (hasActivePlan && !isHigherTier(plan))
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : isPopularPlan(plan, idx)
+                  ? 'bg-white text-slate-950 hover:bg-slate-100 shadow-lg'
+                  : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100'
+            "
             class="w-full py-3.5 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <i
-              *ngIf="isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id"
+              *ngIf="
+                isPlanSelected &&
+                selectedPlanType === 'standard' &&
+                selectedStandardPlan?.id === plan.id
+              "
               class="pi pi-check-circle text-sm"
             ></i>
             <span>
-              {{ isCurrentPlan(plan)
-                ? 'Current Plan Active'
-                : (hasActivePlan && isHigherTier(plan)
-                  ? (isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
-                      ? 'Upgrade Selected • Configure ↓'
-                      : 'Upgrade to ' + getPlanTierTitle(plan, idx))
-                  : (hasActivePlan
-                      ? 'Plan Active'
-                      : (isPlanSelected && selectedPlanType === 'standard' && selectedStandardPlan?.id === plan.id
-                          ? 'Selected • Add Social Channels ↓'
-                          : (idx === 0 ? 'Select Start' : 'Select Growth')))) }}
+              {{
+                isCurrentPlan(plan)
+                  ? "Current Plan Active"
+                  : hasActivePlan && isHigherTier(plan)
+                    ? isPlanSelected &&
+                      selectedPlanType === "standard" &&
+                      selectedStandardPlan?.id === plan.id
+                      ? "Upgrade Selected • Configure ↓"
+                      : "Upgrade to " + getPlanTierTitle(plan, idx)
+                    : hasActivePlan
+                      ? "Plan Active"
+                      : isPlanSelected &&
+                          selectedPlanType === "standard" &&
+                          selectedStandardPlan?.id === plan.id
+                        ? "Selected • Add Social Channels ↓"
+                        : idx === 0
+                          ? "Select Start"
+                          : "Select Growth"
+              }}
             </span>
           </button>
 
           <p
             class="text-center text-[11px] mt-3 font-medium"
-            [ngClass]="isPopularPlan(plan, idx) ? 'text-slate-400' : 'text-slate-400 dark:text-slate-500'"
+            [ngClass]="
+              isPopularPlan(plan, idx)
+                ? 'text-slate-400'
+                : 'text-slate-400 dark:text-slate-500'
+            "
           >
-            {{ getPlanCycleMinutes(plan) | number }} mins included • Inclusive of 18% GST
+            {{ getPlanCycleMinutes(plan) | number }} mins included • Inclusive
+            of 18% GST
           </p>
         </div>
       </div>
@@ -296,13 +357,15 @@
           'pricing-card-light bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-sm',
           isPlanSelected && selectedPlanType === 'custom'
             ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-950'
-            : ''
+            : '',
         ]"
         class="rounded-[28px] border p-7 lg:p-8 flex flex-col justify-between transition-all duration-300 relative cursor-pointer"
       >
         <div>
           <div class="flex items-center justify-between gap-3 mb-3">
-            <h2 class="text-2xl font-bold tracking-tight text-slate-950 dark:text-white">
+            <h2
+              class="text-2xl font-bold tracking-tight text-slate-950 dark:text-white"
+            >
               Enterprise
             </h2>
             <span
@@ -319,29 +382,53 @@
             </span>
           </div>
 
-          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed min-h-[42px]">
-            Perfect for high-volume outbound teams, enterprises, and custom AI voice minute allocations.
+          <p
+            class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed min-h-[42px]"
+          >
+            Perfect for high-volume outbound teams, enterprises, and custom AI
+            voice minute allocations.
           </p>
 
           <!-- Checklist matching reference screenshot -->
           <ul class="mt-6 space-y-2.5 text-xs sm:text-[13.5px]">
             <li class="flex items-start gap-2.5">
-              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
-              <span class="font-medium text-slate-700 dark:text-slate-200">Everything in Growth</span>
+              <i
+                class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"
+              ></i>
+              <span class="font-medium text-slate-700 dark:text-slate-200"
+                >Everything in Growth</span
+              >
             </li>
             <li class="flex items-start gap-2.5">
-              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
+              <i
+                class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"
+              ></i>
               <span class="font-medium text-slate-700 dark:text-slate-200">
-                Custom {{ (billingCycle === 'yearly' ? customMinutes * 12 : customMinutes) | number }} call minutes ({{ customMinutes | number }} mins/mo)
+                Custom
+                {{
+                  (billingCycle === "yearly"
+                    ? customMinutes * 12
+                    : customMinutes
+                  ) | number
+                }}
+                call minutes ({{ customMinutes | number }} mins/mo)
               </span>
             </li>
             <li class="flex items-start gap-2.5">
-              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
-              <span class="font-medium text-slate-700 dark:text-slate-200">Dedicated account &amp; webhook SLA</span>
+              <i
+                class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"
+              ></i>
+              <span class="font-medium text-slate-700 dark:text-slate-200"
+                >Dedicated account &amp; webhook SLA</span
+              >
             </li>
             <li class="flex items-start gap-2.5">
-              <i class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"></i>
-              <span class="font-medium text-slate-700 dark:text-slate-200">Multi-user role permissions</span>
+              <i
+                class="pi pi-check text-blue-500 text-xs mt-1 font-bold flex-shrink-0"
+              ></i>
+              <span class="font-medium text-slate-700 dark:text-slate-200"
+                >Multi-user role permissions</span
+              >
             </li>
           </ul>
 
@@ -351,9 +438,13 @@
             class="mt-5 p-3.5 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/80 space-y-3"
           >
             <div class="flex items-center justify-between text-xs">
-              <span class="font-bold text-slate-600 dark:text-slate-300">Custom Voice Quota:</span>
+              <span class="font-bold text-slate-600 dark:text-slate-300"
+                >Custom Voice Quota:</span
+              >
               <span class="font-extrabold text-blue-600 dark:text-blue-400">
-                {{ customMinutes | number }} Mins / mo (&#64; ₹{{ customRatePerMinute }}/m)
+                {{ customMinutes | number }} Mins / mo (&#64; ₹{{
+                  customRatePerMinute
+                }}/m)
               </span>
             </div>
 
@@ -371,9 +462,11 @@
                 type="button"
                 *ngFor="let preset of [500, 1500, 3000, 6000]"
                 (click)="onCustomMinutesChange(preset)"
-                [ngClass]="customMinutes === preset
-                  ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-bold'
-                  : 'bg-slate-100 dark:bg-slate-700/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200'"
+                [ngClass]="
+                  customMinutes === preset
+                    ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 font-bold'
+                    : 'bg-slate-100 dark:bg-slate-700/70 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                "
                 class="px-2.5 py-1 rounded-full text-[11px] transition cursor-pointer"
               >
                 {{ preset | number }}m
@@ -386,16 +479,28 @@
         <div class="pt-8 mt-6">
           <div class="flex items-baseline justify-between gap-2 mb-6">
             <div class="flex items-baseline gap-1.5">
-              <span class="text-4xl lg:text-[42px] font-extrabold tracking-tight text-slate-950 dark:text-white">
-                ₹{{ getCardDisplayMonthlyPrice(customMinutes * customRatePerMinute) | number }}
+              <span
+                class="text-4xl lg:text-[42px] font-extrabold tracking-tight text-slate-950 dark:text-white"
+              >
+                ₹{{
+                  getCardDisplayMonthlyPrice(
+                    customMinutes * customRatePerMinute
+                  ) | number
+                }}
               </span>
-              <span class="text-xs font-medium text-slate-400 dark:text-slate-500">
+              <span
+                class="text-xs font-medium text-slate-400 dark:text-slate-500"
+              >
                 / per month
               </span>
             </div>
 
-            <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              {{ billingCycle === 'yearly' ? 'billed yearly' : 'billed monthly' }}
+            <span
+              class="text-xs font-semibold text-slate-700 dark:text-slate-300"
+            >
+              {{
+                billingCycle === "yearly" ? "billed yearly" : "billed monthly"
+              }}
             </span>
           </div>
 
@@ -404,27 +509,40 @@
             id="btn-select-custom-plan"
             (click)="$event.stopPropagation(); selectCustomPlan(true)"
             [disabled]="hasActivePlan && !isHigherTierCustom()"
-            [ngClass]="hasActivePlan && !isHigherTierCustom()
-              ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-              : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100'"
+            [ngClass]="
+              hasActivePlan && !isHigherTierCustom()
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100'
+            "
             class="w-full py-3.5 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
-            <i *ngIf="isPlanSelected && selectedPlanType === 'custom'" class="pi pi-check-circle text-sm"></i>
+            <i
+              *ngIf="isPlanSelected && selectedPlanType === 'custom'"
+              class="pi pi-check-circle text-sm"
+            ></i>
             <span>
-              {{ hasActivePlan && !isHigherTierCustom()
-                ? 'Plan Active'
-                : (hasActivePlan
-                  ? (isPlanSelected && selectedPlanType === 'custom'
-                      ? 'Upgrade Selected • Configure ↓'
-                      : 'Upgrade to Enterprise')
-                  : (isPlanSelected && selectedPlanType === 'custom'
-                      ? 'Selected • Add Social Channels ↓'
-                      : 'Select Enterprise')) }}
+              {{
+                hasActivePlan && !isHigherTierCustom()
+                  ? "Plan Active"
+                  : hasActivePlan
+                    ? isPlanSelected && selectedPlanType === "custom"
+                      ? "Upgrade Selected • Configure ↓"
+                      : "Upgrade to Enterprise"
+                    : isPlanSelected && selectedPlanType === "custom"
+                      ? "Selected • Add Social Channels ↓"
+                      : "Select Enterprise"
+              }}
             </span>
           </button>
 
-          <p class="text-center text-[11px] mt-3 font-medium text-slate-400 dark:text-slate-500">
-            {{ (billingCycle === 'yearly' ? customMinutes * 12 : customMinutes) | number }} mins included • Inclusive of 18% GST
+          <p
+            class="text-center text-[11px] mt-3 font-medium text-slate-400 dark:text-slate-500"
+          >
+            {{
+              (billingCycle === "yearly" ? customMinutes * 12 : customMinutes)
+                | number
+            }}
+            mins included • Inclusive of 18% GST
           </p>
         </div>
       </div>
@@ -432,12 +550,14 @@
 
     <!-- Prompt banner if user hasn't clicked a plan yet -->
     <div
-      *ngIf="!isLoadingPlans && !isPlanSelected && !hasActivePlan"
+      *ngIf="!isLoadingPlans && standardPlans.length > 0 && !isPlanSelected && !hasActivePlan"
       class="mt-8 p-4 rounded-2xl bg-slate-100/80 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 text-center flex items-center justify-center gap-2.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 animate-fade-in"
     >
       <i class="pi pi-hand-pointer text-blue-500"></i>
       <span>
-        Select any plan above to choose optional <strong>Social Media Support Add-ons</strong> and view your <strong>Side-by-Side Tax-Inclusive Billing Summary</strong>.
+        Select any plan above to choose optional
+        <strong>Social Media Support Add-ons</strong> and view your
+        <strong>Side-by-Side Tax-Inclusive Billing Summary</strong>.
       </span>
     </div>
   </div>
@@ -447,7 +567,7 @@
   <!-- ======================================================================= -->
   <div
     id="addons-billing-section"
-    *ngIf="isPlanSelected && !isLoadingPlans"
+    *ngIf="isPlanSelected && !isLoadingPlans && standardPlans.length > 0"
     class="max-w-6xl mx-auto mt-12 pt-10 border-t border-slate-200 dark:border-slate-800 animate-fade-in"
   >
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -455,37 +575,59 @@
       <!-- LEFT COLUMN (7 Cols): SOCIAL MEDIA SUPPORT ADD-ONS        -->
       <!-- ========================================================= -->
       <div class="lg:col-span-7 space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div
+          class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        >
           <div class="max-w-xl">
-            <span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-1">
+            <span
+              class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-1"
+            >
               <i class="pi pi-sparkles text-xs"></i> Optional Add-On Services
             </span>
-            <h2 class="text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white">
+            <h2
+              class="text-2xl font-extrabold tracking-tight text-slate-950 dark:text-white"
+            >
               Choose Add-On Services &amp; Channels
             </h2>
-            <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-              Supercharge your selected plan with dedicated voice call facilities, automated blog publishing, and 24/7 omni-channel messaging.
+            <p
+              class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed"
+            >
+              Supercharge your selected plan with dedicated voice call
+              facilities, automated blog publishing, and 24/7 omni-channel
+              messaging.
             </p>
           </div>
 
           <button
             type="button"
             (click)="toggleAllChannels()"
-            [disabled]="hasActivePlan"
+            [disabled]="hasActivePlan || channelOptions.length === 0"
             class="self-start sm:self-center whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
           >
-            {{ areAllChannelsSelected() ? 'Clear All Channels' : 'Select All Channels' }}
+            {{
+              areAllChannelsSelected()
+                ? "Clear All Channels"
+                : "Select All Channels"
+            }}
           </button>
         </div>
 
         <!-- Social Media Channels Grid (Loaded from API) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div
+          *ngIf="channelOptions.length === 0"
+          class="p-8 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400"
+        >
+          No add-on services currently available.
+        </div>
+        <div *ngIf="channelOptions.length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div
             *ngFor="let ch of channelOptions"
             (click)="toggleChannel(ch.key)"
-            [ngClass]="selectedChannelsMap[ch.key]
-              ? 'ring-2 ring-slate-950 dark:ring-white bg-white dark:bg-slate-900 border-transparent shadow-lg'
-              : 'bg-[#f8f9fa] dark:bg-slate-900/60 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'"
+            [ngClass]="
+              selectedChannelsMap[ch.key]
+                ? 'ring-2 ring-slate-950 dark:ring-white bg-white dark:bg-slate-900 border-transparent shadow-lg'
+                : 'bg-[#f8f9fa] dark:bg-slate-900/60 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+            "
             class="p-5 rounded-3xl border flex flex-col justify-between transition-all duration-200 cursor-pointer relative"
           >
             <div>
@@ -500,11 +642,17 @@
                     <i [class]="ch.icon"></i>
                   </div>
                   <div>
-                    <h3 class="text-sm sm:text-base font-bold text-slate-950 dark:text-white leading-snug">
+                    <h3
+                      class="text-sm sm:text-base font-bold text-slate-950 dark:text-white leading-snug"
+                    >
                       {{ ch.name }}
                     </h3>
                     <span class="text-[11px] font-medium text-slate-400">
-                      {{ billingCycle === 'yearly' ? '365 Days Sync' : (ch.durationDays + ' Days Sync') }}
+                      {{
+                        billingCycle === "yearly"
+                          ? "365 Days Sync"
+                          : ch.durationDays + " Days Sync"
+                      }}
                     </span>
                   </div>
                 </div>
@@ -512,16 +660,20 @@
                 <!-- Check Circle Indicator -->
                 <div
                   class="w-6 h-6 rounded-full flex items-center justify-center text-xs transition-all flex-shrink-0"
-                  [ngClass]="selectedChannelsMap[ch.key]
-                    ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
-                    : 'border border-slate-300 dark:border-slate-700 text-transparent'"
+                  [ngClass]="
+                    selectedChannelsMap[ch.key]
+                      ? 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 shadow-xs'
+                      : 'border border-slate-300 dark:border-slate-700 text-transparent'
+                  "
                 >
                   <i class="pi pi-check text-[10px] font-bold"></i>
                 </div>
               </div>
 
               <!-- Channel Description -->
-              <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4 min-h-[34px]">
+              <p
+                class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-4 min-h-[34px]"
+              >
                 {{ ch.description }}
               </p>
 
@@ -531,28 +683,38 @@
                   *ngFor="let feat of ch.features"
                   class="flex items-center gap-2 text-slate-700 dark:text-slate-300"
                 >
-                  <i class="pi pi-check text-blue-500 text-[10px] font-bold"></i>
+                  <i
+                    class="pi pi-check text-blue-500 text-[10px] font-bold"
+                  ></i>
                   <span class="truncate">{{ feat }}</span>
                 </li>
               </ul>
             </div>
 
             <!-- Bottom Price & Add Action -->
-            <div class="pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between">
+            <div
+              class="pt-3 border-t border-slate-200/70 dark:border-slate-800 flex items-center justify-between"
+            >
               <div>
-                <span class="text-lg font-extrabold text-slate-950 dark:text-white">
+                <span
+                  class="text-lg font-extrabold text-slate-950 dark:text-white"
+                >
                   +₹{{ getCardDisplayMonthlyPrice(ch.monthlyPrice) | number }}
                 </span>
-                <span class="text-[11px] text-slate-400 font-medium"> / mo</span>
+                <span class="text-[11px] text-slate-400 font-medium">
+                  / mo</span
+                >
               </div>
 
               <span
                 class="px-3 py-1 rounded-full text-xs font-bold transition"
-                [ngClass]="selectedChannelsMap[ch.key]
-                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300'"
+                [ngClass]="
+                  selectedChannelsMap[ch.key]
+                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                "
               >
-                {{ selectedChannelsMap[ch.key] ? 'Added ✓' : '+ Add Support' }}
+                {{ selectedChannelsMap[ch.key] ? "Added ✓" : "+ Add Support" }}
               </span>
             </div>
           </div>
@@ -563,9 +725,13 @@
       <!-- RIGHT COLUMN (5 Cols): SIDE-BY-SIDE TAX-INCLUSIVE BILLING -->
       <!-- ========================================================= -->
       <div class="lg:col-span-5 sticky top-6">
-        <div class="rounded-[28px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-xl space-y-5">
+        <div
+          class="rounded-[28px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-xl space-y-5"
+        >
           <!-- Header -->
-          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div
+            class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4"
+          >
             <div>
               <h3 class="text-lg font-extrabold text-slate-950 dark:text-white">
                 Billing Summary
@@ -574,34 +740,45 @@
                 Side-by-side itemized statement (Inclusive of 18% GST)
               </p>
             </div>
-            <span class="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 capitalize">
+            <span
+              class="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 capitalize"
+            >
               {{ billingCycle }} Cycle
             </span>
           </div>
 
           <!-- 1. Selected Base Voice Plan Line Item -->
           <div class="space-y-2">
-            <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            <div
+              class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400"
+            >
               <span>1. Selected Base Plan</span>
               <span>Amount (Incl. GST)</span>
             </div>
 
-            <div class="p-4 rounded-2xl bg-[#f8f9fa] dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-start justify-between gap-3">
+            <div
+              class="p-4 rounded-2xl bg-[#f8f9fa] dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-start justify-between gap-3"
+            >
               <div>
-                <div class="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2">
+                <div
+                  class="text-sm font-bold text-slate-950 dark:text-white flex items-center gap-2"
+                >
                   <i class="pi pi-phone text-blue-500 text-xs"></i>
                   <span>{{ getBasePlanName() }}</span>
                 </div>
                 <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  {{ getBasePlanMinutes() | number }} AI Voice Minutes • {{ billingCycle === 'yearly' ? '365 Days' : '30 Days' }}
+                  {{ getBasePlanMinutes() | number }} AI Voice Minutes •
+                  {{ billingCycle === "yearly" ? "365 Days" : "30 Days" }}
                 </div>
               </div>
               <div class="text-right flex-shrink-0">
-                <span class="text-sm font-extrabold text-slate-950 dark:text-white">
+                <span
+                  class="text-sm font-extrabold text-slate-950 dark:text-white"
+                >
                   ₹{{ getBasePlanGrossCyclePrice() | number }}
                 </span>
                 <span class="block text-[10px] text-slate-400">
-                  {{ billingCycle === 'yearly' ? '/ year' : '/ month' }}
+                  {{ billingCycle === "yearly" ? "/ year" : "/ month" }}
                 </span>
               </div>
             </div>
@@ -609,9 +786,15 @@
 
           <!-- 2. Selected Add-On Services Line Items -->
           <div class="space-y-2">
-            <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              <span>2. Add-On Services ({{ getSelectedChannels().length }})</span>
-              <span *ngIf="getSelectedChannels().length > 0">₹{{ getChannelsGrossCycleTotal() | number }}</span>
+            <div
+              class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400"
+            >
+              <span
+                >2. Add-On Services ({{ getSelectedChannels().length }})</span
+              >
+              <span *ngIf="getSelectedChannels().length > 0"
+                >₹{{ getChannelsGrossCycleTotal() | number }}</span
+              >
             </div>
 
             <div
@@ -629,14 +812,27 @@
                 class="px-3.5 py-2.5 rounded-2xl bg-[#f8f9fa] dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between gap-2"
               >
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <i [class]="ch.icon" [style.color]="ch.color" class="text-sm flex-shrink-0"></i>
-                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                  <i
+                    [class]="ch.icon"
+                    [style.color]="ch.color"
+                    class="text-sm flex-shrink-0"
+                  ></i>
+                  <span
+                    class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate"
+                  >
                     {{ ch.name }}
                   </span>
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0">
-                  <span class="text-xs font-bold text-slate-900 dark:text-white">
-                    +₹{{ (billingCycle === 'yearly' ? ch.monthlyPrice * 12 : ch.monthlyPrice) | number }}
+                  <span
+                    class="text-xs font-bold text-slate-900 dark:text-white"
+                  >
+                    +₹{{
+                      (billingCycle === "yearly"
+                        ? ch.monthlyPrice * 12
+                        : ch.monthlyPrice
+                      ) | number
+                    }}
                   </span>
                   <button
                     type="button"
@@ -652,15 +848,25 @@
           </div>
 
           <!-- 3. Tax & Total Breakdown Box (18% GST Back-Calculated from Inclusive Price) -->
-          <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-2.5 text-xs">
-            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+          <div
+            class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-2.5 text-xs"
+          >
+            <div
+              class="flex items-center justify-between text-slate-600 dark:text-slate-300"
+            >
               <span>Base Voice Plan (Incl. GST)</span>
-              <span class="font-semibold">₹{{ getBasePlanGrossCyclePrice() | number:'1.2-2' }}</span>
+              <span class="font-semibold"
+                >₹{{ getBasePlanGrossCyclePrice() | number: "1.2-2" }}</span
+              >
             </div>
 
-            <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+            <div
+              class="flex items-center justify-between text-slate-600 dark:text-slate-300"
+            >
               <span>Add-On Services ({{ getSelectedChannels().length }})</span>
-              <span class="font-semibold">₹{{ getChannelsGrossCycleTotal() | number:'1.2-2' }}</span>
+              <span class="font-semibold"
+                >₹{{ getChannelsGrossCycleTotal() | number: "1.2-2" }}</span
+              >
             </div>
 
             <div
@@ -668,38 +874,57 @@
               class="flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-semibold"
             >
               <span>Yearly Billing Discount (15% Off)</span>
-              <span>-₹{{ getYearlyDiscountAmount() | number:'1.2-2' }}</span>
+              <span>-₹{{ getYearlyDiscountAmount() | number: "1.2-2" }}</span>
             </div>
 
-            <div class="border-t border-dashed border-slate-200 dark:border-slate-700 my-1"></div>
+            <div
+              class="border-t border-dashed border-slate-200 dark:border-slate-700 my-1"
+            ></div>
 
             <!-- Back-Calculated Net Taxable & 18% GST Breakdown -->
-            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div
+              class="flex items-center justify-between text-slate-500 dark:text-slate-400"
+            >
               <span>Net Taxable Amount (Excl. GST)</span>
-              <span class="font-medium">₹{{ getTaxableSubtotalExclTax() | number:'1.2-2' }}</span>
+              <span class="font-medium"
+                >₹{{ getTaxableSubtotalExclTax() | number: "1.2-2" }}</span
+              >
             </div>
 
-            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div
+              class="flex items-center justify-between text-slate-500 dark:text-slate-400"
+            >
               <span>Included GST ({{ GST_TAX_RATE }}% Tax)</span>
-              <span class="font-medium">₹{{ getIncludedGstAmount() | number:'1.2-2' }}</span>
+              <span class="font-medium"
+                >₹{{ getIncludedGstAmount() | number: "1.2-2" }}</span
+              >
             </div>
 
             <!-- Grand Total Inclusive of Taxes -->
-            <div class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-baseline justify-between">
+            <div
+              class="pt-3 border-t border-slate-200 dark:border-slate-700 flex items-baseline justify-between"
+            >
               <div>
-                <span class="text-sm font-extrabold text-slate-950 dark:text-white block">
+                <span
+                  class="text-sm font-extrabold text-slate-950 dark:text-white block"
+                >
                   Total Amount (Incl. Taxes)
                 </span>
-                <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  Includes ₹{{ getIncludedGstAmount() | number:'1.2-2' }} GST (No extra tax added)
+                <span
+                  class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold"
+                >
+                  Includes ₹{{ getIncludedGstAmount() | number: "1.2-2" }} GST
+                  (No extra tax added)
                 </span>
               </div>
               <div class="text-right">
-                <span class="text-2xl sm:text-3xl font-black text-slate-950 dark:text-white">
+                <span
+                  class="text-2xl sm:text-3xl font-black text-slate-950 dark:text-white"
+                >
                   ₹{{ getTotalPayableInclusiveTax() | number }}
                 </span>
                 <span class="block text-[11px] text-slate-400">
-                  /{{ billingCycle === 'yearly' ? 'year' : 'month' }}
+                  /{{ billingCycle === "yearly" ? "year" : "month" }}
                 </span>
               </div>
             </div>
@@ -710,57 +935,65 @@
             type="button"
             id="btn-proceed-autopay"
             (click)="initiateAutoPayCheckout()"
-            [disabled]="(hasActivePlan && !canUpgradeCurrentSelection()) || isCheckingOut || !isCompanyAdmin"
-            [ngClass]="(hasActivePlan && !canUpgradeCurrentSelection()) || !isCompanyAdmin
-              ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-              : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg'"
+            [disabled]="
+              (hasActivePlan && !canUpgradeCurrentSelection()) ||
+              isCheckingOut ||
+              (!isCompanyAdmin && !!currentUserEmail)
+            "
+            [ngClass]="
+              (hasActivePlan && !canUpgradeCurrentSelection()) ||
+              (!isCompanyAdmin && !!currentUserEmail)
+                ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                : 'bg-slate-950 dark:bg-white text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg'
+            "
             class="w-full py-4 px-6 rounded-full font-bold text-sm transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
           >
             <i *ngIf="isCheckingOut" class="pi pi-spin pi-spinner text-sm"></i>
-            <i *ngIf="!isCheckingOut && (!hasActivePlan || canUpgradeCurrentSelection()) && isCompanyAdmin" class="pi pi-shield text-sm"></i>
-            <i *ngIf="!isCompanyAdmin" class="pi pi-lock text-sm"></i>
+            <i
+              *ngIf="
+                !isCheckingOut &&
+                (!hasActivePlan || canUpgradeCurrentSelection()) &&
+                (isCompanyAdmin || !currentUserEmail)
+              "
+              class="pi pi-arrow-right text-sm"
+            ></i>
+            <i
+              *ngIf="!isCompanyAdmin && !!currentUserEmail"
+              class="pi pi-lock text-sm"
+            ></i>
             <span>
-              {{ (hasActivePlan && !canUpgradeCurrentSelection())
-                ? 'Current Plan Active'
-                : (!isCompanyAdmin
-                    ? 'Admin Action Required to Purchase'
-                    : (hasActivePlan && canUpgradeCurrentSelection()
-                        ? ('Upgrade Plan • Pay ₹' + (getTotalPayableInclusiveTax() | number) + ' (Incl. Taxes)')
-                        : ('Pay ₹' + (getTotalPayableInclusiveTax() | number) + ' (Incl. Taxes)'))) }}
+              {{
+                hasActivePlan && !canUpgradeCurrentSelection()
+                  ? "Current Plan Active"
+                  : !isCompanyAdmin && !!currentUserEmail
+                    ? "Admin Action Required to Purchase"
+                    : hasActivePlan && canUpgradeCurrentSelection()
+                      ? "Upgrade Plan • Pay ₹" +
+                        (getTotalPayableInclusiveTax() | number) +
+                        " (Incl. Taxes)"
+                      : "Proceed to Create Account • ₹" +
+                        (getTotalPayableInclusiveTax() | number) +
+                        " (Incl. Taxes)"
+              }}
             </span>
           </button>
 
-          <p *ngIf="!isCompanyAdmin" class="text-center text-xs text-amber-600 dark:text-amber-400 font-semibold">
-            Only company administrators can authorize and purchase subscriptions.
+          <p
+            *ngIf="!isCompanyAdmin && !!currentUserEmail"
+            class="text-center text-xs text-amber-600 dark:text-amber-400 font-semibold"
+          >
+            Only company administrators can authorize and purchase
+            subscriptions.
           </p>
 
           <!-- Security & Mandate Footnote -->
           <p class="text-center text-[11px] text-slate-400 leading-relaxed">
-            <i class="pi pi-lock text-[10px] text-emerald-500 mr-1"></i>
-            Secured via Razorpay AutoPay e-Mandate. Cancel auto-renewal or individual social channels anytime from Usage &amp; Invoices.
+            <i class="pi pi-shield text-[10px] text-emerald-500 mr-1"></i>
+            Secured via Identity Server. You will be redirected to create your
+            workspace account with selected features.
           </p>
         </div>
       </div>
-    </div>
-  </div>
-</div>
-
-<!-- ========================================== -->
-<!-- FULLSCREEN PAYMENT VERIFICATION OVERLAY    -->
-<!-- ========================================== -->
-<div *ngIf="isVerifyingPayment" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center space-y-4 animate-scale-in">
-    <div class="flex justify-center">
-      <p-progressSpinner styleClass="w-14 h-14" strokeWidth="4"></p-progressSpinner>
-    </div>
-    <h3 class="text-xl font-extrabold text-slate-950 dark:text-white">
-      Authenticating AutoPay Mandate
-    </h3>
-    <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-      {{ verificationMessage || 'Verifying transaction signature with Razorpay and activating your quotas...' }}
-    </p>
-    <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
-      Please do not close or refresh this tab while we finalize your subscription.
     </div>
   </div>
 </div>

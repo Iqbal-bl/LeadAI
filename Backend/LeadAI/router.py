@@ -54,6 +54,7 @@ api_router = APIRouter()
 # ---------------------------------------------------------------------------
 api_router.include_router(chat.router)
 api_router.include_router(webhooks.router)
+api_router.include_router(companies.public_router)
 
 # ---------------------------------------------------------------------------
 # Staff surface - identity-server token AND a LeadAI role grant required.

@@ -84,3 +84,21 @@ export interface TeamMember {
   assignedLeads: number;
 }
 
+export interface RegisterUrlOptions {
+  source?: string;
+  returnUrl?: string;
+  permissions?: string;
+  plan?: string;
+  planName?: string;
+  selectedPlan?: string;
+  socialMedia?: string;
+  channels?: string;
+  billingCycle?: string;
+  cycle?: string;
+  minutes?: number | string;
+  voiceMinutes?: number | string;
+  planId?: string;
+  planPrice?: number | string;
+  totalAmount?: number | string;
+}
+
