@@ -84,6 +84,7 @@ class GlobalImagePlan(BaseModel):
 # ===========================================================================
 
 class GenerateBlogRequest(BaseModel):
+    client_id: Optional[str] = None
     topic: str
     tone: Optional[str] = "professional"
     target_audience: Optional[str] = "Business Leaders and Professionals"

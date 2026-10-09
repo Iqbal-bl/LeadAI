@@ -22,6 +22,7 @@ def fanout(state: State):
         Send(
             "worker",
             {
+                "client_id": state.get("client_id"),
                 "topic": state["topic"],
                 "mode": state.get("mode", "closed_book"),
                 "as_of": state.get("as_of", "2026-09-01"),

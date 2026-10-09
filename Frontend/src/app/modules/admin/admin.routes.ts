@@ -155,6 +155,13 @@ export const ADMIN_ROUTES: Routes = [
       ),
   },
   {
+    path: 'ai-usage',
+    loadComponent: () =>
+      import('./pages/ai-usage/admin-ai-usage.component').then(
+        (m) => m.AdminAiUsageComponent,
+      ),
+  },
+  {
     path: 'profile',
     loadComponent: () =>
       import('../../features/profile/profile.component').then(

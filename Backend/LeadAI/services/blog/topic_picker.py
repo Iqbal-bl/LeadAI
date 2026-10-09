@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 
+from core.observability import traceable
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
@@ -32,13 +33,21 @@ class TopicPickerService:
     @classmethod
     def _get_llm(cls):
         api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+        cb = []
+        try:
+            from core.usage_tracker import InAppUsageCallbackHandler
+            cb.append(InAppUsageCallbackHandler(process="blog_topic_picker", channel="blog"))
+        except Exception:
+            pass
         return ChatOpenAI(
             model=settings.openai_model or "gpt-4o-mini",
             api_key=api_key,
             temperature=0.7,
+            callbacks=cb,
         )
 
     @classmethod
+    @traceable(name="tool:blog_topic_picker", run_type="tool")
     def pick_daily_topic(
         cls,
         db: Session,
@@ -105,13 +114,15 @@ Select the best new topic for today's article:
 """
 
         try:
-            result: SuggestedTopic = structured_llm.invoke(
-                [
-                    SystemMessage(content=system_prompt),
-                    HumanMessage(content=user_content),
-                ]
-            )
-            return result.topic, result.keywords or default_keywords
+            from core.usage_tracker import bind_usage_context
+            with bind_usage_context(company_id=client_id, process="blog_topic_picker", channel="blog"):
+                result: SuggestedTopic = structured_llm.invoke(
+                    [
+                        SystemMessage(content=system_prompt),
+                        HumanMessage(content=user_content),
+                    ]
+                )
+                return result.topic, result.keywords or default_keywords
         except Exception as exc:
             logger.error(f"[TopicPickerService] Error picking topic for {client_id}: {exc}")
             # Fallback

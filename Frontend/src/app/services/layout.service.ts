@@ -570,6 +570,21 @@ export class LayoutService {
       });
     }
 
+    // AI Analytics — Company Admin only
+    if (normalized === 'admin') {
+      sections.push({
+        title: 'AI ANALYTICS',
+        items: [
+          {
+            label: 'AI Usage',
+            icon: 'pi pi-microchip-ai',
+            routerLink: '/client/ai-usage',
+            permission: 'usage.read',
+          },
+        ],
+      });
+    }
+
     sections.push({
       title: 'MANAGEMENT',
       items: adminItems,

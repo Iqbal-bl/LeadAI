@@ -267,6 +267,8 @@ class ArticleService:
         ).first()
 
         # Run Generator
+        if not req.client_id:
+            req.client_id = client_id
         gen_res = GeneratorService.generate_blog(req)
 
         # Create Article

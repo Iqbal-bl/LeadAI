@@ -40,7 +40,10 @@ from domain.models import Client
 
 from .. import activity
 from ..activity import A
+from core.observability import traceable
+from core.usage_tracker import bind_usage_context
 from ..config import settings
+
 from ..db import session as new_session
 from ..engine import bridge as engine_bridge
 from ..engine import control as engine_control
@@ -857,7 +860,12 @@ def handle_customer_turn(
     first one's message and reply already in its history.
     """
     conversation_id = conversation.Id
-    with conversation_lock(db, conversation_id):
+    with conversation_lock(db, conversation_id), bind_usage_context(
+        company_id=client.Id,
+        process="chat_answer",
+        channel=conversation.Channel,
+        conversation_id=conversation.Id,
+    ):
         return _run_customer_turn(
             db, client, conversation, text,
             request=request, source=source, deliver_reply=deliver_reply,
@@ -865,6 +873,7 @@ def handle_customer_turn(
         )
 
 
+@traceable(name="agent:leadai_customer_turn", run_type="chain")
 def _run_customer_turn(
     db: Session,
     client: Client,

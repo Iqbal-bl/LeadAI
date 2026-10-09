@@ -200,7 +200,10 @@ def upsert(
     if not chunks:
         return 0
 
-    vectors, model = embed(chunks)
+    from core.usage_tracker import bind_usage_context
+
+    with bind_usage_context(company_id=client_id, process="kb_indexing_embedding", channel="knowledge_base"):
+        vectors, model = embed(chunks)
     rows: list[LeadKbChunk] = []
 
     for position, (text, vector) in enumerate(zip(chunks, vectors)):
@@ -293,7 +296,10 @@ def search(
     if not query or not query.strip():
         return []
 
-    qvec, _ = embed_one(query)
+    from core.usage_tracker import bind_usage_context
+
+    with bind_usage_context(company_id=client_id, process="kb_query_embedding", channel="knowledge_base"):
+        qvec, _ = embed_one(query)
     idf, unseen = idf_map(db, client_id)
     wv = settings.hybrid_vector_weight
 

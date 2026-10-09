@@ -42,75 +42,87 @@ Output must strictly match the Plan schema.
 
 def _get_llm():
     api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+    cb = []
+    try:
+        from core.usage_tracker import InAppUsageCallbackHandler
+        cb.append(InAppUsageCallbackHandler(process="blog_planner", channel="blog"))
+    except Exception:
+        pass
     return ChatOpenAI(
         model=settings.openai_model or "gpt-4o-mini",
         api_key=api_key,
         temperature=0.3,
+        callbacks=cb,
     )
+
 
 
 def orchestrator_node(state: State) -> dict:
     """Create structured blog outline from topic, tone, audience, and evidence."""
-    llm = _get_llm()
-    planner = llm.with_structured_output(Plan)
+    from core.usage_tracker import bind_usage_context
 
-    evidence = state.get("evidence", []) or []
-    mode = state.get("mode", "closed_book")
-    tone = state.get("tone") or "professional"
-    audience = state.get("target_audience") or "Business leaders, practitioners, and modern professionals"
-    keywords = state.get("keywords") or []
-    target_words = state.get("target_words") or 1000
-    target_length = f"~{target_words} words"
-    language = state.get("language") or "English"
-    cta_text = state.get("cta_text")
-    cta_url = state.get("cta_url")
-    cta_part = f"Call to Action (CTA): {cta_text} ({cta_url})\n" if cta_text else ""
-    forced_kind = state.get("forced_kind")
-    forced_part = "Force blog_kind=news_roundup\n" if forced_kind else ""
-    evidence_list = [e.model_dump() if hasattr(e, "model_dump") else e for e in evidence[:12]]
-    variant_angle = state.get("variant_angle")
-    angle_part = f"Unique Content Perspective / Profile Angle: {variant_angle}\nNote: Tailor the outline, tone, and strategic examples specifically to this angle so it provides fresh, distinct value.\n" if variant_angle else ""
+    client_id = state.get("client_id")
+    with bind_usage_context(company_id=client_id, process="blog_planner", channel="blog"):
+        llm = _get_llm()
+        planner = llm.with_structured_output(Plan)
 
-    prompt = (
-        f"Topic: {state['topic']}\n"
-        f"Target Audience: {audience}\n"
-        f"Tone: {tone}\n"
-        f"Language: {language}\n"
-        f"Total Target Word Count: STRICTLY {target_words} words ({target_length})\n"
-        f"Focus Keywords: {', '.join(keywords) if keywords else 'None specified'}\n"
-        f"{angle_part}"
-        f"{cta_part}"
-        f"Mode: {mode}\n"
-        f"As-of Date: {state.get('as_of', '2026-09-01')}\n"
-        f"{forced_part}\n"
-        f"Research Evidence:\n"
-        f"{evidence_list}\n"
-    )
+        evidence = state.get("evidence", []) or []
+        mode = state.get("mode", "closed_book")
+        tone = state.get("tone") or "professional"
+        audience = state.get("target_audience") or "Business leaders, practitioners, and modern professionals"
+        keywords = state.get("keywords") or []
+        target_words = state.get("target_words") or 1000
+        target_length = f"~{target_words} words"
+        language = state.get("language") or "English"
+        cta_text = state.get("cta_text")
+        cta_url = state.get("cta_url")
+        cta_part = f"Call to Action (CTA): {cta_text} ({cta_url})\n" if cta_text else ""
+        forced_kind = state.get("forced_kind")
+        forced_part = "Force blog_kind=news_roundup\n" if forced_kind else ""
+        evidence_list = [e.model_dump() if hasattr(e, "model_dump") else e for e in evidence[:12]]
+        variant_angle = state.get("variant_angle")
+        angle_part = f"Unique Content Perspective / Profile Angle: {variant_angle}\nNote: Tailor the outline, tone, and strategic examples specifically to this angle so it provides fresh, distinct value.\n" if variant_angle else ""
 
-    plan: Plan = planner.invoke(
-        [
-            SystemMessage(content=ORCH_SYSTEM),
-            HumanMessage(content=prompt),
-        ]
-    )
+        prompt = (
+            f"Topic: {state['topic']}\n"
+            f"Target Audience: {audience}\n"
+            f"Tone: {tone}\n"
+            f"Language: {language}\n"
+            f"Total Target Word Count: STRICTLY {target_words} words ({target_length})\n"
+            f"Focus Keywords: {', '.join(keywords) if keywords else 'None specified'}\n"
+            f"{angle_part}"
+            f"{cta_part}"
+            f"Mode: {mode}\n"
+            f"As-of Date: {state.get('as_of', '2026-09-01')}\n"
+            f"{forced_part}\n"
+            f"Research Evidence:\n"
+            f"{evidence_list}\n"
+        )
 
-    plan.tone = tone
-    plan.audience = audience
-    if forced_kind:
-        plan.blog_kind = "news_roundup"
+        plan: Plan = planner.invoke(
+            [
+                SystemMessage(content=ORCH_SYSTEM),
+                HumanMessage(content=prompt),
+            ]
+        )
 
-    # Enforce task limits and word budget scaling
-    if plan.tasks:
-        if target_words <= 750 and len(plan.tasks) > 3:
-            # Consolidate into 3 focused sections: Intro, Core Body, Conclusion
-            plan.tasks = [plan.tasks[0], plan.tasks[1], plan.tasks[-1]]
-            for idx, t in enumerate(plan.tasks, start=1):
-                t.id = idx
+        plan.tone = tone
+        plan.audience = audience
+        if forced_kind:
+            plan.blog_kind = "news_roundup"
 
-        total_budget = sum(t.target_words for t in plan.tasks)
-        if total_budget > target_words:
-            scale = target_words / float(total_budget)
-            for t in plan.tasks:
-                t.target_words = max(80, int(t.target_words * scale))
+        # Enforce task limits and word budget scaling
+        if plan.tasks:
+            if target_words <= 750 and len(plan.tasks) > 3:
+                # Consolidate into 3 focused sections: Intro, Core Body, Conclusion
+                plan.tasks = [plan.tasks[0], plan.tasks[1], plan.tasks[-1]]
+                for idx, t in enumerate(plan.tasks, start=1):
+                    t.id = idx
 
-    return {"plan": plan}
+            total_budget = sum(t.target_words for t in plan.tasks)
+            if total_budget > target_words:
+                scale = target_words / float(total_budget)
+                for t in plan.tasks:
+                    t.target_words = max(80, int(t.target_words * scale))
+
+        return {"plan": plan}

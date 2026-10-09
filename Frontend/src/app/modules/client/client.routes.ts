@@ -226,6 +226,15 @@ export const CLIENT_ROUTES: Routes = [
           ),
       },
       {
+        path: 'ai-usage',
+        canActivate: [ClientPermissionGuard],
+        data: { permission: 'usage.read' },
+        loadComponent: () =>
+          import('../../features/ai-usage/client-ai-usage.component').then(
+            (m) => m.ClientAiUsageComponent,
+          ),
+      },
+      {
         path: 'billing',
         redirectTo: 'usage',
         pathMatch: 'full',

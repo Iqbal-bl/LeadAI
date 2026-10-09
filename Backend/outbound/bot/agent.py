@@ -10,6 +10,7 @@ from outbound.bot.claim_data_get import ClaimDataPrompt
 from outbound.bot.synonym_manager import SynonymManager
 from outbound.bot.single_prompt import prompt_core, prompt_ivr_mode, prompt_human_mode, dtmf_prompt, textual_prompt
 from outbound.bot.party_detector import PartyDetectorAgent
+from core.observability import record_run_metadata, traceable
 import openai as _openai  # legacy client only
 from dotenv import load_dotenv
 import os
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class InsuranceClaimAgent:
-    def __init__(self, knowledge_base, output_manager, call_id: str | None = None):
+    def __init__(self, knowledge_base, output_manager, call_id: str | None = None, client_id: str | None = None):
         # ⚠️ Avoid setting module-global keys; keep a client per instance
         self.claim_data: dict = {}
         _openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -28,6 +29,7 @@ class InsuranceClaimAgent:
         self.knowledge_base = knowledge_base
         self.output_manager = output_manager
         self.call_id = call_id or "unknown-call"
+        self.client_id = client_id
 
         self.extracted_data: List[Dict[str, str]] = []
         self.conversation_history: List[Dict[str, str]] = []  # per-call, safe
@@ -538,7 +540,7 @@ class InsuranceClaimAgent:
             return
 
         try:
-            result = await self.party_detector.detect(self.conversation_history)
+            result = await self.party_detector.detect(self.conversation_history, client_id=self.client_id)
             if result != self.other_party_type:
                 prev = self.other_party_type
                 self.other_party_type = result
@@ -550,6 +552,7 @@ class InsuranceClaimAgent:
             logger.warning(f"[{self.call_id}] Party detection failed (non-fatal): {e}")
     # ─────────────────────────────────────────────────────────────────────
 
+    @traceable(name="agent:outbound_legacy_query_stream", run_type="chain")
     async def query_stream(
         self,
         input_text: str,
@@ -871,6 +874,14 @@ class InsuranceClaimAgent:
             logger.error(f"OpenAI error: {e}")
             yield {"type": "error", "text": "Sorry, I couldn't process that."}
 
+
+    async def _run_party_detection_background(self):
+        try:
+            verdict = await self.party_detector.detect(self.conversation_history, client_id=self.client_id)
+            if verdict in ("ivr", "human"):
+                self.other_party_type = verdict
+        except Exception as e:
+            logger.warning(f"[{self.call_id}] Party detection background error: {e}")
 
     def _history_as_lines(self) -> list[str]:
         """Return the whole history as normalized USER/AGENT lines (no truncation)."""
@@ -1598,12 +1609,15 @@ class InsuranceClaimAgent:
             f"Extract the fields based on the guide above. Return ONLY the JSON object."
         )
         
+    @traceable(name="llm:outbound_legacy_extract", run_type="llm")
     async def _extract_from_chunk(self, transcript_chunk: str) -> dict:
         sys_msg = {"role": "system", "content": self._build_extractor_system_prompt()}
         user_msg = {"role": "user", "content": self._build_extractor_user_prompt_for_chunk(transcript_chunk)}
 
         try:
-            resp = await self._openai.ChatCompletion.acreate(
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            resp = await client.chat.completions.create(
                 model="gpt-4o",
                 temperature=0.1,
                 messages=[
@@ -1613,9 +1627,8 @@ class InsuranceClaimAgent:
                 ],
                 max_tokens=1500  # Increased for more fields
             )
-            raw = resp["choices"][0]["message"]["content"] or "{}"
+            raw = (resp.choices[0].message.content or "{}").strip()
             # Clean any potential markdown formatting
-            raw = raw.strip()
             if raw.startswith("```json"):
                 raw = raw[7:]
             if raw.startswith("```"):
@@ -1631,6 +1644,24 @@ class InsuranceClaimAgent:
             logger.error(f"Extractor chunk error: {e}")
             data = {}
 
+        try:
+            from core.usage_tracker import record_usage
+
+            usage = getattr(resp, "usage", None)
+            p_tok = (getattr(usage, "prompt_tokens", 0) or 0) or (len(str(sys_msg.get("content", ""))) + len(str(user_msg.get("content", "")))) // 4
+            c_tok = (getattr(usage, "completion_tokens", 0) or 0) or len(raw) // 4
+            record_usage(
+                company_id=getattr(self, "client_id", None),
+                provider="openai",
+                model="gpt-4o",
+                input_tokens=p_tok,
+                output_tokens=c_tok,
+                process="bot_extraction",
+                channel="voice",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         # sanitize to schema (only data fields, not audit fields)
         clean = {}
         for k in self._DATA_FIELDS:
@@ -1639,6 +1670,7 @@ class InsuranceClaimAgent:
                 v = json.dumps(v, ensure_ascii=False)
             clean[k] = v
         return clean
+
 
     async def ai_extract_and_build_output_record(self) -> dict:
         acc = self._blank_output_record()

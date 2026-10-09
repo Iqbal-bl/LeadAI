@@ -35,8 +35,11 @@ import re
 
 from sqlalchemy.orm import Session
 
+from core.observability import traceable
+from core.usage_tracker import bind_usage_context
 from ..config import settings
 from ..engine import monitor
+
 from ..engine.text import split_sentences
 from ..engine.trace import TurnTrace
 from ..engine.trace import step as trace_step
@@ -213,6 +216,7 @@ def _is_greeting(text: str) -> bool:
 # --------------------------------------------------------------------------- #
 # answering
 # --------------------------------------------------------------------------- #
+@traceable(name="agent:leadai_answer", run_type="chain")
 def answer(
     db: Session,
     client_id: str,
@@ -255,6 +259,44 @@ def answer(
     Returns: reply, confidence, needs_human, handoff_reason, sources,
              model, latency_ms, script_id.
     """
+    history = history or []
+    from core.usage_tracker import bind_usage_context, get_usage_context
+    ctx = get_usage_context()
+    comp_id = ctx.get("company_id") or client_id
+    proc = ctx.get("process") or "chat_answer"
+    chan = ctx.get("channel") or channel
+
+    with bind_usage_context(company_id=comp_id, process=proc, channel=chan):
+        return _answer_impl(
+            db=db,
+            client_id=client_id,
+            company_name=company_name,
+            question=question,
+            history=history,
+            channel=channel,
+            script=script,
+            carryover=carryover,
+            session_note=session_note,
+            trace=trace,
+            query_override=query_override,
+            reply_language=reply_language,
+        )
+
+
+def _answer_impl(
+    db: Session,
+    client_id: str,
+    company_name: str,
+    question: str,
+    history: list[LeadMessage] | None = None,
+    channel: str = "chat",
+    script=None,
+    carryover: str = "",
+    session_note: str = "",
+    trace: TurnTrace | None = None,
+    query_override: str | None = None,
+    reply_language: str | None = None,
+) -> dict:
     history = history or []
     threshold, top_k = company_thresholds(db, client_id)
     trace_step(trace, "thresholds", "loaded", handoff_threshold=threshold, top_k=top_k,
@@ -881,6 +923,7 @@ def _llm_analysis(
     known_facts: list[str] | None = None,
     data_points: list[LeadCompanyDataPoint] | None = None,
     product_catalog: list[str] | None = None,
+    client_id: str | None = None,
 ) -> dict | None:
     """Ask the LLM to read the conversation. Returns a validated dict, or None.
 
@@ -908,10 +951,12 @@ def _llm_analysis(
         + _product_catalog_instruction(product_catalog or [])
     )
     try:
-        data, _ = llm.complete_json(prompt, [{"role": "user", "content": transcript}])
+        with bind_usage_context(company_id=client_id, process="lead_qualification"):
+            data, _ = llm.complete_json(prompt, [{"role": "user", "content": transcript}])
     except Exception as exc:  # noqa: BLE001
         logger.warning("[LeadAI qualify] LLM analysis failed (%s) — using keyword rules", exc)
         return None
+
     if not isinstance(data, dict):
         return None
 
@@ -947,6 +992,7 @@ def _llm_analysis(
     }
 
 
+@traceable(name="agent:leadai_lead_qualification", run_type="chain")
 def qualify(
     db: Session,
     client_id: str,
@@ -1023,7 +1069,7 @@ def qualify(
         )
         .all()
     )
-    analysis = _llm_analysis(messages, known_facts, data_points, product_catalog)
+    analysis = _llm_analysis(messages, known_facts, data_points, product_catalog, client_id=client_id)
     if analysis:
         lead.FactsJson = merge_facts(known_facts, analysis["facts"]) or None
         if analysis["data_point_values"]:
@@ -1127,6 +1173,7 @@ NEXT_STEP = {
 }
 
 
+@traceable(name="tool:leadai_summarizer", run_type="tool")
 def summarize(
     db: Session,
     client_id: str,
@@ -1147,14 +1194,16 @@ def summarize(
         transcript = "\n".join(
             f"{m.Sender}: {m.Content}" for m in messages[-20:] if m.Content
         )
-        raw, _ = llm.complete(
-            "Summarise this sales conversation in at most 3 short sentences for a "
-            "sales rep who is about to take it over. Then a final line starting with "
-            "'Next step:' recommending the single best action. Plain language, no "
-            "bullet points, no preamble.",
-            [{"role": "user", "content": transcript}],
-            max_tokens=250,
-        )
+        with bind_usage_context(company_id=client_id, process="lead_summary"):
+            raw, _ = llm.complete(
+                "Summarise this sales conversation in at most 3 short sentences for a "
+                "sales rep who is about to take it over. Then a final line starting with "
+                "'Next step:' recommending the single best action. Plain language, no "
+                "bullet points, no preamble.",
+                [{"role": "user", "content": transcript}],
+                max_tokens=250,
+            )
+
         if raw:
             parts = raw.split("Next step:")
             summary = parts[0].strip()
