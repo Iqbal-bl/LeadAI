@@ -816,5 +816,17 @@ from .models_blog import (  # noqa: E402
     LeadCommentSettings,
 )
 
-ALL_LEADAI_TABLES = ALL_LEADAI_TABLES + ALL_LEADAI_SOCIAL_TABLES + ALL_LEADAI_BLOG_TABLES
+from .models_usage import (  # noqa: E402
+    ALL_LEADAI_USAGE_TABLES,
+    LeadAIUsageEvent,
+    LeadAIUsageDailyAggregate,
+)
+
+ALL_LEADAI_TABLES = (
+    ALL_LEADAI_TABLES
+    + ALL_LEADAI_SOCIAL_TABLES
+    + ALL_LEADAI_BLOG_TABLES
+    + ALL_LEADAI_USAGE_TABLES
+)
+
 

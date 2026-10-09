@@ -1,0 +1,361 @@
+/* ─── AI Usage Page ─────────────────────────────────────────────────────── */
+
+.ai-usage-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent, #8b5cf6) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary, var(--app-text));
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary, var(--app-text-secondary));
+}
+
+/* ─── Filter bar ─────────────────────────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.filter-input {
+  width: 160px;
+}
+
+.filter-text {
+  width: 200px !important;
+}
+
+.filter-sep {
+  color: var(--text-secondary, var(--app-text-secondary));
+  font-size: 0.9rem;
+}
+
+.btn-apply {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  font-size: 0.83rem !important;
+}
+
+.btn-reset {
+  font-size: 0.83rem !important;
+}
+
+/* ─── KPI Grid ───────────────────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+
+.kpi-card {
+  background: var(--card-bg, var(--app-bg-secondary));
+  border: 1px solid var(--card-border, var(--app-border));
+  border-radius: 14px;
+  padding: 1.2rem 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+  transition: box-shadow 0.2s;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 14px 14px 0 0;
+  }
+
+  &.kpi-requests::before { background: var(--color-primary, #6366f1); }
+  &.kpi-tokens::before   { background: var(--color-accent, #8b5cf6); }
+  &.kpi-cost::before     { background: #f59e0b; }
+  &.kpi-period::before   { background: #10b981; }
+
+  &:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.15); }
+}
+
+.kpi-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--app-surface-alt, rgba(255,255,255,0.06));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  color: var(--text-secondary, var(--app-text-secondary));
+  flex-shrink: 0;
+}
+
+.kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.kpi-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary, var(--app-text-secondary));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kpi-value {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text-primary, var(--app-text));
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-sub {
+  font-size: 0.72rem;
+  color: var(--text-secondary, var(--app-text-secondary));
+}
+
+/* ─── Sparkline chart ────────────────────────────────────────────────────── */
+.chart-card {
+  background: var(--card-bg, var(--app-bg-secondary));
+  border: 1px solid var(--card-border, var(--app-border));
+  border-radius: 14px;
+  padding: 1.2rem 1.4rem;
+  box-shadow: var(--card-shadow);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.8rem;
+}
+
+.chart-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary, var(--app-text));
+}
+
+.chart-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-secondary, var(--app-text-secondary));
+}
+
+.chart-wrap {
+  position: relative;
+}
+
+.sparkline-svg {
+  width: 100%;
+  height: 80px;
+  display: block;
+}
+
+.chart-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-secondary, var(--app-text-secondary));
+  margin-top: 0.3rem;
+}
+
+/* ─── Tab Nav ────────────────────────────────────────────────────────────── */
+.tab-nav {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--card-border, var(--app-border));
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  padding: 0.55rem 1.1rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: var(--text-secondary, var(--app-text-secondary));
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: color 0.15s, border-color 0.15s;
+
+  &:hover { color: var(--text-primary, var(--app-text)); }
+  &.active {
+    color: var(--color-primary, #6366f1);
+    border-bottom-color: var(--color-primary, #6366f1);
+  }
+}
+
+/* ─── Table card ─────────────────────────────────────────────────────────── */
+.table-card {
+  background: var(--card-bg, var(--app-bg-secondary));
+  border: 1px solid var(--card-border, var(--app-border));
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+
+.usage-table {
+  :deep(.p-datatable-thead th) {
+    background: transparent;
+    color: var(--text-secondary, var(--app-text-secondary));
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--card-border, var(--app-border));
+    padding: 0.8rem 1rem;
+  }
+
+  :deep(.p-datatable-tbody td) {
+    border-bottom: 1px solid var(--card-border, var(--app-border-light, var(--app-border)));
+    padding: 0.65rem 1rem;
+    font-size: 0.84rem;
+    color: var(--text-primary, var(--app-text));
+  }
+
+  :deep(.p-datatable-tbody tr:hover td) {
+    background: var(--app-surface-alt, rgba(255,255,255,0.03));
+  }
+
+  :deep(.p-datatable-tbody tr.system-row td) {
+    background: rgba(107,114,128,0.07);
+    font-style: italic;
+  }
+}
+
+/* ─── Cells ──────────────────────────────────────────────────────────────── */
+.col-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.col-flag {
+  width: 36px;
+  text-align: center !important;
+}
+
+.cost-cell {
+  color: #f59e0b !important;
+  font-weight: 600;
+}
+
+.num-secondary {
+  color: var(--text-secondary, var(--app-text-secondary)) !important;
+}
+
+.company-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.company-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.company-name {
+  font-weight: 500;
+}
+
+.process-name {
+  display: block;
+  font-weight: 500;
+}
+
+.process-key {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-secondary, var(--app-text-secondary));
+  font-family: monospace;
+}
+
+.cat-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+.model-chip {
+  font-family: monospace;
+  font-size: 0.8rem;
+  background: var(--app-surface-alt, rgba(255,255,255,0.06));
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+}
+
+.date-chip {
+  font-family: monospace;
+  font-size: 0.82rem;
+}
+
+.warn-icon {
+  color: #f59e0b;
+  font-size: 0.85rem;
+}
+
+.empty-msg {
+  text-align: center;
+  color: var(--text-secondary, var(--app-text-secondary));
+  padding: 2rem !important;
+  font-size: 0.85rem;
+}

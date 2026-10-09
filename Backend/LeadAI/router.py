@@ -38,6 +38,7 @@ from .routers import (
     scripts,
     social,
     social_drafts,
+    usage,
     user_management,
     webhooks,
 )
@@ -85,11 +86,12 @@ api_router.include_router(customers.router)
 api_router.include_router(files.router)
 api_router.include_router(files.threshold_router)
 
-# Phase 3: social publishing & blog automation
+# Phase 3: social publishing & blog automation & AI usage
 api_router.include_router(social.router)
 api_router.include_router(social_drafts.router)
 api_router.include_router(articles.router)
 api_router.include_router(blog.router)
+api_router.include_router(usage.router)
 
 
 # Voice last - see the note at the top of this file.

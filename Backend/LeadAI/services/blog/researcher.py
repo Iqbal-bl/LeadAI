@@ -28,10 +28,17 @@ Rules:
 
 def _get_llm():
     api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+    cb = []
+    try:
+        from core.usage_tracker import InAppUsageCallbackHandler
+        cb.append(InAppUsageCallbackHandler(process="blog_researcher", channel="blog"))
+    except Exception:
+        pass
     return ChatOpenAI(
         model=settings.openai_model or "gpt-4o-mini",
         api_key=api_key,
         temperature=0.1,
+        callbacks=cb,
     )
 
 
@@ -78,65 +85,69 @@ def _iso_to_date(s: Optional[str]) -> Optional[date]:
 
 def research_node(state: State) -> dict:
     """Execute research on queries and produce structured evidence."""
-    queries = (state.get("queries", []) or [])[:6]
-    if not queries:
-        return {"evidence": []}
+    from core.usage_tracker import bind_usage_context
 
-    raw_results: List[dict] = []
-    for query in queries:
-        raw_results.extend(_tavily_search(query, max_results=5))
+    client_id = state.get("client_id")
+    with bind_usage_context(company_id=client_id, process="blog_researcher", channel="blog"):
+        queries = (state.get("queries", []) or [])[:6]
+        if not queries:
+            return {"evidence": []}
 
-    if not raw_results:
-        return {"evidence": []}
+        raw_results: List[dict] = []
+        for query in queries:
+            raw_results.extend(_tavily_search(query, max_results=5))
 
-    llm = _get_llm()
-    extractor = llm.with_structured_output(EvidencePack)
+        if not raw_results:
+            return {"evidence": []}
 
-    try:
-        pack: EvidencePack = extractor.invoke(
-            [
-                SystemMessage(content=RESEARCH_SYSTEM),
-                HumanMessage(
-                    content=(
-                        f"As-of date: {state.get('as_of', '2026-09-01')}\n"
-                        f"Recency days: {state.get('recency_days', 3650)}\n\n"
-                        f"Raw results:\n{raw_results[:20]}"
-                    )
-                ),
-            ]
-        )
-        evidence = pack.evidence or []
-    except Exception as exc:
-        print(f"[Researcher] Evidence extraction error: {exc}")
-        evidence = [
-            EvidenceItem(
-                title=r.get("title", ""),
-                url=r.get("url", ""),
-                snippet=r.get("snippet", ""),
-                published_at=r.get("published_at"),
-                source=r.get("source"),
-            )
-            for r in raw_results if r.get("url")
-        ]
+        llm = _get_llm()
+        extractor = llm.with_structured_output(EvidencePack)
 
-    # Deduplicate by URL
-    dedup = {}
-    for item in evidence:
-        if item.url:
-            dedup[item.url] = item
-    evidence = list(dedup.values())
-
-    # Mode-based recency filtering
-    mode = state.get("mode", "closed_book")
-    if mode == "open_book" and state.get("as_of"):
         try:
-            as_of_date = date.fromisoformat(state["as_of"][:10])
-            cutoff = as_of_date - timedelta(days=int(state.get("recency_days", 7)))
+            pack: EvidencePack = extractor.invoke(
+                [
+                    SystemMessage(content=RESEARCH_SYSTEM),
+                    HumanMessage(
+                        content=(
+                            f"As-of date: {state.get('as_of', '2026-09-01')}\n"
+                            f"Recency days: {state.get('recency_days', 3650)}\n\n"
+                            f"Raw results:\n{raw_results[:20]}"
+                        )
+                    ),
+                ]
+            )
+            evidence = pack.evidence or []
+        except Exception as exc:
+            print(f"[Researcher] Evidence extraction error: {exc}")
             evidence = [
-                e for e in evidence
-                if not e.published_at or (_iso_to_date(e.published_at) and _iso_to_date(e.published_at) >= cutoff)
+                EvidenceItem(
+                    title=r.get("title", ""),
+                    url=r.get("url", ""),
+                    snippet=r.get("snippet", ""),
+                    published_at=r.get("published_at"),
+                    source=r.get("source"),
+                )
+                for r in raw_results if r.get("url")
             ]
-        except Exception:
-            pass
 
-    return {"evidence": evidence}
+        # Deduplicate by URL
+        dedup = {}
+        for item in evidence:
+            if item.url:
+                dedup[item.url] = item
+        evidence = list(dedup.values())
+
+        # Mode-based recency filtering
+        mode = state.get("mode", "closed_book")
+        if mode == "open_book" and state.get("as_of"):
+            try:
+                as_of_date = date.fromisoformat(state["as_of"][:10])
+                cutoff = as_of_date - timedelta(days=int(state.get("recency_days", 7)))
+                evidence = [
+                    e for e in evidence
+                    if not e.published_at or (_iso_to_date(e.published_at) and _iso_to_date(e.published_at) >= cutoff)
+                ]
+            except Exception:
+                pass
+
+        return {"evidence": evidence}

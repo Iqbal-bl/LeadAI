@@ -82,4 +82,14 @@ export const AdminNavigationalMenu: SidebarSection[] = [
       },
     ],
   },
+  {
+    title: 'AI Analytics',
+    items: [
+      {
+        label: 'AI Usage & Costs',
+        icon: 'pi pi-microchip-ai',
+        routerLink: '/admin/ai-usage',
+      },
+    ],
+  },
 ];

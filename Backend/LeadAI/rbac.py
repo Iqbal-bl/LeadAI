@@ -115,6 +115,8 @@ P = {
     "billing.read": "View company recharge plans and usage history",
     "billing.recharge": "Purchase or allocate company recharge plans",
     "billing.manage_global": "Manage master billing templates and custom client plans",
+    # AI usage & analytics
+    "usage.read": "View AI token utilization, request volume, and analytics",
 }
 
 # Features and communication channels that can be individually enabled or disabled per company
@@ -185,7 +187,9 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "billing.recharge",
         "product.read",
         "product.manage",
+        "usage.read",
     },
+
 
     ROLE_MANAGER: {
         "company.read",

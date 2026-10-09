@@ -11,6 +11,7 @@ import random
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 
+from core.observability import traceable
 from .llm import complete_json
 from ..models import (
     LeadCustomer,
@@ -124,6 +125,7 @@ class CommentReplyAIService:
         return [m[1] for m in matches[:limit]]
 
     @classmethod
+    @traceable(name="tool:comment_reply_ai", run_type="tool")
     def generate_reply_for_comment(
         cls,
         db: Session,
@@ -190,7 +192,11 @@ COMMENT DETAILS:
 {f"- Special Instruction: {custom_instructions}" if custom_instructions else ""}"""
 
         messages = [{"role": "user", "content": user_content}]
-        result, meta = complete_json(system_prompt, messages)
+        from core.usage_tracker import bind_usage_context
+
+        with bind_usage_context(company_id=comment.ClientId, process="comment_reply_generation", channel="social"):
+            result, meta = complete_json(system_prompt, messages)
+
 
         if not result or "suggested_reply" not in result:
             # Fallback reply

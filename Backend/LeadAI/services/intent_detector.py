@@ -12,6 +12,7 @@ import re
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
+from core.observability import traceable
 from .llm import complete_json
 from ..models import utcnow
 
@@ -83,11 +84,13 @@ class LeadIntentEvaluator:
     """Evaluates inbound text turns from DMs, InMail, and notes for commercial buying intent."""
 
     @classmethod
+    @traceable(name="tool:intent_evaluator", run_type="tool")
     def evaluate_text(
         cls,
         text: str,
         contact_name: Optional[str] = None,
-        use_llm_fallback: bool = True
+        use_llm_fallback: bool = True,
+        company_id: Optional[str] = None,
     ) -> IntentEvaluationResult:
         if not text or not text.strip():
             return IntentEvaluationResult(
@@ -153,6 +156,8 @@ class LeadIntentEvaluator:
         # 2. LLM Fallback for ambiguous or implicit inquiries
         if use_llm_fallback and len(clean_text) >= 15:
             try:
+                from core.usage_tracker import bind_usage_context
+
                 system_prompt = (
                     "You are an AI sales qualification assistant. Analyze the incoming LinkedIn direct message "
                     "or note from a prospect to determine if they are expressing commercial/buying interest, "
@@ -169,7 +174,9 @@ class LeadIntentEvaluator:
                 user_content = f"Prospect Message:\n\"\"\"{clean_text}\"\"\""
                 messages = [{"role": "user", "content": user_content}]
 
-                result, _ = complete_json(system_prompt, messages, temperature=0.1, max_tokens=180)
+                with bind_usage_context(company_id=company_id, process="intent_evaluation", channel="social"):
+                    result, _ = complete_json(system_prompt, messages, temperature=0.1, max_tokens=180)
+
                 if result and isinstance(result, dict) and "is_lead" in result:
                     score = float(result.get("intent_score", 0.0))
                     is_lead = bool(result.get("is_lead", False)) and score >= 0.60

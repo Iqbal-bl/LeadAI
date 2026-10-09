@@ -153,6 +153,10 @@ def _is_transient(exc: Exception) -> bool:
     return isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout)
 
 
+from core.observability import record_run_metadata, traceable
+
+
+@traceable(name="llm:leadai_gateway", run_type="llm")
 def complete(
     system: str,
     messages: list[dict],
@@ -223,6 +227,31 @@ def complete(
             break
 
     meta["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    
+    # Record token usage, provider, and model for LangSmith observability
+    record_run_metadata(
+        prompt_tokens=meta.get("prompt_tokens"),
+        completion_tokens=meta.get("completion_tokens"),
+        model=meta.get("model"),
+        provider=meta.get("provider", "openai"),
+        extra_metadata={"profile": prof.name, "attempts": meta.get("attempts"), "json_mode": json_mode},
+        tags=["gateway", prof.name, meta.get("provider", "openai")],
+    )
+
+    # Record in-app token usage (independent of LangSmith)
+    if reply is not None or meta.get("prompt_tokens") is not None:
+        try:
+            from core.usage_tracker import record_usage
+
+            record_usage(
+                provider=meta.get("provider", "openai"),
+                model=meta.get("model", "gpt-4o"),
+                input_tokens=meta.get("prompt_tokens") or 0,
+                output_tokens=meta.get("completion_tokens") or 0,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     _emit_trace(meta, system, messages, reply)
     return reply, meta
 
@@ -251,3 +280,5 @@ def complete_json(
         except json.JSONDecodeError:
             meta["error"] = "unparseable json"
             return None, meta
+
+

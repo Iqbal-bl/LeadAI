@@ -91,15 +91,20 @@ async def generate_draft(
         )
     user_msg = f"Material:\n{body.content.strip()}\n\n{alternate}".strip()
 
-    draft, meta = llm.complete(
-        system=_DRAFT_SYSTEM,
-        messages=[{"role": "user", "content": user_msg}],
-        temperature=0.8,
-        max_tokens=1000,
-    )
+    principal, client_id = scope
+    from core.usage_tracker import bind_usage_context
+
+    with bind_usage_context(company_id=client_id, process="social_copy_draft", channel="social"):
+        draft, meta = llm.complete(
+            system=_DRAFT_SYSTEM,
+            messages=[{"role": "user", "content": user_msg}],
+            temperature=0.8,
+            max_tokens=1000,
+        )
     if not draft:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Unable to generate a draft.")
     return {"draft": draft, "version": body.version, "meta": meta}
+
 
 
 # ---------------------------------------------------------------------------

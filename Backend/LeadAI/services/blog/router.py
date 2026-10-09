@@ -32,41 +32,53 @@ If needs_research=true:
 
 def _get_llm():
     api_key = settings.openai_api_key or os.getenv("OPENAI_API_KEY")
+    cb = []
+    try:
+        from core.usage_tracker import InAppUsageCallbackHandler
+        cb.append(InAppUsageCallbackHandler(process="blog_router", channel="blog"))
+    except Exception:
+        pass
     return ChatOpenAI(
         model=settings.openai_model or "gpt-4o-mini",
         api_key=api_key,
         temperature=0.2,
+        callbacks=cb,
     )
+
 
 
 def router_node(state: State) -> dict:
     """Decide whether the topic requires external research and generate search queries."""
-    topic = state["topic"]
-    llm = _get_llm()
-    decider = llm.with_structured_output(RouterDecision)
-    
-    decision: RouterDecision = decider.invoke(
-        [
-            SystemMessage(content=ROUTER_SYSTEM),
-            HumanMessage(
-                content=f"Topic: {topic}\nAs-of date: {state.get('as_of', '2026-09-01')}"
-            ),
-        ]
-    )
+    from core.usage_tracker import bind_usage_context
 
-    if decision.mode == "open_book":
-        recency_days = 7
-    elif decision.mode == "hybrid":
-        recency_days = 45
-    else:
-        recency_days = 3650
+    client_id = state.get("client_id")
+    with bind_usage_context(company_id=client_id, process="blog_router", channel="blog"):
+        topic = state["topic"]
+        llm = _get_llm()
+        decider = llm.with_structured_output(RouterDecision)
+        
+        decision: RouterDecision = decider.invoke(
+            [
+                SystemMessage(content=ROUTER_SYSTEM),
+                HumanMessage(
+                    content=f"Topic: {topic}\nAs-of date: {state.get('as_of', '2026-09-01')}"
+                ),
+            ]
+        )
 
-    return {
-        "needs_research": decision.needs_research,
-        "mode": decision.mode,
-        "queries": decision.queries,
-        "recency_days": recency_days,
-    }
+        if decision.mode == "open_book":
+            recency_days = 7
+        elif decision.mode == "hybrid":
+            recency_days = 45
+        else:
+            recency_days = 3650
+
+        return {
+            "needs_research": decision.needs_research,
+            "mode": decision.mode,
+            "queries": decision.queries,
+            "recency_days": recency_days,
+        }
 
 
 def route_next(state: State) -> str:

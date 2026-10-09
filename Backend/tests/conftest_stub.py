@@ -33,13 +33,47 @@ base_mod = types.ModuleType("core.base"); base_mod.Base = Base
 db_mod = types.ModuleType("core.database")
 db_mod.engine_admin = engine; db_mod.SessionLocalAdmin = SessionLocalAdmin
 db_mod.engine = engine; db_mod.SessionLocal = SessionLocalAdmin
+def get_dynamic_db():
+    db = SessionLocalAdmin()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_db_from_headers(*a, **k):
+    db = SessionLocalAdmin()
+    try:
+        yield db
+    finally:
+        db.close()
+
+db_mod.get_dynamic_db = get_dynamic_db
+db_mod.get_db_from_headers = get_db_from_headers
 sys.modules["core.base"] = base_mod; sys.modules["core.database"] = db_mod
 core.base, core.database = base_mod, db_mod
 
 auth_mod = types.ModuleType("core.auth")
 def get_current_user(): return "tester@example.com"
+def get_current_user_optional(): return "tester@example.com"
+def get_current_client_admin(): return "tester@example.com"
+def get_current_super_admin(): return "superadmin@example.com"
+def get_current_user_email(): return "tester@example.com"
+def get_password_hash(p): return "mock_hash"
+def validate_twilio_request(r): return True
+def create_stream_token(*a, **k): return "mock_token"
+def verify_stream_token(*a, **k): return {"call_sid": "mock_call"}
 async def get_current_user_websocket(ws): return "tester@example.com"
 auth_mod.get_current_user = get_current_user
+auth_mod.get_current_user_optional = get_current_user_optional
+auth_mod.get_current_client_admin = get_current_client_admin
+auth_mod.get_current_super_admin = get_current_super_admin
+auth_mod.get_current_user_email = get_current_user_email
+auth_mod.get_password_hash = get_password_hash
+auth_mod.validate_twilio_request = validate_twilio_request
+auth_mod.create_stream_token = create_stream_token
+auth_mod.verify_stream_token = verify_stream_token
 auth_mod.get_current_user_websocket = get_current_user_websocket
+auth_mod.create_access_token = lambda subject, *a, **k: f"mock_token_{subject}"
+auth_mod._decode_token = lambda token, *a, **k: {"sub": "tester@example.com", "type": "access"}
 sys.modules["core.auth"] = auth_mod
 core.auth = auth_mod

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 import markdown
 
+from core.observability import traceable
 from .graph import blog_graph
 from .schemas import GenerateBlogRequest, GenerateBlogResponse
 
@@ -127,6 +128,7 @@ class GeneratorService:
         return styled_html
 
     @classmethod
+    @traceable(name="agent:blog_generator", run_type="chain")
     def generate_blog(cls, req: GenerateBlogRequest) -> GenerateBlogResponse:
         """Executes LangGraph blog workflow and returns styled HTML with images & tags."""
         req_blog_type = (req.blog_type or "").strip().lower()
@@ -140,8 +142,10 @@ class GeneratorService:
             effective_num_images = (req.num_images if req.num_images and req.num_images > 0 else 1) if include_images else 0
 
         target_words = int(req.target_words) if req.target_words and int(req.target_words) > 0 else 1000
+        client_id = getattr(req, "client_id", None)
 
         state = {
+            "client_id": client_id,
             "topic": req.topic.strip(),
             "variant_angle": req.variant_angle,
             "tone": req.tone or "professional",

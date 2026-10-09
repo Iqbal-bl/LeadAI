@@ -57,7 +57,9 @@ def create_db_if_not_exists(engine_url: str, db_name: str):
             print(f"[DB] Database already exists: {db_name}")
             print(f"Database connection established successfully")
 
-create_db_if_not_exists(DB1_URL_WITHOUT_NAME, db_name1)
+if not os.getenv("TESTING") and not str(DB1_URL_WITHOUT_NAME).startswith("sqlite"):
+    create_db_if_not_exists(DB1_URL_WITHOUT_NAME, db_name1)
+
 
 # === Your existing functions (unchanged) ===
 def get_dynamic_db(email: str) -> Session:

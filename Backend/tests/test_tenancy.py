@@ -68,7 +68,18 @@ db = SessionLocalAdmin()
 
 ACME, GLOBEX = "company-acme", "company-globex"
 
+from LeadAI.models import LeadChannelAccount, LeadSocialPost, LeadClientRecharge  # noqa: E402
+
 db.add_all([
+    LeadClientRecharge(
+        ClientId=ACME, PlanNameSnapshot="Enterprise", PurchasedMinutes=100.0, RemainingMinutes=100.0,
+        ValidityDaysSnapshot=30, Status="active", ActiveChannels=["facebook", "instagram", "messenger"], CreatedBy="t",
+    ),
+    LeadClientRecharge(
+        ClientId=GLOBEX, PlanNameSnapshot="Enterprise", PurchasedMinutes=100.0, RemainingMinutes=100.0,
+        ValidityDaysSnapshot=30, Status="active", ActiveChannels=["facebook", "instagram", "messenger"], CreatedBy="t",
+    ),
+
     LeadChannelAccount(
         ClientId=ACME, Channel="messenger", Name="Acme Page",
         ExternalId="PAGE_ACME", AccessTokenEnc=encrypt_pii("TOKEN_ACME"),
@@ -86,6 +97,7 @@ db.add_all([
     ),
 ])
 db.commit()
+
 
 failures = []
 

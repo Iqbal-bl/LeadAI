@@ -261,6 +261,7 @@ class LeadAISettings:
     quiet_hours_end: int = _i("LEADAI_QUIET_HOURS_END", 21)
     default_timezone: str = os.getenv("LEADAI_TIMEZONE", "Asia/Kolkata")
     campaign_dry_run: bool = _b("LEADAI_CAMPAIGN_DRY_RUN", "false")
+    ai_usage_show_cost_to_client: bool = _b("AI_USAGE_SHOW_COST_TO_CLIENT", "false")
 
     # =======================================================================
     # Background worker

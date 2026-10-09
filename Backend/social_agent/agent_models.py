@@ -13,7 +13,7 @@ from langchain_openai import ChatOpenAI
 load_dotenv()
 
 # --- Text/chat generation (agent reasoning, CRAG grading, CRAG answers) ---
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq").lower()
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai" if not os.environ.get("GROQ_API_KEY") else "groq").lower()
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 
@@ -34,13 +34,20 @@ OPENAI_EMBEDDING_MODEL = os.environ.get("OPENAI_EMBEDDING_MODEL", "text-embeddin
 def get_text_model(temperature: float = 0, max_tokens: int = 1024):
     """Returns the configured provider's chat model, tools NOT bound —
     used directly by crag/grader.py and crag/crag_graph.py."""
+    cb = []
+    try:
+        from core.usage_tracker import InAppUsageCallbackHandler
+        cb.append(InAppUsageCallbackHandler(process=None, channel="social"))
+    except Exception:
+        pass
+
     if LLM_PROVIDER == "openai":
-        return ChatOpenAI(model=OPENAI_MODEL, temperature=temperature, max_tokens=max_tokens)
+        return ChatOpenAI(model=OPENAI_MODEL, temperature=temperature, max_tokens=max_tokens, callbacks=cb)
     if LLM_PROVIDER == "groq":
         if not os.environ.get("GROQ_API_KEY"):
             raise ValueError("GROQ_API_KEY is not set in .env")
         from langchain_groq import ChatGroq
-        return ChatGroq(model=GROQ_MODEL, temperature=temperature, max_tokens=max_tokens)
+        return ChatGroq(model=GROQ_MODEL, temperature=temperature, max_tokens=max_tokens, callbacks=cb)
     raise ValueError("LLM_PROVIDER must be 'groq' or 'openai'")
 
 
@@ -48,16 +55,16 @@ def get_model(tools, vision: bool = False):
     """Returns the chat model WITH tools bound — used by agent/graph.py."""
     if vision and LLM_PROVIDER == "groq":
         raise ValueError("Groq is configured for text-only tasks; set LLM_PROVIDER=openai for vision.")
-    # parallel_tool_calls=False: forces one action per turn — without this
-    # the model can batch multiple DOM-mutating calls into one turn, which
-    # LangGraph's ToolNode then runs CONCURRENTLY via asyncio.gather. Two
-    # simultaneous programmatic inputs against a live page can race
-    # against the site's own JS in ways a real sequential user never
-    # would. One action per turn also means get_state() is always
-    # re-checked before the next move, instead of acting on a stale
-    # snapshot.
+    cb = []
+    try:
+        from core.usage_tracker import InAppUsageCallbackHandler
+        cb.append(InAppUsageCallbackHandler(process=None, channel="social"))
+    except Exception:
+        pass
+
     if vision:
-        return ChatOpenAI(model=VISION_MODEL, max_tokens=1024).bind_tools(
+        return ChatOpenAI(model=VISION_MODEL, max_tokens=1024, callbacks=cb).bind_tools(
+
             tools, parallel_tool_calls=False
         )
     return get_text_model(max_tokens=1024).bind_tools(tools, parallel_tool_calls=False)

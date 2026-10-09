@@ -29,6 +29,7 @@ from outbound.speech.sarvam_stt import SarvamSTTManager
 from outbound.phone import validate_phone_number
 from dotenv import load_dotenv
 from core.paths import ENV_FILE, SCRIPTS_DIR as _SCRIPTS_DIR, STATIC_DIR, SYSTEM_PROMPT_FILE, TEMPLATES_DIR
+from core.observability import record_run_metadata, traceable, wrap_openai
 load_dotenv(ENV_FILE)
 
 import logging
@@ -220,7 +221,8 @@ class SetLanguageRequest(BaseModel):
 class HangupRequest(BaseModel):
     call_sid: str = Field(..., description="Twilio Call SID to terminate")
 
-connect_db()
+if not os.getenv("TESTING") and not str(os.getenv("DATABASE_URL", "")).startswith("sqlite"):
+    connect_db()
 
 def seed_db():
     """Seed the database with a default user if none exists"""
@@ -237,7 +239,9 @@ def seed_db():
     except Exception as e:
         logger.error(f"Failed to seed database: {e}")
 
-seed_db()
+if not os.getenv("TESTING") and not str(os.getenv("DATABASE_URL", "")).startswith("sqlite"):
+    seed_db()
+
 
 active_calls: Dict[str, dict] = {}
 transcript_connections: Dict[str, WebSocket] = {}
@@ -726,9 +730,10 @@ class TTSManager:
                 await self._ws.close()
             except:
                 pass
-        
         self._ws = None
         logger.info(f"Cartesia TTS cleaned up for call {self.callsid}")
+
+_last_unattributed_warning_time: float = 0.0
 
 
 class SimpleAgent:
@@ -739,17 +744,21 @@ class SimpleAgent:
     MAX_RAW_TURNS = 40
     KEEP_RAW = 20
 
-    def __init__(self, xml_sections: list = None, gender: str = "neutral", language: str = "hi"):
+    def __init__(self, xml_sections: list = None, gender: str = "neutral", language: str = "hi", client_id: str | None = None, is_leadai: bool = True):
         from openai import AsyncOpenAI
-        self._client = AsyncOpenAI(
+        raw_client = AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL", "https://api.sarvam.ai/v1"),
         )
+        self._client = wrap_openai(raw_client)
         self._chat_model = os.getenv("OPENAI_CHAT_MODEL", "sarvam-105b")
+
         self.history = []
         self.summary_prefix = ""  # cumulative summary of compressed older turns
         self.gender = gender
         self.language = language
+        self.client_id = client_id
+        self.is_leadai = is_leadai
         self.system_prompt = self._build_system_prompt(xml_sections)
 
         script_name = "none"
@@ -840,6 +849,7 @@ class SimpleAgent:
         combined = f"{base_prompt}\n\n---\n\n# Agent Configuration\n\n{xml_prompt}{gender_instruction}{lang_instruction}"
         return combined
 
+    @traceable(name="agent:outbound_voice_turn", run_type="chain")
     async def get_response(self, user_text: str):
         self.history.append({"role": "user", "content": user_text})
         # Assemble: system prompt + (optional) running summary of older turns +
@@ -930,6 +940,7 @@ class SimpleAgent:
                     top_p=1,
                     max_tokens=cfg["max_tokens"],
                     stream=True,
+                    stream_options={"include_usage": True},
                     timeout=20.0,
                 )
                 last_finish_reason = None
@@ -937,7 +948,10 @@ class SimpleAgent:
                 raw_accum = ""
                 in_think = False
                 end_call_token = "[END_CALL]"
+                stream_usage = None
                 async for chunk in response:
+                    if hasattr(chunk, "usage") and chunk.usage:
+                        stream_usage = chunk.usage
                     if not chunk.choices:
                         continue
                     choice = chunk.choices[0]
@@ -1007,16 +1021,69 @@ class SimpleAgent:
                     f"raw_preview={raw_accum[:200]!r})"
                 )
             self.history.append({"role": "assistant", "content": full_response})
+            if stream_usage:
+                record_run_metadata(
+                    prompt_tokens=getattr(stream_usage, "prompt_tokens", None),
+                    completion_tokens=getattr(stream_usage, "completion_tokens", None),
+                    total_tokens=getattr(stream_usage, "total_tokens", None),
+                    model=self._chat_model,
+                    provider="sarvam" if "sarvam" in str(self._chat_model).lower() else "openai",
+                    tags=["voice", "sarvam", self.language],
+                )
+            else:
+                record_run_metadata(
+                    model=self._chat_model,
+                    provider="sarvam" if "sarvam" in str(self._chat_model).lower() else "openai",
+                    tags=["voice", "sarvam", self.language],
+                )
+
+            # In-app token tracking
+            if self.is_leadai:
+                try:
+                    from core.usage_tracker import record_usage
+
+                    if not self.client_id:
+                        global _last_unattributed_warning_time
+                        _now = time.time()
+                        if _now - _last_unattributed_warning_time > 60:
+                            logger.warning("[LeadAI voice] Voice call has no client_id attached; recording usage as Unattributed.")
+                            _last_unattributed_warning_time = _now
+
+                    if stream_usage:
+                        p_tok = getattr(stream_usage, "prompt_tokens", 0) or 0
+                        c_tok = getattr(stream_usage, "completion_tokens", 0) or 0
+                        is_est = False
+                    else:
+                        p_tok = max(1, sum(len(str(m.get("content", ""))) for m in messages) // 4)
+                        c_tok = max(1, len(full_response) // 4)
+                        is_est = True
+
+                    record_usage(
+                        company_id=self.client_id,
+                        provider="sarvam" if "sarvam" in str(self._chat_model).lower() else "openai",
+                        model=str(self._chat_model),
+                        input_tokens=p_tok,
+                        output_tokens=c_tok,
+                        process="voice_call",
+                        channel="voice",
+                        is_estimated=is_est,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            else:
+                logger.debug("[LeadAI voice] Non-LeadAI voice call turn; skipping token tracking.")
         except Exception as e:
             logger.error(f"Agent error: {e}")
             yield "Sorry, I had trouble processing that."
             return
+
 
         # Inline (not background) so a fast user follow-up never races a
         # mid-edit history. Only runs when the raw transcript crosses the
         # threshold, which on most calls is never.
         await self._maybe_compress()
 
+    @traceable(name="tool:voice_transcript_compressor", run_type="tool")
     async def _maybe_compress(self):
         """If the raw transcript has outgrown MAX_RAW_TURNS, fold the oldest
         portion into self.summary_prefix via a single Sarvam call. Failures
@@ -1076,9 +1143,35 @@ class SimpleAgent:
                 f"[SimpleAgent] memory compressed: kept={len(self.history)} "
                 f"summary_len={len(new_summary)}"
             )
+            if self.is_leadai:
+                try:
+                    from core.usage_tracker import record_usage
+
+                    usage = getattr(resp, "usage", None)
+                    p_tok = (getattr(usage, "prompt_tokens", 0) or 0) or max(1, len(prompt) // 4)
+                    c_tok = (getattr(usage, "completion_tokens", 0) or 0) or max(1, len(new_summary) // 4)
+                    record_usage(
+                        company_id=self.client_id,
+                        provider="sarvam" if "sarvam" in str(self._chat_model).lower() else "openai",
+                        model=str(self._chat_model),
+                        input_tokens=p_tok,
+                        output_tokens=c_tok,
+                        process="voice_transcript_compress",
+                        channel="voice",
+                    )
+                except Exception:
+                    pass
+            else:
+                logger.debug("[LeadAI voice] Non-LeadAI memory compression; skipping token tracking.")
         except Exception as e:
             logger.warning(f"[SimpleAgent] compress failed (will retry next turn): {e}")
 
+    @traceable(
+        name="tool:voice_cache_prewarm",
+        run_type="tool",
+        tags=["pre_warm", "synthetic", "exclude_from_analytics"],
+        metadata={"exclude_from_analytics": True, "is_prewarm": True},
+    )
     async def pre_warm(self, greeting: str):
         """Pre-warm the LLM cache with the system prompt and initial greeting."""
         messages = [
@@ -1090,15 +1183,69 @@ class SimpleAgent:
             logger.info(f"[SimpleAgent] Pre-warming LLM cache...")
             start_time = time.time()
             # Send a minimal request to trigger prompt caching and connection pooling
-            await self._client.chat.completions.create(
+            response = await self._client.chat.completions.create(
                 model=self._chat_model,
                 messages=messages,
                 max_tokens=1
             )
             duration = (time.time() - start_time) * 1000
             logger.info(f"[SimpleAgent] Pre-warm complete in {duration:.0f}ms")
+            record_run_metadata(
+                model=self._chat_model,
+                provider="sarvam" if "sarvam" in str(self._chat_model).lower() else "openai",
+                tags=["pre_warm", "synthetic", "exclude_from_analytics"],
+                extra_metadata={"exclude_from_analytics": True},
+            )
+            # In-app token tracking (flagged as pre_warm)
+            try:
+                from core.usage_tracker import record_usage
+
+                usage = getattr(response, "usage", None)
+                p_tokens = getattr(usage, "prompt_tokens", None) if usage else None
+                c_tokens = getattr(usage, "completion_tokens", None) if usage else None
+                is_est = False
+                if p_tokens is None:
+                    # Estimate based on actual prompt text characters
+                    prompt_chars = sum(len(str(m.get("content", ""))) for m in messages)
+                    p_tokens = max(1, prompt_chars // 4)
+                    c_tokens = 1
+                    is_est = True
+
+                record_usage(
+                    provider="sarvam" if "sarvam" in str(self._chat_model).lower() else "openai",
+                    model=str(self._chat_model),
+                    input_tokens=int(p_tokens),
+                    output_tokens=int(c_tokens or 1),
+                    process="pre_warm",
+                    channel="voice",
+                    is_prewarm=True,
+                    is_estimated=is_est,
+                )
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as e:
             logger.warning(f"[SimpleAgent] Pre-warm failed: {e}")
+
+
+def build_agent_for_call(call_data: dict) -> SimpleAgent:
+    """Factory helper to instantiate a SimpleAgent with complete tenancy, script, and language context.
+    Decides is_leadai strictly from the call source (leadai flag or call context), never solely by client_id presence.
+    """
+    multi_stt = call_data.get("multi_stt", False)
+    stt_language = call_data.get("language", "hi")
+    agent_language = "multi" if multi_stt else stt_language
+    xml_sections = call_data.get("xml_sections") or []
+    gender = call_data.get("gender", "neutral")
+    is_leadai = bool(call_data.get("leadai", False))
+
+    return SimpleAgent(
+        xml_sections=xml_sections,
+        gender=gender,
+        language=agent_language,
+        client_id=call_data.get("client_id"),
+        is_leadai=is_leadai,
+    )
+
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -2585,8 +2732,7 @@ async def media_stream(ws: WebSocket):
                     # (otherwise we transcribe English correctly but always reply
                     # in Hindi). Pass "multi" so the system prompt switches to its
                     # "mirror the user" branch.
-                    agent_language = "multi" if multi_stt else stt_language
-                    agent = SimpleAgent(xml_sections, gender=gender, language=agent_language)
+                    agent = build_agent_for_call(call_data)
 
                     # NOTE: we intentionally do NOT broadcast an app-level
                     # "connected" status. The client tracks call state purely
