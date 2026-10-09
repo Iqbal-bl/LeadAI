@@ -180,4 +180,8 @@ if __name__ == "__main__":
 
     port = int(os.getenv("PORT", "5050"))
     logger.info(f"Starting unified voice-agent app on :{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port, timeout_keep_alive=75)
+    is_dev = os.getenv("APP_ENV", "development").lower() != "production"
+    if is_dev:
+        uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, timeout_keep_alive=75)
+    else:
+        uvicorn.run(app, host="0.0.0.0", port=port, timeout_keep_alive=75)

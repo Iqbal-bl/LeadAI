@@ -58,16 +58,24 @@ export class AuthInterceptor implements HttpInterceptor {
     }
 
     // Check public paths that do not require any authentication
-    // e.g. GET /health, POST /voice/exotel/status, /api/leadai/public/*
+    // e.g. GET /health, POST /voice/exotel/status, GET /billing/available-plans, /api/leadai/public/*
     const isPublicPath =
       url.includes('/api/leadai/health') ||
       url.endsWith('/health') ||
       url.includes('/voice/exotel/status') ||
+      url.includes('/billing/available-plans') ||
       (url.includes('/api/leadai/public/') && !url.includes('/public/chat/')) ||
       (url.includes('/public/') && !url.includes('/public/chat/'));
 
     if (isPublicPath) {
-      return next.handle(req);
+      const accessToken =
+        this.authService.getValue('accessToken') ||
+        this.authService.getStaffToken();
+      let publicHeaders = req.headers.set('ngrok-skip-browser-warning', 'true');
+      if (accessToken) {
+        publicHeaders = publicHeaders.set('Authorization', `Bearer ${accessToken}`);
+      }
+      return next.handle(req.clone({ headers: publicHeaders }));
     }
 
     // Check customer widget session paths

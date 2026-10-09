@@ -7,13 +7,10 @@ import { Subscription } from 'rxjs';
 import { BillingService } from '../../services/billing.service';
 import { AuthService } from '../../services/auth.service';
 import { ToastService } from '../../shared/services/toast.service';
-import { OnboardingService } from '../../services/onboarding.service';
 
 import {
   BillingSummary,
-  CustomBundlePayload,
   PricingChannelOption,
-  RazorpaySubscriptionResponse,
   RechargePlanTemplate,
 } from '../../models/billing.models';
 
@@ -25,21 +22,16 @@ import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
 import { SkeletonModule } from 'primeng/skeleton';
 import { TooltipModule } from 'primeng/tooltip';
-import { DialogModule } from 'primeng/dialog';
-import { ProgressSpinnerModule } from 'primeng/progressspinner';
-import { DividerModule } from 'primeng/divider';
 
 /**
- * PlansPricingComponent provides a modern, high-converting Plans & Pricing experience.
+ * PlansPricingComponent provides a clean, modern Plans & Pricing experience.
  *
  * Workflow:
- * 1. Top Pricing Plans Grid (Start, Growth [Best Choice dark card], Enterprise Custom Bundle)
- *    with Yearly (-15%) / Monthly billing toggle, driven by /billing/available-plans API.
- * 2. Upon selecting any plan, reveals the side-by-side configuration workspace:
- *    - Left: Social Media Support Add-ons (WhatsApp, Instagram, Facebook, LinkedIn) from API.
- *    - Right: Live Side-by-Side Billing Summary with back-calculated 18% GST tax breakdown
- *      (DB prices are inclusive of 18% GST).
- * 3. Razorpay AutoPay Mandate Checkout with verification overlay and redirect to /client/usage.
+ * 1. Top Pricing Plans Grid (Start, Growth, Enterprise Custom Bundle)
+ *    driven dynamically by /billing/available-plans API.
+ * 2. Reveals Social Media Support Add-ons (WhatsApp, Instagram, Facebook, LinkedIn, etc.)
+ *    and live side-by-side order summary.
+ * 3. Redirects to Identity Server with the selected plan, voice minutes, and social channels.
  */
 @Component({
   selector: 'app-plans-pricing',
@@ -55,9 +47,6 @@ import { DividerModule } from 'primeng/divider';
     CheckboxModule,
     SkeletonModule,
     TooltipModule,
-    DialogModule,
-    ProgressSpinnerModule,
-    DividerModule,
   ],
   templateUrl: './plans-pricing.component.html',
   styleUrl: './plans-pricing.component.scss',
@@ -67,7 +56,6 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
   private router = inject(Router);
-  private onboardingService = inject(OnboardingService);
 
   private subscriptions = new Subscription();
 
@@ -108,87 +96,93 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   /** Default visual styling metadata for social media channels */
   private readonly CHANNEL_STYLE_META: Record<
     string,
-    { icon: string; color: string; defaultName: string; defaultDesc: string; defaultFeatures: string[] }
+    {
+      icon: string;
+      color: string;
+      defaultName: string;
+      defaultDesc: string;
+      defaultFeatures: string[];
+    }
   > = {
-      whatsapp: {
-        icon: 'pi pi-whatsapp',
-        color: '#22c55e',
-        defaultName: 'WhatsApp Business API',
-        defaultDesc:
-          'Official Meta Cloud API integration for automated 24/7 lead chats and appointment scheduling.',
-        defaultFeatures: [
-          'Official Meta Cloud API webhook routing',
-          '24/7 AI conversational auto-replies',
-          'Instant qualification scorecard & handoff alerts',
-          '30-day recurring synchronization',
-        ],
-      },
-      instagram: {
-        icon: 'pi pi-instagram',
-        color: '#a855f7',
-        defaultName: 'Instagram DM Automation',
-        defaultDesc:
-          'Engage high-intent prospects reaching out via Instagram direct messages and reel comments.',
-        defaultFeatures: [
-          'Direct message automatic AI response funnel',
-          'Post and Story comment-to-DM triggers',
-          'Lead scoring and sentiment analysis',
-          '30-day recurring synchronization',
-        ],
-      },
-      facebook: {
-        icon: 'pi pi-facebook',
-        color: '#3b82f6',
-        defaultName: 'Facebook Messenger',
-        defaultDesc:
-          'Turn Facebook page visitors into qualified opportunities with zero response delay.',
-        defaultFeatures: [
-          'Business page inbox AI integration',
-          'Post comment auto-replies to Messenger',
-          'Multi-channel customer contact linking',
-          '30-day recurring synchronization',
-        ],
-      },
-      linkedin: {
-        icon: 'pi pi-linkedin',
-        color: '#0284c7',
-        defaultName: 'LinkedIn Lead Automation',
-        defaultDesc:
-          'Automate connection messaging, B2B lead qualification, and CRM syncing on LinkedIn.',
-        defaultFeatures: [
-          'B2B profile qualification & matching',
-          'Automated connection and InMail follow-ups',
-          'Real-time CRM contact creation',
-          '30-day recurring synchronization',
-        ],
-      },
-      blog: {
-        icon: 'pi pi-file-edit',
-        color: '#f59e0b',
-        defaultName: 'AI Blog & Content Automation',
-        defaultDesc:
-          'Automated SEO blog generation, Ghost/WordPress publishing, and high-ranking lead acquisition articles.',
-        defaultFeatures: [
-          'SEO-optimized long-form AI article generation',
-          'One-click WordPress & Ghost auto-publishing',
-          'Keyword intent scoring & organic lead capture',
-          '30-day recurring synchronization',
-        ],
-      },
-      voice_facilities: {
-        icon: 'pi pi-phone',
-        color: '#06b6d4',
-        defaultName: 'Voice Call Facilities',
-        defaultDesc:
-          'Dedicated virtual phone numbers, inbound IVR auto-receptionist, and smart multi-agent call routing.',
-        defaultFeatures: [
-          'Dedicated business virtual DID phone line',
-          'Inbound IVR auto-receptionist & smart menu',
-          'Live call transfers & agent hunt groups',
-          'High-fidelity audio & cloud call recordings',
-        ],
-      },
-    };
+    whatsapp: {
+      icon: 'pi pi-whatsapp',
+      color: '#22c55e',
+      defaultName: 'WhatsApp Business API',
+      defaultDesc:
+        'Official Meta Cloud API integration for automated 24/7 lead chats and appointment scheduling.',
+      defaultFeatures: [
+        'Official Meta Cloud API webhook routing',
+        '24/7 AI conversational auto-replies',
+        'Instant qualification scorecard & handoff alerts',
+        '30-day recurring synchronization',
+      ],
+    },
+    instagram: {
+      icon: 'pi pi-instagram',
+      color: '#a855f7',
+      defaultName: 'Instagram DM Automation',
+      defaultDesc:
+        'Engage high-intent prospects reaching out via Instagram direct messages and reel comments.',
+      defaultFeatures: [
+        'Direct message automatic AI response funnel',
+        'Post and Story comment-to-DM triggers',
+        'Lead scoring and sentiment analysis',
+        '30-day recurring synchronization',
+      ],
+    },
+    facebook: {
+      icon: 'pi pi-facebook',
+      color: '#3b82f6',
+      defaultName: 'Facebook Messenger',
+      defaultDesc:
+        'Turn Facebook page visitors into qualified opportunities with zero response delay.',
+      defaultFeatures: [
+        'Business page inbox AI integration',
+        'Post comment auto-replies to Messenger',
+        'Multi-channel customer contact linking',
+        '30-day recurring synchronization',
+      ],
+    },
+    linkedin: {
+      icon: 'pi pi-linkedin',
+      color: '#0284c7',
+      defaultName: 'LinkedIn Lead Automation',
+      defaultDesc:
+        'Automate connection messaging, B2B lead qualification, and CRM syncing on LinkedIn.',
+      defaultFeatures: [
+        'B2B profile qualification & matching',
+        'Automated connection and InMail follow-ups',
+        'Real-time CRM contact creation',
+        '30-day recurring synchronization',
+      ],
+    },
+    blog: {
+      icon: 'pi pi-file-edit',
+      color: '#f59e0b',
+      defaultName: 'AI Blog & Content Automation',
+      defaultDesc:
+        'Automated SEO blog generation, Ghost/WordPress publishing, and high-ranking lead acquisition articles.',
+      defaultFeatures: [
+        'SEO-optimized long-form AI article generation',
+        'One-click WordPress & Ghost auto-publishing',
+        'Keyword intent scoring & organic lead capture',
+        '30-day recurring synchronization',
+      ],
+    },
+    voice_facilities: {
+      icon: 'pi pi-phone',
+      color: '#06b6d4',
+      defaultName: 'Voice Call Facilities',
+      defaultDesc:
+        'Dedicated virtual phone numbers, inbound IVR auto-receptionist, and smart multi-agent call routing.',
+      defaultFeatures: [
+        'Dedicated business virtual DID phone line',
+        'Inbound IVR auto-receptionist & smart menu',
+        'Live call transfers & agent hunt groups',
+        'High-fidelity audio & cloud call recordings',
+      ],
+    },
+  };
 
   /** Omni-Channel Addon Options dynamically populated from API */
   public channelOptions: PricingChannelOption[] = [];
@@ -196,13 +190,10 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   /** Selected channels map */
   public selectedChannelsMap: Record<string, boolean> = {};
 
-  /** Checkout & Verification States */
+  /** Checkout Redirect State */
   public isCheckingOut: boolean = false;
-  public isVerifyingPayment: boolean = false;
-  public verificationMessage: string = '';
 
   ngOnInit(): void {
-    this.initDefaultChannelOptions();
     this.initUserContext();
     this.loadCurrentSummary();
     this.loadPlans();
@@ -221,19 +212,6 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
         this.hasActivePlan = user.has_active_subscription;
       }
     }
-    this.subscriptions.add(
-      this.authService.getAccessMe().subscribe({
-        next: (u) => {
-          this.isCompanyAdmin = this.authService.isCompanyAdmin();
-          this.currentUserEmail = u.email || '';
-          this.companyName = u.client_name || '';
-          if (u.has_active_subscription !== undefined) {
-            this.hasActivePlan = u.has_active_subscription;
-          }
-        },
-        error: () => { },
-      })
-    );
   }
 
   ngOnDestroy(): void {
@@ -241,36 +219,18 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Initializes fallback channel options before API response arrives.
-   */
-  private initDefaultChannelOptions(): void {
-    const defaultPrices: Record<string, number> = {
-      whatsapp: 2000,
-      instagram: 2000,
-      facebook: 2000,
-      linkedin: 3000,
-      blog: 2000,
-      voice_facilities: 2500,
-    };
-    this.channelOptions = Object.keys(this.CHANNEL_STYLE_META).map((key) => {
-      const meta = this.CHANNEL_STYLE_META[key];
-      return {
-        key,
-        name: meta.defaultName,
-        icon: meta.icon,
-        color: meta.color,
-        monthlyPrice: defaultPrices[key] || 2000,
-        durationDays: 30,
-        description: meta.defaultDesc,
-        features: [...meta.defaultFeatures],
-      };
-    });
-  }
-
-  /**
    * Loads current billing summary to check if company already has an active subscription.
    */
   public loadCurrentSummary(): void {
+    const hasToken =
+      !!this.authService.getValue('accessToken') ||
+      !!this.authService.getStaffToken();
+    if (!hasToken) {
+      this.isLoadingSummary = false;
+      this.hasActivePlan = false;
+      return;
+    }
+
     this.isLoadingSummary = true;
     this.subscriptions.add(
       this.billingService.getCurrentPlan().subscribe({
@@ -279,7 +239,8 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
           const active = summary?.active_recharge;
           if (active && active.status === 'active') {
             const isNotExpired =
-              !active.expires_at || new Date(active.expires_at).getTime() > Date.now();
+              !active.expires_at ||
+              new Date(active.expires_at).getTime() > Date.now();
             this.hasActivePlan = isNotExpired;
           } else {
             this.hasActivePlan = false;
@@ -293,7 +254,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
         error: () => {
           this.isLoadingSummary = false;
         },
-      })
+      }),
     );
   }
 
@@ -306,7 +267,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
       this.billingService.getAvailablePlans().subscribe({
         next: (plans) => {
           // 1. Extract base voice plans
-          const filtered = plans.filter(
+          const filtered = (plans || []).filter(
             (p) =>
               p.plan_type === 'standard' &&
               p.plan_category !== 'client_self_bundle' &&
@@ -315,7 +276,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
               !p.name.toLowerCase().includes('channel add-on') &&
               !p.name.toLowerCase().includes('booster') &&
               !p.name.toLowerCase().includes('yearly') &&
-              p.validity_days <= 90
+              p.validity_days <= 90,
           );
 
           // Deduplicate so each distinct minute quota appears once
@@ -332,20 +293,27 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
           distinctPlans.sort((a, b) => a.price - b.price);
           this.standardPlans = distinctPlans.slice(0, 5);
 
-          if (this.standardPlans.length > 0 && this.standardPlans[0].rate_per_minute > 0) {
+          if (
+            this.standardPlans.length > 0 &&
+            this.standardPlans[0].rate_per_minute > 0
+          ) {
             this.customRatePerMinute = this.standardPlans[0].rate_per_minute;
           }
 
           // 2. Dynamically build add-on options from API templates with strict key deduplication
-          const channelTemplates = plans.filter(
-            (p) => p.plan_category === 'channel_addon' && p.feature_key
+          const channelTemplates = (plans || []).filter(
+            (p) => p.plan_category === 'channel_addon' && p.feature_key,
           );
           const seenChannelKeys = new Set<string>();
           const apiChannels: PricingChannelOption[] = [];
 
           for (const ct of channelTemplates) {
             let key = (ct.feature_key || '').toLowerCase().trim();
-            if (key === 'voice_call_facilities' || key === 'voice_call' || key === 'voice-facilities') {
+            if (
+              key === 'voice_call_facilities' ||
+              key === 'voice_call' ||
+              key === 'voice-facilities'
+            ) {
               key = 'voice_facilities';
             }
             if (!key || seenChannelKeys.has(key)) {
@@ -353,61 +321,35 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
             }
             seenChannelKeys.add(key);
 
-            const meta = this.CHANNEL_STYLE_META[key] || {
-              icon: 'pi pi-sparkles',
-              color: '#6366f1',
-              defaultName: ct.name,
-              defaultDesc: ct.description || 'Automated 24/7 AI integration.',
-              defaultFeatures: [
-                '24/7 AI conversational auto-replies',
-                'Instant lead qualification & CRM sync',
-                '30-day recurring synchronization',
-              ],
-            };
+            const meta = this.CHANNEL_STYLE_META[key];
             apiChannels.push({
               key,
-              name: ct.name || meta.defaultName,
-              icon: meta.icon,
-              color: meta.color,
+              name: ct.name || meta?.defaultName || key,
+              icon: meta?.icon || 'pi pi-sparkles',
+              color: meta?.color || '#6366f1',
               monthlyPrice: ct.price,
               durationDays: ct.validity_days || 30,
-              description: ct.description || meta.defaultDesc,
+              description: ct.description || meta?.defaultDesc || 'Automated 24/7 AI integration.',
               features:
                 ct.features && ct.features.length > 0
                   ? ct.features
-                  : [...meta.defaultFeatures],
+                  : (meta?.defaultFeatures || [
+                      '24/7 AI conversational auto-replies',
+                      'Instant lead qualification & CRM sync',
+                      '30-day recurring synchronization',
+                    ]),
             });
           }
 
-          // Ensure all required add-ons (WhatsApp, Instagram, Facebook, LinkedIn, Blog, Voice Facilities) are present
-          const requiredKeys = ['whatsapp', 'instagram', 'facebook', 'linkedin', 'blog', 'voice_facilities'];
-          const defaultPrices: Record<string, number> = {
-            whatsapp: 2000,
-            instagram: 2000,
-            facebook: 2000,
-            linkedin: 3000,
-            blog: 2000,
-            voice_facilities: 2500,
-          };
-          for (const reqKey of requiredKeys) {
-            if (!seenChannelKeys.has(reqKey) && this.CHANNEL_STYLE_META[reqKey]) {
-              const meta = this.CHANNEL_STYLE_META[reqKey];
-              seenChannelKeys.add(reqKey);
-              apiChannels.push({
-                key: reqKey,
-                name: meta.defaultName,
-                icon: meta.icon,
-                color: meta.color,
-                monthlyPrice: defaultPrices[reqKey] || 2000,
-                durationDays: 30,
-                description: meta.defaultDesc,
-                features: [...meta.defaultFeatures],
-              });
-            }
-          }
-
           // Canonical order: WhatsApp, Instagram, Facebook, LinkedIn, Blog, Voice Facilities
-          const order = ['whatsapp', 'instagram', 'facebook', 'linkedin', 'blog', 'voice_facilities'];
+          const order = [
+            'whatsapp',
+            'instagram',
+            'facebook',
+            'linkedin',
+            'blog',
+            'voice_facilities',
+          ];
           apiChannels.sort((a, b) => {
             const idxA = order.indexOf(a.key);
             const idxB = order.indexOf(b.key);
@@ -416,17 +358,26 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
           this.channelOptions = apiChannels;
 
           // Pre-highlight the popular Growth plan (or next upgrade tier if plan active)
-          this.autoSelectUpgradePlan();
+          if (this.standardPlans.length > 0) {
+            this.autoSelectUpgradePlan();
+          } else {
+            this.isPlanSelected = false;
+            this.selectedStandardPlan = null;
+          }
           this.isLoadingPlans = false;
         },
-        error: (err) => {
+        error: () => {
           this.isLoadingPlans = false;
+          this.standardPlans = [];
+          this.channelOptions = [];
+          this.isPlanSelected = false;
+          this.selectedStandardPlan = null;
           this.toastService.error(
-            err?.error?.detail || 'Failed to load plans & pricing from server.',
-            'Plans Error'
+            'Failed to load pricing plans. Please refresh or try again later.',
+            'Plans Unavailable',
           );
         },
-      })
+      }),
     );
   }
 
@@ -523,7 +474,8 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
     if (!active) return false;
     return (
       active.plan_template_id === plan.id ||
-      (active.plan_name_snapshot || '').trim().toLowerCase() === (plan.name || '').trim().toLowerCase()
+      (active.plan_name_snapshot || '').trim().toLowerCase() ===
+        (plan.name || '').trim().toLowerCase()
     );
   }
 
@@ -559,7 +511,10 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   public canUpgradeCurrentSelection(): boolean {
     if (!this.hasActivePlan) return true;
     if (this.selectedPlanType === 'standard') {
-      return !!this.selectedStandardPlan && this.isHigherTier(this.selectedStandardPlan);
+      return (
+        !!this.selectedStandardPlan &&
+        this.isHigherTier(this.selectedStandardPlan)
+      );
     }
     if (this.selectedPlanType === 'custom') {
       return this.isHigherTierCustom();
@@ -594,19 +549,22 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   /**
    * Selects a standard pre-configured master plan and reveals the Social Media Add-ons + Billing section.
    */
-  public selectStandardPlan(plan: RechargePlanTemplate, scrollToAddons: boolean = true): void {
+  public selectStandardPlan(
+    plan: RechargePlanTemplate,
+    scrollToAddons: boolean = true,
+  ): void {
     if (this.hasActivePlan) {
       if (this.isCurrentPlan(plan)) {
         this.toastService.info(
           'This is your currently active subscription plan.',
-          'Current Plan'
+          'Current Plan',
         );
         return;
       }
       if (!this.isHigherTier(plan)) {
         this.toastService.warn(
           'You already have an active subscription with equal or higher quota.',
-          'Active Plan Running'
+          'Active Plan Running',
         );
         return;
       }
@@ -627,7 +585,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
     if (this.hasActivePlan && !this.isHigherTierCustom()) {
       this.toastService.warn(
         'Enterprise quota must exceed your current plan minutes to upgrade.',
-        'Custom Quota'
+        'Custom Quota',
       );
       return;
     }
@@ -656,7 +614,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
     if (isNaN(minutes)) minutes = this.MIN_CUSTOM_MINUTES;
     const clamped = Math.min(
       this.MAX_CUSTOM_MINUTES,
-      Math.max(this.MIN_CUSTOM_MINUTES, minutes)
+      Math.max(this.MIN_CUSTOM_MINUTES, minutes),
     );
     this.customMinutes = Math.round(clamped / 50) * 50;
     this.selectedPlanType = 'custom';
@@ -670,11 +628,12 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
     if (this.hasActivePlan) {
       this.toastService.warn(
         'Omni-channel add-ons for an active subscription can be added from Usage & Top-Ups.',
-        'Active Plan Running'
+        'Active Plan Running',
       );
       return;
     }
-    this.selectedChannelsMap[channelKey] = !this.selectedChannelsMap[channelKey];
+    this.selectedChannelsMap[channelKey] =
+      !this.selectedChannelsMap[channelKey];
   }
 
   /**
@@ -736,7 +695,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   public getChannelsGrossCycleTotal(): number {
     const monthlySum = this.getSelectedChannels().reduce(
       (acc, ch) => acc + ch.monthlyPrice,
-      0
+      0,
     );
     return this.billingCycle === 'yearly' ? monthlySum * 12 : monthlySum;
   }
@@ -745,7 +704,9 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
    * Returns combined gross amount before yearly discount.
    */
   public getGrossCycleSubtotalInclTax(): number {
-    return this.getBasePlanGrossCyclePrice() + this.getChannelsGrossCycleTotal();
+    return (
+      this.getBasePlanGrossCyclePrice() + this.getChannelsGrossCycleTotal()
+    );
   }
 
   /**
@@ -753,7 +714,9 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
    */
   public getYearlyDiscountAmount(): number {
     if (this.billingCycle !== 'yearly') return 0;
-    return Math.round(this.getGrossCycleSubtotalInclTax() * this.YEARLY_DISCOUNT_RATE);
+    return Math.round(
+      this.getGrossCycleSubtotalInclTax() * this.YEARLY_DISCOUNT_RATE,
+    );
   }
 
   /**
@@ -815,207 +778,171 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
       return `Enterprise Custom (${this.customMinutes.toLocaleString('en-IN')} Mins/mo)`;
     }
     if (!this.selectedStandardPlan) return 'Select a Plan';
-    const tier = this.selectedStandardPlan.tier_label || (this.selectedStandardPlan.included_minutes <= 500 ? 'Start' : 'Growth');
+    const tier =
+      this.selectedStandardPlan.tier_label ||
+      (this.selectedStandardPlan.included_minutes <= 500 ? 'Start' : 'Growth');
     return `${tier} — ${this.selectedStandardPlan.name}`;
   }
 
   /**
-   * Initiates recurring AutoPay subscription checkout via Razorpay.
+   * Generates comma-separated permissions string for Identity Server user creation
+   * based on selected plan (voice) and selected social channels.
+   * Format example: "social.instagram,social.facebook,voice.inbound"
+   */
+  public getSelectedPermissions(): string {
+    const permissions: string[] = [];
+
+    const channelPermissionMap: Record<string, string> = {
+      instagram: 'social.instagram',
+      facebook: 'social.facebook',
+      whatsapp: 'social.whatsapp',
+      linkedin: 'social.linkedin',
+      blog: 'social.blog',
+      voice_facilities: 'voice.inbound',
+    };
+
+    const selectedChannels = this.getSelectedChannels();
+    for (const ch of selectedChannels) {
+      const perm =
+        channelPermissionMap[ch.key] ||
+        (ch.key.startsWith('social.') ? ch.key : `social.${ch.key}`);
+      if (perm && !permissions.includes(perm)) {
+        permissions.push(perm);
+      }
+    }
+
+    // Include voice.inbound permission for base plans (Start, Growth, Enterprise)
+    if (
+      this.selectedPlanType === 'standard' ||
+      this.selectedPlanType === 'custom'
+    ) {
+      if (!permissions.includes('voice.inbound')) {
+        permissions.push('voice.inbound');
+      }
+    }
+
+    return permissions.join(',');
+  }
+
+  /**
+   * Returns selected plan identifier or name for query parameters.
+   */
+  public getSelectedPlanKey(): string {
+    if (this.selectedPlanType === 'custom') {
+      return 'custom';
+    }
+    if (this.selectedStandardPlan) {
+      if (this.selectedStandardPlan.tier_label) {
+        return this.selectedStandardPlan.tier_label.toLowerCase();
+      }
+      return this.selectedStandardPlan.included_minutes <= 500 ? 'start' : 'growth';
+    }
+    return 'growth';
+  }
+
+  /**
+   * Returns comma-separated selected social media / channel keys.
+   */
+  public getSelectedSocialMediaKeys(): string {
+    return this.getSelectedChannels()
+      .map((ch) => ch.key)
+      .join(',');
+  }
+
+  /**
+   * Constructs the full Identity Server URL for account creation with selected permissions,
+   * selected voice plan, and social media package.
+   * e.g. https://localhost:7085/Account/Create?source=leadai&returnUrl=...&plan=growth&social_media=whatsapp,instagram&permissions=social.instagram,social.facebook,voice.inbound
+   */
+  /**
+   * Constructs the full Identity Server URL for account creation with selected permissions,
+   * selected voice plan, and social media package via AuthService endpoint builder.
+   */
+  public buildIdentityServerRegisterUrl(): string {
+    return this.authService.buildRegisterUrl({
+      source: 'leadai',
+      permissions: this.getSelectedPermissions(),
+      plan: this.getSelectedPlanKey(),
+      planName: this.getBasePlanName(),
+      selectedPlan: this.getSelectedPlanKey(),
+      socialMedia: this.getSelectedSocialMediaKeys(),
+      channels: this.getSelectedSocialMediaKeys(),
+      billingCycle: this.billingCycle,
+      cycle: this.billingCycle,
+      minutes: this.getBasePlanMinutes(),
+      voiceMinutes: this.getMonthlyVoiceMinutes(),
+      planId: this.selectedStandardPlan?.id ? String(this.selectedStandardPlan.id) : undefined,
+      planPrice: this.getBasePlanMonthlyPrice(),
+      totalAmount: this.getTotalPayableInclusiveTax(),
+    });
+  }
+
+  /**
+   * Redirects the user to the Identity Server to create an account with selected plan permissions.
+   */
+  public redirectToIdentityServer(): void {
+    // Persist current dynamic selection to localStorage so it is restored when returning to checkout
+    try {
+      const planIdentifier =
+        this.selectedPlanType === 'custom'
+          ? 'custom'
+          : (this.selectedStandardPlan?.tier_label ||
+             this.selectedStandardPlan?.name ||
+             String(this.selectedStandardPlan?.id) ||
+             'growth');
+
+      const checkoutSelection = {
+        billingCycle: this.billingCycle,
+        selectedPlanType: this.selectedPlanType,
+        selectedPlanIdentifier: planIdentifier,
+        selectedPlanId: this.selectedStandardPlan?.id,
+        customMinutes: this.customMinutes,
+        selectedChannelsMap: { ...this.selectedChannelsMap },
+      };
+      localStorage.setItem('leadai_checkout_selection', JSON.stringify(checkoutSelection));
+    } catch {
+      // ignore
+    }
+
+    this.authService.redirectToRegister({
+      source: 'leadai',
+      permissions: this.getSelectedPermissions(),
+      plan: this.getSelectedPlanKey(),
+      planName: this.getBasePlanName(),
+      selectedPlan: this.getSelectedPlanKey(),
+      socialMedia: this.getSelectedSocialMediaKeys(),
+      channels: this.getSelectedSocialMediaKeys(),
+      billingCycle: this.billingCycle,
+      cycle: this.billingCycle,
+      minutes: this.getBasePlanMinutes(),
+      voiceMinutes: this.getMonthlyVoiceMinutes(),
+      planId: this.selectedStandardPlan?.id ? String(this.selectedStandardPlan.id) : undefined,
+      planPrice: this.getBasePlanMonthlyPrice(),
+      totalAmount: this.getTotalPayableInclusiveTax(),
+    });
+  }
+
+  /**
+   * Initiates redirect to Identity Server to create user and register with selected permissions.
    */
   public initiateAutoPayCheckout(): void {
     if (this.hasActivePlan && !this.canUpgradeCurrentSelection()) {
       this.toastService.warn(
         'You already have an active subscription with equal or higher quota.',
-        'Active Plan Running'
+        'Active Plan Running',
       );
       return;
     }
 
-    const selectedChannels = this.getSelectedChannels().map((ch) => ch.key);
     this.isCheckingOut = true;
-
-    // Case 1: Custom Plan OR Yearly Cycle OR Standard Plan with modular social media add-ons
-    if (
-      this.selectedPlanType === 'custom' ||
-      this.billingCycle === 'yearly' ||
-      selectedChannels.length > 0
-    ) {
-      const payload: CustomBundlePayload = {
-        base_plan_template_id:
-          this.selectedPlanType === 'standard' ? this.selectedStandardPlan?.id || null : null,
-        include_voice: true,
-        voice_minutes: this.getMonthlyVoiceMinutes(),
-        channels: selectedChannels,
-        billing_cycle: this.billingCycle,
-      };
-
-      this.subscriptions.add(
-        this.billingService.createCustomBundle(payload).subscribe({
-          next: (subRes: RazorpaySubscriptionResponse) => {
-            this.isCheckingOut = false;
-            this.launchRazorpaySubscriptionModal(subRes);
-          },
-          error: (err: any) => {
-            this.isCheckingOut = false;
-            this.toastService.error(
-              err?.error?.detail || 'Failed to initiate subscription bundle.',
-              'Checkout Error'
-            );
-          },
-        })
-      );
-    } else {
-      // Case 2: Standard Monthly Master Plan with no extra social channels
-      const planId = this.selectedStandardPlan?.id;
-      if (!planId) {
-        this.isCheckingOut = false;
-        this.toastService.error('Please select a valid plan.', 'Plan Error');
-        return;
-      }
-
-      this.subscriptions.add(
-        this.billingService.createRazorpaySubscription(planId).subscribe({
-          next: (subRes: RazorpaySubscriptionResponse) => {
-            this.isCheckingOut = false;
-            this.launchRazorpaySubscriptionModal(subRes);
-          },
-          error: (err: any) => {
-            this.isCheckingOut = false;
-            this.toastService.error(
-              err?.error?.detail || 'Failed to initiate subscription mandate.',
-              'Checkout Error'
-            );
-          },
-        })
-      );
-    }
+    this.redirectToIdentityServer();
   }
 
   /**
-   * Opens standard Razorpay Checkout modal for recurring subscription mandate.
+   * Redirects unauthenticated visitor to OIDC login flow.
    */
-  private launchRazorpaySubscriptionModal(subRes: RazorpaySubscriptionResponse): void {
-    if (typeof (window as any).Razorpay === 'undefined') {
-      this.toastService.error(
-        'Razorpay checkout SDK not loaded. Please verify your connection.',
-        'Gateway Error'
-      );
-      return;
-    }
-
-    const cycleLabel = this.billingCycle === 'yearly' ? 'Yearly' : '30-Day';
-    const options = {
-      key: subRes.key_id,
-      subscription_id: subRes.subscription_id,
-      name: 'LeadAI Automation',
-      description: `${cycleLabel} AutoPay Plan: ${subRes.plan_name}`,
-      handler: (response: any) => {
-        this.verifySubscriptionPayment(subRes, response);
-      },
-      modal: {
-        ondismiss: () => {
-          this.handleCheckoutDismiss(subRes);
-        },
-      },
-      theme: {
-        color: '#0f172a',
-      },
-    };
-
-    const rzp = new (window as any).Razorpay(options);
-    rzp.on('payment.failed', (failRes: any) => {
-      this.handlePaymentFailure(subRes, failRes);
-    });
-    rzp.open();
-  }
-
-  /**
-   * Verifies payment signature and redirects to /client/usage on success.
-   */
-  private verifySubscriptionPayment(subRes: RazorpaySubscriptionResponse, paymentRes: any): void {
-    this.isVerifyingPayment = true;
-    this.verificationMessage = 'Verifying AutoPay mandate and activating your plan & channels...';
-
-    const verifyPayload = {
-      razorpay_subscription_id: paymentRes.razorpay_subscription_id || subRes.subscription_id,
-      razorpay_payment_id: paymentRes.razorpay_payment_id,
-      razorpay_signature: paymentRes.razorpay_signature,
-      plan_template_id: subRes.plan_id,
-    };
-
-    this.subscriptions.add(
-      this.billingService.verifyRazorpaySubscription(verifyPayload).subscribe({
-        next: () => {
-          this.verificationMessage = 'Subscription successfully activated! Unlocking workspace...';
-          this.toastService.success(
-            'Your AutoPay subscription is now active! Welcome to LeadAI.',
-            'Plan Activated'
-          );
-          this.hasActivePlan = true;
-
-          // Re-fetch user session so has_active_subscription becomes true across the entire app
-          this.authService.getAccessMe().subscribe({
-            next: (me) => {
-              this.onboardingService.initOnboarding(me?.client_id || this.authService.getSelectedCompanyId());
-              setTimeout(() => {
-                this.isVerifyingPayment = false;
-                this.router.navigate(['/onboarding']);
-              }, 1200);
-            },
-            error: () => {
-              this.onboardingService.initOnboarding(this.authService.getSelectedCompanyId());
-              setTimeout(() => {
-                this.isVerifyingPayment = false;
-                this.router.navigate(['/onboarding']);
-              }, 1200);
-            },
-          });
-        },
-        error: (err) => {
-          this.isVerifyingPayment = false;
-          this.toastService.error(
-            err?.error?.detail || 'Signature verification failed. Please contact support.',
-            'Verification Error'
-          );
-        },
-      })
-    );
-  }
-
-  /**
-   * Handles checkout closure without payment completion.
-   */
-  private handleCheckoutDismiss(subRes: RazorpaySubscriptionResponse): void {
-    this.billingService
-      .recordPaymentFailure({
-        subscription_id: subRes.subscription_id,
-        error_code: 'CHECKOUT_DISMISSED',
-        error_description: 'Checkout window closed before completing mandate authentication.',
-      })
-      .subscribe();
-
-    this.toastService.warn(
-      'Checkout closed. Your subscription has not been charged.',
-      'Checkout Cancelled'
-    );
-  }
-
-  /**
-   * Handles gateway payment failure.
-   */
-  private handlePaymentFailure(subRes: RazorpaySubscriptionResponse, failRes: any): void {
-    this.billingService
-      .recordPaymentFailure({
-        subscription_id: subRes.subscription_id,
-        error_code: failRes?.error?.code || 'SUBSCRIPTION_AUTH_FAILED',
-        error_description: failRes?.error?.description || 'Mandate authorization failed at bank.',
-      })
-      .subscribe();
-
-    this.toastService.error(
-      failRes?.error?.description || 'Payment mandate could not be authorized.',
-      'Mandate Failed'
-    );
+  public signIn(): void {
+    this.authService.initiateOidcLogin();
   }
 
   /**
@@ -1025,7 +952,7 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
     if (!this.hasActivePlan) {
       this.toastService.warn(
         'An active subscription plan is required before accessing the application.',
-        'Subscription Required'
+        'Subscription Required',
       );
       return;
     }
@@ -1040,5 +967,3 @@ export class PlansPricingComponent implements OnInit, OnDestroy {
   }
 }
 // End of PlansPricingComponent
-
-

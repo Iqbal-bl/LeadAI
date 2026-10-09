@@ -34,6 +34,8 @@ from ..rbac import (
     super_admin,
 )
 from ..schemas import (
+    ClientRegisterCreate,
+    ClientRegisterOut,
     CompanyCreate,
     CompanyOut,
     CompanyPermissionsOut,
@@ -129,28 +131,6 @@ def create_company(
             )
 
     if payload.admin_email:
-        # Create user in identity server directly
-        import httpx
-        import os
-        admin_name = payload.admin_name or payload.admin_email.split("@")[0]
-        idp_url = os.getenv("LOCAL_IDENTITY_SERVER", "").rstrip("/")
-        try:
-            with httpx.Client(verify=False, timeout=10) as http:
-                http.post(
-                    f"{idp_url}/api/user-management/create",
-                    json={
-                        "email": payload.admin_email,
-                        "password": "Admin@123",
-                        "name": admin_name,
-                        "role": "CompanyAdmin",
-                        "clientId": client.Id,
-                        "clientName": payload.name,
-                        "sendEmailConfirmation": True,
-                    },
-                )
-        except Exception as exc:
-            logger.warning("[Companies] failed to create admin in identity server: %s", exc)
-
         db.add(
             LeadUserRole(
                 UserEmail=payload.admin_email.lower(),
@@ -617,5 +597,158 @@ def patch_company_permissions(
     )
     db.commit()
     return get_company_permissions(company_id=company_id, principal=principal, db=db)
+
+
+# ---------------------------------------------------------------------------
+# Public (Unauthorized) Surface: Register a new Client & Admin user
+# ---------------------------------------------------------------------------
+
+public_router = APIRouter(prefix="/public", tags=["LeadAI • Public Registration"])
+
+
+@public_router.post(
+    "/register",
+    response_model=ClientRegisterOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new client workspace and admin (unauthorized)",
+)
+async def register_client_public(
+    payload: ClientRegisterCreate,
+    request: Request,
+    db: Session = Depends(get_leadai_db),
+):
+    company_name = (payload.company_name or payload.name or "").strip()
+    if not company_name:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Company name is required ('company_name' or 'name').",
+        )
+
+    admin_email = (payload.admin_email or payload.email or "").strip().lower()
+    if not admin_email:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Admin email is required ('admin_email' or 'email').",
+        )
+
+    admin_name = (payload.admin_name or "").strip() or admin_email.split("@")[0]
+
+    # 1. Check if company name already exists
+    existing_client = (
+        db.query(Client)
+        .filter(Client.Name == company_name, Client.IsDeleted == False)  # noqa: E712
+        .first()
+    )
+    if existing_client:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"A company with the name '{company_name}' already exists.",
+        )
+
+    # 2. Check if admin email already exists in local directory
+    existing_user = (
+        db.query(LeadUserRole)
+        .filter(
+            LeadUserRole.UserEmail == admin_email,
+            LeadUserRole.IsDeleted == False,  # noqa: E712
+        )
+        .first()
+    )
+    if existing_user:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"User with email '{admin_email}' is already registered.",
+        )
+
+    # 3. Create client record
+    client = Client(
+        Name=company_name,
+        Email=str(payload.company_email) if payload.company_email else admin_email,
+        PhoneNumber=payload.phone_number,
+        Description=payload.description,
+        IsActive=True,
+        CreatedBy=admin_email,
+    )
+    db.add(client)
+    db.flush()
+
+    # 4. Seed prompt set and company settings
+    script_engine.seed_prompts(db, client.Id, created_by=admin_email)
+    db.add(LeadCompanySettings(ClientId=client.Id, CreatedBy=admin_email))
+
+    # 5. Seed default or provided permissions
+    default_permissions = [
+        "social.instagram",
+        "social.facebook",
+        "social.linkedin",
+        "social.whatsapp",
+        "voice.inbound",
+        "voice.outbound",
+        "knowledge.base",
+    ]
+    perms = payload.permissions if payload.permissions is not None else default_permissions
+    for p_key in perms:
+        p_key = p_key.strip().lower()
+        db.add(
+            LeadCompanyPermission(
+                ClientId=client.Id,
+                PermissionKey=p_key,
+                IsEnabled=True,
+                CreatedBy=admin_email,
+            )
+        )
+
+    # 6. Seed LeadUserRole for the Company Admin (user is already created in Identity Server)
+    user_id = payload.user_id or admin_email
+
+    db.add(
+        LeadUserRole(
+            UserEmail=admin_email,
+            UserId=str(user_id) if user_id else None,
+            FullName=admin_name,
+            Role=ROLE_COMPANY_ADMIN,
+            ClientId=client.Id,
+            IsActive=True,
+            CreatedBy=admin_email,
+        )
+    )
+
+    activity.log(
+        db,
+        action=A.COMPANY_CREATED,
+        client_id=client.Id,
+        actor_email=admin_email,
+        entity_type="company",
+        entity_id=client.Id,
+        message=f"Public signup: created company '{client.Name}' with admin '{admin_email}'",
+        meta={"admin_email": admin_email, "public_signup": True},
+        request=request,
+    )
+
+    try:
+        db.commit()
+        db.refresh(client)
+    except Exception as exc:
+        db.rollback()
+        logger.error(
+            "[Companies] Database commit failed during registration for '%s': %s",
+            admin_email,
+            exc,
+        )
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during registration: {exc}.",
+        )
+
+    return ClientRegisterOut(
+        client_id=client.Id,
+        company_name=client.Name,
+        admin_email=admin_email,
+        admin_name=admin_name,
+        user_id=str(user_id),
+        role="CompanyAdmin",
+        message="Client workspace and admin account registered successfully",
+    )
+
 
 
